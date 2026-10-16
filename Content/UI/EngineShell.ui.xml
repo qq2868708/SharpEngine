@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui version="3" title="Editor">
+  <panel id="editor" layout="column" padding="0" gap="0" color="#181C24">
+    <row id="menuBar" height="30" gap="0" color="#11151C">
+      <text id="brand" width="156" value="SharpEngine" color="#F1F4F8" fontSize="14" />
+      <button id="menuFile" width="54" text="File" action="editor.file-menu" color="#11151C" />
+      <button id="menuEdit" width="54" text="Edit" action="editor.edit-menu" color="#11151C" />
+      <button id="menuAssets" width="64" text="Assets" action="editor.assets-menu" color="#11151C" />
+      <button id="menuWindow" width="72" text="Window" action="editor.window-menu" color="#11151C" />
+      <button id="menuHelp" width="54" text="Help" action="editor.help-menu" color="#11151C" />
+      <spacer id="menuSpacer" />
+      <text id="projectTitle" width="260" bind="Editor.ProjectName" color="#8997AA" alignment="right" />
+    </row>
+    <row id="toolBar" height="46" gap="6" padding="7" color="#242B37">
+      <button id="newProject" width="112" text="New Project" action="editor.new-project" color="#3E78BA" />
+      <button id="openProject" width="112" text="Open Project" action="editor.open-project" color="#34455E" />
+      <button id="saveProject" width="70" text="Save" action="editor.save" color="#34455E" />
+      <spacer id="toolbarSpacer" />
+      <button id="play" width="78" text="Play" action="editor.play" color="#287C5B" />
+      <button id="pause" width="78" text="Pause" action="editor.pause" color="#34455E" />
+      <button id="stop" width="78" text="Stop" action="editor.stop" color="#34455E" />
+    </row>
+    <row id="workspace" layout="row" gap="1" color="#0F131A">
+      <panel id="leftDock" width="252" layout="column" padding="6" gap="6" color="#202735">
+        <panel id="hierarchyPane" height="202" layout="column" padding="6" gap="4" color="#252F40">
+          <row id="hierarchyHeader" height="26" gap="4">
+            <text id="hierarchyTitle" width="176" value="HIERARCHY" color="#E0E6EF" fontSize="12" />
+            <button id="hierarchyMenu" width="42" text="..." action="editor.project-menu" color="#303D50" />
+          </row>
+          <button id="sceneRoot" height="26" text="▾  Main Scene" action="editor.select-scene" color="#32435B" />
+          <button id="cameraObject" height="24" text="    Main Camera" action="editor.select-camera" color="#252F40" />
+          <button id="lightObject" height="24" text="    Directional Light" action="editor.select-light" color="#252F40" />
+        </panel>
+        <panel id="projectPane" layout="column" padding="6" gap="4" color="#202735">
+          <row id="projectHeader" height="26" gap="4">
+            <text id="projectHeaderTitle" width="176" value="PROJECT" color="#E0E6EF" fontSize="12" />
+            <button id="projectMenu" width="42" text="..." action="editor.project-menu" color="#303D50" />
+          </row>
+          <input id="projectSearch" height="28" value="Search assets" action="editor.search" color="#A8B5C7" />
+          <text id="assetsFolder" height="22" value="ASSETS" color="#8997AA" fontSize="11" />
+          <button id="sceneAsset" height="28" text="  Main Scene" action="editor.select-scene" color="#32435B" />
+          <button id="prefabAsset" height="28" text="  Player.prefab" action="editor.select-prefab" color="#202735" />
+          <button id="materialAsset" height="28" text="  Default.mat" action="editor.select-material" color="#202735" />
+          <spacer id="projectFill" />
+          <text id="projectPath" bind="Editor.ProjectPath" color="#8997AA" fontSize="11" />
+        </panel>
+      </panel>
+      <panel id="viewportDock" layout="column" padding="0" gap="0" color="#171D27">
+        <row id="viewportHeader" height="38" padding="8" gap="8" color="#242B37">
+          <text id="viewportTitle" width="122" value="Scene View" color="#F1F4F8" fontSize="13" />
+          <button id="moveTool" width="56" text="Move" action="editor.tool-move" color="#3B5F8B" />
+          <button id="rotateTool" width="62" text="Rotate" action="editor.tool-rotate" color="#303D50" />
+          <button id="scaleTool" width="56" text="Scale" action="editor.tool-scale" color="#303D50" />
+          <spacer id="viewportHeaderFill" />
+          <text id="viewportMode" width="100" value="Perspective" color="#8997AA" alignment="right" />
+        </row>
+        <panel id="viewportCanvas" layout="column" padding="18" gap="8" color="#10151C">
+          <text id="viewportHint" height="24" value="Scene viewport" color="#708096" fontSize="12" />
+          <spacer id="viewportCanvasFill" />
+          <row id="viewportFooter" height="22" gap="12">
+            <text id="viewportGridHint" width="210" value="Grid 10m  |  Camera Preview" color="#596A82" fontSize="11" />
+            <spacer id="viewportFooterFill" />
+            <text id="viewportStats" width="120" value="0 objects" color="#596A82" fontSize="11" alignment="right" />
+          </row>
+        </panel>
+      </panel>
+      <panel id="inspectorDock" width="286" layout="column" padding="6" gap="6" color="#202735">
+        <row id="inspectorHeader" height="26" gap="4">
+          <text id="inspectorTitle" width="204" value="INSPECTOR" color="#E0E6EF" fontSize="12" />
+          <button id="inspectorMenu" width="42" text="..." action="editor.inspector-menu" color="#303D50" />
+        </row>
+        <text id="selectedObject" height="28" bind="Editor.SelectedAsset" color="#F1F4F8" fontSize="14" />
+        <panel id="transformSection" layout="column" padding="8" gap="4" color="#2A3547">
+          <text id="transformTitle" height="22" value="Transform" color="#E0E6EF" />
+          <text id="position" height="20" value="Position     X 0   Y 0   Z 0" color="#A8B5C7" fontSize="11" />
+          <text id="rotation" height="20" value="Rotation     X 0   Y 0   Z 0" color="#A8B5C7" fontSize="11" />
+          <text id="scale" height="20" value="Scale        X 1   Y 1   Z 1" color="#A8B5C7" fontSize="11" />
+        </panel>
+        <panel id="propertiesSection" layout="column" padding="8" gap="4" color="#2A3547">
+          <text id="propertiesTitle" height="22" value="Properties" color="#E0E6EF" />
+          <text id="status" height="22" bind="Editor.Status" color="#A8B5C7" fontSize="11" />
+        </panel>
+        <spacer id="inspectorFill" />
+      </panel>
+    </row>
+    <row id="bottomDock" height="132" layout="row" gap="1" color="#0F131A">
+      <panel id="console" width="252" layout="column" padding="10" gap="4" color="#202735">
+        <row id="consoleTabs" height="22" gap="12">
+          <text id="consoleTitle" width="72" value="CONSOLE" color="#E0E6EF" fontSize="12" />
+          <text id="consoleOutputTab" width="60" value="OUTPUT" color="#71829A" fontSize="11" />
+        </row>
+        <text id="consoleLine1" height="20" value="No errors" color="#77C69D" fontSize="11" />
+        <text id="consoleLine2" height="20" bind="Editor.Status" color="#8997AA" fontSize="11" />
+      </panel>
+      <panel id="selectionDetails" layout="column" padding="10" gap="4" color="#171D27">
+        <text id="detailsTitle" height="22" value="OUTPUT" color="#E0E6EF" fontSize="12" />
+        <text id="detailsText" height="20" value="Ready" color="#8997AA" fontSize="11" />
+      </panel>
+    </row>
+    <row id="statusBar" height="24" padding="5" gap="12" color="#11151C">
+      <text id="statusText" width="420" bind="Editor.Status" color="#A8B5C7" fontSize="11" />
+      <spacer id="statusSpacer" />
+      <text id="fps" width="90" bind="Editor.Fps" color="#71829A" fontSize="11" alignment="right" />
+    </row>
+  </panel>
+</ui>

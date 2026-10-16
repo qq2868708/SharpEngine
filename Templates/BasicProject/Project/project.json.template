@@ -1,0 +1,32 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/project-v1.json",
+  "schemaVersion": 1,
+  "projectId": "__PROJECT_ID__",
+  "displayName": "__DISPLAY_NAME__",
+  "engine": {
+    "id": "SharpEngine",
+    "version": "0.1.0-dev",
+    "path": "__ENGINE_PATH__",
+    "pathBase": "manifest",
+    "pathEnvironment": "SHARPENGINE_ROOT",
+    "manifest": "Engine/engine.json"
+  },
+  "managed": {
+    "runtimeConfig": "Build/Managed/__PROJECT_ID__.runtimeconfig.json",
+    "assembly": "Build/Managed/__PROJECT_ID__.dll"
+  },
+  "entryPoint": {
+    "typeName": "__PROJECT_NAMESPACE__.GameEntrypoint, __PROJECT_ID__"
+  },
+  "paths": {
+    "content": "Content",
+    "managed": "Managed"
+  },
+  "assets": {
+    "manifest": "Content/Assets/assets.json",
+    "root": "Content/Assets"
+  },
+  "world": {
+    "startup": "Content/Worlds/Main.world.xml"
+  }
+}

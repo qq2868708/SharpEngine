@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Right-handed, meters, Y-up. Camera looks along local -Z.
+     Transform rotation is Euler degrees (pitch X, yaw Y, roll Z). -->
+<world version="1" name="Main Scene" activeCamera="mainCamera">
+  <entity id="ground" name="Ground" type="mesh"
+          asset="engine://meshes/plane" position="0,0,0"
+          scale="10,1,10" color="#38506F" />
+  <entity id="player" name="Player" type="mesh"
+          asset="engine://meshes/cube" position="-2,0.75,0"
+          rotation="0,25,0" scale="1.5,1.5,1.5" color="#4C91E8" />
+  <entity id="crate" name="Crate" type="mesh"
+          asset="engine://meshes/cube" position="2,0.5,1"
+          rotation="0,-15,0" scale="1,1,1" color="#B56D46" />
+  <entity id="mainCamera" name="Main Camera" type="camera"
+          position="8,7,11" rotation="-28,36,0"
+          fieldOfView="55" nearPlane="0.1" farPlane="100" />
+  <entity id="sun" name="Directional Light" type="light"
+          rotation="-50,-30,0" intensity="1.2" />
+</world>

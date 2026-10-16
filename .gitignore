@@ -1,0 +1,42 @@
+# IDE state
+.vs/
+.idea/
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+
+# Native and managed build output
+Build/
+x64/
+**/x64/
+**/bin/
+**/obj/
+External/Build*/
+
+# CMake generated files
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/CTestTestfile.cmake
+
+# Compiler and linker artifacts
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.exe
+*.dll
+*.lib
+*.exp
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.recipe
+
+# Logs and local scratch output
+*.log
+*.tmp
+*.userprefs
+Saved/

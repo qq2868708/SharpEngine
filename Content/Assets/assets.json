@@ -1,0 +1,74 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "id": "worlds/main",
+      "type": "World",
+      "name": "Editor Sample World",
+      "path": "Content/Worlds/Main.world.xml",
+      "importer": "SharpEngine.WorldXml",
+      "tags": ["builtin", "scene", "sample"]
+    },
+    {
+      "id": "ui/editor",
+      "type": "RmlDocument",
+      "name": "Editor UI",
+      "path": "Content/UI/Rml/Editor.rml",
+      "importer": "RmlUi.Document",
+      "tags": ["editor", "ui"]
+    },
+    {
+      "id": "ui/editor-style",
+      "type": "StyleSheet",
+      "name": "Editor Style",
+      "path": "Content/UI/Rml/Editor.rcss",
+      "importer": "RmlUi.StyleSheet",
+      "tags": ["editor", "ui"]
+    },
+    {
+      "id": "meshes/cube",
+      "type": "Mesh",
+      "name": "Cube",
+      "path": "Content/Assets/Meshes/Cube.mesh.json",
+      "importer": "SharpEngine.MeshJson",
+      "tags": ["builtin", "primitive"],
+      "metadata": {"primitive": "Cube", "vertices": "8", "triangles": "12"}
+    },
+    {
+      "id": "meshes/plane",
+      "type": "Mesh",
+      "name": "Plane",
+      "path": "Content/Assets/Meshes/Plane.mesh.json",
+      "importer": "SharpEngine.MeshJson",
+      "tags": ["builtin", "primitive"],
+      "metadata": {"primitive": "Plane", "vertices": "4", "triangles": "2"}
+    },
+    {
+      "id": "materials/default",
+      "type": "Material",
+      "name": "Default Material",
+      "path": "Content/Assets/Materials/Default.material.json",
+      "importer": "SharpEngine.MaterialJson",
+      "tags": ["builtin", "material"]
+    },
+    {
+      "id": "ui/engine-shell",
+      "type": "UiDocument",
+      "name": "Engine Shell",
+      "path": "Content/UI/EngineShell.ui.xml",
+      "readOnly": true,
+      "importer": "SharpEngine.UiXml",
+      "tags": ["editor", "ui"]
+    },
+    {
+      "id": "ui/main",
+      "type": "UiDocument",
+      "name": "Default Game UI",
+      "path": "Content/UI/Main.ui.xml",
+      "readOnly": true,
+      "importer": "SharpEngine.UiXml",
+      "tags": ["runtime", "ui"]
+    }
+  ]
+}

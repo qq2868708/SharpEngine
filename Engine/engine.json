@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "engineId": "SharpEngine",
+  "version": "0.1.0-dev",
+  "runtime": "CoreCLR",
+  "managedTargetFramework": "net8.0",
+  "paths": {
+    "nativeSource": "Engine",
+    "managed": "Managed",
+    "managedApi": "x64/{configuration}/Managed/SharpEngine.Managed.dll",
+    "content": "Content",
+    "tools": "Tools",
+    "nativeDebugExecutable": "x64/Debug/Engine.exe"
+  },
+  "assets": {
+    "manifest": "Content/Assets/assets.json",
+    "root": "Content/Assets"
+  },
+  "projectContract": {
+    "manifest": "Project/project.json",
+    "enginePathEnvironmentVariable": "SHARPENGINE_ROOT"
+  }
+}

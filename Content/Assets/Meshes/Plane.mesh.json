@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "Plane",
+  "primitive": "Plane",
+  "coordinateSystem": "Y-up",
+  "defaultMaterial": "engine://materials/default",
+  "positions": [[-0.5, 0, -0.5], [-0.5, 0, 0.5], [0.5, 0, 0.5], [0.5, 0, -0.5]],
+  "indices": [0, 1, 2, 0, 2, 3]
+}

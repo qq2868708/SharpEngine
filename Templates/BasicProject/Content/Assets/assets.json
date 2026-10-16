@@ -1,0 +1,22 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "id": "worlds/main",
+      "type": "World",
+      "name": "Main Scene",
+      "path": "Content/Worlds/Main.world.xml",
+      "importer": "SharpEngine.WorldXml",
+      "tags": ["scene", "startup"]
+    },
+    {
+      "id": "ui/main",
+      "type": "UiDocument",
+      "name": "Main UI",
+      "path": "Content/UI/Main.ui.xml",
+      "importer": "SharpEngine.UiXml",
+      "tags": ["ui"]
+    }
+  ]
+}

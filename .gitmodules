@@ -1,0 +1,6 @@
+[submodule "External/FreeType"]
+	path = External/FreeType
+	url = https://github.com/freetype/freetype.git
+[submodule "External/RmlUi"]
+	path = External/RmlUi
+	url = https://github.com/mikke89/RmlUi.git

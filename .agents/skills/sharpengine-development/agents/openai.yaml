@@ -1,0 +1,4 @@
+interface:
+  display_name: "SharpEngine Development"
+  short_description: "AI-first SharpEngine architecture and development contract"
+  default_prompt: "Use $sharpengine-development to design or review this SharpEngine change against the engine contract."

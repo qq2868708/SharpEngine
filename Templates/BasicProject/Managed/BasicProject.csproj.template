@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\Project\SharpEngine.props" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>__PROJECT_NAMESPACE__</RootNamespace>
+    <AssemblyName>__PROJECT_ID__</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputPath>..\Build\Managed\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\Content\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
