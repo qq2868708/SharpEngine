@@ -35,7 +35,7 @@ namespace
         dialog->SetTitle(create ? L"New Project - choose parent folder and enter a project name" : L"Open SharpEngine Project");
         dialog->SetOkButtonLabel(create ? L"Create project" : L"Open project");
         if (create) { dialog->SetFileName(L"NewGame"); dialog->SetFileNameLabel(L"Project name:"); }
-        else { const COMDLG_FILTERSPEC filter{L"SharpEngine project (project.json)",L"project.json"}; dialog->SetFileTypes(1,&filter); }
+        else { const COMDLG_FILTERSPEC filter{L"SharpEngine project",L"*.sharpproject"}; dialog->SetFileTypes(1,&filter); }
         Rml::String path;
         if (SUCCEEDED(dialog->Show(window)))
         {

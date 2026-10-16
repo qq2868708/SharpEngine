@@ -277,17 +277,9 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
     std::string enginePath;
     std::string engineManifest = "Engine/engine.json";
     std::string pathEnvironment;
-    std::string managedAssembly;
-    std::string managedRuntimeConfig;
-    std::string entryPointTypeName;
-
-    if (!ReadJsonString(json, "path", enginePath) ||
-        !ReadJsonString(json, "assembly", managedAssembly) ||
-        !ReadJsonString(json, "runtimeConfig", managedRuntimeConfig) ||
-        !ReadJsonString(json, "typeName", entryPointTypeName))
+    if (!ReadJsonString(json, "path", enginePath))
     {
-        std::wcerr << L"[ManagedHost] Project manifest is missing engine.path, "
-                      L"managed assembly/runtimeConfig, or entryPoint.typeName.\n"
+        std::wcerr << L"[ManagedHost] Project manifest is missing engine.path.\n"
                    << projectManifest << std::endl;
         return false;
     }
@@ -297,7 +289,7 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
 
     const auto manifestPath = std::filesystem::absolute(projectManifest).lexically_normal();
     const auto manifestDirectory = manifestPath.parent_path();
-    const auto projectRoot = manifestDirectory.parent_path();
+    const auto projectRoot = manifestDirectory;
 
     std::filesystem::path resolvedEngineRoot;
     if (!pathEnvironment.empty())
@@ -310,15 +302,13 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
     }
 
     const auto engineManifestPath = ResolvePath(resolvedEngineRoot, engineManifest);
-    const auto runtimeConfigPath = ResolvePath(projectRoot, managedRuntimeConfig);
-    const auto assemblyPath = ResolvePath(projectRoot, managedAssembly);
+    const auto moduleManifestPath = projectRoot / L"Binaries" / L"Managed" /
+        L"modules.runtime.json";
     if (!std::filesystem::exists(engineManifestPath) ||
-        !std::filesystem::exists(runtimeConfigPath) ||
-        !std::filesystem::exists(assemblyPath))
+        !std::filesystem::exists(moduleManifestPath))
     {
         std::wcerr << L"[ManagedHost] Project files are missing. engine="
-                   << engineManifestPath << L" runtimeConfig="
-                   << runtimeConfigPath << L" assembly=" << assemblyPath
+                   << engineManifestPath << L" modules=" << moduleManifestPath
                    << std::endl;
         return false;
     }
@@ -326,16 +316,6 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
     selection.ProjectManifest = manifestPath;
     selection.ProjectRoot = projectRoot;
     selection.EngineRoot = resolvedEngineRoot;
-    selection.RuntimeConfigPath = runtimeConfigPath;
-    selection.AssemblyPath = assemblyPath;
-    selection.EntryPointTypeName = Utf8ToWide(entryPointTypeName);
-    if (selection.EntryPointTypeName.empty())
-    {
-        std::wcerr << L"[ManagedHost] Project entryPoint.typeName is not valid UTF-8."
-                   << std::endl;
-        return false;
-    }
-
     return true;
 }
 

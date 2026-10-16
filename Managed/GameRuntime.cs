@@ -241,8 +241,8 @@ public sealed partial class EditorRuntime
         _engineRoot = FindEngineRoot();
         _projectManifest = FindProjectManifest();
         _projectRoot = _projectManifest is null ? null :
-            Directory.GetParent(Path.GetDirectoryName(_projectManifest)!)!.FullName;
-        _assets = AssetRegistry.Load(_engineRoot, _projectRoot);
+            Path.GetDirectoryName(_projectManifest)!;
+        _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
         _content = new ContentManager(_assets);
         _settings = EngineSettings.Load(_engineRoot, _projectRoot);
         var candidates = new List<string>();
@@ -652,7 +652,7 @@ public sealed partial class EditorRuntime
                 SetStatus("Create a project with Tools/SharpEngineProject.ps1 -Command New -Name MyGame");
                 break;
             case "editor.open-project":
-                SetStatus("Open a project with Engine.exe --project <Project/project.json>");
+                SetStatus("Open a project with Engine.exe --project <project.sharpproject>");
                 break;
             default:
                 SetStatus($"Action: {action}");
@@ -1188,9 +1188,12 @@ public sealed partial class EditorRuntime
                 Path.Combine(_engineRoot, "Tools", "SharpEngineProject.ps1"),
                 "-Command", "New", "-Name", name, "-Directory", parent,
                 "-EngineRoot", _engineRoot);
-            var managedProject = Directory.GetFiles(Path.Combine(fullPath, "Managed"), "*.csproj").Single();
-            RunTool("dotnet", "build", managedProject, "-c", "Debug", "--nologo");
-            OpenProject(Path.Combine(fullPath, "Project", "project.json"));
+            var manifest = Path.Combine(fullPath, name + ".sharpproject");
+            RunTool("powershell.exe", "-NoProfile", "-File",
+                Path.Combine(_engineRoot, "Tools", "SharpEngineProject.ps1"),
+                "-Command", "Build", "-ProjectFile", manifest,
+                "-Target", "Editor", "-Configuration", "Debug", "-Platform", "Win64");
+            OpenProject(manifest);
         }
         catch (Exception exception)
         {

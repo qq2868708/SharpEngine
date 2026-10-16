@@ -82,9 +82,9 @@ int wmain(int argc,wchar_t** argv)
         // window or relies on UI automation.
         ManagedHost managed;
         const ManagedHostApi api{5};
-        const bool loaded=projectManifest.empty()
-            ? managed.Initialize((executableDirectory/L"Managed/SharpEngine.Game.runtimeconfig.json").wstring(),(executableDirectory/L"Managed/SharpEngine.Game.dll").wstring())
-            : managed.Initialize(selection.RuntimeConfigPath.wstring(),selection.AssemblyPath.wstring(),selection.EntryPointTypeName);
+        const bool loaded=managed.Initialize(
+            (executableDirectory/L"Managed/SharpEngine.Game.runtimeconfig.json").wstring(),
+            (executableDirectory/L"Managed/SharpEngine.Game.dll").wstring());
         if (!loaded || !managed.Start(nullptr,0,0,&api))
         {
             std::cerr<<"[MCP] managed runtime initialization failed"<<std::endl;
@@ -109,9 +109,9 @@ int wmain(int argc,wchar_t** argv)
     ManagedHost managed;
     GManaged=&managed;
     const ManagedHostApi api{6,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput};
-    const bool loaded=projectManifest.empty()
-        ? managed.Initialize((executableDirectory/L"Managed/SharpEngine.Game.runtimeconfig.json").wstring(),(executableDirectory/L"Managed/SharpEngine.Game.dll").wstring())
-        : managed.Initialize(selection.RuntimeConfigPath.wstring(),selection.AssemblyPath.wstring(),selection.EntryPointTypeName);
+    const bool loaded=managed.Initialize(
+        (executableDirectory/L"Managed/SharpEngine.Game.runtimeconfig.json").wstring(),
+        (executableDirectory/L"Managed/SharpEngine.Game.dll").wstring());
     if (!loaded || !managed.Start(window.Window,1440,900,&api))
     {
         std::cerr<<"[ManagedHost] initialization failed"<<std::endl;

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>__PROJECT_NAMESPACE__.Editor</AssemblyName>
+    <RootNamespace>__PROJECT_NAMESPACE__.Editor</RootNamespace>
+    <SharpEngineModuleId>__PROJECT_NAMESPACE__.Editor</SharpEngineModuleId>
+    <SharpEngineModuleType>Editor</SharpEngineModuleType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Modules">
+      <HintPath>$(SharpEngineModulesApi)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SharpEngine.Managed">
+      <HintPath>$(SharpEngineManagedApi)</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <ProjectReference Include="..\__PROJECT_NAMESPACE__\__PROJECT_NAMESPACE__.csproj" />
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="Build">
+    <Error Condition="'$(SharpEngineManagedApi)' == '' or !Exists('$(SharpEngineManagedApi)') or '$(SharpEngineModulesApi)' == '' or !Exists('$(SharpEngineModulesApi)')"
+           Text="SharpEngine managed APIs are missing. Use the SharpEngine project build command." />
+  </Target>
+</Project>

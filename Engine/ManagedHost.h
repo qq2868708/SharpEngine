@@ -55,16 +55,13 @@ struct ManagedHostApi
     ManagedViewportInputFn ViewportInput = nullptr;
 };
 
-// Resolved from a project Project/project.json manifest. Paths are kept on the
-// native side so the managed assembly only receives the normal lifecycle API.
+// Resolved from a root .sharpproject manifest. User Module loading remains in
+// the engine-owned managed bootstrap; native code resolves only project/engine roots.
 struct ManagedProjectSelection
 {
     std::filesystem::path ProjectManifest;
     std::filesystem::path ProjectRoot;
     std::filesystem::path EngineRoot;
-    std::filesystem::path RuntimeConfigPath;
-    std::filesystem::path AssemblyPath;
-    std::wstring EntryPointTypeName;
 };
 
 bool ResolveManagedProject(const std::filesystem::path& projectManifest,

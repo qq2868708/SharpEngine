@@ -167,7 +167,8 @@ public sealed class AssetRegistry
     /// Load the public engine manifest and the optional project manifest. Missing
     /// project manifests are valid for the editor's empty-project state.
     /// </summary>
-    public static AssetRegistry Load(string engineRoot, string? projectRoot = null)
+    public static AssetRegistry Load(string engineRoot, string? projectRoot = null,
+        string? projectManifestPath = null)
     {
         var registry = new AssetRegistry(engineRoot, projectRoot);
         var engineManifest = Path.Combine(registry.EngineRoot, "Engine", "engine.json");
@@ -181,13 +182,12 @@ public sealed class AssetRegistry
 
         if (!string.IsNullOrWhiteSpace(registry.ProjectRoot))
         {
-            var projectManifest = Path.Combine(registry.ProjectRoot!, "Project", "project.json");
-            if (!File.Exists(projectManifest))
-            {
-                projectManifest = Path.Combine(registry.ProjectRoot!, "project.json");
-            }
+            var projectManifest = string.IsNullOrWhiteSpace(projectManifestPath)
+                ? Directory.GetFiles(registry.ProjectRoot!, "*.sharpproject",
+                    SearchOption.TopDirectoryOnly).SingleOrDefault()
+                : Path.GetFullPath(projectManifestPath);
 
-            if (File.Exists(projectManifest))
+            if (projectManifest is not null && File.Exists(projectManifest))
             {
                 registry.LoadOwnerManifest(projectManifest,
                     AssetSource.Project, registry.ProjectRoot!);
@@ -197,8 +197,7 @@ public sealed class AssetRegistry
         return registry;
     }
 
-    /// <summary>Load resolved engine.json and optional project.json paths.
-    /// Each may live directly in its source root or in Engine/Project.</summary>
+    /// <summary>Load resolved engine and optional root project manifest paths.</summary>
     public static AssetRegistry LoadFromManifests(string engineManifestPath,
         string? projectManifestPath = null)
     {
@@ -263,11 +262,9 @@ public sealed class AssetRegistry
     {
         var directory = new DirectoryInfo(Path.GetDirectoryName(
             Path.GetFullPath(manifestPath))!);
-        // Distribution manifests live in <root>/Engine and project manifests
-        // live in <root>/Project. Asset paths in both contracts are rooted at
-        // the containing distribution/project root.
-        if (string.Equals(directory.Name, "Engine", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(directory.Name, "Project", StringComparison.OrdinalIgnoreCase))
+        // Distribution manifests live in <root>/Engine. Project manifests now
+        // live directly in the project root.
+        if (string.Equals(directory.Name, "Engine", StringComparison.OrdinalIgnoreCase))
         {
             return directory.Parent?.FullName ?? directory.FullName;
         }

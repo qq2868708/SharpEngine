@@ -14,7 +14,6 @@ void Require(bool condition, string message)
 }
 try
 {
-    var projectDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Project"));
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var worldPath = Path.Combine(worlds.FullName, "Main.world.xml");
@@ -22,9 +21,9 @@ try
     File.WriteAllText(Path.Combine(assets.FullName, "assets.json"), """
         {"schemaVersion":1,"assets":[{"id":"worlds/main","type":"World","path":"Content/Worlds/Main.world.xml"}]}
         """);
-    var manifest = Path.Combine(projectDirectory.FullName, "project.json");
+    var manifest = Path.Combine(temporary.FullName, "Validation.sharpproject");
     File.WriteAllText(manifest, """
-        {"schemaVersion":1,"assets":{"manifest":"Content/Assets/assets.json"},"world":{"startup":"Content/Worlds/Main.world.xml"}}
+        {"schemaVersion":2,"projectId":"validation","modules":[],"assets":{"manifest":"Content/Assets/assets.json"},"world":{"startup":"Content/Worlds/Main.world.xml"}}
         """);
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", root);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);

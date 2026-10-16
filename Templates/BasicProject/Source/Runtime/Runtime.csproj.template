@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>__PROJECT_NAMESPACE__</AssemblyName>
+    <RootNamespace>__PROJECT_NAMESPACE__</RootNamespace>
+    <SharpEngineModuleId>__PROJECT_NAMESPACE__</SharpEngineModuleId>
+    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Modules">
+      <HintPath>$(SharpEngineModulesApi)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="Build">
+    <Error Condition="'$(SharpEngineModulesApi)' == '' or !Exists('$(SharpEngineModulesApi)')"
+           Text="SharpEngineModulesApi must point to a built SharpEngine.Modules.dll. Use the SharpEngine project build command." />
+  </Target>
+</Project>

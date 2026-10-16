@@ -21,7 +21,8 @@ net8.0; a compatible .NET 8 runtime must be installed on the machine.
 
     .\x64\Debug\Engine.exe
 
-The host loads SharpEngine.Game.dll and the shared SharpEngine.Managed.dll.
+The host loads the engine-owned `SharpEngine.Game.dll` bootstrap, the shared
+`SharpEngine.Modules.dll` contract, and `SharpEngine.Managed.dll` editor API.
 RmlUi loads `Content/UI/Rml/Editor.rml` and `Editor.rcss`. The C# editor session
 loads `Content/Worlds/Main.world.xml` and the asset registry, then sends real
 mesh triangles and lines to the viewport. Hierarchy selection and viewport
@@ -49,7 +50,10 @@ The native host calls:
     GameEntrypoint.ViewportKey    (optional)
     GameEntrypoint.RunMcp         (optional, used by --mcp-stdio)
 
-Only POD values and opaque native callbacks cross the boundary. Vulkan and C++
+These callbacks belong only to the engine bootstrap; user projects no longer
+copy an unmanaged entry point. The bootstrap loads every project Module from
+`Binaries/Managed/modules.runtime.json` and calls Module Startup/Shutdown in
+dependency order. Only POD values and opaque native callbacks cross the boundary. Vulkan and C++
 implementation types are intentionally kept out of the C# project. The
 versioned native API carries UI text/actions, viewport bounds, and blittable
 vertex arrays. Both the built-in entry point and new projects delegate editor
@@ -57,8 +61,8 @@ behavior to `SharpEngine.Editor.EditorRuntime` from the public managed DLL.
 
 ## Public engine and new projects
 
-`Engine/engine.json` is the distribution manifest. A game project stores only
-`Project/project.json`, whose `engine.path` points at that distribution; engine
+`Engine/engine.json` is the distribution manifest. A game project stores a root
+`<Name>.sharpproject`, whose `engine.path` points at that distribution; engine
 source and binaries are not copied into the project. Set `SHARPENGINE_ROOT` to
 override the manifest path when the same project is opened with a separately
 installed public engine.
@@ -67,23 +71,23 @@ Create a project from the checked-out engine or an installed distribution:
 
 ```powershell
 & .\Tools\SharpEngineProject.ps1 -Command New -Name MyGame -Directory ..\Samples
-& .\Tools\SharpEngineProject.ps1 -Command Resolve -ProjectFile ..\Samples\MyGame\Project\project.json
-& .\Tools\SharpEngineProject.ps1 -Command Doctor -ProjectFile ..\Samples\MyGame\Project\project.json
-dotnet build ..\Samples\MyGame\Managed\mygame.csproj
+& .\Tools\SharpEngineProject.ps1 -Command Resolve -ProjectFile ..\Samples\MyGame\MyGame.sharpproject
+& .\Tools\SharpEngineProject.ps1 -Command Doctor -ProjectFile ..\Samples\MyGame\MyGame.sharpproject
+& .\Tools\SharpEngineProject.ps1 -Command Build -ProjectFile ..\Samples\MyGame\MyGame.sharpproject -Target Editor -Configuration Debug -Platform Win64
 ```
 
-The generated `Project/SharpEngine.props` exposes the public engine root to
-MSBuild (`SharpEngineManagedRoot`, `SharpEngineContentRoot`, and
-`SharpEngineToolsRoot`). The native host keeps the sample managed game when no
-project is specified. Run a generated project assembly with:
+Each Module is one `.csproj`, one DLL, and one `ISharpEngineModule` entry.
+Module ID/type come from evaluated MSBuild properties; dependencies come from
+real `ProjectReference` items. The native host keeps the sample workspace when no
+project is specified. Run a generated project with:
 
 ```powershell
-dotnet build ..\Samples\MyGame\Managed\mygame.csproj
-.\x64\Debug\Engine.exe --project ..\Samples\MyGame\Project\project.json
+& .\Tools\SharpEngineProject.ps1 -Command Build -ProjectFile ..\Samples\MyGame\MyGame.sharpproject
+.\x64\Debug\Engine.exe --project ..\Samples\MyGame\MyGame.sharpproject
 ```
 
-The host reads the project manifest's `managed.runtimeConfig`,
-`managed.assembly`, and `entryPoint.typeName` fields.
+The build emits `Binaries/Managed/modules.runtime.json` with resolved Module
+assemblies, entry types, and dependency order.
 
 ### Scene navigation, hierarchy, and mesh import
 
@@ -161,7 +165,7 @@ asset provenance, and importer metadata without controlling the desktop window.
 The public engine owns `Content/Assets/assets.json`, referenced by the
 `assets.manifest` entry in `Engine/engine.json`. A project gets its own
 `Content/Assets/assets.json` from the BasicProject template and references it
-from `Project/project.json`. The two manifests are intentionally separate:
+from the root `.sharpproject`. The two manifests are intentionally separate:
 engine records are read-only and use `engine://...` IDs, while project records
 use `project://...` IDs. This lets the editor show both stores without
 silently allowing a project to overwrite a public engine asset.
@@ -172,12 +176,11 @@ provide the query surface used by the Project dock and viewport. An entry is
 portable because its `path` is relative to the owning engine/project root;
 `AssetDescriptor.ResolvePath` validates that it cannot escape that root.
 
-`Managed/Public/SharpEngine.Managed.csproj` builds the public .NET 8 API to
-`x64/<Configuration>/Managed/SharpEngine.Managed.dll`. It contains the asset,
-UI, world, and shared editor runtime APIs; the built-in game and generated
-projects both reference this DLL. Generated `Project/SharpEngine.props`
-resolves it from the public engine installation and copies the binary to the
-project build output, with no copied engine sources.
+`Managed/Modules/SharpEngine.Modules.csproj` builds the minimal Runtime-safe
+Module contract. Runtime Modules reference only this DLL. `Managed/Public/
+SharpEngine.Managed.csproj` builds the asset, world, UI, and editor APIs;
+Editor Modules reference both public DLLs. The unified project builder supplies
+their resolved paths to MSBuild and copies no engine source.
 
 Built-in meshes are real indexed triangle data:
 `engine://meshes/cube` is a unit cube (8 positions, 12 triangles) and
@@ -188,20 +191,28 @@ metallic, and roughness parameters. Load them through
 `AssetContent.LoadMaterial(registry, id)`; the formats are UTF-8 JSON files in
 `Content/Assets/Meshes` and `Content/Assets/Materials`.
 
-The native host accepts `--project <path-to-Project/project.json>`. It resolves
+The native host accepts `--project <path-to-project.sharpproject>`. It resolves
 the public engine from `SHARPENGINE_ROOT` when set, otherwise from the
-manifest-relative `engine.path`, then loads the project-owned managed DLL and
-runtimeconfig. The project directory contains no copied engine sources.
+manifest-relative `engine.path`, enters the engine-owned managed bootstrap, and
+loads the project Module graph. The project directory contains no copied engine sources.
 
 ## C# editor commands, menus, Toolbar, and context menus
 
 Project-owned C# code can extend the shared editor without changing the native
-host or writing project-specific RML. Implement `IEditorExtension` and register
-it after the editor runtime is initialized:
+host or writing project-specific RML. An Editor Module registers its extension
+during Module Startup:
 
 ```csharp
-editor.Initialize();
-editor.RegisterExtension(new ProjectEditorExtension());
+public sealed class MyEditorModule : ISharpEngineModule
+{
+    private IDisposable? registration;
+    public void Startup(ModuleContext context)
+    {
+        var editor = (EditorModuleContext)context;
+        registration = editor.RegisterEditorExtension(new ProjectEditorExtension());
+    }
+    public void Shutdown() => registration?.Dispose();
+}
 ```
 
 Register commands separately from their UI placements. The returned handles

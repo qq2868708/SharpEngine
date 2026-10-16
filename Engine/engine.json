@@ -7,6 +7,7 @@
   "paths": {
     "nativeSource": "Engine",
     "managed": "Managed",
+    "moduleApi": "x64/{configuration}/Managed/SharpEngine.Modules.dll",
     "managedApi": "x64/{configuration}/Managed/SharpEngine.Managed.dll",
     "content": "Content",
     "tools": "Tools",
@@ -17,7 +18,7 @@
     "root": "Content/Assets"
   },
   "projectContract": {
-    "manifest": "Project/project.json",
+    "manifestPattern": "*.sharpproject",
     "enginePathEnvironmentVariable": "SHARPENGINE_ROOT"
   }
 }

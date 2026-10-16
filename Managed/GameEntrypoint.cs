@@ -6,6 +6,7 @@ namespace SharpEngine.Game;
 public static class GameEntrypoint
 {
     private static EditorRuntime? s_runtime;
+    private static ProjectModuleHost? s_modules;
 
     [UnmanagedCallersOnly]
     public static int Initialize(
@@ -18,11 +19,15 @@ public static class GameEntrypoint
         {
             s_runtime = new EditorRuntime(windowHandle, width, height, nativeApi);
             s_runtime.Initialize();
+            s_modules = ProjectModuleHost.Load(s_runtime);
             return 0;
         }
         catch (Exception exception)
         {
             Console.Error.WriteLine($"[Game] Initialize failed: {exception}");
+            s_modules?.Dispose();
+            s_modules = null;
+            s_runtime?.Shutdown();
             s_runtime = null;
             return -1;
         }
@@ -46,6 +51,8 @@ public static class GameEntrypoint
     {
         try
         {
+            s_modules?.Dispose();
+            s_modules = null;
             s_runtime?.Shutdown();
         }
         catch (Exception exception)
@@ -54,6 +61,7 @@ public static class GameEntrypoint
         }
         finally
         {
+            s_modules = null;
             s_runtime = null;
         }
     }

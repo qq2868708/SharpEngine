@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <SharpEngineProjectRoot>$(MSBuildThisFileDirectory)</SharpEngineProjectRoot>
+    <OutputPath>$(SharpEngineProjectRoot)Binaries\Managed\</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineProjectRoot)Intermediate\Managed\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+</Project>

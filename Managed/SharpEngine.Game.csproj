@@ -14,7 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="AssetRegistry.cs;BuiltinAssetDescriptions.cs;ContentManager.cs;EditorExtensions.cs;EditorRuntimeExtensions.cs;MeshImport.cs;GameRuntime.cs;NativeEngineApi.cs;UiDocument.cs;UiFramework.cs;EngineUi.cs;UiSemantics.cs;WorldDescription.cs;WorldViewportRenderer.cs;McpEndpoint.cs;EngineSettings.cs;Public\**\*.cs" />
+    <Compile Remove="AssetRegistry.cs;BuiltinAssetDescriptions.cs;ContentManager.cs;EditorExtensions.cs;EditorModuleContext.cs;EditorRuntimeExtensions.cs;ModuleContracts.cs;MeshImport.cs;GameRuntime.cs;NativeEngineApi.cs;UiDocument.cs;UiFramework.cs;EngineUi.cs;UiSemantics.cs;WorldDescription.cs;WorldViewportRenderer.cs;McpEndpoint.cs;EngineSettings.cs;Modules\**\*.cs;Public\**\*.cs" />
     <ProjectReference Include="Public\SharpEngine.Managed.csproj" />
   </ItemGroup>
 

@@ -14,6 +14,7 @@
   <!-- Explicit includes keep the public contract separate from the editor
        game's lifecycle and native callback implementation without moving files. -->
   <ItemGroup>
+    <Compile Include="AssemblyInfo.cs" />
     <Compile Include="..\AssetRegistry.cs" Link="Assets\AssetRegistry.cs" />
     <Compile Include="..\ContentManager.cs" Link="Assets\ContentManager.cs" />
     <Compile Include="..\BuiltinAssetDescriptions.cs" Link="Assets\BuiltinAssetDescriptions.cs" />
@@ -21,6 +22,7 @@
     <Compile Include="..\GameRuntime.cs" Link="Editor\EditorRuntime.cs" />
     <Compile Include="..\EditorRuntimeExtensions.cs" Link="Editor\EditorRuntimeExtensions.cs" />
     <Compile Include="..\EditorExtensions.cs" Link="Editor\EditorExtensions.cs" />
+    <Compile Include="..\EditorModuleContext.cs" Link="Editor\EditorModuleContext.cs" />
     <Compile Include="..\NativeEngineApi.cs" Link="Editor\NativeEngineApi.cs" />
     <Compile Include="..\UiDocument.cs" Link="Editor\UiDocument.cs" />
     <Compile Include="..\UiFramework.cs" Link="UI\UiFramework.cs" />
@@ -30,5 +32,8 @@
     <Compile Include="..\WorldViewportRenderer.cs" Link="World\WorldViewportRenderer.cs" />
     <Compile Include="..\McpEndpoint.cs" Link="Editor\McpEndpoint.cs" />
     <Compile Include="..\EngineSettings.cs" Link="Editor\EngineSettings.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\SharpEngine.Modules.csproj" />
   </ItemGroup>
 </Project>

@@ -59,14 +59,13 @@ try
     Check(imported.Positions.Count == 4 && imported.Indices.Count == 6,
         "OBJ importer must triangulate polygon faces");
     var importedAssets = Directory.CreateDirectory(Path.Combine(importRoot.FullName, "Content", "Assets"));
-    var importedProject = Directory.CreateDirectory(Path.Combine(importRoot.FullName, "Project"));
     File.Copy(objPath, Path.Combine(importedAssets.FullName, "quad.obj"));
     File.WriteAllText(Path.Combine(importedAssets.FullName, "assets.json"), """
       {"schemaVersion":1,"assets":[{"id":"meshes/quad","type":"Mesh","name":"Imported Quad","path":"Content/Assets/quad.obj","importer":"SharpEngine.Obj"}]}
       """);
-    var importedManifest = Path.Combine(importedProject.FullName, "project.json");
+    var importedManifest = Path.Combine(importRoot.FullName, "Imported.sharpproject");
     File.WriteAllText(importedManifest, """
-      {"schemaVersion":1,"assets":{"manifest":"Content/Assets/assets.json"}}
+      {"schemaVersion":2,"projectId":"imported","modules":[],"assets":{"manifest":"Content/Assets/assets.json"}}
       """);
     var importedRegistry = AssetRegistry.LoadFromManifests(
         Path.Combine(sourceRoot, "Engine", "engine.json"), importedManifest);
