@@ -45,6 +45,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="SharpEngineResource.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="ManagedHost.h">
       <Filter>源文件</Filter>
     </ClInclude>
@@ -84,12 +87,20 @@
     <ClInclude Include="Platform\Windows\WindowsPlatform.h">
       <Filter>Platform\Windows</Filter>
     </ClInclude>
+    <ClInclude Include="Platform\Windows\SharpEngineBranding.h">
+      <Filter>Platform\Windows</Filter>
+    </ClInclude>
     <ClInclude Include="Platform\Windows\Window\Win32Window.h">
       <Filter>Platform\Windows\Window</Filter>
     </ClInclude>
     <ClInclude Include="UI\RmlUiShell.h">
       <Filter>UI</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="SharpEngine.rc">
+      <Filter>资源文件</Filter>
+    </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="RenderCore\Private\RenderCore.cpp">

@@ -1,4 +1,5 @@
 #include "Win32Window.h"
+#include "Platform/Windows/SharpEngineBranding.h"
 #include <dwmapi.h>
 #include <windowsx.h>
 
@@ -111,6 +112,9 @@ bool Win32Window::Create(uint32_t width, uint32_t height, const wchar_t* title)
     wc.style = CS_DBLCLKS;
     wc.hInstance = hInstance;
     wc.lpszClassName = L"SelfEngineWindow";
+    wc.hIcon = SharpEngine::Windows::LoadBrandIcon(
+        hInstance, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
 
     RegisterClass(&wc);
 
@@ -129,6 +133,7 @@ bool Win32Window::Create(uint32_t width, uint32_t height, const wchar_t* title)
     );
 
     if (!hWnd) return false;
+    SharpEngine::Windows::ApplyBrandIcon(hWnd, hInstance);
 
     // Windows 11 can still draw a one-pixel DWM outline after the non-client
     // area is removed. Suppress that outline as well (ignored on older OSes).

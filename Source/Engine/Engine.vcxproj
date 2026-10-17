@@ -132,6 +132,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="SharpEngineResource.h" />
     <ClInclude Include="ManagedHost.h" />
     <ClInclude Include="Platform\Platform.h" />
     <ClInclude Include="Platform\PlatformTypes.h" />
@@ -147,6 +148,10 @@
     <ClInclude Include="RenderCore\Private\Vulkan\VkSwapchain.h" />
     <ClInclude Include="RenderCore\Public\RenderCore.h" />
     <ClInclude Include="UI\RmlUiShell.h" />
+    <ClInclude Include="Platform\Windows\SharpEngineBranding.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="SharpEngine.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Editor\EditorMain.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />

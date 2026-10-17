@@ -246,6 +246,7 @@ int wmain(int argc,wchar_t** argv)
         return result;
     }
 
+    SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Editor");
     Platform::Initialize();
     auto window=Platform::CreateMainWindow(1440,900,L"SharpEngine Editor");
     if (!window.Window) { Platform::Shutdown(); return -1; }

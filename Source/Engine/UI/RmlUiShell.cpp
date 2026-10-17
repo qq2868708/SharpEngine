@@ -8,6 +8,7 @@
 #include <shobjidl.h>
 #include "RmlUi_Platform_Win32.h"
 #include "RmlUi_Renderer_GL2.h"
+#include "Platform/Windows/SharpEngineBranding.h"
 #include <gl/GL.h>
 #include <windowsx.h>
 #include <algorithm>
@@ -2088,6 +2089,9 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     windowClass.style = CS_DBLCLKS | CS_OWNDC;
     windowClass.hInstance = GetModuleHandleW(nullptr);
     windowClass.lpszClassName = DockWindowClass;
+    windowClass.hIcon = SharpEngine::Windows::LoadBrandIcon(
+        windowClass.hInstance, GetSystemMetrics(SM_CXICON),
+        GetSystemMetrics(SM_CYICON));
     if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
         return nullptr;
 
@@ -2105,6 +2109,7 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
         WS_OVERLAPPEDWINDOW, mainBounds.left + 64, mainBounds.top + 64,
         720, 520, state.MainWindow, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!host->Window) return nullptr;
+    SharpEngine::Windows::ApplyBrandIcon(host->Window, windowClass.hInstance);
     const COLORREF noBorder = DWMWA_COLOR_NONE;
     DwmSetWindowAttribute(host->Window, DWMWA_BORDER_COLOR,
                           &noBorder, sizeof(noBorder));

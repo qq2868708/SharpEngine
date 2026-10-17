@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <windowsx.h>
+#include <shobjidl.h>
 #include <GL/gl.h>
 #include <chrono>
 #include <filesystem>
@@ -8,6 +9,7 @@
 #include <string>
 #include <vector>
 #include "ManagedHost.h"
+#include "Platform/Windows/SharpEngineBranding.h"
 #include "RenderCore/Public/PreviewRenderer.h"
 
 namespace {
@@ -93,10 +95,13 @@ int wmain(int argc,wchar_t** argv) {
     if(!ResolveManagedProject(project,selection)) return 2;
     SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST",selection.ProjectManifest.c_str());
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT",selection.EngineRoot.c_str());
+    SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Game");
     WNDCLASSW wc{};wc.lpfnWndProc=Procedure;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"SharpEngineGameWindow";wc.style=CS_OWNDC;wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
+    wc.hIcon=SharpEngine::Windows::LoadBrandIcon(wc.hInstance,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON));
     RegisterClassW(&wc);
     Window=CreateWindowW(wc.lpszClassName,L"SharpEngine Game",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1280,720,nullptr,nullptr,wc.hInstance,nullptr);
     if(!Window) return 3;
+    SharpEngine::Windows::ApplyBrandIcon(Window, wc.hInstance);
     auto dc=GetDC(Window);
     PIXELFORMATDESCRIPTOR format{};format.nSize=sizeof(format);format.nVersion=1;
     format.dwFlags=PFD_DRAW_TO_WINDOW|PFD_SUPPORT_OPENGL|PFD_DOUBLEBUFFER;format.iPixelType=PFD_TYPE_RGBA;format.cColorBits=32;format.cDepthBits=24;

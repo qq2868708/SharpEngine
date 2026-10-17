@@ -1,0 +1,3 @@
+#include "SharpEngineResource.h"
+
+IDI_SHARPENGINE ICON "..\\..\\Resources\\Branding\\SharpEngine.ico"
