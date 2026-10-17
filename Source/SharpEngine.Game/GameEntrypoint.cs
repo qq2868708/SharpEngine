@@ -8,6 +8,7 @@ public static class GameEntrypoint
 {
     private static EditorRuntime? s_runtime;
     private static ProjectModuleHost? s_modules;
+    private static ProjectCodeService? s_projectCode;
     private static InputRuntimeService? s_input;
     private static readonly List<IDisposable> s_inputHandlers = new();
 
@@ -26,7 +27,18 @@ public static class GameEntrypoint
                 throw new InvalidOperationException("The asset registry is unavailable"));
             s_runtime.AttachInputRuntime(s_input);
             RegisterEditorInput(s_runtime, s_input);
-            s_modules = ProjectModuleHost.Load(s_runtime, s_input);
+            try
+            {
+                s_modules = ProjectModuleHost.Load(s_runtime, s_input);
+                if (s_modules is null) s_runtime.CompleteComponentRegistration();
+            }
+            catch (Exception error)
+            {
+                s_runtime.SetProjectCodeAvailable(false, "Project code failed to load; edit code and rebuild to recover");
+                s_runtime.SetProjectBuildStatus("ReloadFailed", error.ToString());
+            }
+            s_projectCode = new ProjectCodeService(s_runtime, s_input, s_modules);
+            s_modules = null; // Ownership transferred to the build/reload service.
             return 0;
         }
         catch (Exception exception)
@@ -57,6 +69,7 @@ public static class GameEntrypoint
                     runtime.PlayState == EditorPlayState.Playing);
                 input.AdvanceFrame(deltaSeconds);
             }
+            s_projectCode?.Tick();
             s_runtime?.Update(deltaSeconds);
         }
         catch (Exception exception)
@@ -70,6 +83,8 @@ public static class GameEntrypoint
     {
         try
         {
+            s_projectCode?.Dispose();
+            s_projectCode = null;
             s_modules?.Dispose();
             s_modules = null;
             DisposeInputHandlers();

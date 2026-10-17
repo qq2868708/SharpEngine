@@ -33,8 +33,9 @@ The host loads the engine-owned `SharpEngine.Game.dll` bootstrap, the shared
 RmlUi loads `Content/UI/Rml/Editor.rml` and `Editor.rcss`. The C# editor session
 loads the startup `.sworld` and the asset registry, then sends real
 mesh triangles and lines to the viewport. Hierarchy selection and viewport
-ray picking update the Inspector. Play rotates a demo mesh through C# state;
-Pause freezes it, and Stop restores the same Authoring document's edit transforms.
+ray picking update the component Inspector. Play reconstructs an independent
+Runtime World from committed Authoring data; Pause freezes simulation, and Stop
+discards Runtime changes and restores the Authoring document.
 Projects without a startup World receive an `Untitled*` deep copy of the engine
 default World; its first Save creates a project `.sworld`, registers the asset,
 and updates the project startup path as one checked operation.
@@ -116,6 +117,13 @@ The build emits the schema 2
 Module assemblies, with resolved entry types and dependency order. Project
 intermediates use `Intermediate/Win64/<Configuration>/<Target>/<BuildModule>`.
 
+Use **File > New C# Class...** to create a Component or plain class in an existing
+Module. Project source edits build in the background and reload when Stopped;
+Playing/Paused sessions apply the pending build after Stop. Failed reloads keep
+the Editor open and can recover after another source edit. See
+[C# creation and project code reload](Documentation/CSharpSourceCreation.md) for
+namespace rules, MCP commands, compatibility checks and validation.
+
 ### Scene navigation, hierarchy, and mesh import
 
 The Scene viewport supports RMB orbit, MMB pan, and mouse-wheel zoom. The navigation
@@ -154,8 +162,42 @@ by tools and AI workflows.
 
 Viewport navigation uses W/A/S/D for planar movement, Q/E for vertical movement,
 Shift for a speed boost, RMB orbit, MMB pan, and the wheel for zoom. Orbit yaw and
-pitch follow the drag direction; `Engine Settings > Invert Y Axis` reverses the
-vertical pitch and is saved under the project `Saved/Config/EngineSettings.json`.
+pitch follow the drag direction. `File > Engine Settings` opens the engine-owned
+settings window; Navigation > Invert Y Axis reverses vertical pitch. Engine
+defaults come from the engine assembly, while explicit project overrides are
+saved under `Config/EngineSettings/<settings-id>.json`.
+
+`File > Project Settings` opens the same schema-driven editor filtered to settings
+types declared by project Modules. A Runtime or Editor Module assembly registers
+each marked type automatically before its Module entry point starts:
+
+```csharp
+[DevelopmentSettings("mygame.gameplay", SettingsScope.Project, 1,
+    DisplayName = "Gameplay", Category = "Game")]
+public sealed class GameDevelopmentSettings : DevelopmentSettings
+{
+    [Setting("moveSpeed", DisplayName = "Move Speed", Minimum = 0)]
+    public float MoveSpeed { get; init; } = 600.0f;
+}
+
+var settings = DevelopmentSettings.Get<GameDevelopmentSettings>();
+```
+
+The explicit IDs survive CLR type and property renames. Edits publish a validated
+in-memory snapshot immediately, support panel-local Undo/Redo and Revert, and are
+written only by Save. Project-defined values are stored under
+`Config/ProjectSettings/<settings-id>.json`. Nested marked objects and deterministic
+collections are supported; schema cycles, abstract values, delegates, and other
+non-deterministic shapes fail during registration instead of becoming hidden nulls.
+Objects expand into marked fields; arrays and dictionaries currently use a JSON
+value editor. Static reads return detached snapshots, so editing a returned list
+cannot bypass validation. Read again to observe subsequent committed changes.
+Valid external file edits reload on the editor thread; invalid files or conflicts
+with unsaved edits retain the last valid state and show a diagnostic. Unknown schema
+versions are rejected; custom version migrations are not implemented yet.
+The legacy `Saved/Config/EngineSettings.json` navigation value is imported without
+changing that file; Save writes the new project override.
+
 ### Unified input routing
 
 Win64 keyboard and mouse input enter one engine route. RmlUi receives the
@@ -198,7 +240,6 @@ for routing and asset validation, and
 for rendered RmlUi input acceptance and a PNG capture. This first version loads
 input assets at startup; live rebinding/editor authoring, multi-player device
 assignment, persistent replay files and a Gamepad backend are not implemented.
-
 The 3D viewport draws a fixed corner orientation gizmo with world X/Y/Z axes
 in red/green/blue. It is a scene-only surface; UI authoring no longer changes
 the viewport mode.
@@ -218,8 +259,8 @@ lights renders mesh RGB as black. Camera and light orientation inherit parent
 rotation while ignoring parent scale; parent scale still affects child position.
 
 The editor menu hierarchy follows the usual Unreal-style split: `File` contains
-New Project, Open Project, Save World, and scene export; `Edit` contains Engine
-Settings and navigation preferences. The toolbar keeps only frequent Save,
+New Project, Open Project, Save World, scene export, Engine Settings and Project
+Settings; `Edit` contains Undo/Redo. The toolbar keeps only frequent Save,
 Export, and Play/Pause/Stop controls. Move, Rotate, and Scale are scoped to the
 3D viewport.
 
@@ -341,8 +382,8 @@ Object, Asset, and Folder context menus. `EditorContext` and command callbacks
 expose the current world, assets, unified `EditorSelection`, play state, dirty
 state, status, save, and UI refresh operations. Right-clicking first replaces the
 active selection, then evaluates context command state. Retrieve world entities
-through the context when executing. Stop restores simulation transforms on the
-same Authoring document. Call `MarkDirty` after changing non-transactional extension
+through the context when executing. Stop restores the original Authoring document.
+Component Inspector and `components.edit` operations share transactions. Call `MarkDirty` after changing non-transactional extension
 data; saving clears it. Built-in hierarchy and gizmo changes use the shared
 revisioned Undo/Redo layer. Arbitrary project extension field writes are not yet
 automatically converted into transactions.
@@ -429,9 +470,15 @@ compatibility/experimentation APIs; new projects no longer receive `*.ui.xml`
 assets. Runtime UI source assets use RML and RCSS, while the editor shell itself
 continues to use `Content/UI/Rml/Editor.rml`.
 
-World schema v2 uses the `.sworld` extension and requires explicit light colors.
-World data describes stable entity IDs, asset URIs, editable Transform,
-cameras, and directional lights. The viewport applies model/view/projection,
+World schema v3 uses strict JSON in `.sworld` files; pre-stable builds reject old
+schemas without migration. Entities contain versioned component records with
+stable instance/type IDs and explicit defaults. Runtime Modules use generated
+field descriptors, default states, private-field access and factories. The
+Inspector supports Add/Remove/Reset/Patch and Runtime context switching.
+`.sprefab` assets contain an independently edited subtree and instantiate by
+deep copy with remapped IDs. See `Documentation/InspectorComponentDesign.md`
+and `Content/Worlds/README.md` for the contract and validation commands.
+The viewport applies model/view/projection,
 frustum clipping, lighting, and native depth testing. Mesh and material data
 are resolved through the same asset registry as the Project panel. See
 `Content/Worlds/README.md` for the format. The `.sasset` format for non-World

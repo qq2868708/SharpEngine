@@ -1,6 +1,7 @@
 using System.Numerics;
-using System.Xml.Linq;
 using SharpEngine.World;
+using SharpEngine.Components;
+using System.Text.Json.Nodes;
 
 namespace SharpEngine.Editor;
 
@@ -76,6 +77,41 @@ public sealed class WorldAuthoringSession
     public bool IsDirty => !string.Equals(_savepoint, Serialize(Document), StringComparison.Ordinal);
     public bool CanUndo => _historyCursor > 0;
     public bool CanRedo => _historyCursor < _history.Count;
+    internal void ValidateRegistry(SharpEngine.Components.ComponentRegistry registry)
+    {
+        EnsureOwnerThread();
+        Validate(SceneData.Parse(Document.Serialize(), registry));
+        foreach (var entry in _history)
+        {
+            Validate(SceneData.Parse(entry.Before.Json, registry));
+            Validate(SceneData.Parse(entry.After.Json, registry));
+        }
+        void Validate(SceneData data)
+        {
+            foreach (var component in data.Entities.SelectMany(entity => entity.Components))
+                if (Document.Registry.Find(component.TypeId) is not null && registry.Find(component.TypeId) is null)
+                    throw new InvalidDataException($"Reload would remove component type {component.TypeId} used by {Document.SourcePath} or its history");
+            data.Validate(registry);
+        }
+    }
+    internal Action CaptureReloadRestorePoint()
+    {
+        EnsureOwnerThread();
+        var data = Document.Data.Clone();
+        var registry = Document.Registry;
+        var history = _history.ToArray();
+        var cursor = _historyCursor;
+        var savepoint = _savepoint;
+        var revision = DocumentRevision;
+        var savedRevision = SavepointRevision;
+        return () =>
+        {
+            Document.Registry = registry;
+            Document.Replace(data.Clone());
+            _history.Clear(); _history.AddRange(history); _historyCursor = cursor;
+            _savepoint = savepoint; DocumentRevision = revision; SavepointRevision = savedRevision;
+        };
+    }
     public string? UndoDescription => CanUndo ? Describe(_history[_historyCursor - 1].Kind) : null;
     public string? RedoDescription => CanRedo ? Describe(_history[_historyCursor].Kind) : null;
 
@@ -323,26 +359,33 @@ public sealed class WorldAuthoringSession
             beforeRevision, DocumentRevision, IsDirty, record);
     }
 
-    private DocumentState Capture() => new(Document.Entities.Select(entity =>
-        new EntityState(entity.Id, entity.ParentId, CurrentTransform(entity))).ToArray(),
-        Document.Entities.Select(entity => entity.Id).ToArray());
+    private DocumentState Capture() => new(Document.Serialize());
 
     private void Apply(DocumentState state)
     {
-        var entities = Document.Entities.ToDictionary(entity => entity.Id,
-            StringComparer.OrdinalIgnoreCase);
-        if (state.Entities.Length != entities.Count ||
-            state.Entities.Any(item => !entities.ContainsKey(item.Id)))
-            throw new InvalidOperationException("Transaction state does not match the world document");
-        foreach (var item in state.Entities)
-        {
-            var entity = entities[item.Id];
-            entity.ParentId = item.ParentId;
-            ApplyTransform(entity, item.Transform);
-        }
-        Document.SetEntityOrder(state.Order.Select(id => entities[id]).ToArray());
-        ValidateHierarchy();
+        Document.Replace(SceneData.Parse(state.Json, Document.Registry));
     }
+
+    public WorldEditResult Edit(string kind, ulong expectedRevision, Action<SceneData> edit,
+        string[] affected, string? transactionGroupId = null)
+    {
+        if (!IsOwnerThread()) return WrongThread();
+        if (expectedRevision != DocumentRevision) return RevisionConflict(expectedRevision);
+        var before = Capture();
+        var staging = Document.Data.Clone();
+        try { edit(staging); staging.Validate(Document.Registry); }
+        catch (Exception error) { return Failure("EDIT_REJECTED", error.Message); }
+        Document.Replace(staging);
+        return Commit(kind, before, Capture(), affected, transactionGroupId);
+    }
+
+    public WorldEditResult PatchComponent(string entityId, string componentId, JsonObject patch,
+        ulong expectedRevision, string? transactionGroupId = null) => Edit("component.patch", expectedRevision, data =>
+    {
+        var component = data.Entities.Single(e => e.EntityId == entityId).Components.Single(c => c.ComponentId == componentId);
+        if (Document.Registry.Find(component.TypeId) is null) throw new InvalidOperationException("Unknown component cannot be edited");
+        foreach (var (field, value) in patch) component.State[field] = value?.DeepClone();
+    }, [entityId], transactionGroupId);
 
     private void ValidateHierarchy()
     {
@@ -399,7 +442,7 @@ public sealed class WorldAuthoringSession
     }
 
     private static string Serialize(WorldDocument document) =>
-        document.ToXml().ToString(SaveOptions.DisableFormatting);
+        document.Serialize();
 
     private static string NormalizeId(string? id) => id?.Trim() ?? string.Empty;
     private static string Describe(string kind) => kind switch
@@ -463,14 +506,7 @@ public sealed class WorldAuthoringSession
     private static float Radians(float value) => value * 180 / MathF.PI;
     private static WorldVector3 ToWorld(Vector3 value) => new(value.X, value.Y, value.Z);
 
-    private sealed record EntityState(string Id, string ParentId, WorldLocalTransform Transform);
-
-    private sealed record DocumentState(EntityState[] Entities, string[] Order)
-    {
-        public bool Equals(DocumentState? other) => other is not null &&
-            Entities.SequenceEqual(other.Entities) && Order.SequenceEqual(other.Order, StringComparer.OrdinalIgnoreCase);
-        public override int GetHashCode() => HashCode.Combine(Entities.Length, Order.Length);
-    }
+    private sealed record DocumentState(string Json);
 
     private sealed record HistoryEntry(Guid TransactionId, string Kind, string? TransactionGroupId,
         DocumentState Before, DocumentState After, ulong BeforeRevision, ulong AfterRevision,

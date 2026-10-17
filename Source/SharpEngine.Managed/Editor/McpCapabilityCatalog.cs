@@ -53,6 +53,8 @@ internal sealed record McpCapabilityDescriptor(
 
     internal (bool Available, JsonObject? Reason) Availability(EditorRuntime runtime)
     {
+        if (Id is "source.create" or "source.modules" && runtime.ProjectManifest is null)
+            return (false, McpCapabilityCatalog.Unavailable("PROJECT_UNAVAILABLE", "Open a project before creating C# source"));
         if (RequiresLiveUi && !runtime.HasLiveUi)
             return (false, McpCapabilityCatalog.Unavailable("EDITOR_LIVE_UI_UNAVAILABLE",
                 "The selected Editor session has no live RmlUi host"));
@@ -69,6 +71,30 @@ internal static class McpCapabilityCatalog
         new McpCapabilityDescriptor[]
         {
             Read("scene.describe", "Return the complete serialized scene, including hierarchy and resolved world matrices."),
+            Read("source.modules", "List evaluated project Modules and root namespaces for C# source creation."),
+            Read("source.status", "Read project build/reload state, availability and retry diagnostics."),
+            new("source.create", 1, "Create one C# class or Runtime component source file and queue a project build. Writes to disk immediately; not part of scene Undo.", "external",
+                new JsonObject { ["$schema"] = "https://json-schema.org/draft/2020-12/schema", ["type"] = "object",
+                    ["properties"] = new JsonObject {
+                        ["moduleProject"] = new JsonObject { ["type"] = "string" },
+                        ["directory"] = new JsonObject { ["type"] = "string" },
+                        ["name"] = new JsonObject { ["type"] = "string" },
+                        ["template"] = new JsonObject { ["enum"] = new JsonArray("class", "component") } },
+                    ["required"] = new JsonArray("moduleProject", "directory", "name", "template"), ["additionalProperties"] = false }, ObjectOutput()),
+            Read("components.describe", "Discover component schemas, defaults, context, revisions and live component data."),
+            new("components.edit", 1, "Edit components or create/remove entities through shared transactions.", "edit",
+                new JsonObject { ["$schema"] = "https://json-schema.org/draft/2020-12/schema", ["type"] = "object",
+                    ["properties"] = new JsonObject {
+                        ["context"] = new JsonObject { ["enum"] = new JsonArray("authoring", "runtime") },
+                        ["expectedRevision"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0 },
+                        ["operation"] = new JsonObject { ["enum"] = new JsonArray("add", "patch", "reset", "remove", "enabled", "active", "reorder", "create-entity", "destroy-entity") },
+                        ["entityId"] = new JsonObject { ["type"] = "string" }, ["componentId"] = new JsonObject { ["type"] = "string" },
+                        ["typeId"] = new JsonObject { ["type"] = "string" }, ["state"] = new JsonObject { ["type"] = "object" },
+                        ["value"] = new JsonObject { ["type"] = "boolean" }, ["index"] = new JsonObject { ["type"] = "integer" },
+                        ["name"] = new JsonObject { ["type"] = "string" }, ["parentId"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
+                        ["transactionGroupId"] = new JsonObject { ["type"] = "string" } },
+                    ["required"] = new JsonArray("context", "expectedRevision", "operation"), ["additionalProperties"] = false },
+                ObjectOutput(), RevisionPrecondition: "context revision"),
             Read("assets.describe", "Return the engine and project asset registry with source and importer metadata."),
             Read("content.describe", "Return all four independent content managers, their queries, filters, selections, Tile/List modes, and active routing target (schema v2)."),
             Read("editor.describe", "Return the committed editor snapshot and links to capability and live UI resources."),

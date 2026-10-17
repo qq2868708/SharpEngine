@@ -1,66 +1,69 @@
-# World description v2
+# World and Prefab component data
 
-`Main.sworld` is a data-only World asset. It is consumed by
-`SharpEngine.World.WorldDocument` and is the engine's default World source.
-Each entity has a stable `id`, display `name`, type (`mesh`, `camera`, `light`, or `empty`),
-and a position, Euler rotation, and positive scale. Values are comma-separated numbers
-using the invariant culture. Units are meters; the system is right-handed with Y up.
-Rotation is degrees: pitch X, yaw Y, roll Z. A camera looks along its local -Z axis.
+`.sworld` and `.sprefab` contain strict UTF-8 JSON with `schemaVersion: 3`.
+Pre-stable SharpEngine accepts only the current schema. XML/v2 is rejected;
+there is no automatic migration or upgrade utility.
 
-The `version="2"` attribute is required; legacy or missing versions are rejected.
-The world's `activeCamera` chooses the camera used by the viewport. Cameras expose
-`fieldOfView` (vertical degrees), `nearPlane`, and `farPlane`. Lights are directional;
-their rotation controls local -Z light direction, `intensity` controls diffuse light,
-and every light must declare `color`. Scene lights are the only source of mesh RGB:
-there is no hidden preview or ambient light. Multiple lights accumulate linear RGB
-before the current LDR viewport clamps the result.
-Mesh assets use registered URIs such as `engine://meshes/cube` and
-`engine://meshes/plane`.
+A document stores `kind` (`world` or `prefab`), `worldId`, `name`,
+`activeCameraId` (an entity ID or null), and an ordered `entities` array.
+Each entity stores `entityId`, `name`, `parentId`, `activeSelf`, and `components`.
+Each component stores `componentId`, `typeId`, `schemaVersion`, `enabled`, and
+`state`. All known fields, including default-valued fields, are explicit.
 
-Entities may set `parent="anotherEntityId"`. Position, rotation, and scale are
-then local to that parent. The loader rejects missing parents, self-parenting, and
-cycles. `WorldDocument.WorldMatrix(entity)` resolves the complete local-to-world
-transform for rendering, picking, and AI inspection.
-Camera and light direction inherit the full parent rotation chain while ignoring
-parent scale; parent scale still affects their local position offset.
+Every entity has exactly one enabled `engine.transform`. Its `Position`,
+`Rotation`, and `Scale` are three-number arrays. Coordinates are right-handed,
+meters, Y-up. Rotation is Euler degrees (X pitch, Y yaw, Z roll); scale is
+positive. Parent transforms compose local TRS into world matrices. Camera and
+directional-light orientation inherit parent rotation but not scale.
 
-`WorldViewportRenderer.BuildFrame(world, bounds, selectedEntityId, assets)` produces triangle
-and line lists. Every vertex is seven sequential floats: viewport-relative X/Y pixels,
-0..1 perspective depth, then RGBA. Backends must scissor to the provided viewport and
-enable depth testing. Rendering data is independent of the UI layout and native API.
-The supplied RmlUi viewport bounds therefore determine the exact camera aspect ratio.
-Passing the asset registry loads the actual mesh positions/indices and the referenced
-material base color. Geometry is cached for that registry; `InvalidateAssets` clears
-the cache after reimport. Missing or invalid resources are skipped with frame diagnostics.
+Other built-in component types:
 
-Loading rejects duplicate entity IDs, malformed or non-finite transforms, non-positive
-scale, unsupported versions/types, invalid camera ranges, and a missing active camera.
-Triangles and lines are clipped to all six camera planes before perspective division.
-`TryPick` converts the viewport pointer position to a 3D ray and selects the nearest
-actual mesh triangle. It uses the same camera, asset geometry, and transforms as rendering.
+| Type ID | State fields |
+| --- | --- |
+| `engine.mesh-renderer` | `Mesh`, `Material` asset URI or null; RGBA `Color` |
+| `engine.camera` | `FieldOfView`, `NearPlane`, `FarPlane` |
+| `engine.directional-light` | RGBA `Color`, nonnegative `Intensity` |
 
-The editor viewport supports W/A/S/D movement, Q/E vertical movement, Shift speed boost,
-RMB orbit, MMB pan, and mouse-wheel zoom. Camera changes are regular world entity changes
-and are persisted by Save. The 3D world axes are X right/red, Y up/green, and Z depth/blue;
-the UI coordinate overlay uses X right and Y down. `WorldDocument.Describe()`
-and `WorldDocument.ToJson()` expose the complete scene, including local transforms,
-parent IDs, resolved world matrices, camera parameters, and mesh/material references.
-Hierarchy reparent and ordering use `WorldAuthoringSession`, preserve world transform,
-validate expected document revision, and participate in the shared Undo/Redo history.
+Components can coexist on the same entity. Component array order is Inspector
+presentation only, including the Transform's position. Instance references use
+IDs, never indexes, names, or display order. Entity/component references are
+nullable; deleting a target clears serialized references in the same mutation.
+Unknown component records survive unrelated saves but are not instantiated or
+shown as available components. Cook validation rejects unknown components.
 
-Wavefront OBJ meshes can be imported into a project with:
+Authoring stores data records. Add/Remove/Reset/Patch/reorder and hierarchy edits
+share revision checks and Undo/Redo. Save validates a temporary file before
+atomic replacement. Play reconstructs a separate Runtime World from committed
+memory, including unsaved edits. Runtime instances execute component callbacks;
+Stop discards Runtime changes. Runtime exceptions are logged without rollback
+or automatic component deactivation.
+
+Prefab documents contain one root entity and its subtree. The Prefab editor
+keeps separate selection, history, and dirty state for each open document.
+Export rejects references outside the subtree. Instantiation generates fresh
+IDs and remaps internal references before initialization. Instances are deep
+copies without persistent override links.
+
+Create a project component with:
 
 ```powershell
-& .\Tools\SharpEngineMesh.ps1 -Command Import -ProjectRoot .\MyGame `
-  -Input .\assets\character.obj -Name Character -Id meshes/character
+./Tools/NewSharpComponent.ps1 -ModuleDirectory D:/MyGame/Source/Gameplay -Name HealthComponent -Namespace Gameplay
 ```
 
-The importer triangulates polygon faces into the same JSON Mesh asset consumed by the
-viewport. Direct `SharpEngine.Obj` manifest entries are also supported for projects
-that want to keep the source OBJ file.
+The tool generates a stable type UUID, schema version, and `partial` class.
+Public supported instance fields appear automatically; `[SerializeField]`
+includes non-public fields. `[NonSerialized]` excludes state, while
+`[HideInInspector]` only hides the UI. Runtime Modules receive the component
+source generator through the unified build. See
+`Documentation/InspectorComponentDesign.md` for the full agreed contract.
 
-Run the model and projection checks with:
+Validation:
 
 ```powershell
+dotnet run --project Tools/ComponentGeneratorValidation/SharpEngine.ComponentGeneratorValidation.csproj
+dotnet run --project Tools/ComponentValidation/SharpEngine.ComponentValidation.csproj
 dotnet run --project Tools/WorldValidation/SharpEngine.WorldValidation.csproj -- D:/SharpEngine
+dotnet run --project Tools/WorldAuthoringValidation/SharpEngine.WorldAuthoringValidation.csproj
+dotnet run --project Tools/EditorValidation/SharpEngine.EditorValidation.csproj -- D:/SharpEngine
+dotnet run --project Tools/McpUiValidation/SharpEngine.McpUiValidation.csproj -- Debug --inspector-only
 ```

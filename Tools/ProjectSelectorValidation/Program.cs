@@ -76,6 +76,12 @@ try
         "Source Engine and generated Editor Target must coexist in the Solution");
     var engineBootstrapGuid = StableGuid("project:" + Path.Combine(engineRoot, "Source",
         "SharpEngine.Game", "SharpEngine.Game.csproj"));
+    var componentGeneratorGuid = StableGuid("project:" + Path.Combine(engineRoot, "Source",
+        "SharpEngine.ComponentGenerator", "SharpEngine.ComponentGenerator.csproj"));
+    foreach (var configuration in new[] { "Debug", "Development", "Shipping" })
+        Check(firstSolution.Contains(componentGeneratorGuid + "." + configuration +
+                " Editor|Win64.Build.0 = " + configuration + "|Any CPU", StringComparison.Ordinal),
+            "Component generator must build in the selected Solution configuration: " + configuration);
     var nativeEnginePath = Path.Combine(engineRoot, "Source", "Engine", "Engine.vcxproj");
     var nativeEngineDocument = XDocument.Load(nativeEnginePath);
     var nativeEngineGuid = nativeEngineDocument.Descendants().First(element =>
@@ -114,12 +120,31 @@ try
           props.Contains("SharpEngineModulesApi", StringComparison.Ordinal) &&
           !props.Contains("SharpEngineUnifiedBuild>true", StringComparison.Ordinal),
         "Generated design-time props must resolve APIs without authorizing direct builds");
+    var generatedProps = XDocument.Load(generated.GeneratedPropsPath);
+    var generatorPath = generatedProps.Descendants("SharpEngineComponentGenerator").Single().Value;
+    var componentTargets = generatedProps.Descendants("CustomAfterMicrosoftCommonTargets").Single().Value;
+    Check(generatorPath == Path.Combine(engineRoot,
+            @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.ComponentGenerator.dll") &&
+        componentTargets == Path.Combine(engineRoot, @"Build\SharpEngine.Components.targets"),
+        "Runtime Module IDE builds must resolve the generator for the selected configuration");
 
     var sentinelTime = new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
     File.SetLastWriteTimeUtc(generated.SolutionPath, sentinelTime);
     _ = SolutionGenerator.EnsureCurrent(new ResolvedSharpProject(project, engine));
     Check(File.GetLastWriteTimeUtc(generated.SolutionPath) == sentinelTime,
         "Fresh project-file stamps must avoid rewriting the generated Solution");
+    // Version 4 predates component-generator properties. Existing user projects
+    // must be regenerated even when their project/engine manifests are unchanged.
+    var legacyStamp = System.Text.Json.Nodes.JsonNode.Parse(firstStamp)!.AsObject();
+    legacyStamp["generatorVersion"] = 4;
+    File.WriteAllText(generated.StampPath, legacyStamp.ToJsonString());
+    generatedProps.Descendants("SharpEngineComponentGenerator").Remove();
+    generatedProps.Descendants("CustomAfterMicrosoftCommonTargets").Remove();
+    generatedProps.Save(generated.GeneratedPropsPath);
+    _ = SolutionGenerator.EnsureCurrent(new ResolvedSharpProject(project, engine));
+    Check(File.ReadAllText(generated.GeneratedPropsPath) == props &&
+        File.ReadAllText(generated.StampPath) == firstStamp,
+        "Version 4 project files must regenerate the component-generator path and imports");
     _ = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
     Check(firstSolution == File.ReadAllText(generated.SolutionPath) &&
           firstStamp == File.ReadAllText(generated.StampPath),

@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup Condition="'$(SharpEngineModuleType)' == 'Runtime'">
+    <Analyzer Include="$(SharpEngineComponentGenerator)" />
+  </ItemGroup>
+  <Target Name="ValidateComponentGenerator" BeforeTargets="CoreCompile" Condition="'$(SharpEngineModuleType)' == 'Runtime'">
+    <Error Condition="!Exists('$(SharpEngineComponentGenerator)')" Text="Build the engine component generator before compiling Runtime Modules." />
+  </Target>
+</Project>

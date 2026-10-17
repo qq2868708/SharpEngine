@@ -8,6 +8,15 @@ public sealed partial class EditorRuntime
 {
     private void RegisterBuiltInEditorUi()
     {
+        _commands.Register(new EditorCommand("core.new-csharp", "New C# Class...",
+            _ => OpenSourceWizard(), _ => _projectManifest is not null));
+        _commands.Register(new EditorCommand("core.build-project-code", "Build Project Code",
+            _ => RequestProjectBuild?.Invoke(), _ => RequestProjectBuild is not null && _projectManifest is not null));
+        _commands.Register(new EditorCommand("core.new-prefab", "New Prefab", _ => InvokeUiAction("editor.prefab-new"),
+            _ => PlayState == EditorPlayState.Stopped));
+        _commands.Register(new EditorCommand("core.new-entity", "Create Empty Entity", _ => InvokeUiAction("editor.component-create-entity")));
+        _commands.Register(new EditorCommand("core.step", "Step", _ => { _runtimeWorld?.Step(); if (_runtimeWorld is not null) _world!.Replace(_runtimeWorld.Snapshot()); RefreshInspector(); },
+            _ => PlayState == EditorPlayState.Paused));
         _commands.Register(new EditorCommand("core.new-project", "New Project...",
             command => command.SetStatus("Choose a folder for the new project")));
         _commands.Register(new EditorCommand("core.open-project", "Open Project...",
@@ -39,9 +48,8 @@ public sealed partial class EditorRuntime
             "Select the current level in Content Manager"));
         _commands.Register(new EditorCommand("core.engine-settings", "Engine Settings...",
             _ => InvokeUiAction("editor.engine-settings")));
-        _commands.Register(new EditorCommand("core.invert-y", "Invert Y Axis",
-            _ => InvokeUiAction("editor.toggle-invert-y"), tooltip: "Invert viewport orbit Y input",
-            getChecked: _ => _settings.InvertYAxis));
+        _commands.Register(new EditorCommand("core.project-settings", "Project Settings...",
+            _ => InvokeUiAction("editor.project-settings")));
         _commands.Register(new EditorCommand("core.show-project-content", "Show Project Content",
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
@@ -58,6 +66,7 @@ public sealed partial class EditorRuntime
             _ => InvokeUiAction("editor.dock-reset-layout")));
         _commands.Register(new EditorCommand("core.play-pause", "Play / Pause",
             _ => InvokeUiAction(PlayState == EditorPlayState.Playing ? "editor.pause" : "editor.play"),
+            _ => ProjectCodeAvailable,
             tooltip: "Start or pause simulation",
             getChecked: _ => PlayState == EditorPlayState.Paused));
         _commands.Register(new EditorCommand("core.stop", "Stop",
@@ -77,21 +86,26 @@ public sealed partial class EditorRuntime
 
         _menus.RegisterCategory(new EditorMenuCategory("file", "project", 100));
         _menus.RegisterCategory(new EditorMenuCategory("file", "level", 200));
+        _menus.RegisterCategory(new EditorMenuCategory("file", "settings", 300));
         _menus.RegisterCategory(new EditorMenuCategory("edit", "history", 50));
-        _menus.RegisterCategory(new EditorMenuCategory("edit", "settings", 100));
         _menus.RegisterCategory(new EditorMenuCategory("assets", "content", 100));
         _menus.RegisterCategory(new EditorMenuCategory("view", "panes", 100));
         _menus.RegisterCategory(new EditorMenuCategory("view", "layout", 200));
         _menus.RegisterItem(new EditorMenuItem("file", "project", "core.new-project", 100));
         _menus.RegisterItem(new EditorMenuItem("file", "project", "core.open-project", 200));
+        _menus.RegisterItem(new EditorMenuItem("file", "project", "core.new-csharp", 300));
+        _menus.RegisterItem(new EditorMenuItem("file", "project", "core.build-project-code", 400));
         _menus.RegisterItem(new EditorMenuItem("file", "level", "core.save-current-level", 100));
         _menus.RegisterItem(new EditorMenuItem("file", "level", "core.export-scene", 200));
+        _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.engine-settings", 100));
+        _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.project-settings", 200));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.undo", 100));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.redo", 200));
-        _menus.RegisterItem(new EditorMenuItem("edit", "settings", "core.engine-settings", 100));
-        _menus.RegisterItem(new EditorMenuItem("edit", "settings", "core.invert-y", 200));
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.browse-current-level", 100));
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.show-project-content", 200));
+        _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.new-prefab", 300));
+        _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.new-entity", 300));
+        _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.step", 400));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.hierarchy", 100));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.ui-editor", 200));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content", 300));

@@ -344,6 +344,10 @@ struct RmlUiShell::Impl
         bool Reported{};
         bool PendingDestroy{};
         std::string HierarchySource;
+        std::string ComponentSource;
+        std::string PrefabSource;
+        bool InspectorGesture{};
+        int MarkupDepth{};
         Rml::Element* HierarchyDropTarget{};
         std::string HierarchyDropClass;
         int PointerX{};
@@ -1737,9 +1741,39 @@ struct RmlUiShell::Impl
 
     void ProcessEvent(Host& host, Rml::Event& event)
     {
+        if (host.MarkupDepth != 0) return;
         Rml::Element* target = event.GetTargetElement();
+        if (event.GetId() == Rml::EventId::Mousedown && FindAttributeElement(target, "data-component-slider"))
+        {
+            host.InspectorGesture = true;
+            QueueAction(host, "editor.component-gesture");
+        }
+        if (event.GetId() == Rml::EventId::Mouseup && host.InspectorGesture)
+        {
+            host.InspectorGesture = false;
+            QueueAction(host, "editor.component-gesture-end");
+        }
+        if (target && target->HasAttribute("data-component-input"))
+        {
+            if (event.GetId() == Rml::EventId::Focus) QueueAction(host, "editor.component-focus");
+            if (event.GetId() == Rml::EventId::Keydown && event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE)
+            {
+                target->SetAttribute("value", target->GetAttribute<Rml::String>("data-original-value", ""));
+                QueueAction(host, "editor.component-cancel"); event.StopPropagation(); return;
+            }
+            if (event.GetId() == Rml::EventId::Blur || (event.GetId() == Rml::EventId::Keydown && event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_RETURN))
+            {
+                const auto value = target->GetAttribute<Rml::String>("value", "");
+                if (value != target->GetAttribute<Rml::String>("data-original-value", ""))
+                    QueueAction(host, target->GetAttribute<Rml::String>("data-commit-action", "") + value);
+                else QueueAction(host, "editor.component-blur");
+                return;
+            }
+        }
         if (event.GetId() == Rml::EventId::Dragstart)
         {
+            host.ComponentSource = Attribute(FindAttributeElement(target, "data-component-id"), "data-component-id");
+            host.PrefabSource = Attribute(FindAttributeElement(target, "data-prefab-asset"), "data-prefab-asset");
             auto* source = FindAttributeElement(target, "data-hierarchy-entity");
             host.HierarchySource = Attribute(source, "data-hierarchy-entity");
             return;
@@ -1761,6 +1795,20 @@ struct RmlUiShell::Impl
         }
         if (event.GetId() == Rml::EventId::Dragdrop)
         {
+            if (!host.ComponentSource.empty())
+            {
+                const auto destination = Attribute(FindAttributeElement(target, "data-component-id"), "data-component-id");
+                if (!destination.empty()) QueueAction(host, "editor.component-drop:" + host.ComponentSource + ":" + destination);
+                host.ComponentSource.clear(); return;
+            }
+            if (!host.PrefabSource.empty())
+            {
+                auto* parent = FindAttributeElement(target, "data-hierarchy-entity");
+                const auto paneId = Attribute(FindAttributeElement(target, "data-pane-id"), "data-pane-id");
+                if (parent || paneId == "viewport" || paneId == "hierarchy")
+                    QueueAction(host, "editor.prefab-instantiate:" + host.PrefabSource + "|" + Attribute(parent, "data-hierarchy-entity"));
+                host.PrefabSource.clear(); return;
+            }
             if (host.HierarchySource.empty()) return;
             const int y = event.GetParameter<int>("mouse_y", 0);
             const auto drop = ResolveHierarchyDrop(host, target, y);
@@ -1775,6 +1823,8 @@ struct RmlUiShell::Impl
         {
             ClearHierarchyDrop(host);
             host.HierarchySource.clear();
+            host.ComponentSource.clear();
+            host.PrefabSource.clear();
             return;
         }
         if (event.GetId() == Rml::EventId::Change && target)
@@ -1791,7 +1841,8 @@ struct RmlUiShell::Impl
                 "data-change-action", "");
             if (!changeAction.empty())
             {
-                EmitAction(host, changeAction + value);
+                if (changeAction.find("editor.component-") == 0) QueueAction(host, changeAction + value);
+                else EmitAction(host, changeAction + value);
                 return;
             }
         }
@@ -1999,7 +2050,11 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     if (!main.Document) return false;
     main.Document->AddEventListener(Rml::EventId::Click, &main);
     main.Document->AddEventListener(Rml::EventId::Change, &main);
+    main.Document->AddEventListener(Rml::EventId::Focus, &main, true);
+    main.Document->AddEventListener(Rml::EventId::Blur, &main, true);
+    main.Document->AddEventListener(Rml::EventId::Keydown, &main, true);
     main.Document->AddEventListener(Rml::EventId::Mouseup, &main);
+    main.Document->AddEventListener(Rml::EventId::Mousedown, &main, true);
     main.Document->AddEventListener(Rml::EventId::Dragstart, &main, true);
     main.Document->AddEventListener(Rml::EventId::Dragover, &main, true);
     main.Document->AddEventListener(Rml::EventId::Dragdrop, &main, true);
@@ -2093,7 +2148,11 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     }
     host->Document->AddEventListener(Rml::EventId::Click, host.get());
     host->Document->AddEventListener(Rml::EventId::Change, host.get());
+    host->Document->AddEventListener(Rml::EventId::Focus, host.get(), true);
+    host->Document->AddEventListener(Rml::EventId::Blur, host.get(), true);
+    host->Document->AddEventListener(Rml::EventId::Keydown, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Mouseup, host.get());
+    host->Document->AddEventListener(Rml::EventId::Mousedown, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Dragstart, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Dragover, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Dragdrop, host.get(), true);
@@ -2474,6 +2533,19 @@ bool RmlUiShell::Render()
         }
         host.Context->SetDimensions({client.right, client.bottom});
         host.Context->Update();
+        // RmlUi's scrollable flex item can leave percentage children with an
+        // indefinite containing width. Resolve the Inspector against its Dock
+        // allocation after layout, including detached panes and splitter drags.
+        if (auto* inspector = host.Document->GetElementById("componentInspector"))
+        {
+            const float width = (std::max)(0.0f, inspector->GetParentNode()->GetParentNode()->GetBox().GetSize(Rml::BoxArea::Border).x - 20.0f);
+            if (width > 0 && std::abs(inspector->GetAttribute<float>("data-layout-width", -1) - width) > 0.1f)
+            {
+                inspector->SetProperty("width", std::to_string(width) + "px");
+                inspector->SetAttribute("data-layout-width", width);
+                host.Context->Update();
+            }
+        }
         state.Renderer.SetViewport(client.right, client.bottom);
         state.Renderer.DrawCalls = 0;
         state.Renderer.BeginFrame();
@@ -2591,7 +2663,9 @@ void RmlUiShell::SetMarkup(const char* id, const char* markup)
             strcmp(id, "toolbarLeft") == 0 ||
             strcmp(id, "toolbarCenter") == 0 ||
             strcmp(id, "toolbarRight") == 0)) host->OpenPopup = nullptr;
+        if (host) ++host->MarkupDepth;
         element->SetInnerRML(markup);
+        if (host) --host->MarkupDepth;
     }
 }
 
@@ -2603,7 +2677,9 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
     if (!host || !host->Document) return false;
     auto* element = host->Document->GetElementById(elementId);
     if (!element) return false;
+    ++host->MarkupDepth;
     element->SetInnerRML(markup);
+    --host->MarkupDepth;
     return true;
 }
 

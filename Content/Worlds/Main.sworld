@@ -1,19 +1,238 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Right-handed, meters, Y-up. Camera looks along local -Z.
-     Transform rotation is Euler degrees (pitch X, yaw Y, roll Z). -->
-<world version="2" name="Main Scene" activeCamera="mainCamera">
-  <entity id="ground" name="Ground" type="mesh"
-          asset="engine://meshes/plane" position="0,0,0"
-          scale="10,1,10" color="#38506F" />
-  <entity id="player" name="Player" type="mesh"
-          asset="engine://meshes/cube" position="-2,0.75,0"
-          rotation="0,25,0" scale="1.5,1.5,1.5" color="#4C91E8" />
-  <entity id="crate" name="Crate" type="mesh"
-          asset="engine://meshes/cube" position="2,0.5,1"
-          rotation="0,-15,0" scale="1,1,1" color="#B56D46" />
-  <entity id="mainCamera" name="Main Camera" type="camera"
-          position="8,7,11" rotation="-28,36,0"
-          fieldOfView="55" nearPlane="0.1" farPlane="100" />
-  <entity id="sun" name="Directional Light" type="light"
-          rotation="-50,-30,0" color="#FFFFFF" intensity="1.2" />
-</world>
+{
+  "schemaVersion": 3,
+  "kind": "world",
+  "worldId": "engine-main-world",
+  "name": "Main Scene",
+  "activeCameraId": "mainCamera",
+  "entities": [
+    {
+      "entityId": "ground",
+      "name": "Ground",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "ground-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              0,
+              0
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              10,
+              1,
+              10
+            ]
+          }
+        },
+        {
+          "componentId": "ground-mesh-renderer",
+          "typeId": "engine.mesh-renderer",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Mesh": "engine://meshes/plane",
+            "Material": null,
+            "Color": [
+              0.2196078431372549,
+              0.3137254901960784,
+              0.43529411764705883,
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "player",
+      "name": "Player",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "player-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              -2,
+              0.75,
+              0
+            ],
+            "Rotation": [
+              0,
+              25,
+              0
+            ],
+            "Scale": [
+              1.5,
+              1.5,
+              1.5
+            ]
+          }
+        },
+        {
+          "componentId": "player-mesh-renderer",
+          "typeId": "engine.mesh-renderer",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Mesh": "engine://meshes/cube",
+            "Material": null,
+            "Color": [
+              0.2980392156862745,
+              0.5686274509803921,
+              0.9098039215686274,
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "crate",
+      "name": "Crate",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "crate-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              2,
+              0.5,
+              1
+            ],
+            "Rotation": [
+              0,
+              -15,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "crate-mesh-renderer",
+          "typeId": "engine.mesh-renderer",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Mesh": "engine://meshes/cube",
+            "Material": null,
+            "Color": [
+              0.7098039215686275,
+              0.42745098039215684,
+              0.27450980392156865,
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "mainCamera",
+      "name": "Main Camera",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "mainCamera-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              8,
+              7,
+              11
+            ],
+            "Rotation": [
+              -28,
+              36,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "mainCamera-camera",
+          "typeId": "engine.camera",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "FieldOfView": 55,
+            "NearPlane": 0.1,
+            "FarPlane": 100
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "sun",
+      "name": "Directional Light",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "sun-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              0,
+              0
+            ],
+            "Rotation": [
+              -50,
+              -30,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "sun-directional-light",
+          "typeId": "engine.directional-light",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Color": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "Intensity": 1.2
+          }
+        }
+      ]
+    }
+  ]
+}

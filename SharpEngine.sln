@@ -11,6 +11,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Managed", "Sour
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Modules", "Source\SharpEngine.Modules\SharpEngine.Modules.csproj", "{54D53221-F9D3-4400-A6A0-D809296FD837}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.ComponentGenerator", "Source\SharpEngine.ComponentGenerator\SharpEngine.ComponentGenerator.csproj", "{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.ProjectSelector", "Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj", "{0F9B79B7-3E4F-4B5F-B5BB-7A84426885FC}"
 EndProject
 Global
@@ -20,6 +22,12 @@ Global
 		Shipping|x64 = Shipping|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}.Debug|x64.Build.0 = Debug|Any CPU
+		{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}.Development|x64.ActiveCfg = Development|Any CPU
+		{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}.Development|x64.Build.0 = Development|Any CPU
+		{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}.Shipping|x64.ActiveCfg = Shipping|Any CPU
+		{DC3DB971-0F58-4B10-B825-0E9D3F8B1254}.Shipping|x64.Build.0 = Shipping|Any CPU
 		{7F2E41AB-ACC9-4C33-8782-A67A6ED902E5}.Debug|x64.ActiveCfg = Debug|x64
 		{7F2E41AB-ACC9-4C33-8782-A67A6ED902E5}.Debug|x64.Build.0 = Debug|x64
 		{7F2E41AB-ACC9-4C33-8782-A67A6ED902E5}.Development|x64.ActiveCfg = Development|x64

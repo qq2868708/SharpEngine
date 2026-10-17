@@ -117,13 +117,15 @@ internal sealed class InputRuntimeService : IInputRuntime
         if (!_actionsById.ContainsKey(actionId))
             throw new ArgumentException($"Unknown InputAction '{actionId}'", nameof(actionId));
         var key = (route, actionId);
-        var registration = new HandlerRegistration(priority, ++_nextRegistration, handler);
+        var owner = ModuleRegistrationScope.Current;
+        var registration = new HandlerRegistration(priority, ++_nextRegistration,
+            owner is null ? handler : input => { using var entered = owner.Enter(); return handler(input); });
         if (!_handlers.TryGetValue(key, out var handlers))
             _handlers.Add(key, handlers = new List<HandlerRegistration>());
         handlers.Add(registration);
         handlers.Sort(HandlerRegistration.Compare);
         _stateRevision++;
-        return new Registration(() =>
+        return ModuleRegistrationScope.Track(new Registration(() =>
         {
             CheckThread();
             if (_handlers.TryGetValue(key, out var current) && current.Remove(registration))
@@ -131,7 +133,7 @@ internal sealed class InputRuntimeService : IInputRuntime
                 if (current.Count == 0) _handlers.Remove(key);
                 _stateRevision++;
             }
-        });
+        }));
     }
 
     public IDisposable ActivateContext(string contextId)
@@ -143,7 +145,7 @@ internal sealed class InputRuntimeService : IInputRuntime
         _activationCounts.TryGetValue(contextId, out var count);
         _activationCounts[contextId] = count + 1;
         _stateRevision++;
-        return new Registration(() =>
+        return ModuleRegistrationScope.Track(new Registration(() =>
         {
             CheckThread();
             if (!_activationCounts.TryGetValue(contextId, out var current)) return;
@@ -151,7 +153,7 @@ internal sealed class InputRuntimeService : IInputRuntime
             else _activationCounts[contextId] = current - 1;
             _stateRevision++;
             EvaluateAll("Context/Deactivated", InputDeviceKind.Keyboard);
-        });
+        }));
     }
 
     public bool IsContextActive(string contextId) =>

@@ -35,13 +35,11 @@ public sealed partial class EditorRuntime
     private readonly Queue<string> _messages = new();
     private AssetRegistry? _assets;
     private ContentManagerCoordinator? _contentManagers;
-    private EngineSettings _settings = new();
     private WorldDocument? _world;
     private string _engineRoot = string.Empty;
     private string? _projectRoot;
     private string? _projectManifest;
     private WorldAuthoringSession? _authoring;
-    private Dictionary<string, WorldLocalTransform>? _playTransforms;
     private bool _worldIsUntitled;
     private string? _worldAssetId;
     private EditorSelection _selection = EditorSelection.None;
@@ -129,7 +127,8 @@ public sealed partial class EditorRuntime
     public AssetDescriptor? SelectedAsset => _selection.Kind == EditorSelectionKind.Asset && _selection.Id is not null
         ? _assets?.Find(_selection.Id) : null;
     public string? SelectedFolderPath => _selection.Kind == EditorSelectionKind.Folder ? _selection.Path : null;
-    public EngineSettings Settings => _settings;
+    public EngineSettings Settings => (EngineSettings)(_developmentSettings?.Get(typeof(EngineSettings)) ??
+        throw new InvalidOperationException("Settings are not initialized"));
     public EditorPlayState PlayState { get; private set; }
     public bool TransformSnapEnabled { get; set; }
     public bool IsDirty => _worldIsUntitled || _dirty || (_authoring?.IsDirty ?? false);
@@ -199,6 +198,7 @@ public sealed partial class EditorRuntime
         schemaVersion = 1,
         mcp = DescribeMcpLinks(),
         input = JsonNode.Parse(DescribeInputJson()),
+        projectCode = JsonNode.Parse(DescribeProjectCodeJson()),
         inputDemo = new { open = _inputDemoOpen, uiConsumes = _inputDemoConsume,
             uiCount = _inputDemoUiCount, gameplayCount = _inputDemoGameCount,
             x = _inputDemoX, y = _inputDemoY },
@@ -212,11 +212,7 @@ public sealed partial class EditorRuntime
             path = _world?.SourcePath,
             untitled = _worldIsUntitled,
         },
-        settings = new
-        {
-            invertYAxis = _settings.InvertYAxis,
-            path = EngineSettings.GetPath(_engineRoot, _projectRoot),
-        },
+        settings = JsonNode.Parse(DescribeSettingsJson()),
         viewport = new
         {
             mode = "scene3d",
@@ -367,8 +363,8 @@ public sealed partial class EditorRuntime
         _projectManifest = FindProjectManifest();
         _projectRoot = _projectManifest is null ? null :
             Path.GetDirectoryName(_projectManifest)!;
+        InitializeDevelopmentSettings();
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
-        _settings = EngineSettings.Load(_engineRoot, _projectRoot);
         _defaultLayout = _layoutStore.LoadDefault(_engineRoot);
         try
         {
@@ -385,6 +381,12 @@ public sealed partial class EditorRuntime
         var contentLayout = _layout.Document;
         _contentManagers = new ContentManagerCoordinator(_assets,
             contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
+        // The content browser normalizes unavailable sources/folders on load.
+        // Adopt that initial state before exposing revisions so the first Dock
+        // edit does not also commit an unrelated browser correction.
+        contentLayout.ContentManagers = _contentManagers.Capture().ToList();
+        contentLayout.ActiveContentManagerId = _contentManagers.ActivePaneId;
+        _layout = new EditorLayoutSession(contentLayout);
         var loadedWorld = WorldAssetWorkflow.LoadInitial(_engineRoot, _projectRoot,
             _projectManifest, _assets);
         _world = loadedWorld.Document;
@@ -421,6 +423,7 @@ public sealed partial class EditorRuntime
 
     public void Update(float deltaSeconds)
     {
+        PollDevelopmentSettings();
         UpdateInputDemo();
         // Conditions can depend on project C# state. Compare the resulting markup
         // before publishing, so an unchanged state preserves RmlUi focus/hover.
@@ -435,12 +438,7 @@ public sealed partial class EditorRuntime
         if (PlayState == EditorPlayState.Playing && float.IsFinite(deltaSeconds))
         {
             _seconds += Math.Clamp(deltaSeconds, 0, 0.1f);
-            var animated = _world.Entities.FirstOrDefault(e => e.Kind == WorldEntityKind.Mesh &&
-                !e.Asset.EndsWith("/plane", StringComparison.OrdinalIgnoreCase));
-            if (animated is not null)
-                animated.Rotation = new WorldVector3(animated.Rotation.X,
-                    (animated.Rotation.Y + Math.Clamp(deltaSeconds, 0, 0.1f) * 35) % 360,
-                    animated.Rotation.Z);
+            UpdateComponentRuntime(Math.Clamp(deltaSeconds, 0, 0.1f));
         }
         if (_nativeApi.TryGetViewportRect(out var viewport))
         {
@@ -492,6 +490,7 @@ public sealed partial class EditorRuntime
         const uint LeftButton = 0x0001;
         if (inputEvent == 1)
         {
+            _cameraTransactionGroup = Guid.NewGuid().ToString("N");
             EnsureNavigationState();
             _lastPointerX = x;
             _lastPointerY = y;
@@ -510,6 +509,7 @@ public sealed partial class EditorRuntime
         }
         if (inputEvent == 2)
         {
+            _cameraTransactionGroup = null;
             if ((buttons & LeftButton) != 0 && _gizmoDragging)
             {
                 EndGizmoDrag();
@@ -545,6 +545,7 @@ public sealed partial class EditorRuntime
         }
         if (inputEvent == 3 && wheelDelta != 0)
         {
+            _cameraTransactionGroup = null;
             EnsureNavigationState();
             _orbitDistance = Math.Clamp(_orbitDistance *
                 MathF.Exp(-wheelDelta / 120f * 0.16f), 0.75f, 250f);
@@ -577,7 +578,7 @@ public sealed partial class EditorRuntime
             // Dragging follows the camera movement direction. The previous
             // signs felt reversed for both the numeric yaw and the viewport.
             _orbitYaw += dx * 0.35f;
-            var ySign = _settings.InvertYAxis ? -1f : 1f;
+            var ySign = Settings.InvertYAxis ? -1f : 1f;
             _orbitPitch = Math.Clamp(_orbitPitch + dy * 0.35f * ySign, -89f, 89f);
             ApplyNavigationCamera();
         }
@@ -591,13 +592,8 @@ public sealed partial class EditorRuntime
             var up = Vector3.Normalize(Vector3.Cross(right, forward));
             var delta = (-right * dx + up * dy) * (_orbitDistance * 0.0025f);
             _orbitTarget += delta;
-            camera.Position = LocalPositionForWorld(camera,
-                EntityWorldPosition(camera) + delta);
-            if (PlayState == EditorPlayState.Stopped)
-            {
-                _dirty = true;
-                RefreshWorldTitle();
-            }
+            CommitCameraNavigation(camera, LocalPositionForWorld(camera,
+                EntityWorldPosition(camera) + delta), camera.Rotation);
             SetText("position", Format(camera.Position));
         }
     }
@@ -607,12 +603,14 @@ public sealed partial class EditorRuntime
     {
         if (key == 0)
         {
+            _cameraTransactionGroup = null;
             _pressedKeys.Clear();
             _viewportKeyFocus = false;
             return;
         }
         if (pressed)
         {
+            if (_pressedKeys.Count == 0) _cameraTransactionGroup = Guid.NewGuid().ToString("N");
             _viewportKeyFocus = viewportFocused;
             if (viewportFocused) _pressedKeys.Add(key);
             else _pressedKeys.Clear();
@@ -620,6 +618,7 @@ public sealed partial class EditorRuntime
         else
         {
             _pressedKeys.Remove(key);
+            if (_pressedKeys.Count == 0) _cameraTransactionGroup = null;
         }
     }
 
@@ -634,7 +633,14 @@ public sealed partial class EditorRuntime
             actionHostId = action[hostPrefix.Length..separator];
             action = action[(separator + 1)..];
         }
+        if (HandleSourceAction(actionHostId, action)) return;
+        if (HandleDevelopmentSettingsAction(actionHostId, action)) return;
         if (HandleInputDemoAction(actionHostId, action)) return;
+        if (actionHostId == "prefab-editor" && action == "window.closed")
+        {
+            ActivateMainWorld(); _prefabWindowOpen = false;
+            _nativeApi.DestroyDockWindow("prefab-editor"); return;
+        }
         if (action == "window.close-requested")
         {
             HandleMainWindowClose();
@@ -643,6 +649,7 @@ public sealed partial class EditorRuntime
         MarkExtensionUiDirty();
         if (_commands.TryExecute(action, _commandContext)) return;
         if (HandleUiEditorAction(action)) return;
+        if (HandleComponentAction(action) || HandlePrefabAction(action)) return;
         if (_world is null || _assets is null) return;
         if (action.StartsWith("editor.context:", StringComparison.Ordinal))
         { HandleContextRequest(action); return; }
@@ -804,14 +811,13 @@ public sealed partial class EditorRuntime
         switch (action)
         {
             case "editor.play":
+                if (!ProjectCodeAvailable) { SetStatus("Project code unavailable; fix code and rebuild before Play"); break; }
                 if (PlayState == EditorPlayState.Stopped)
                 {
-                    _playTransforms = _world.Entities.ToDictionary(entity => entity.Id,
-                        entity => new WorldLocalTransform(entity.Position, entity.Rotation,
-                            entity.Scale), StringComparer.OrdinalIgnoreCase);
+                    BeginComponentPlay();
                 }
                 PlayState = EditorPlayState.Playing;
-                SetStatus("Playing — C# rotates the demo mesh");
+                SetStatus("Playing — independent Runtime World");
                 break;
             case "editor.pause":
                 if (PlayState == EditorPlayState.Playing)
@@ -820,17 +826,7 @@ public sealed partial class EditorRuntime
             case "editor.stop":
                 if (PlayState != EditorPlayState.Stopped)
                 {
-                    if (_playTransforms is not null)
-                    {
-                        foreach (var entity in _world.Entities)
-                        {
-                            if (!_playTransforms.TryGetValue(entity.Id, out var transform)) continue;
-                            entity.Position = transform.Position;
-                            entity.Rotation = transform.Rotation;
-                            entity.Scale = transform.Scale;
-                        }
-                    }
-                    _playTransforms = null;
+                    EndComponentPlay();
                     PlayState = EditorPlayState.Stopped;
                     _seconds = 0;
                     _gizmoDragging = false;
@@ -838,24 +834,8 @@ public sealed partial class EditorRuntime
                     _pressedKeys.Clear();
                     _viewportKeyFocus = false;
                     RefreshInspector();
-                    SetStatus("Stopped — edit transforms restored");
+                    SetStatus("Stopped — Authoring World restored");
                 }
-                break;
-            case "editor.toggle-invert-y":
-                _settings.InvertYAxis = !_settings.InvertYAxis;
-                try
-                {
-                    _settings.Save(_engineRoot, _projectRoot);
-                    RefreshSettingsUi();
-                    SetStatus($"Engine Settings · Invert Y Axis {(_settings.InvertYAxis ? "On" : "Off")}");
-                }
-                catch (Exception exception)
-                {
-                    Log($"Engine Settings could not be saved: {exception.Message}");
-                }
-                break;
-            case "editor.engine-settings":
-                SetStatus($"Engine Settings · Invert Y Axis {(_settings.InvertYAxis ? "On" : "Off")} · settings are project-local");
                 break;
             case "editor.save":
                 SaveWorld();
@@ -937,10 +917,13 @@ public sealed partial class EditorRuntime
 
     public void Shutdown()
     {
+        _runtimeWorld?.Dispose();
+        _runtimeWorld = null;
         _mcpSession?.Dispose();
         _mcpSession = null;
         foreach (var registration in _extensions.Values.Reverse().ToArray())
             registration.Dispose();
+        ShutdownDevelopmentSettings();
         _contextMenus.Clear();
         _toolbar.Clear();
         _menus.Clear();
@@ -981,6 +964,8 @@ public sealed partial class EditorRuntime
         CommitContentManagerState($"Selected {asset.Id}");
         if (asset.Type.Equals("RmlDocument", StringComparison.OrdinalIgnoreCase))
             OpenUiAsset(asset);
+        if (asset.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase) && PlayState == EditorPlayState.Stopped)
+            OpenPrefab(_assets!.ResolvePath(asset)!);
     }
 
     private void OpenContentEntry(string managerId, string payload)
@@ -1560,6 +1545,7 @@ public sealed partial class EditorRuntime
             return false;
         }
         if (_world is null || _authoring is null) return false;
+        if (_activePrefabPath is not null) return SaveActivePrefab();
         try
         {
             string target;
@@ -1613,6 +1599,7 @@ public sealed partial class EditorRuntime
 
     private void HandleMainWindowClose()
     {
+        if (!ConfirmDevelopmentSettingsClose()) return;
         if (!IsDirty)
         {
             NativeEngineApi.ExitMessageLoop();
@@ -1803,7 +1790,9 @@ public sealed partial class EditorRuntime
                 var readOnly = entry.ReadOnly
                     ? "<img class=\"readonly-icon\" src=\"Icons/lock.tga\" />"
                     : string.Empty;
-                markup.Append("<button class=\"asset-item ").Append(itemClass)
+                markup.Append("<button ").Append(entry.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase)
+                        ? "draggable=\"true\" data-prefab-asset=\"" + Escape(entry.AssetId ?? "") + "\" " : "")
+                    .Append("class=\"asset-item ").Append(itemClass)
                     .Append(selected).Append(missing).Append("\" data-action=\"")
                     .Append(action).Append("\" data-context-kind=\"").Append(contextKind)
                     .Append("\" data-context-manager=\"").Append(paneId)
@@ -1899,6 +1888,7 @@ public sealed partial class EditorRuntime
 
     private void RefreshInspector()
     {
+        RefreshComponentInspector();
         var entity = _world?.Entities.FirstOrDefault(e => e.Id == SelectedEntityId);
         if (entity is not null)
         {
@@ -1951,8 +1941,8 @@ public sealed partial class EditorRuntime
 
     private void RefreshSettingsUi()
     {
-        SetText("invertYAxisMenu", $"Invert Y Axis: {(_settings.InvertYAxis ? "On" : "Off")}");
-        SetText("settingsPath", EngineSettings.GetPath(_engineRoot, _projectRoot));
+        RefreshSettingsWindow(SettingsScope.Engine);
+        RefreshSettingsWindow(SettingsScope.Project);
     }
 
     private void RefreshViewportModeUi()
@@ -1992,12 +1982,7 @@ public sealed partial class EditorRuntime
         var speed = MathF.Max(_orbitDistance * 0.75f, 1f);
         if (IsPressed(0x10)) speed *= 4f; // Shift
         var delta = direction * speed * Math.Clamp(deltaSeconds, 0, 0.1f);
-        camera.Position = LocalPositionForWorld(camera, EntityWorldPosition(camera) + delta);
-        if (PlayState == EditorPlayState.Stopped)
-        {
-            _dirty = true;
-            RefreshWorldTitle();
-        }
+        CommitCameraNavigation(camera, LocalPositionForWorld(camera, EntityWorldPosition(camera) + delta), camera.Rotation);
         _orbitTarget += delta;
         SetText("position", Format(camera.Position));
     }
@@ -2028,7 +2013,7 @@ public sealed partial class EditorRuntime
             MathF.Sin(yaw) * cosine * _orbitDistance,
             MathF.Sin(pitch) * _orbitDistance,
             MathF.Cos(yaw) * cosine * _orbitDistance);
-        camera.Position = LocalPositionForWorld(camera, position);
+        var localPosition = LocalPositionForWorld(camera, position);
         var forward = Vector3.Normalize(_orbitTarget - position);
         var worldRotation = new WorldVector3(
             MathF.Asin(Math.Clamp(forward.Y, -1, 1)) * 180 / MathF.PI,
@@ -2037,12 +2022,7 @@ public sealed partial class EditorRuntime
         var worldQuaternion = Rotation(worldRotation);
         var localQuaternion = Quaternion.Normalize(worldQuaternion *
             Quaternion.Inverse(ParentWorldRotation(camera)));
-        camera.Rotation = QuaternionToEuler(localQuaternion);
-        if (PlayState == EditorPlayState.Stopped)
-        {
-            _dirty = true;
-            RefreshWorldTitle();
-        }
+        CommitCameraNavigation(camera, localPosition, QuaternionToEuler(localQuaternion));
         RefreshInspector();
     }
 

@@ -21,13 +21,14 @@ public interface IUiRuntime
 public class ModuleContext
 {
     protected internal ModuleContext(string projectRoot, string moduleId,
-        string moduleType, IUiRuntime? ui = null, IInputRuntime? input = null)
+        string moduleType, IUiRuntime? ui = null, IInputRuntime? input = null, IComponentRuntime? components = null)
     {
         ProjectRoot = projectRoot;
         ModuleId = moduleId;
         ModuleType = moduleType;
         Ui = ui;
         Input = input;
+        Components = components;
     }
 
     public string ProjectRoot { get; }
@@ -35,4 +36,10 @@ public class ModuleContext
     public string ModuleType { get; }
     public IUiRuntime? Ui { get; }
     public IInputRuntime? Input { get; }
+    public IComponentRuntime? Components { get; }
+}
+
+public interface IComponentRuntime
+{
+    SharpEngine.Components.RuntimeWorld? RuntimeWorld { get; }
 }

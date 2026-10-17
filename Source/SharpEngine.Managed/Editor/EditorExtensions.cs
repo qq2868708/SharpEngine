@@ -31,7 +31,9 @@ public sealed class EditorCommand
     {
         Id = EditorExtensionIds.Validate(id, nameof(id));
         Label = EditorExtensionIds.RequireLabel(label, nameof(label));
-        Execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        ArgumentNullException.ThrowIfNull(execute);
+        var owner = SharpEngine.Modules.ModuleRegistrationScope.Current;
+        Execute = owner is null ? execute : context => { using var entered = owner.Enter(); execute(context); };
         CanExecute = canExecute;
         Tooltip = string.IsNullOrWhiteSpace(tooltip) ? null : tooltip.Trim();
         GetChecked = getChecked;
@@ -549,7 +551,11 @@ public sealed class EditorContextMenuRegistry
 internal sealed class EditorRegistration : IDisposable
 {
     private Action? _dispose;
-    public EditorRegistration(Action dispose) => _dispose = dispose;
+    public EditorRegistration(Action dispose)
+    {
+        _dispose = dispose;
+        SharpEngine.Modules.ModuleRegistrationScope.Track(this);
+    }
     public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
 }
 

@@ -138,8 +138,8 @@ public static class WorldViewportRenderer
                 world.MeshCount, camera?.Id ?? string.Empty);
 
         var viewProjection = CameraMatrix(world, camera, bounds.Width / bounds.Height);
-        var lights = world.Entities
-            .Where(entity => entity.Kind == WorldEntityKind.Light && entity.Intensity > 0)
+        var lights = world.Entities.SelectMany(e => e.RenderViews("engine.directional-light"))
+            .Where(entity => entity.HasEnabledComponent("engine.directional-light") && entity.Intensity > 0)
             .Select(light =>
             {
                 var color = new Vector3(light.Color.R, light.Color.G, light.Color.B) / 255f;
@@ -148,7 +148,7 @@ public static class WorldViewportRenderer
             })
             .ToArray();
 
-        foreach (var entity in world.Entities.Where(e => e.Kind == WorldEntityKind.Mesh))
+        foreach (var entity in world.Entities.SelectMany(e => e.RenderViews("engine.mesh-renderer")))
         {
             var geometry = ResolveGeometry(entity, assets);
             if (geometry.Error is not null)
@@ -251,7 +251,7 @@ public static class WorldViewportRenderer
         var direction = Vector3.Normalize(end - origin);
         var nearest = float.MaxValue;
         var farDistance = Vector3.Distance(origin, end);
-        foreach (var candidate in world.Entities.Where(e => e.Kind == WorldEntityKind.Mesh))
+        foreach (var candidate in world.Entities.SelectMany(e => e.RenderViews("engine.mesh-renderer")))
         {
             var geometry = ResolveGeometry(candidate, assets);
             if (geometry.Error is not null) continue;

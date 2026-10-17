@@ -9,7 +9,13 @@ namespace SharpEngine.Game;
 
 internal sealed class ProjectModuleHost : IDisposable
 {
+    private static readonly List<(WeakReference Context, string Directory)> RetiredCopies = [];
     private readonly List<ISharpEngineModule> _modules = new();
+    private readonly ModuleRegistrationScope _registrations = new();
+    internal readonly List<(Assembly Assembly, string Id, string Type, string Hash)> Assemblies = [];
+    private readonly List<string> _entryTypes = [];
+    private bool _disposed;
+    internal string? ShutdownError { get; private set; }
     private readonly AssemblyLoadContext _loadContext;
     private readonly HashSet<string> _publishedAssemblies =
         new(StringComparer.OrdinalIgnoreCase);
@@ -17,6 +23,24 @@ internal sealed class ProjectModuleHost : IDisposable
     private Func<AssemblyLoadContext, AssemblyName, Assembly?>? _resolver;
 
     public static ProjectModuleHost? Load(EditorRuntime runtime, IInputRuntime input)
+    {
+        var host = Prepare();
+        if (host is null) return null;
+        EditorRuntime.ModuleReloadPreparation? preparation = null;
+        try
+        {
+            preparation = runtime.PrepareModuleReload(host.Assemblies);
+            preparation.Commit();
+            host.Start(runtime, input);
+            runtime.SetProjectCodeAvailable(true, "Project code loaded");
+            preparation.Accept();
+            return host;
+        }
+        catch { host.Dispose(); throw; }
+        finally { preparation?.Dispose(); }
+    }
+
+    internal static ProjectModuleHost? Prepare()
     {
         var projectManifest = Environment.GetEnvironmentVariable(
             "SHARPENGINE_PROJECT_MANIFEST");
@@ -49,6 +73,12 @@ internal sealed class ProjectModuleHost : IDisposable
             throw new InvalidDataException("Engine manifest paths.binaries is required");
         var assemblyDirectory = ResolveLayoutPath(projectRoot, binariesTemplate,
             platform, configuration, target);
+        var intermediateDirectory = ResolveLayoutPath(projectRoot,
+            engineManifest.GetProperty("paths").GetProperty("intermediate").GetString()!, platform, configuration, target);
+        var buildDirectory = Path.Combine(intermediateDirectory, "ProjectBuild");
+        Directory.CreateDirectory(buildDirectory);
+        using var publishLease = new FileStream(Path.Combine(buildDirectory, "build.lock"),
+            FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var runtimeManifestPath = Path.Combine(assemblyDirectory,
             "modules.runtime.json");
         if (!File.Exists(runtimeManifestPath))
@@ -86,28 +116,33 @@ internal sealed class ProjectModuleHost : IDisposable
             throw new InvalidDataException(
                 "Project Modules were built for a different engine. Rebuild the project.");
 
-        var loadContext = AssemblyLoadContext.GetLoadContext(
-            typeof(ProjectModuleHost).Assembly) ?? AssemblyLoadContext.Default;
+        // Load immutable private copies so the unified builder can publish while
+        // this generation is live. Keep shared engine contracts in the host ALC.
+        var shadowDirectory = Path.Combine(intermediateDirectory, "HotReload", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(shadowDirectory);
+        var loadContext = new ProjectLoadContext(shadowDirectory);
         var host = new ProjectModuleHost(loadContext)
-        { _assemblyDirectory = assemblyDirectory };
-        foreach (var file in root.GetProperty("files").EnumerateArray())
-        {
-            var name = RequiredFileName(file.GetProperty("name").GetString());
-            if (!host._publishedAssemblies.Add(name))
-                throw new InvalidDataException($"Duplicate published file '{name}'");
-            var path = Path.Combine(assemblyDirectory, name);
-            if (!File.Exists(path) || !string.Equals(FileHash(path),
-                    file.GetProperty("contentHash").GetString(),
-                    StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException(
-                    $"Published file '{name}' does not match its build manifest");
-        }
-        host._resolver = (_, name) => host.ResolveAssembly(name);
-        host._loadContext.Resolving += host._resolver;
+        { _assemblyDirectory = shadowDirectory };
         try
         {
+            foreach (var file in root.GetProperty("files").EnumerateArray())
+            {
+                var name = RequiredFileName(file.GetProperty("name").GetString());
+                if (!host._publishedAssemblies.Add(name))
+                    throw new InvalidDataException($"Duplicate published file '{name}'");
+                var path = Path.Combine(assemblyDirectory, name);
+                if (!File.Exists(path) || !string.Equals(FileHash(path),
+                        file.GetProperty("contentHash").GetString(), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"Published file '{name}' does not match its build manifest");
+                var copy = Path.Combine(shadowDirectory, name);
+                File.Copy(path, copy);
+                if (!string.Equals(FileHash(copy), file.GetProperty("contentHash").GetString(), StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"Published file '{name}' changed during reload");
+            }
+            host._resolver = (_, name) => host.ResolveAssembly(name);
+            host._loadContext.Resolving += host._resolver;
             foreach (var module in root.GetProperty("modules").EnumerateArray())
-                host.StartModule(projectRoot, runtime, input, module);
+                host.ReadModule(module);
             return host;
         }
         catch
@@ -119,22 +154,51 @@ internal sealed class ProjectModuleHost : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        using var entered = _registrations.Enter();
         for (var index = _modules.Count - 1; index >= 0; index--)
         {
             try { _modules[index].Shutdown(); }
             catch (Exception exception)
             {
+                ShutdownError = exception.ToString();
                 Console.Error.WriteLine($"[Module] Shutdown failed: {exception}");
             }
         }
         _modules.Clear();
+        _registrations.Dispose();
+        Assemblies.Clear();
+        _entryTypes.Clear();
         if (_resolver is not null)
             _loadContext.Resolving -= _resolver;
         _resolver = null;
+        if (_assemblyDirectory is not null) RetiredCopies.Add((new WeakReference(_loadContext), _assemblyDirectory));
+        _loadContext.Unload();
     }
 
-    private void StartModule(string projectRoot, EditorRuntime runtime,
-        IInputRuntime input, JsonElement descriptor)
+    internal static void CollectRetiredCopies()
+    {
+        foreach (var copy in RetiredCopies.ToArray())
+        {
+            if (copy.Context.IsAlive) continue;
+            try
+            {
+                if (Directory.Exists(copy.Directory))
+                {
+                    // These are flat, exclusively engine-created generation directories.
+                    if ((File.GetAttributes(copy.Directory) & FileAttributes.ReparsePoint) != 0) continue;
+                    foreach (var file in Directory.EnumerateFiles(copy.Directory)) File.Delete(file);
+                    Directory.Delete(copy.Directory);
+                }
+                RetiredCopies.Remove(copy);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private void ReadModule(JsonElement descriptor)
     {
         var id = descriptor.GetProperty("id").GetString()!;
         var type = descriptor.GetProperty("type").GetString()!;
@@ -150,22 +214,41 @@ internal sealed class ProjectModuleHost : IDisposable
             throw new InvalidDataException($"Module '{id}' content hash does not match its build manifest");
         var assembly = _loadContext.LoadFromAssemblyPath(assemblyPath);
         var entryType = assembly.GetType(entryTypeName, throwOnError: true)!;
-        if (Activator.CreateInstance(entryType) is not ISharpEngineModule instance)
-            throw new InvalidDataException(
-                $"Module '{id}' entry does not implement ISharpEngineModule");
-        try
+        if (!typeof(ISharpEngineModule).IsAssignableFrom(entryType) || entryType.IsAbstract ||
+            (!entryType.IsPublic && !entryType.IsNestedPublic) || entryType.ContainsGenericParameters || entryType.GetConstructor(Type.EmptyTypes) is null)
+            throw new InvalidDataException($"Module '{id}' has an invalid entry type '{entryTypeName}'");
+        Assemblies.Add((assembly, id, type, descriptor.GetProperty("contentHash").GetString()!));
+        _entryTypes.Add(entryTypeName);
+    }
+
+    internal void Start(EditorRuntime runtime, IInputRuntime input)
+    {
+        using var entered = _registrations.Enter();
+        var projectRoot = Path.GetDirectoryName(Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST"))!;
+        for (var index = 0; index < Assemblies.Count; index++)
         {
+            var (assembly, id, type, _) = Assemblies[index];
+            var entryType = assembly.GetType(_entryTypes[index], throwOnError: true)!;
+            if (Activator.CreateInstance(entryType) is not ISharpEngineModule instance)
+                throw new InvalidDataException($"Module '{id}' entry does not implement ISharpEngineModule");
+            // Include the partially started module in cleanup on failure.
+            _modules.Add(instance);
             ModuleContext context = type.Equals("Editor", StringComparison.OrdinalIgnoreCase)
                 ? new EditorModuleContext(projectRoot, id, runtime, input)
-                : new ModuleContext(projectRoot, id, type, runtime.UiRuntime, input);
+                : new ModuleContext(projectRoot, id, type, runtime.UiRuntime, input, runtime);
             instance.Startup(context);
-            _modules.Add(instance);
             Console.Error.WriteLine($"[Module] Started {id} ({type})");
         }
-        catch
+    }
+
+    private sealed class ProjectLoadContext(string directory) : AssemblyLoadContext(isCollectible: true)
+    {
+        protected override Assembly? Load(AssemblyName name)
         {
-            try { instance.Shutdown(); } catch { }
-            throw;
+            foreach (var shared in new[] { typeof(ISharpEngineModule).Assembly, typeof(EditorRuntime).Assembly })
+                if (AssemblyName.ReferenceMatchesDefinition(shared.GetName(), name)) return shared;
+            var path = Path.Combine(directory, name.Name + ".dll");
+            return File.Exists(path) ? LoadFromAssemblyPath(path) : null;
         }
     }
 

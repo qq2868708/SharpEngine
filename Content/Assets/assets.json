@@ -11,7 +11,7 @@
       "type": "World",
       "name": "Editor Sample World",
       "path": "Content/Worlds/Main.sworld",
-      "importer": "SharpEngine.WorldXml",
+      "importer": "SharpEngine.WorldJson",
       "tags": ["builtin", "scene", "sample"]
     },
     {

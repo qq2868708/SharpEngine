@@ -1,5 +1,6 @@
 using SharpEngine.Editor;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Modules;
 using SharpEngine.UI;
 using SharpEngine.World;
 
@@ -25,6 +26,7 @@ static bool MatrixNear(System.Numerics.Matrix4x4 left, System.Numerics.Matrix4x4
 }
 try
 {
+    DevelopmentSettingsValidation.Run(temporary.FullName, Require);
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));
@@ -54,6 +56,7 @@ try
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    runtime.RegisterProjectSettingsAssembly(typeof(ValidationProjectSettings).Assembly);
     using var uiContract = runtime.UiRuntime.RegisterViewModel<ValidationMainScreen>(
         "validation.main", 1);
     Require(runtime.UiRuntime.ViewModelContracts.Single().JsonSchema.Contains(
@@ -139,7 +142,51 @@ try
         Console.WriteLine($"PASS: {assertions} focused Content Manager assertions");
         return;
     }
-    Require(!runtime.Settings.InvertYAxis, "Engine Settings should default to normal Y navigation");
+    Require(!DevelopmentSettings.Get<EngineSettings>().InvertYAxis,
+        "Engine Settings should auto-register and support static runtime reads");
+    Require(DevelopmentSettings.Get<ValidationProjectSettings>().MoveSpeed == 600 &&
+        DevelopmentSettings.Get<ValidationProjectSettings>().Profile.Title == "Default" &&
+        DevelopmentSettings.Get<ValidationProjectSettings>().Tags.SequenceEqual(["starter"]),
+        "Project Settings should auto-register nested defaults from the project assembly");
+    Require(runtime.BuildSettingsMarkup(SettingsScope.Engine).Contains(
+            "sharpengine.editor-navigation", StringComparison.Ordinal) &&
+        runtime.BuildSettingsMarkup(SettingsScope.Project).Contains(
+            "validation.gameplay", StringComparison.Ordinal),
+        "Engine and Project Settings panels must filter the shared registry by scope");
+    var detachedSnapshot = DevelopmentSettings.Get<ValidationProjectSettings>();
+    detachedSnapshot.Tags.Add("caller-mutation");
+    Require(DevelopmentSettings.Get<ValidationProjectSettings>().Tags.SequenceEqual(["starter"]),
+        "Static settings reads must return detached snapshots instead of mutable authority");
+    Require(runtime.Commands.Commands.Any(command => command.Id == "core.engine-settings") &&
+        runtime.Commands.Commands.Any(command => command.Id == "core.project-settings") &&
+        runtime.Menus.Items.Any(item => item.MenuId == "file" &&
+            item.CommandId == "core.engine-settings") &&
+        runtime.Menus.Items.Any(item => item.MenuId == "file" &&
+            item.CommandId == "core.project-settings"),
+        "File must expose separate Engine Settings and Project Settings commands");
+    var engineSettingsPath = Path.Combine(temporary.FullName, "Config", "EngineSettings",
+        "sharpengine.editor-navigation.json");
+    runtime.InvokeUiAction(
+        "editor.settings-change:engine:sharpengine.editor-navigation:invertYAxis:true");
+    Require(DevelopmentSettings.Get<EngineSettings>().InvertYAxis &&
+        !File.Exists(engineSettingsPath),
+        "Settings edits should publish a new runtime snapshot without saving implicitly");
+    runtime.InvokeUiAction(
+        "editor.settings-save:engine:sharpengine.editor-navigation");
+    Require(File.Exists(engineSettingsPath) &&
+        File.ReadAllText(engineSettingsPath).Contains("\"invertYAxis\": true",
+            StringComparison.Ordinal),
+        "Engine Settings overrides should save explicitly under the project Config folder");
+    runtime.InvokeUiAction(
+        "editor.settings-change:project:validation.gameplay:profile/title:Configured");
+    Require(DevelopmentSettings.Get<ValidationProjectSettings>().Profile.Title == "Configured",
+        "Nested Project Settings edits must update static runtime reads atomically");
+    if (args.Contains("--settings-only", StringComparer.Ordinal))
+    {
+        runtime.Shutdown();
+        Console.WriteLine($"PASS: {assertions} focused settings assertions");
+        return;
+    }
     var commandCalls = 0;
     using var commandRegistration = runtime.Commands.Register(new EditorCommand(
         "validation.raise-status",
@@ -234,10 +281,6 @@ try
     Require(File.ReadAllText(uiPath).Contains("Saved UI headline", StringComparison.Ordinal) &&
         !runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
         "UI Save must validate and atomically replace the authoritative RML source");
-    runtime.InvokeUiAction("editor.toggle-invert-y");
-    Require(runtime.Settings.InvertYAxis &&
-        EngineSettings.Load(root, temporary.FullName).InvertYAxis,
-        "Invert Y Axis should persist in the project-local Engine Settings file");
     var initialCameraPosition = runtime.World!.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);
     runtime.Update(0.1f);
@@ -246,10 +289,12 @@ try
         "Viewport keyboard navigation should move the serialized camera");
     var original = runtime.World!.Entities.First(e => e.Kind == WorldEntityKind.Mesh && !e.Asset.EndsWith("/plane")).Rotation;
     runtime.InvokeUiAction("editor.play");
+    var liveTransform = runtime.RuntimeWorld!.FindEntity("player")!.GetComponent<SharpEngine.Components.TransformComponent>()!;
+    liveTransform.Rotation += new System.Numerics.Vector3(0, 15, 0);
     runtime.Update(0.1f);
     Require(runtime.PlayState == EditorPlayState.Playing, "Play must enter simulation");
     var playing = runtime.World.Entities.First(e => e.Kind == WorldEntityKind.Mesh && !e.Asset.EndsWith("/plane"));
-    Require(playing.Rotation != original, "C# simulation must change the world Transform");
+    Require(playing.Rotation != original, "Runtime component changes must drive the viewport world independently");
     var pausedRotation = playing.Rotation;
     runtime.InvokeUiAction("editor.pause");
     runtime.Update(0.1f);
@@ -259,6 +304,7 @@ try
     Require(WorldDocument.Load(worldPath).Entities.First(e => e.Id == playing.Id).Rotation == original,
         "Saving while playing/paused must not persist simulation changes");
     runtime.InvokeUiAction("editor.play");
+    liveTransform.Rotation += new System.Numerics.Vector3(0, 15, 0);
     runtime.Update(0.1f);
     Require(playing.Rotation != pausedRotation, "Play from pause must resume the same simulation");
     runtime.InvokeUiAction("editor.stop");
@@ -274,6 +320,33 @@ try
     var snapshotPath = Path.Combine(temporary.FullName, "Saved", "Scenes", "Main.scene.json");
     Require(File.Exists(snapshotPath) && File.ReadAllText(snapshotPath).Contains("worldMatrix", StringComparison.Ordinal),
         "Scene export must contain the AI-facing resolved transform description");
+    runtime.InvokeUiAction("editor.select-entity:player");
+    var mainWorldBeforePrefab = runtime.World;
+    var mainStateBeforePrefab = runtime.World!.Serialize();
+    runtime.InvokeUiAction("editor.prefab-export");
+    Require(runtime.World!.Data.IsPrefab && runtime.World.Entities.Count == 1, "Export opens an independent Prefab document");
+    var prefabPath = runtime.World.SourcePath;
+    var prefabTransform = runtime.World.Entities[0].Components.Single(c => c.TypeId == "engine.transform");
+    var prefabDescribe = System.Text.Json.Nodes.JsonNode.Parse(runtime.DescribeComponentsJson())!;
+    var prefabEdit = runtime.EditComponent(new() { ["operation"] = "patch", ["context"] = "authoring",
+        ["expectedRevision"] = prefabDescribe["revision"]!.GetValue<ulong>(), ["entityId"] = "player", ["componentId"] = prefabTransform.ComponentId,
+        ["state"] = new System.Text.Json.Nodes.JsonObject { ["Position"] = new System.Text.Json.Nodes.JsonArray(11, 12, 13) } });
+    Require(prefabEdit["success"]!.GetValue<bool>() && mainWorldBeforePrefab.Serialize() == mainStateBeforePrefab,
+        "Prefab edits are isolated from World data and history");
+    runtime.InvokeUiAction("editor.undo");
+    Require(runtime.World.Entities[0].Position != new WorldVector3(11, 12, 13), "Prefab Undo uses its own history");
+    runtime.InvokeUiAction("editor.redo"); runtime.InvokeUiAction("editor.save");
+    Require(WorldDocument.Load(prefabPath).Entities[0].Position == new WorldVector3(11, 12, 13), "Save targets the active Prefab");
+    runtime.InvokeUiAction("editor.prefab-world");
+    Require(ReferenceEquals(mainWorldBeforePrefab, runtime.World) && runtime.World.Serialize() == mainStateBeforePrefab, "Switching documents restores the same World state");
+    runtime.InvokeUiAction("editor.prefab-instantiate:project://prefabs/player|");
+    Require(runtime.World.Entities.Count == mainWorldBeforePrefab.Data.Entities.Count && runtime.World.Entities.Count == 6 &&
+        runtime.World.Entities.Last().Id != "player" && runtime.World.Entities.Last().Position == new WorldVector3(11, 12, 13), "Prefab instantiation creates an independent World subtree with new IDs");
+    runtime.InvokeUiAction("editor.undo");
+    Require(runtime.World.Entities.Count == 5, "Prefab instantiation is one undoable transaction");
+    runtime.OpenPrefab(prefabPath); runtime.InvokeUiAction("editor.play");
+    Require(runtime.World.Entities.Count == 5 && !runtime.World.Data.IsPrefab, "Play from Prefab editing runs the main World");
+    runtime.InvokeUiAction("editor.stop");
     EditorExtensionValidation.Run(Require);
     runtime.Shutdown();
 
@@ -328,6 +401,35 @@ finally
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", previousRoot);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", previousManifest);
     temporary.Delete(true);
+}
+
+[DevelopmentSettings("validation.gameplay", SettingsScope.Project, 1,
+    DisplayName = "Gameplay", Category = "Game")]
+public sealed class ValidationProjectSettings : DevelopmentSettings
+{
+    [Setting("moveSpeed", DisplayName = "Move Speed", Minimum = 0)]
+    public float MoveSpeed { get; init; } = 600;
+
+    [Setting("profile", DisplayName = "Profile")]
+    public ValidationSettingsProfile Profile { get; init; } = new();
+
+    [Setting("tags", DisplayName = "Tags")]
+    public List<string> Tags { get; init; } = ["starter"];
+
+    [Setting("weights")]
+    public Dictionary<string, float> Weights { get; init; } = new();
+
+    [Setting("profiles")]
+    public List<ValidationSettingsProfile> Profiles { get; init; } = [];
+}
+
+public sealed class ValidationSettingsProfile
+{
+    [Setting("title", DisplayName = "Title")]
+    public string Title { get; init; } = "Default";
+
+    [Setting("strength", Minimum = 0)]
+    public float Strength { get; init; } = 1;
 }
 
 public sealed class ValidationMainScreen

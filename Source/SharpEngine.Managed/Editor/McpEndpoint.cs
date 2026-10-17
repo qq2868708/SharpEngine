@@ -185,6 +185,20 @@ public static class McpEndpoint
         };
     }
 
+    private static ToolCall CreateSource(EditorRuntime runtime, JsonElement request)
+    {
+        var args = request.GetProperty("params").GetProperty("arguments");
+        var result = runtime.CreateCSharpSource(new(args.GetProperty("moduleProject").GetString()!,
+            args.GetProperty("directory").GetString()!, args.GetProperty("name").GetString()!, args.GetProperty("template").GetString()!));
+        return new(JsonSerializer.Serialize(result, JsonOptions), !result.Success);
+    }
+
+    private static ToolCall ComponentEdit(EditorRuntime runtime, JsonElement request)
+    {
+        var result = runtime.EditComponent(JsonNode.Parse(request.GetProperty("params").GetProperty("arguments").GetRawText())!.AsObject());
+        return new(result.ToJsonString(), result["success"]?.GetValue<bool>() != true);
+    }
+
     private static JsonObject CallTool(EditorRuntime runtime, JsonElement request)
     {
         var name = RequiredString(request, "params", "name");
@@ -201,7 +215,12 @@ public static class McpEndpoint
         }
         var call = name switch
         {
+            "source.modules" => new ToolCall(runtime.DescribeSourceModulesJson(), false),
+            "source.status" => new ToolCall(runtime.DescribeProjectCodeJson(), false),
+            "source.create" => CreateSource(runtime, request),
             "scene.describe" => new ToolCall(runtime.DescribeSceneJson(), false),
+            "components.describe" => new ToolCall(runtime.DescribeComponentsJson(), false),
+            "components.edit" => ComponentEdit(runtime, request),
             "assets.describe" => new ToolCall(runtime.DescribeAssetsJson(), false),
             "content.describe" => new ToolCall(runtime.DescribeContentJson(), false),
             "editor.describe" => new ToolCall(runtime.DescribeEditorJson(), false),

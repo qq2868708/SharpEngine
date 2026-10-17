@@ -39,7 +39,7 @@ internal sealed class UiRuntimeService : IUiRuntime
                 throw new InvalidOperationException(
                     $"UI ViewModel contract '{contract.Key}' is already registered");
         }
-        return new Registration(() =>
+        return ModuleRegistrationScope.Track(new Registration(() =>
         {
             lock (_contracts)
             {
@@ -47,7 +47,7 @@ internal sealed class UiRuntimeService : IUiRuntime
                     ReferenceEquals(current, contract))
                     _contracts.Remove(contract.Key);
             }
-        });
+        }));
     }
 
     private static string BuildSchema(Type type)

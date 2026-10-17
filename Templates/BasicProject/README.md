@@ -30,8 +30,11 @@ allowed only for IntelliSense. The unified build validates the complete graph an
 the schema 2 `Binaries/Win64/<Configuration>/<Target>/modules.runtime.json`
 beside the flat Module assemblies. Intermediates use the matching
 `Intermediate/Win64/<Configuration>/<Target>/<BuildModule>` hierarchy. Code
-changes require rebuilding the project and restarting the editor; managed hot
-reload is not implemented.
+changes are built automatically while the project Editor is open. New project
+code is loaded when Stopped; Playing/Paused sessions apply it after Stop. Use
+File > New C# Class to create a class or Component in an existing Module, or
+File > Build Project Code to retry a failed build. Reload failure keeps the
+Editor open and can be retried after fixing source; no automatic restart occurs.
 
 The first editor session creates an unsaved World instance from the engine's
 default World. Saving it creates a project-owned `.sworld`, registers it in

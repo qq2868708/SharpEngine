@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Xml.Linq;
 using SharpEngine.Assets;
 using SharpEngine.World;
 
@@ -37,7 +36,7 @@ internal static class WorldAssetWorkflow
             var presetPath = assets.ResolvePath(preset) ?? throw new InvalidDataException(
                 $"Default World '{preset.Id}' has no source path");
             var source = WorldDocument.Load(presetPath);
-            var clone = WorldDocument.Parse(source.ToXml().ToString(SaveOptions.DisableFormatting),
+            var clone = WorldDocument.Parse(source.Serialize(),
                 "untitled:default-world");
             return new(clone, true, null);
         }
@@ -108,7 +107,7 @@ internal static class WorldAssetWorkflow
         matchingId["type"] = "World";
         matchingId["name"] = Path.GetFileNameWithoutExtension(target);
         matchingId["path"] = $"Content/{contentRelative}";
-        matchingId["importer"] = "SharpEngine.WorldXml";
+        matchingId["importer"] = "SharpEngine.WorldJson";
         matchingId["tags"] ??= new JsonArray("scene");
 
         var projectWorld = projectManifest["world"] as JsonObject ?? new JsonObject();
@@ -186,7 +185,7 @@ internal static class WorldAssetWorkflow
     {
         var stage = StagedFile.Create(target);
         Directory.CreateDirectory(Path.GetDirectoryName(stage.TemporaryPath)!);
-        world.ToXml().Save(stage.TemporaryPath);
+        File.WriteAllText(stage.TemporaryPath, world.Serialize());
         _ = WorldDocument.Load(stage.TemporaryPath);
         return stage;
     }

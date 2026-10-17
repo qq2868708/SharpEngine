@@ -76,6 +76,9 @@ var outputDirectory = ResolveLayoutPath(projectRoot, binariesTemplate,
 var intermediateDirectory = ResolveLayoutPath(projectRoot, intermediateTemplate,
     platform, configuration, target);
 var projectBuildDirectory = Path.Combine(intermediateDirectory, "ProjectBuild");
+Directory.CreateDirectory(projectBuildDirectory);
+// CLI and Editor builds share the same output and intermediate directories.
+using var buildLock = AcquireBuildLock(Path.Combine(projectBuildDirectory, "build.lock"));
 var validationOutput = Path.Combine(projectBuildDirectory, "Validation");
 var publishInputs = Path.Combine(projectBuildDirectory, "PublishInputs");
 var packageDirectory = Path.Combine(projectBuildDirectory, "Package");
@@ -161,11 +164,18 @@ foreach (var module in ordered)
 }
 
 var typeOwners = new Dictionary<string, string>(StringComparer.Ordinal);
+var componentOwners = new Dictionary<string, string>(StringComparer.Ordinal);
 foreach (var module in ordered)
 {
     if (!File.Exists(module.TargetPath))
         Fail("SEMOD008", $"Module output is missing: {module.TargetPath}");
     var metadata = InspectAssembly(module.TargetPath);
+    foreach (var component in metadata.ComponentTypes)
+    {
+        if (module.Type != "Runtime") Fail("SECOMP002", $"Editor Module '{module.Id}' cannot declare scene component {component.Key}");
+        if (component.Key.StartsWith("engine.", StringComparison.Ordinal)) Fail("SECOMP003", "Project component IDs cannot use the engine namespace");
+        if (!componentOwners.TryAdd(component.Key, module.Id)) Fail("SECOMP004", $"Duplicate component ID {component.Key} in Modules {componentOwners[component.Key]} and {module.Id}");
+    }
     foreach (var typeName in metadata.UserTypes)
     {
         if (typeOwners.TryGetValue(typeName, out var owner))
@@ -382,6 +392,8 @@ static IReadOnlyList<string> BuildProperties(string configuration, string platfo
     $"-p:SharpEngineIntermediateRoot={EnsureTrailingSeparator(intermediateRoot)}",
     $"-p:SharpEngineManagedApi={managedApi}",
     $"-p:SharpEngineModulesApi={modulesApi}",
+    $"-p:SharpEngineComponentGenerator={Path.Combine(Path.GetDirectoryName(modulesApi)!, "SharpEngine.ComponentGenerator.dll")}",
+    $"-p:CustomAfterMicrosoftCommonTargets={Path.GetFullPath(Path.Combine(Path.GetDirectoryName(modulesApi)!, "..", "..", "..", "..", "Build", "SharpEngine.Components.targets"))}",
     "-p:SharpEngineUnifiedBuild=true",
 ];
 
@@ -417,6 +429,16 @@ static IReadOnlyList<ModuleInfo> TopologicalOrder(IReadOnlyList<ModuleInfo> modu
     }
     foreach (var module in modules) Visit(module);
     return result;
+}
+
+static FileStream AcquireBuildLock(string path)
+{
+    var timer = Stopwatch.StartNew();
+    while (true)
+    {
+        try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException) when (timer.Elapsed < TimeSpan.FromSeconds(60)) { Thread.Sleep(100); }
+    }
 }
 
 static void PrepareDirectory(string path)
@@ -459,18 +481,31 @@ static void PublishDirectory(string packageDirectory, string outputDirectory,
     {
         if (Directory.Exists(outputDirectory))
         {
-            Directory.Move(outputDirectory, backup);
+            MovePublishedDirectory(outputDirectory, backup);
             movedPrevious = true;
         }
-        Directory.Move(packageDirectory, outputDirectory);
+        MovePublishedDirectory(packageDirectory, outputDirectory);
     }
     catch
     {
         if (movedPrevious && !Directory.Exists(outputDirectory) && Directory.Exists(backup))
-            Directory.Move(backup, outputDirectory);
+            MovePublishedDirectory(backup, outputDirectory);
         throw;
     }
     if (Directory.Exists(backup)) Directory.Delete(backup, true);
+}
+
+static void MovePublishedDirectory(string source, string destination)
+{
+    // Scanners and recently closed compiler handles can temporarily prevent
+    // directory replacement on Windows. Keep the rollback boundary intact.
+    for (var attempt = 0; ; attempt++)
+    {
+        try { Directory.Move(source, destination); return; }
+        catch (IOException error) when (attempt < 10 && (error.HResult & 0xffff) is 5 or 32 or 33)
+        { Thread.Sleep(100); }
+        catch (UnauthorizedAccessException) when (attempt < 10) { Thread.Sleep(100); }
+    }
 }
 
 static AssemblyMetadata InspectAssembly(string path)
@@ -480,6 +515,7 @@ static AssemblyMetadata InspectAssembly(string path)
     var reader = pe.GetMetadataReader();
     var types = new List<string>();
     var entries = new List<string>();
+    var components = new Dictionary<string, string>(StringComparer.Ordinal);
     foreach (var handle in reader.TypeDefinitions)
     {
         var definition = reader.GetTypeDefinition(handle);
@@ -487,6 +523,17 @@ static AssemblyMetadata InspectAssembly(string path)
         if (name == "<Module>" || name.StartsWith('<')) continue;
         var fullName = FullTypeDefinitionName(reader, handle);
         types.Add(fullName);
+        foreach (var attributeHandle in definition.GetCustomAttributes())
+        {
+            var attribute = reader.GetCustomAttribute(attributeHandle);
+            if (attribute.Constructor.Kind != HandleKind.MemberReference) continue;
+            var constructor = reader.GetMemberReference((MemberReferenceHandle)attribute.Constructor);
+            if (InterfaceName(reader, constructor.Parent) != "SharpEngine.Components.ComponentTypeIdAttribute") continue;
+            var blob = reader.GetBlobReader(attribute.Value);
+            if (blob.ReadUInt16() != 1) Fail("SECOMP005", "Invalid component type metadata");
+            var componentId = blob.ReadSerializedString() ?? throw new InvalidDataException("Empty component ID");
+            if (!components.TryAdd(componentId, fullName)) Fail("SECOMP004", $"Duplicate component ID {componentId}");
+        }
         var directlyImplementsModule = definition.GetInterfaceImplementations()
             .Select(reader.GetInterfaceImplementation)
             .Any(value => InterfaceName(reader, value.Interface) ==
@@ -504,7 +551,7 @@ static AssemblyMetadata InspectAssembly(string path)
             Fail("SEMOD013", $"Module entry '{fullName}' must be public, concrete, non-generic, and have a public parameterless constructor");
         entries.Add(fullName);
     }
-    return new AssemblyMetadata(types, entries);
+    return new AssemblyMetadata(types, entries, components);
 }
 
 static string InterfaceName(MetadataReader reader, EntityHandle handle) => handle.Kind switch
@@ -587,4 +634,4 @@ sealed class PublishedFile(string name, string sourcePath, string contentHash,
 }
 
 sealed record AssemblyMetadata(IReadOnlyList<string> UserTypes,
-    IReadOnlyList<string> ModuleEntries);
+    IReadOnlyList<string> ModuleEntries, IReadOnlyDictionary<string, string> ComponentTypes);

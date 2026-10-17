@@ -18,21 +18,11 @@ void Reject(string xml, string expectedText)
     throw new InvalidOperationException($"Expected world rejection containing '{expectedText}'");
 }
 
-Reject("<world version='1'/>", "version");
-Reject("<world/>", "version");
-Reject("<world version='2'><entity id='sun' type='light'/></world>", "color");
+Reject("{\"schemaVersion\":1,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[]}", "schema");
+Reject("{\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[]}", "fields");
+Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"sun\",\"name\":\"sun\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"sun-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"sun-directional-light\",\"typeId\":\"engine.directional-light\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Intensity\":1}}]}]}", "fields");
 
-var world = WorldDocument.Parse("""
-    <world version="2" name="Authoring" customRoot="preserve">
-      <!-- preserved-comment -->
-      <metadata custom="yes" />
-      <entity id="a" type="empty" customEntity="preserve"><plugin value="42" /></entity>
-      <entity id="b" type="empty" position="2,0,0" />
-      <entity id="p" type="empty" position="10,0,0" />
-      <entity id="d" type="empty" parent="p" position="1,0,0" />
-      <entity id="c" type="empty" position="4,0,0" />
-    </world>
-    """);
+var world = WorldDocument.Parse("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Authoring\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"a\",\"name\":\"a\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"a-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"a-unknown\",\"typeId\":\"plugin.unknown\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"value\":42},\"extension\":\"preserve\"}]},{\"entityId\":\"b\",\"name\":\"b\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"b-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[2,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}}]},{\"entityId\":\"p\",\"name\":\"p\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"p-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[10,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}}]},{\"entityId\":\"d\",\"name\":\"d\",\"parentId\":\"p\",\"activeSelf\":true,\"components\":[{\"componentId\":\"d-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[1,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}}]},{\"entityId\":\"c\",\"name\":\"c\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"c-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[4,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}}]}]}");
 var session = new WorldAuthoringSession(world);
 Check(session.DocumentRevision == 1 && session.SavepointRevision == 1 && !session.IsDirty,
     "New session must start at a clean savepoint");
@@ -49,11 +39,11 @@ Check(world.Entities.Where(entity => entity.ParentId == "p").Select(entity => en
     .SequenceEqual(["d", "c"]), "Inside placement must append to the destination siblings");
 
 var rejectedRevision = session.DocumentRevision;
-var rejectedState = world.ToXml().ToString();
+var rejectedState = world.Serialize();
 var cycle = session.Reparent(new WorldReparentRequest("p", "c",
     WorldHierarchyPlacement.Inside, null, session.DocumentRevision));
 Check(!cycle.Success && cycle.Code == "PARENT_CYCLE" &&
-    session.DocumentRevision == rejectedRevision && world.ToXml().ToString() == rejectedState,
+    session.DocumentRevision == rejectedRevision && world.Serialize() == rejectedState,
     "Cycle rejection must leave the world and revision unchanged");
 var missing = session.Reparent(new WorldReparentRequest("c", "missing",
     WorldHierarchyPlacement.Inside, null, session.DocumentRevision));
@@ -107,35 +97,24 @@ Check(session.IsDirty, "Undo away from saved content must mark the document dirt
 session.Redo(session.DocumentRevision);
 Check(!session.IsDirty, "Redo back to saved content must clear dirty");
 
-var preserved = world.ToXml().ToString();
-Check(preserved.Contains("customRoot=\"preserve\"") && preserved.Contains("preserved-comment") &&
-    preserved.Contains("customEntity=\"preserve\"") && preserved.Contains("<plugin value=\"42\""),
-    "Serialization must retain unknown root/entity attributes, comments, and child nodes");
-Check(WorldDocument.Parse(preserved).ToXml().ToString() == preserved,
-    "Repeated v2 serialization must be deterministic");
-Check(world.ToJson().Contains("\"schemaVersion\": 2", StringComparison.Ordinal),
-    "AI scene JSON must identify its v2 schema");
+var preserved = world.Serialize();
+Check(preserved.Contains("plugin.unknown") && preserved.Contains("\"extension\": \"preserve\""),
+    "Serialization retains unknown component records during unrelated edits");
+Check(WorldDocument.Parse(preserved).Serialize() == preserved,
+    "Repeated v3 serialization must be deterministic");
+Check(world.ToJson().Contains("\"schemaVersion\": 3", StringComparison.Ordinal),
+    "AI scene JSON must identify its v3 schema");
 
-var sheared = WorldDocument.Parse("""
-    <world version="2">
-      <entity id="source" type="empty" rotation="10,25,5" />
-      <entity id="parent" type="empty" rotation="20,30,15" scale="2,1,0.5" />
-    </world>
-    """);
+var sheared = WorldDocument.Parse("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"source\",\"name\":\"source\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"source-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[10,25,5],\"Scale\":[1,1,1]}}]},{\"entityId\":\"parent\",\"name\":\"parent\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"parent-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[20,30,15],\"Scale\":[2,1,0.5]}}]}]}");
 var shearSession = new WorldAuthoringSession(sheared);
-var shearBefore = sheared.ToXml().ToString();
+var shearBefore = sheared.Serialize();
 var shearResult = shearSession.Reparent(new WorldReparentRequest("source", "parent",
     WorldHierarchyPlacement.Inside, null, shearSession.DocumentRevision));
 Check(!shearResult.Success && shearResult.Code == "TRANSFORM_NOT_DECOMPOSABLE" &&
-    shearSession.DocumentRevision == 1 && sheared.ToXml().ToString() == shearBefore,
+    shearSession.DocumentRevision == 1 && sheared.Serialize() == shearBefore,
     "A world-preserving reparent that requires shear must reject atomically");
 
-var rotated = WorldDocument.Parse("""
-    <world version="2">
-      <entity id="source" type="empty" position="3,4,5" rotation="17,-38,29" scale="1.5,1.5,1.5" />
-      <entity id="parent" type="empty" position="-2,7,1" rotation="-21,42,13" scale="2,2,2" />
-    </world>
-    """);
+var rotated = WorldDocument.Parse("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"source\",\"name\":\"source\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"source-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[3,4,5],\"Rotation\":[17,-38,29],\"Scale\":[1.5,1.5,1.5]}}]},{\"entityId\":\"parent\",\"name\":\"parent\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"parent-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[-2,7,1],\"Rotation\":[-21,42,13],\"Scale\":[2,2,2]}}]}]}");
 var rotatedSession = new WorldAuthoringSession(rotated);
 var rotatedSource = rotated.Entities.First(entity => entity.Id == "source");
 var rotatedWorldBefore = rotated.WorldMatrix(rotatedSource);

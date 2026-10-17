@@ -1,0 +1,34 @@
+#componentInspector { display: block; width: 100%; position: relative; z-index: 1; }
+#inspectorContent { position: relative; width: 100%; height: 100%; display: block; overflow-y: auto; flex-grow: 1; min-width: 0px; }
+.component { width: auto; min-width: 0px; }
+.component-title button { width: auto; min-width: 0px; flex-grow: 1; }
+.inspector-context { color: #8dbcf2; padding: 6px 0; font-size: 11px; }
+.component { padding-bottom: 8px; }
+.component-title { display: flex; align-items: center; drag: drag-drop; }
+.component-title button { flex: 1; text-align: left; }
+.component-field { display: flex; flex-wrap: wrap; align-items: center; margin: 4px 0; }
+.component-field label { min-width: 80px; flex: 1; }
+.component-field input, .component-field select { width: 128px; min-width: 60px; flex-grow: 1; }
+.component-vector { display: flex; flex-wrap: nowrap; width: 100%; }
+.component-palette { display: flex; padding: 4px; }
+.component-palette button { width: 22px; height: 22px; padding: 0; margin: 2px; }
+#componentInspector input[type=checkbox] { width: 18px; min-width: 18px; height: 18px; flex-grow: 0; margin-left: 6px; }
+#componentInspector input[type=checkbox]:checked { background-color: #5599dd; border: 2px #aecfff; }
+#componentInspector input[type=range] { width: 100%; height: 18px; margin-top: 4px; }
+#componentInspector input[type=range] slidertrack { background-color: #171e27; height: 4px; margin-top: 7px; }
+#componentInspector input[type=range] sliderbar { background-color: #69a4df; width: 12px; height: 16px; }
+#componentInspector textarea { width: 100%; min-height: 64px; }
+.component-vector .component-field { width: 33.333%; min-width: 0px; padding: 4px 2px; }
+.component-vector .component-field label { width: 12px; min-width: 12px; flex-grow: 0; }
+.component-vector .component-field input { width: 45px; min-width: 20px; }
+.component-nested { margin-left: 8px; padding-left: 6px; border-left: 1px #3c4656; }
+.component-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.component-actions button { padding: 3px 7px; }
+.component-error { color: #ff9292; white-space: pre-wrap; }
+.component-menu-item { display: block; width: 100%; text-align: left; margin-top: 3px; }
+.add-component { width: 100%; margin: 8px 0; }
+.legacy-inspector-details { display: none; }
+.asset-item[data-prefab-asset] { drag: drag-drop; }
+.prefab-editor { padding: 12px; overflow-y: auto; height: 100%; }
+.prefab-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.prefab-entity { display: block; width: 100%; text-align: left; margin: 4px 0; }

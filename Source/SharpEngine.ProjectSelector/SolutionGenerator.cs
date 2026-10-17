@@ -16,7 +16,7 @@ internal sealed record GeneratedSolution(
 
 internal static class SolutionGenerator
 {
-    private const int GeneratorVersion = 4;
+    private const int GeneratorVersion = 5;
     private const string CppProjectType = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     private const string CSharpProjectType = "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}";
     private const string FolderProjectType = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -112,7 +112,10 @@ internal static class SolutionGenerator
                     new XElement("SharpEngineManagedApi",
                         root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.Managed.dll"),
                     new XElement("SharpEngineModulesApi",
-                        root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.Modules.dll"))));
+                        root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.Modules.dll"),
+                    new XElement("SharpEngineComponentGenerator",
+                        root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.ComponentGenerator.dll"),
+                    new XElement("CustomAfterMicrosoftCommonTargets", root + @"Build\SharpEngine.Components.targets"))));
         WriteXmlAtomic(path, document);
     }
 
@@ -248,6 +251,7 @@ internal static class SolutionGenerator
         foreach (var name in new[]
                  {
                      "SharpEngine.Game", "SharpEngine.Managed", "SharpEngine.Modules",
+                     "SharpEngine.ComponentGenerator",
                      "SharpEngine.ProjectSelector",
                  })
         {
