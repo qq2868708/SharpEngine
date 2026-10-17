@@ -1,10 +1,11 @@
 # SharpEngine
 
-SharpEngine is a Windows native host with a managed C# game layer. The editor
-uses RmlUi 6.1, FreeType, and RML/RCSS documents for layout, text, controls,
-and input. The executable owns Win32, CoreCLR, and the current OpenGL preview
-backend. The existing Vulkan code remains available for later renderer work;
-it does not render the current editor viewport.
+SharpEngine is a Windows native host with a managed C# game layer. This delivery
+contains two complete rendering schemes. The Editor target uses a Win32 window,
+OpenGL, and RmlUi 6.1 with FreeType and RML/RCSS documents for the editor shell,
+viewport, text, controls, and input. The Game target uses a Vulkan swapchain for
+the runtime scene and RmlUi's Vulkan renderer for the visible game UI in the same
+frame.
 
 ## Build
 
@@ -41,7 +42,10 @@ saved `world.startup`:
 
 Game loads Runtime Modules only, starts the World immediately and does not load the
 Editor assembly. Editor can open without a project; Game rejects a missing project
-or startup World. Both use the same component RuntimeWorld and scene renderer.
+or startup World. Both use the same component RuntimeWorld and scene renderer,
+while each target presents through its own complete backend: Editor/OpenGL and
+Game/Vulkan. Game also loads `Content/UI/Main.rml` and presents its RmlUi controls
+over the Vulkan scene.
 
 The host loads the engine-owned `SharpEngine.Host.dll` bootstrap, the shared
 `SharpEngine.Runtime.dll` contract, and `SharpEngine.Editor.dll` editor API.
@@ -55,11 +59,15 @@ Projects without a startup World receive an `Untitled*` deep copy of the engine
 default World; its first Save creates a project `.sworld`, registers the asset,
 and updates the project startup path as one checked operation.
 
-For a bounded run and an actual framebuffer capture:
+For bounded runs and actual framebuffer captures from both schemes:
 
 ```powershell
 .\Binaries\Win64\Debug\Editor\Engine.exe --smoke-test --screenshot D:\SharpEngine\Binaries\Win64\Debug\Editor\editor-smoke.bmp
+.\Binaries\Win64\Debug\Game\Engine.exe --project D:\Games\MyGame\MyGame.sharpproject --smoke-test --screenshot D:\SharpEngine\Binaries\Win64\Debug\Game\game-smoke.bmp
 ```
+
+The Editor capture verifies the OpenGL scene and RmlUi editor shell. The Game
+capture verifies Vulkan scene geometry and the visible RmlUi game UI together.
 
 ## Managed lifecycle
 

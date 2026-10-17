@@ -144,7 +144,9 @@ runtime lifecycle and input routing, and renders through the shared scene render
 It does not start editor panels, authoring tools, code watchers or editor MCP.
 Missing project/world or invalid startup data causes an explicit diagnostic and a
 nonzero exit. `--frames N --hidden --screenshot <bmp>` supports bounded acceptance runs.
-Packaging/Cook distribution and a full game UI renderer are separate work.
+The delivery includes the complete Game presentation path: Vulkan scene rendering
+and the visible RmlUi game UI share the same swapchain frame. Packaging/Cook
+distribution remains separate work.
 
 ## Existing project migration
 

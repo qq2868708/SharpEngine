@@ -5,8 +5,8 @@ namespace SharpEngine.UI;
 
 /// <summary>
 /// Stable, renderer independent description of the interactive part of a UI.
-/// RmlUi, a future Vulkan renderer, and editor automation can all consume this
-/// without depending on the current GDI draw list.
+/// RmlUi, the Editor OpenGL shell, the Game Vulkan UI, and editor automation can
+/// all consume this without depending on a backend-specific draw list.
 /// </summary>
 public sealed record UiSemanticElement(
     string Id,

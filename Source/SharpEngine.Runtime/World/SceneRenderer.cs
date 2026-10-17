@@ -13,7 +13,7 @@ using SharpEngine.UI;
 namespace SharpEngine.World;
 
 /// <summary>One native-friendly vertex: relative viewport pixels, 0..1 depth,
-/// and RGBA. The GL and future Vulkan backends consume the same data.</summary>
+/// and RGBA. The Editor OpenGL and Game Vulkan backends consume the same data.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct WorldViewportVertex(float X, float Y, float Z,
     float R, float G, float B, float A);

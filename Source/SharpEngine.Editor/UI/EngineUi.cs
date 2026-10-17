@@ -22,8 +22,8 @@ public sealed class EngineUiState
 }
 
 /// <summary>
-/// The engine's own UI shell. It intentionally depends only on the renderer-neutral
-/// UI model, so the native Vulkan renderer can consume UiDrawList later.
+/// The engine's own renderer-neutral UI model. The Editor OpenGL shell and Game
+/// Vulkan UI each consume their target-specific presentation path.
 /// </summary>
 public sealed class EngineUiController
 {
@@ -109,7 +109,7 @@ public sealed class EngineUiController
     }
 
     /// <summary>
-    /// Returns the stable UI contract used by automation and future RmlUi/Vulkan
+    /// Returns the stable UI contract used by automation and both RmlUi rendering
     /// frontends. Bounds are refreshed using the same layout pass as rendering.
     /// </summary>
     public UiSemanticSnapshot BuildSemanticSnapshot(UiSize viewport)
