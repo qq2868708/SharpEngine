@@ -79,6 +79,26 @@ internal static class ContentManagerUiValidation
             Require(up["accepted"]!.GetValue<bool>(), $"Pointer up failed: {up}");
             return target.Host;
         }
+        JsonObject MovePointer(string id)
+        {
+            var snap = Snapshot();
+            var target = Elements(snap).FirstOrDefault(p => Match(p.Element, id) &&
+                p.Element["visible"]!.GetValue<bool>() && p.Element["hitTarget"]!.GetValue<bool>());
+            if (target.Element is null)
+                throw new InvalidOperationException($"Control is not visible/clickable: {id}");
+            var b = target.Element["bounds"]!;
+            return Invoke("ui.pointer", new JsonObject
+            {
+                ["hostId"] = target.Host["hostId"]!.GetValue<string>(),
+                ["event"] = "move", ["button"] = "none",
+                ["x"] = (int)(b["x"]!.GetValue<double>() + b["width"]!.GetValue<double>() / 2),
+                ["y"] = (int)(b["y"]!.GetValue<double>() + b["height"]!.GetValue<double>() / 2),
+                ["buttons"] = new JsonArray(), ["modifiers"] = new JsonArray(),
+                ["pointerId"] = 0, ["wheelX"] = 0, ["wheelY"] = 0,
+                ["expectedFrameId"] = snap["frameId"]!.GetValue<ulong>(),
+                ["expectedElementId"] = target.Element["elementId"]!.GetValue<string>(),
+            });
+        }
         void Search(string pane, string text)
         {
             var host = Click(pane + "-search");
@@ -113,6 +133,14 @@ internal static class ContentManagerUiValidation
             tiles[0]["bounds"]!["x"]!.GetValue<double>() !=
                 tiles[1]["bounds"]!["x"]!.GetValue<double>(),
             "Tile view must arrange entries horizontally before wrapping");
+        Click("editor.content.open:content:engine|Assets");
+        var hover = MovePointer("content-up");
+        Require(hover["accepted"]!.GetValue<bool>(), "Parent folder hover must enter the native pointer path");
+        SaveFrames("parent-hover");
+        Require(hover["targetElementId"]?.GetValue<string>() ==
+                "host/main/id/content-up",
+            "Parent folder hover must resolve the button through native hit testing");
+        Click("content-up");
         Click("content-view-list");
         var rows = Entries("content");
         Require(rows[0]["bounds"]!["x"]!.GetValue<double>() ==

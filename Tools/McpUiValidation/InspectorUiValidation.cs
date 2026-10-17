@@ -89,6 +89,52 @@ internal static class InspectorUiValidation
             Key("text", text: text);
             if (commit) { Key("down", 0x0D); Key("up", 0x0D); }
         }
+        void DragMainDockSplitterPreservesInspector(string controlId)
+        {
+            var before = Read();
+            var splitter = Host(before)["elements"]!.AsArray().Select(node => node!.AsObject())
+                .FirstOrDefault(element => element["role"]?.GetValue<string>() == "splitter" &&
+                    element["semanticId"]?.GetValue<string>() == "main.body")
+                ?? throw new InvalidDataException("Main body splitter was unavailable");
+            var splitterBounds = splitter["bounds"]!.AsObject();
+            var x = (int)(splitterBounds["x"]!.GetValue<double>() +
+                splitterBounds["width"]!.GetValue<double>() / 2);
+            var y = (int)(splitterBounds["y"]!.GetValue<double>() +
+                splitterBounds["height"]!.GetValue<double>() / 2);
+            var frame = before["frameId"]!.GetValue<ulong>();
+            var elementId = splitter["elementId"]!.GetValue<string>();
+            JsonObject Pointer(string inputEvent, string button, ulong expectedFrame,
+                string expectedElement, int pointerX, int pointerY, string[]? buttons = null)
+            {
+                var result = Result(tool(sequence++, "ui.pointer", new JsonObject
+                {
+                    ["hostId"] = "main", ["event"] = inputEvent, ["button"] = button,
+                    ["x"] = pointerX, ["y"] = pointerY,
+                    ["buttons"] = new JsonArray((buttons ?? []).Select(value =>
+                        (JsonNode?)JsonValue.Create(value)).ToArray()),
+                    ["modifiers"] = new JsonArray(), ["pointerId"] = 0,
+                    ["expectedFrameId"] = expectedFrame, ["expectedElementId"] = expectedElement,
+                    ["wheelX"] = 0, ["wheelY"] = 0,
+                }));
+                require(result["accepted"]!.GetValue<bool>(),
+                    $"Inspector splitter {inputEvent} must be accepted: {result}");
+                return result;
+            }
+            var down = Pointer("down", "left", frame, elementId, x, y);
+            var move = Pointer("move", "none", down["frameId"]!.GetValue<ulong>(),
+                elementId, x + 24, y, ["left"]);
+            var preview = Read();
+            var previewControl = Find(preview, controlId);
+            require(previewControl["visible"]!.GetValue<bool>(),
+                "Inspector component remains visible during splitter preview");
+            var up = Pointer("up", "left", move["frameId"]!.GetValue<ulong>(),
+                elementId, x + 24, y, ["left"]);
+            var committed = Read();
+            var committedControl = Find(committed, controlId);
+            require(up["accepted"]!.GetValue<bool>() &&
+                    committedControl["visible"]!.GetValue<bool>(),
+                "Inspector component remains visible after splitter layout commit");
+        }
         JsonObject Entity(string id) => Data()["document"]!["entities"]!.AsArray().Single(e => e!["entityId"]!.GetValue<string>() == id)!.AsObject();
         Click("editor.component-create-entity");
         var created = Data()["document"]!["entities"]!.AsArray().Last()!;
@@ -104,6 +150,7 @@ internal static class InspectorUiValidation
         require(Entity(entityId)["components"]!.AsArray().Last()!["state"]!["FieldOfView"]!.GetValue<float>() == 60, "Typing remains in local edit buffer");
         Key("down", 0x0D); Key("up", 0x0D);
         require(Entity(entityId)["components"]!.AsArray().Last()!["state"]!["FieldOfView"]!.GetValue<float>() == 123, "Enter commits Inspector field through transaction layer");
+        DragMainDockSplitterPreservesInspector(fovControl);
         Type(fovControl, "124", commit: false);
         Click("editor.select-entity:player");
         require(Entity(entityId)["components"]!.AsArray().Last()!["state"]!["FieldOfView"]!.GetValue<float>() == 124,

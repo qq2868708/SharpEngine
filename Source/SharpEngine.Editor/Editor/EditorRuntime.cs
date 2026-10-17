@@ -1513,6 +1513,11 @@ public sealed partial class EditorRuntime
     private void RefreshDockUiAndContents()
     {
         RefreshDockUi();
+        // SetHostMarkup replaces the dock document, including the Inspector's
+        // componentInspector container. The cached markup belongs to the old
+        // DOM, so invalidate it before RefreshInspector repopulates the new
+        // container.
+        _componentMarkup = "";
         _contentMarkup.Clear();
         _uiText.Clear();
         _extensionUiDirty = true;
