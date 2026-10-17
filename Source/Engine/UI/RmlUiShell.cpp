@@ -2752,11 +2752,15 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
         }
         message = button == 1 ? WM_LBUTTONUP :
             button == 2 ? WM_RBUTTONUP : WM_MBUTTONUP;
+        // Win32 button-up carries the buttons that remain held, excluding
+        // the released button. Otherwise WindowProcedure never releases capture.
+        state.McpButtons &= ~buttonBit;
+        buttons &= ~buttonBit;
     }
     else if (event == 3)
     {
         if (GetCapture() == host->Window)
-            SendMessageW(host->Window, WM_CAPTURECHANGED, 0, 0);
+            ReleaseCapture();
         state.McpButtons = 0;
     }
     else if (event == 4) message = WM_MOUSEWHEEL;
@@ -2791,6 +2795,14 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
         return failure("UI_RENDER_UNAVAILABLE", "frameId", "a completed presentation",
                        std::to_string(state.FrameId), true);
     state.PinCurrentFrame();
+    // A click can close the floating host. Render drains deferred destruction,
+    // so the pre-dispatch Host pointer must not be dereferenced afterwards.
+    host = state.FindHost(hostId);
+    if (!host || !host->Context)
+        return "{\"accepted\":true,\"beforeStateRevision\":" + std::to_string(beforeRevision) +
+            ",\"afterStateRevision\":" + std::to_string(state.StateRevision) +
+            ",\"frameId\":" + std::to_string(state.FrameId) +
+            ",\"targetElementId\":null,\"eventPath\":[],\"capture\":null,\"diagnostics\":[]}";
     target = host->Context->GetHoverElement();
     if (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host)
         target = state.SplitterDrag.Element;

@@ -39,9 +39,8 @@ public sealed partial class EditorRuntime
             "Select the current level in Content Manager"));
         _commands.Register(new EditorCommand("core.engine-settings", "Engine Settings...",
             _ => InvokeUiAction("editor.engine-settings")));
-        _commands.Register(new EditorCommand("core.invert-y", "Invert Y Axis",
-            _ => InvokeUiAction("editor.toggle-invert-y"), tooltip: "Invert viewport orbit Y input",
-            getChecked: _ => _settings.InvertYAxis));
+        _commands.Register(new EditorCommand("core.project-settings", "Project Settings...",
+            _ => InvokeUiAction("editor.project-settings")));
         _commands.Register(new EditorCommand("core.show-project-content", "Show Project Content",
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
@@ -74,8 +73,8 @@ public sealed partial class EditorRuntime
 
         _menus.RegisterCategory(new EditorMenuCategory("file", "project", 100));
         _menus.RegisterCategory(new EditorMenuCategory("file", "level", 200));
+        _menus.RegisterCategory(new EditorMenuCategory("file", "settings", 300));
         _menus.RegisterCategory(new EditorMenuCategory("edit", "history", 50));
-        _menus.RegisterCategory(new EditorMenuCategory("edit", "settings", 100));
         _menus.RegisterCategory(new EditorMenuCategory("assets", "content", 100));
         _menus.RegisterCategory(new EditorMenuCategory("view", "panes", 100));
         _menus.RegisterCategory(new EditorMenuCategory("view", "layout", 200));
@@ -83,10 +82,10 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("file", "project", "core.open-project", 200));
         _menus.RegisterItem(new EditorMenuItem("file", "level", "core.save-current-level", 100));
         _menus.RegisterItem(new EditorMenuItem("file", "level", "core.export-scene", 200));
+        _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.engine-settings", 100));
+        _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.project-settings", 200));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.undo", 100));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.redo", 200));
-        _menus.RegisterItem(new EditorMenuItem("edit", "settings", "core.engine-settings", 100));
-        _menus.RegisterItem(new EditorMenuItem("edit", "settings", "core.invert-y", 200));
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.browse-current-level", 100));
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.show-project-content", 200));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.hierarchy", 100));

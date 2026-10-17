@@ -149,6 +149,7 @@ internal sealed class ProjectModuleHost : IDisposable
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Module '{id}' content hash does not match its build manifest");
         var assembly = _loadContext.LoadFromAssemblyPath(assemblyPath);
+        runtime.RegisterProjectSettingsAssembly(assembly);
         var entryType = assembly.GetType(entryTypeName, throwOnError: true)!;
         if (Activator.CreateInstance(entryType) is not ISharpEngineModule instance)
             throw new InvalidDataException(

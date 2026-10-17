@@ -1,5 +1,6 @@
 using SharpEngine.Editor;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Modules;
 using SharpEngine.UI;
 using SharpEngine.World;
 
@@ -25,6 +26,7 @@ static bool MatrixNear(System.Numerics.Matrix4x4 left, System.Numerics.Matrix4x4
 }
 try
 {
+    DevelopmentSettingsValidation.Run(temporary.FullName, Require);
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));
@@ -54,6 +56,7 @@ try
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    runtime.RegisterProjectSettingsAssembly(typeof(ValidationProjectSettings).Assembly);
     using var uiContract = runtime.UiRuntime.RegisterViewModel<ValidationMainScreen>(
         "validation.main", 1);
     Require(runtime.UiRuntime.ViewModelContracts.Single().JsonSchema.Contains(
@@ -113,7 +116,51 @@ try
         runtime.SelectedFolderPath == "Worlds" && runtime.SelectedEntity is null,
         "Folder context selection must replace selection from every other editor surface");
     runtime.InvokeUiAction("editor.content.clear");
-    Require(!runtime.Settings.InvertYAxis, "Engine Settings should default to normal Y navigation");
+    Require(!DevelopmentSettings.Get<EngineSettings>().InvertYAxis,
+        "Engine Settings should auto-register and support static runtime reads");
+    Require(DevelopmentSettings.Get<ValidationProjectSettings>().MoveSpeed == 600 &&
+        DevelopmentSettings.Get<ValidationProjectSettings>().Profile.Title == "Default" &&
+        DevelopmentSettings.Get<ValidationProjectSettings>().Tags.SequenceEqual(["starter"]),
+        "Project Settings should auto-register nested defaults from the project assembly");
+    Require(runtime.BuildSettingsMarkup(SettingsScope.Engine).Contains(
+            "sharpengine.editor-navigation", StringComparison.Ordinal) &&
+        runtime.BuildSettingsMarkup(SettingsScope.Project).Contains(
+            "validation.gameplay", StringComparison.Ordinal),
+        "Engine and Project Settings panels must filter the shared registry by scope");
+    var detachedSnapshot = DevelopmentSettings.Get<ValidationProjectSettings>();
+    detachedSnapshot.Tags.Add("caller-mutation");
+    Require(DevelopmentSettings.Get<ValidationProjectSettings>().Tags.SequenceEqual(["starter"]),
+        "Static settings reads must return detached snapshots instead of mutable authority");
+    Require(runtime.Commands.Commands.Any(command => command.Id == "core.engine-settings") &&
+        runtime.Commands.Commands.Any(command => command.Id == "core.project-settings") &&
+        runtime.Menus.Items.Any(item => item.MenuId == "file" &&
+            item.CommandId == "core.engine-settings") &&
+        runtime.Menus.Items.Any(item => item.MenuId == "file" &&
+            item.CommandId == "core.project-settings"),
+        "File must expose separate Engine Settings and Project Settings commands");
+    var engineSettingsPath = Path.Combine(temporary.FullName, "Config", "EngineSettings",
+        "sharpengine.editor-navigation.json");
+    runtime.InvokeUiAction(
+        "editor.settings-change:engine:sharpengine.editor-navigation:invertYAxis:true");
+    Require(DevelopmentSettings.Get<EngineSettings>().InvertYAxis &&
+        !File.Exists(engineSettingsPath),
+        "Settings edits should publish a new runtime snapshot without saving implicitly");
+    runtime.InvokeUiAction(
+        "editor.settings-save:engine:sharpengine.editor-navigation");
+    Require(File.Exists(engineSettingsPath) &&
+        File.ReadAllText(engineSettingsPath).Contains("\"invertYAxis\": true",
+            StringComparison.Ordinal),
+        "Engine Settings overrides should save explicitly under the project Config folder");
+    runtime.InvokeUiAction(
+        "editor.settings-change:project:validation.gameplay:profile/title:Configured");
+    Require(DevelopmentSettings.Get<ValidationProjectSettings>().Profile.Title == "Configured",
+        "Nested Project Settings edits must update static runtime reads atomically");
+    if (args.Contains("--settings-only", StringComparer.Ordinal))
+    {
+        runtime.Shutdown();
+        Console.WriteLine($"PASS: {assertions} focused settings assertions");
+        return;
+    }
     var commandCalls = 0;
     using var commandRegistration = runtime.Commands.Register(new EditorCommand(
         "validation.raise-status",
@@ -202,10 +249,6 @@ try
     Require(File.ReadAllText(uiPath).Contains("Saved UI headline", StringComparison.Ordinal) &&
         !runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
         "UI Save must validate and atomically replace the authoritative RML source");
-    runtime.InvokeUiAction("editor.toggle-invert-y");
-    Require(runtime.Settings.InvertYAxis &&
-        EngineSettings.Load(root, temporary.FullName).InvertYAxis,
-        "Invert Y Axis should persist in the project-local Engine Settings file");
     var initialCameraPosition = runtime.World!.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);
     runtime.Update(0.1f);
@@ -296,6 +339,35 @@ finally
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", previousRoot);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", previousManifest);
     temporary.Delete(true);
+}
+
+[DevelopmentSettings("validation.gameplay", SettingsScope.Project, 1,
+    DisplayName = "Gameplay", Category = "Game")]
+public sealed class ValidationProjectSettings : DevelopmentSettings
+{
+    [Setting("moveSpeed", DisplayName = "Move Speed", Minimum = 0)]
+    public float MoveSpeed { get; init; } = 600;
+
+    [Setting("profile", DisplayName = "Profile")]
+    public ValidationSettingsProfile Profile { get; init; } = new();
+
+    [Setting("tags", DisplayName = "Tags")]
+    public List<string> Tags { get; init; } = ["starter"];
+
+    [Setting("weights")]
+    public Dictionary<string, float> Weights { get; init; } = new();
+
+    [Setting("profiles")]
+    public List<ValidationSettingsProfile> Profiles { get; init; } = [];
+}
+
+public sealed class ValidationSettingsProfile
+{
+    [Setting("title", DisplayName = "Title")]
+    public string Title { get; init; } = "Default";
+
+    [Setting("strength", Minimum = 0)]
+    public float Strength { get; init; } = 1;
 }
 
 public sealed class ValidationMainScreen

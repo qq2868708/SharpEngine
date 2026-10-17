@@ -22,7 +22,12 @@ void Require(bool condition, string message)
 }
 
 var sessionId = Guid.NewGuid().ToString("N");
-using var editor = Start(executable, "--mcp-isolated", "--mcp-session-id", sessionId);
+var settingsProject = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
+var editorArguments = new List<string> { "--mcp-isolated", "--mcp-session-id", sessionId };
+if (!string.IsNullOrWhiteSpace(settingsProject)) editorArguments.AddRange(["--project", settingsProject]);
+using var editor = Start(executable, editorArguments.ToArray());
+var editorErrors = editor.StandardError.ReadToEndAsync();
+_ = editor.StandardOutput.ReadToEndAsync();
 Process? bridge = null;
 try
 {
@@ -34,13 +39,14 @@ try
     {
         if (editor.HasExited)
             throw new InvalidOperationException(
-                $"The isolated Editor exited {editor.ExitCode}: {editor.StandardError.ReadToEnd()}");
+                $"The isolated Editor exited {editor.ExitCode}: {editorErrors.GetAwaiter().GetResult()}");
         Thread.Sleep(50);
     }
     Require(File.Exists(registry), "Isolated Editor must publish a session registration");
     Thread.Sleep(250);
 
     bridge = Start(executable, "--mcp-stdio");
+    _ = bridge.StandardError.ReadToEndAsync();
     JsonObject Call(int id, string method, JsonObject? parameters = null)
     {
         var request = new JsonObject
@@ -85,6 +91,12 @@ try
             "notifications/resources/list_changed",
         "Attachment must notify clients that the resource list changed");
 
+    if (args.Contains("--settings-only", StringComparer.Ordinal))
+    {
+        SettingsUiValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} Settings UI integration assertions");
+        return;
+    }
     var tools = Call(5, "tools/list")["result"]?["tools"]?.AsArray() ?? [];
     var pointerTool = tools.Select(node => node?.AsObject()).First(tool =>
         tool?["name"]?.GetValue<string>() == "ui.pointer")!;
@@ -398,7 +410,6 @@ static Process Start(string executable, params string[] arguments)
     };
     foreach (var argument in arguments) start.ArgumentList.Add(argument);
     var process = Process.Start(start) ?? throw new IOException($"Could not start {executable}");
-    _ = process.StandardError.ReadToEndAsync();
     return process;
 }
 

@@ -166,6 +166,7 @@ function Invoke-NewProject {
         @{ Source = 'Directory.Build.props'; Target = 'Directory.Build.props' },
         @{ Source = 'Source\Runtime\Runtime.csproj.template'; Target = "Source\$namespace\$namespace.csproj" },
         @{ Source = 'Source\Runtime\RuntimeModule.cs'; Target = "Source\$namespace\${namespace}Module.cs" },
+        @{ Source = 'Source\Runtime\GameDevelopmentSettings.cs'; Target = "Source\$namespace\GameDevelopmentSettings.cs" },
         @{ Source = 'Source\Editor\Editor.csproj.template'; Target = "Source\$namespace.Editor\$namespace.Editor.csproj" },
         @{ Source = 'Source\Editor\EditorModule.cs'; Target = "Source\$namespace.Editor\${namespace}EditorModule.cs" },
         @{ Source = 'Source\Editor\ProjectEditorExtension.cs'; Target = "Source\$namespace.Editor\ProjectEditorExtension.cs" },

@@ -35,7 +35,6 @@ public sealed partial class EditorRuntime
     private readonly Queue<string> _messages = new();
     private AssetRegistry? _assets;
     private ContentManager? _content;
-    private EngineSettings _settings = new();
     private WorldDocument? _world;
     private string _engineRoot = string.Empty;
     private string? _projectRoot;
@@ -126,7 +125,8 @@ public sealed partial class EditorRuntime
     public AssetDescriptor? SelectedAsset => _selection.Kind == EditorSelectionKind.Asset && _selection.Id is not null
         ? _assets?.Find(_selection.Id) : null;
     public string? SelectedFolderPath => _selection.Kind == EditorSelectionKind.Folder ? _selection.Path : null;
-    public EngineSettings Settings => _settings;
+    public EngineSettings Settings => (EngineSettings)(_developmentSettings?.Get(typeof(EngineSettings)) ??
+        throw new InvalidOperationException("Settings are not initialized"));
     public EditorPlayState PlayState { get; private set; }
     public bool TransformSnapEnabled { get; set; }
     public bool IsDirty => _worldIsUntitled || _dirty || (_authoring?.IsDirty ?? false);
@@ -196,11 +196,7 @@ public sealed partial class EditorRuntime
             path = _world?.SourcePath,
             untitled = _worldIsUntitled,
         },
-        settings = new
-        {
-            invertYAxis = _settings.InvertYAxis,
-            path = EngineSettings.GetPath(_engineRoot, _projectRoot),
-        },
+        settings = JsonNode.Parse(DescribeSettingsJson()),
         viewport = new
         {
             mode = "scene3d",
@@ -359,9 +355,9 @@ public sealed partial class EditorRuntime
         _projectManifest = FindProjectManifest();
         _projectRoot = _projectManifest is null ? null :
             Path.GetDirectoryName(_projectManifest)!;
+        InitializeDevelopmentSettings();
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
         _content = new ContentManager(_assets);
-        _settings = EngineSettings.Load(_engineRoot, _projectRoot);
         _defaultLayout = _layoutStore.LoadDefault(_engineRoot);
         try
         {
@@ -407,6 +403,7 @@ public sealed partial class EditorRuntime
 
     public void Update(float deltaSeconds)
     {
+        PollDevelopmentSettings();
         // Conditions can depend on project C# state. Compare the resulting markup
         // before publishing, so an unchanged state preserves RmlUi focus/hover.
         RefreshExtensionUi();
@@ -562,7 +559,7 @@ public sealed partial class EditorRuntime
             // Dragging follows the camera movement direction. The previous
             // signs felt reversed for both the numeric yaw and the viewport.
             _orbitYaw += dx * 0.35f;
-            var ySign = _settings.InvertYAxis ? -1f : 1f;
+            var ySign = Settings.InvertYAxis ? -1f : 1f;
             _orbitPitch = Math.Clamp(_orbitPitch + dy * 0.35f * ySign, -89f, 89f);
             ApplyNavigationCamera();
         }
@@ -619,6 +616,7 @@ public sealed partial class EditorRuntime
             actionHostId = action[hostPrefix.Length..separator];
             action = action[(separator + 1)..];
         }
+        if (HandleDevelopmentSettingsAction(actionHostId, action)) return;
         if (action == "window.close-requested")
         {
             HandleMainWindowClose();
@@ -772,22 +770,6 @@ public sealed partial class EditorRuntime
                     SetStatus("Stopped — edit transforms restored");
                 }
                 break;
-            case "editor.toggle-invert-y":
-                _settings.InvertYAxis = !_settings.InvertYAxis;
-                try
-                {
-                    _settings.Save(_engineRoot, _projectRoot);
-                    RefreshSettingsUi();
-                    SetStatus($"Engine Settings · Invert Y Axis {(_settings.InvertYAxis ? "On" : "Off")}");
-                }
-                catch (Exception exception)
-                {
-                    Log($"Engine Settings could not be saved: {exception.Message}");
-                }
-                break;
-            case "editor.engine-settings":
-                SetStatus($"Engine Settings · Invert Y Axis {(_settings.InvertYAxis ? "On" : "Off")} · settings are project-local");
-                break;
             case "editor.save":
                 SaveWorld();
                 break;
@@ -883,6 +865,7 @@ public sealed partial class EditorRuntime
         _mcpSession = null;
         foreach (var registration in _extensions.Values.Reverse().ToArray())
             registration.Dispose();
+        ShutdownDevelopmentSettings();
         _contextMenus.Clear();
         _toolbar.Clear();
         _menus.Clear();
@@ -1421,6 +1404,7 @@ public sealed partial class EditorRuntime
 
     private void HandleMainWindowClose()
     {
+        if (!ConfirmDevelopmentSettingsClose()) return;
         if (!IsDirty)
         {
             NativeEngineApi.ExitMessageLoop();
@@ -1665,8 +1649,8 @@ public sealed partial class EditorRuntime
 
     private void RefreshSettingsUi()
     {
-        SetText("invertYAxisMenu", $"Invert Y Axis: {(_settings.InvertYAxis ? "On" : "Off")}");
-        SetText("settingsPath", EngineSettings.GetPath(_engineRoot, _projectRoot));
+        RefreshSettingsWindow(SettingsScope.Engine);
+        RefreshSettingsWindow(SettingsScope.Project);
     }
 
     private void RefreshViewportModeUi()
