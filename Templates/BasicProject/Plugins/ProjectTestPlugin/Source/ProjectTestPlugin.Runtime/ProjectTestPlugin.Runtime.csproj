@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.Test.ProjectPlugin.Runtime</AssemblyName>
+    <RootNamespace>SharpEngine.Test.ProjectPlugin</RootNamespace>
+    <SharpEngineModuleId>SharpEngine.Test.ProjectPlugin.Runtime</SharpEngineModuleId>
+    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Runtime">
+      <HintPath>$(SharpEngineRuntimeApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Plugin Module builds are unsupported. Build the project through SharpEngine.ProjectBuild." />
+    <Error Condition="'$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
+           Text="SharpEngineRuntimeApi must point to a built SharpEngine.Runtime.dll." />
+  </Target>
+</Project>

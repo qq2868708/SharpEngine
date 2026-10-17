@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "kind": "timeline",
+  "timelineId": "engine://timelines/robot-walk",
+  "name": "Robot Walk Timeline",
+  "duration": 3.0,
+  "frameRate": 30.0,
+  "tracks": [
+    {
+      "trackId": "robot-animation",
+      "name": "Robot Animation",
+      "targetId": "robot",
+      "type": "skeletal-animation",
+      "muted": false,
+      "clips": [
+        {
+          "clipId": "robot-walk-clip",
+          "playableId": "engine://animations/robot-walk",
+          "start": 0,
+          "duration": 3.0,
+          "sourceStart": 0,
+          "speed": 1,
+          "loopMode": "Loop"
+        }
+      ]
+    }
+  ]
+}

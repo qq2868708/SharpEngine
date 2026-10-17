@@ -1,5 +1,9 @@
 <Project>
-  <PropertyGroup><SharpEngineRole>Editor</SharpEngineRole></PropertyGroup>
+  <PropertyGroup>
+    <SharpEngineRole>Editor</SharpEngineRole>
+    <SharpEngineModuleId>SharpEngine.Editor</SharpEngineModuleId>
+    <SharpEngineModuleType>Editor</SharpEngineModuleType>
+  </PropertyGroup>
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>

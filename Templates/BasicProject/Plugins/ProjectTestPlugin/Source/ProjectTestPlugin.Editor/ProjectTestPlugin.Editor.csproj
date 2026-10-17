@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.Test.ProjectPlugin.Editor</AssemblyName>
+    <RootNamespace>SharpEngine.Test.ProjectPlugin</RootNamespace>
+    <SharpEngineModuleId>SharpEngine.Test.ProjectPlugin.Editor</SharpEngineModuleId>
+    <SharpEngineModuleType>Editor</SharpEngineModuleType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Runtime">
+      <HintPath>$(SharpEngineRuntimeApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpEngine.Editor">
+      <HintPath>$(SharpEngineEditorApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <ProjectReference Include="..\ProjectTestPlugin.Runtime\ProjectTestPlugin.Runtime.csproj" />
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Plugin Module builds are unsupported. Build the project through SharpEngine.ProjectBuild." />
+    <Error Condition="'$(SharpEngineEditorApi)' == '' or !Exists('$(SharpEngineEditorApi)') or '$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
+           Text="SharpEngine managed APIs are missing. Build the engine before the Plugin Module." />
+  </Target>
+</Project>

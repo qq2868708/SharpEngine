@@ -102,8 +102,20 @@ if (projectPaths.Length == 0) Fail("SEMOD001", "A project requires at least one 
 if (projectPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != projectPaths.Length)
     Fail("SEMOD002", "The project contains a duplicate Module project path");
 
-var modules = projectPaths.Select(path => EvaluateModule(path, configuration,
-    platform, target, validationOutput, moduleIntermediate, managedApi, modulesApi)).ToArray();
+var plugins = ReadPlugins(projectJson, projectRoot, engineRoot);
+var pluginModulePaths = plugins.SelectMany(plugin => plugin.Modules.Select(path =>
+    new ModuleSource(path))).ToArray();
+var allModuleSources = projectPaths.Select(path =>
+    new ModuleSource(path)).Concat(pluginModulePaths).ToArray();
+if (allModuleSources.Select(source => source.ProjectPath)
+        .Distinct(StringComparer.OrdinalIgnoreCase).Count() != allModuleSources.Length)
+    Fail("SEMOD002", "The project contains a duplicate Module project path");
+
+var modules = allModuleSources.Select(source =>
+{
+    return EvaluateModule(source.ProjectPath, configuration,
+        platform, target, validationOutput, moduleIntermediate, managedApi, modulesApi);
+}).ToArray();
 foreach (var module in modules)
     if (!string.Equals(Path.GetDirectoryName(module.TargetPath), validationOutput,
             StringComparison.OrdinalIgnoreCase))
@@ -257,6 +269,13 @@ var runtimeManifest = new
             kind = file.Kind,
             contentHash = file.ContentHash,
         }).ToArray(),
+    plugins = plugins.Select(plugin => new
+    {
+        id = plugin.Id,
+        version = plugin.Version,
+        source = plugin.Source,
+        manifestHash = plugin.ManifestHash,
+    }).ToArray(),
     modules = selected.Select(module =>
     {
         var assembly = module.AssemblyName + ".dll";
@@ -298,6 +317,75 @@ static string RequiredString(JsonElement value, string property)
         string.IsNullOrWhiteSpace(element.GetString()))
         Fail("SEBUILD007", $"Required string property is missing: {property}");
     return element.GetString()!;
+}
+
+static IReadOnlyList<PluginInfo> ReadPlugins(JsonElement project, string projectRoot,
+    string engineRoot)
+{
+    if (!project.TryGetProperty("plugins", out var pluginArray)) return [];
+    if (pluginArray.ValueKind != JsonValueKind.Array)
+        Fail("SEPLUGIN001", "Project property 'plugins' must be an array");
+    var result = new List<PluginInfo>();
+    var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    foreach (var item in pluginArray.EnumerateArray())
+    {
+        var source = item.GetString() ?? string.Empty;
+        var manifestPath = ResolvePluginManifest(source, projectRoot, engineRoot);
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = document.RootElement;
+        if (!root.TryGetProperty("schemaVersion", out var schema) || schema.GetInt32() != 1)
+            Fail("SEPLUGIN002", $"Plugin manifest schemaVersion must be 1: {source}");
+        var id = RequiredString(root, "id");
+        var version = RequiredString(root, "version");
+        if (!ids.Add(id)) Fail("SEPLUGIN003", $"Duplicate Plugin id '{id}'");
+        if (!root.TryGetProperty("modules", out var modules) ||
+            modules.ValueKind != JsonValueKind.Array)
+            Fail("SEPLUGIN004", $"Plugin '{id}' must declare a modules array");
+        var pluginRoot = Path.GetDirectoryName(manifestPath)!;
+        var modulePaths = modules.EnumerateArray().Select(value =>
+        {
+            var relative = value.GetString() ?? string.Empty;
+            if (Path.IsPathRooted(relative) || string.IsNullOrWhiteSpace(relative))
+                Fail("SEPLUGIN005", $"Plugin '{id}' has an invalid Module path: {relative}");
+            var rootPrefix = Path.GetFullPath(pluginRoot).TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(Path.Combine(pluginRoot, relative));
+            if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                Fail("SEPLUGIN006", $"Plugin '{id}' Module path escapes its root: {relative}");
+            return fullPath;
+        }).ToArray();
+        result.Add(new PluginInfo(id, version, source,
+            Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))).ToLowerInvariant(),
+            modulePaths));
+    }
+    return result;
+}
+
+static string ResolvePluginManifest(string source, string projectRoot, string engineRoot)
+{
+    var separator = source.IndexOf("://", StringComparison.Ordinal);
+    if (separator <= 0) Fail("SEPLUGIN007", $"Invalid Plugin URI: {source}");
+    var scheme = source[..separator];
+    var relative = source[(separator + 3)..].Replace('/', Path.DirectorySeparatorChar);
+    if (!relative.StartsWith("Plugins" + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase))
+        Fail("SEPLUGIN008", $"Plugin URI must remain under Plugins: {source}");
+    var root = scheme.Equals("project", StringComparison.OrdinalIgnoreCase)
+        ? projectRoot
+        : scheme.Equals("engine", StringComparison.OrdinalIgnoreCase)
+            ? engineRoot
+            : null;
+    if (root is null) Fail("SEPLUGIN009", $"Unknown Plugin URI scheme: {scheme}");
+    var pluginsRoot = Path.GetFullPath(Path.Combine(root, "Plugins"));
+    var rootPrefix = pluginsRoot.TrimEnd(Path.DirectorySeparatorChar,
+        Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    var fullPath = Path.GetFullPath(Path.Combine(pluginsRoot,
+        relative[("Plugins" + Path.DirectorySeparatorChar).Length..]));
+    if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) ||
+        !fullPath.EndsWith(".sharpplugin", StringComparison.OrdinalIgnoreCase))
+        Fail("SEPLUGIN010", $"Plugin manifest path is invalid: {source}");
+    if (!File.Exists(fullPath)) Fail("SEPLUGIN011", $"Plugin manifest not found: {fullPath}");
+    return fullPath;
 }
 
 static string ResolveEngineRoot(JsonElement engine, string explicitEngineRoot)
@@ -624,6 +712,11 @@ sealed class ModuleInfo
     public List<ModuleInfo> Dependencies { get; } = new();
     public string EntryType { get; set; } = string.Empty;
 }
+
+sealed record ModuleSource(string ProjectPath);
+
+sealed record PluginInfo(string Id, string Version, string Source,
+    string ManifestHash, IReadOnlyList<string> Modules);
 
 sealed class PublishedFile(string name, string sourcePath, string contentHash,
     string kind)

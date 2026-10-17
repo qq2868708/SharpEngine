@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Reflection;
 using SharpEngine.Assets;
 using SharpEngine.Components;
 using SharpEngine.Input;
@@ -13,6 +14,7 @@ namespace SharpEngine.Runtime.Hosting;
 internal sealed class GameSession : IComponentRuntime, IDisposable
 {
     private ProjectModuleHost? _modules;
+    private EngineModuleHost? _engineModules;
     private DevelopmentSettingsRegistry? _settings;
     public RuntimeWorld? RuntimeWorld { get; private set; }
     public AssetRegistry Assets { get; }
@@ -20,7 +22,8 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
     public UiRuntimeService Ui { get; } = new();
     public WorldDocument World { get; private set; } = null!;
 
-    public GameSession(string engineRoot, string manifestPath)
+    public GameSession(string engineRoot, string manifestPath,
+        params Assembly[] engineModuleAssemblies)
     {
         if (string.IsNullOrWhiteSpace(manifestPath))
             throw new InvalidDataException("GAME_PROJECT_REQUIRED: Game requires --project <file.sharpproject>");
@@ -43,6 +46,9 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
         {
             _settings = new DevelopmentSettingsRegistry(projectRoot, engineRoot);
             var registry = ComponentRegistry.CreateBuiltin();
+            _engineModules = EngineModuleHost.Prepare("Game", engineModuleAssemblies);
+            _engineModules.Start((id, type) =>
+                new ModuleContext(projectRoot, id, type, Ui, Input, this));
             _modules = ProjectModuleHost.Prepare() ?? throw new InvalidDataException("GAME_MODULES_REQUIRED");
             foreach (var (assembly, id, type, hash) in _modules.Assemblies)
             {
@@ -75,6 +81,7 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
     {
         RuntimeWorld?.Dispose(); RuntimeWorld = null;
         _modules?.Dispose(); _modules = null;
+        _engineModules?.Dispose(); _engineModules = null;
         _settings?.Dispose(); _settings = null;
     }
 }

@@ -6,23 +6,71 @@ there is no second engine-project list in the solution generator or layout check
 
 | Project | Role | Owns |
 | --- | --- | --- |
-| SharpEngine.Runtime | Runtime | Module contracts, components, RuntimeWorld, assets, input, runtime UI contracts, settings storage, playables, animation and timeline execution, scene rendering |
-| SharpEngine.Editor | Editor | Authoring transactions, Inspector, Dock, asset browsing, editor UI, preview overlays, project code watching and reload |
+| SharpEngine.Runtime | Runtime Module | Core module contracts, components, RuntimeWorld, assets, input, runtime UI contracts, settings storage and scene rendering |
+| SharpEngine.Editor | Editor Module | Core authoring transactions, Inspector, Dock, asset browsing, editor UI, preview overlays, project code watching and reload |
+| SharpEngine.Timeline.Runtime | Runtime Module | Built-in Timeline document, Playable composition and Timeline asset loading |
+| SharpEngine.Timeline.Editor | Editor Module | Built-in Timeline semantic view and editor-facing Timeline presentation |
 | SharpEngine.Host | Host | Native-to-managed lifecycle entry points; compiled with Editor entry or Game entry according to Target |
 | Engine | NativeHost | One native project; selects EditorMain or GameMain at build time and shares CLR bridge and scene presentation |
 | SharpEngine.ComponentGenerator | Generator | Compile-time Roslyn analyzer; never a runtime assembly reference |
 | SharpEngine.ProjectSelector | Tool | Association, project generation/migration, engine build orchestration and launch selection |
+
+Engine feature code must belong to an explicit Engine Module project. A source folder
+does not create a dependency or loading boundary: SDK-style projects compile all
+source files beneath their project directory by default. Timeline is an Engine-owned
+feature, so its Runtime and Editor projects live under `Source/` and are referenced by
+the Engine Host; it does not need a Plugin descriptor.
+
+Engine feature Modules carry a `SharpEngineModuleAttribute` in their assembly. The
+Host supplies the statically linked Engine assemblies to `EngineModuleHost`, which
+validates the entry and starts Runtime Modules for both targets and Editor Modules
+only for Editor. They shut down in reverse startup order with the Host. This is a
+different lifetime from project Modules: project assemblies come from
+`modules.runtime.json` and can be replaced by the Editor's project-code reload;
+Engine feature assemblies stay fixed until the process exits. `SharpEngine.Runtime`
+and `SharpEngine.Editor` are core API assemblies loaded by the Host and do not need
+an `ISharpEngineModule` entry of their own.
 
 User Modules still have one project, one assembly and one `ISharpEngineModule` entry.
 Runtime Modules reference `SharpEngine.Runtime`; Editor Modules additionally reference
 `SharpEngine.Editor`. Runtime never references Editor. Host references Editor only for
 Editor Target. Game Target compiles neither RmlUi editor-shell code nor Editor entry code.
 
+## Plugins
+
+A Plugin is a distribution and discovery container; it is not a second executable code
+boundary. A `.sharpplugin` descriptor declares a stable `id`, `version`, and an explicit
+list of Module `.csproj` paths. Each listed project remains an ordinary Module with the
+same `ISharpEngineModule` entry, `Startup`/`Shutdown` lifecycle, Runtime/Editor target
+rules, and dependency validation. The Plugin itself has no lifecycle callback.
+
+Projects enable Plugins explicitly in their `.sharpproject` manifest:
+
+```json
+{
+  "plugins": [
+    "project://Plugins/Example/Example.sharpplugin",
+    "engine://Plugins/Diagnostics/Diagnostics.sharpplugin"
+  ]
+}
+```
+
+Only `ProjectRoot/Plugins` and `EngineRoot/Plugins` are valid roots. A Plugin descriptor
+is required for an installable/enabled Plugin because it gives the builder a deterministic
+set of Modules, identity, and a hashable input. It is not required for ordinary project
+Modules, which remain listed directly in `.sharpproject.modules`. After discovery, project
+and Plugin Modules are merged into one dependency graph and one runtime manifest.
+
 ## Build and generated files
 
-Run `Tools/SharpEngineBuild.ps1 -Command Generate` to regenerate the engine solution.
-Use `Tools/SharpEngineProject.ps1 -Command GenerateProjectFiles -ProjectFile <project>`
-for a user solution. Solutions expose Debug/Development/Shipping × Editor/Game.
+Run `Tools/GenerateProjectFiles.ps1 -EngineRoot <engine>` to regenerate the Engine
+solution. Use `Tools/SharpEngineProject.ps1 -Command GenerateProjectFiles
+-ProjectFile <project>` for a user solution, or pass `-ProjectFile` to the same
+`GenerateProjectFiles.ps1` wrapper. Solutions expose Debug/Development/Shipping ×
+Editor/Game.
+After registering the Engine, the `.sharpproject` context menu exposes the same
+`Generate Project Files` operation and writes the generated solution beside the
+project manifest.
 Only the selected generated Target wrapper participates in Solution Build. It invokes
 the same build pipeline as the CLI, which builds engine dependencies before user Modules.
 The other projects remain visible for editing and design-time analysis.

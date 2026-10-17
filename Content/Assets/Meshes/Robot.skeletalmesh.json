@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "kind": "skeletal-mesh",
+  "assetId": "engine://meshes/robot-skeletal",
+  "name": "Robot Skeletal Mesh",
+  "skeletonId": "engine://skeletons/robot",
+  "defaultMaterial": "engine://materials/default",
+  "sourcePath": "Content/Assets/Sources/Robot.fbx",
+  "sourceSha256": "7C7552CB66FC5E9CACBD6EE4788CA235ECF7553F676AAFFC1EA0E524EF175353",
+  "bones": [
+    { "boneId": "root", "name": "Root", "parentBoneId": null, "bindPosition": [0, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] },
+    { "boneId": "left-foot", "name": "Left Foot", "parentBoneId": "root", "bindPosition": [-0.18, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] },
+    { "boneId": "right-foot", "name": "Right Foot", "parentBoneId": "root", "bindPosition": [0.18, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] }
+  ],
+  "positions": [[-0.3, 0, -0.2], [0.3, 0, -0.2], [0.3, 1, -0.2], [-0.3, 1, -0.2], [-0.3, 0, 0.2], [0.3, 0, 0.2], [0.3, 1, 0.2], [-0.3, 1, 0.2]],
+  "indices": [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5],
+  "influences": [
+    { "boneIndices": [0], "weights": [1] }, { "boneIndices": [0], "weights": [1] },
+    { "boneIndices": [1], "weights": [1] }, { "boneIndices": [1], "weights": [1] },
+    { "boneIndices": [0], "weights": [1] }, { "boneIndices": [0], "weights": [1] },
+    { "boneIndices": [2], "weights": [1] }, { "boneIndices": [2], "weights": [1] }
+  ]
+}

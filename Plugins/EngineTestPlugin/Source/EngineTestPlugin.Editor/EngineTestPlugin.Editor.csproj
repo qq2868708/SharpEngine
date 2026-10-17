@@ -1,0 +1,45 @@
+<Project>
+  <PropertyGroup>
+    <SharpEngineRole>Editor</SharpEngineRole>
+    <SharpEngineModuleId>SharpEngine.Test.EnginePlugin.Editor</SharpEngineModuleId>
+    <SharpEngineModuleType>Editor</SharpEngineModuleType>
+  </PropertyGroup>
+  <Import Project="..\..\..\..\Build\SharpEngine.Build.props" />
+  <PropertyGroup>
+    <OutDir>$(SharpEngineOutputRoot)</OutDir>
+    <IntDir>$(SharpEngineIntermediateRoot)SharpEngine.Test.EnginePlugin.Editor\</IntDir>
+    <OutputPath>$(SharpEngineOutputRoot)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateRoot)SharpEngine.Test.EnginePlugin.Editor\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.Test.EnginePlugin.Editor</AssemblyName>
+    <RootNamespace>SharpEngine.Test.EnginePlugin</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputPath>$(SharpEngineOutputRoot)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateRoot)SharpEngine.Test.EnginePlugin.Editor\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Runtime">
+      <HintPath>$(SharpEngineRuntimeApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpEngine.Editor">
+      <HintPath>$(SharpEngineEditorApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <ProjectReference Include="..\EngineTestPlugin.Runtime\EngineTestPlugin.Runtime.csproj" />
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Plugin Module builds are unsupported. Build the project through SharpEngine.ProjectBuild." />
+    <Error Condition="'$(SharpEngineEditorApi)' == '' or !Exists('$(SharpEngineEditorApi)') or '$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
+           Text="SharpEngine managed APIs are missing. Build the engine before the Plugin Module." />
+  </Target>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

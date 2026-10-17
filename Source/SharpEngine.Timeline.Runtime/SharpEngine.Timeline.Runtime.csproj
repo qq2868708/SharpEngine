@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup><SharpEngineRole>Runtime</SharpEngineRole></PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <SharpEngineModuleId>SharpEngine.Timeline.Runtime</SharpEngineModuleId>
+    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.Timeline.Runtime</AssemblyName>
+    <RootNamespace>SharpEngine.Timeline</RootNamespace>
+    <Version>0.2.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputPath>$(SharpEngineBinariesDir)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateDir)SharpEngine.Timeline.Runtime\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpEngine.Runtime\SharpEngine.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

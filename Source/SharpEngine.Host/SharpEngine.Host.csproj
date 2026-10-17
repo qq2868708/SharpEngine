@@ -21,7 +21,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpEngine.Runtime\SharpEngine.Runtime.csproj" />
+    <ProjectReference Include="..\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj" />
     <ProjectReference Include="..\SharpEngine.Editor\SharpEngine.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
+    <ProjectReference Include="..\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' == 'Game'">
     <Compile Remove="EditorEntrypoint.cs" />

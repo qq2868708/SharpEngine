@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "sharpengine.test.project-plugin",
+  "version": "1.0.0",
+  "modules": [
+    "Source/ProjectTestPlugin.Runtime/ProjectTestPlugin.Runtime.csproj",
+    "Source/ProjectTestPlugin.Editor/ProjectTestPlugin.Editor.csproj"
+  ]
+}

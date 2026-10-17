@@ -12,7 +12,7 @@ The native solution builds the RmlUi/FreeType dependencies and the managed
 projects as part of the Win64 build. It requires Visual Studio C++, CMake, and
 .NET 8. Dependency source versions and licenses are preserved under External.
 
-    .\Tools\SharpEngineBuild.ps1 -Command Generate
+    .\Tools\GenerateProjectFiles.ps1 -EngineRoot D:\SharpEngine
     .\Tools\SharpEngineBuild.ps1 -Target Editor -Configuration Debug
     .\Tools\SharpEngineBuild.ps1 -Target Game -Configuration Development
 
@@ -100,6 +100,11 @@ Register a source Engine once, including the `.sharpproject` shell actions:
   --engine-root D:\SharpEngine
 ```
 
+Registration adds `Open in SharpEngine`, `Generate Project Files`, and `Open
+Visual Studio Solution` to the `.sharpproject` file context menu. Re-run this
+command after replacing the Project Selector executable so the shell command
+points at the current build.
+
 Create a project from the checked-out engine or an installed distribution:
 
 ```powershell
@@ -109,18 +114,24 @@ Create a project from the checked-out engine or an installed distribution:
 & .\Tools\SharpEngineProject.ps1 -Command Build -ProjectFile ..\Samples\MyGame\MyGame.sharpproject -Target Editor -Configuration Debug -Platform Win64
 ```
 
-`New` also generates `MyGame.sln`. `GenerateProjectFiles` forces a refresh,
-while `OpenSolution` refreshes only when its stamp is stale and then opens it.
+`New` also generates `MyGame.sln`. `GenerateProjectFiles` forces a refresh for a
+project, while `Tools\GenerateProjectFiles.ps1` can regenerate either the Engine
+solution or a project solution. `OpenSolution` refreshes only when its stamp is
+stale and then opens it.
 A source Engine Solution shows the Engine and Project logical folders, including
 Engine Build Modules and project Modules even when they live on different drives.
 The generated SDK-style `MyGame.Editor Target` and `MyGame.Game Target` invoke the
 unified build pipeline. The selected Target owns the entire build; other projects
 remain visible for editing and IntelliSense and are not built a second time by the solution.
 
-Each Module is one `.csproj`, one DLL, and one `ISharpEngineModule` entry.
+Each project Module is one `.csproj`, one DLL, and one `ISharpEngineModule` entry.
 Module ID/type come from evaluated MSBuild properties; dependencies come from
-real `ProjectReference` items. The native host keeps the sample workspace when no
-project is specified. Run a generated project with:
+real `ProjectReference` items. Engine feature Modules are also separate
+`.csproj`/DLL boundaries, but are statically linked into the Host and identify
+their lifecycle metadata with `SharpEngineModuleAttribute`; `EngineModuleHost`
+starts Runtime features on both targets and Editor features only in Editor. The
+native host keeps the sample workspace when no project is specified. Run a
+generated project with:
 
 ```powershell
 & .\Tools\SharpEngineProject.ps1 -Command OpenEditor `
@@ -131,6 +142,20 @@ The build emits the schema 2
 `Binaries/Win64/<Configuration>/<Target>/modules.runtime.json` beside the flat
 Module assemblies, with resolved entry types and dependency order. Project
 intermediates use `Intermediate/Win64/<Configuration>/<Target>/<BuildModule>`.
+
+Engine-owned feature Modules use the same explicit project boundary without a
+Plugin descriptor. For example, Timeline is built from separate
+`SharpEngine.Timeline.Runtime` and `SharpEngine.Timeline.Editor` projects under
+`Source/`; the Engine Host references the Runtime project for Game and both
+projects for Editor. A source folder inside `SharpEngine.Runtime` or
+`SharpEngine.Editor` is only organization and does not create this boundary.
+
+Plugins are explicit containers around reusable Modules. Add a `.sharpplugin` path to
+the project's `plugins` array using `project://Plugins/...` or
+`engine://Plugins/...`; the descriptor lists its Module `.csproj` files. Plugin Modules
+use the same `ISharpEngineModule` contract and are merged into the project's dependency
+graph. The Plugin container has no startup callback, and ordinary project Modules do not
+need a Plugin descriptor.
 
 Use **File > New C# Class...** to create a Component or plain class in an existing
 Module. Project source edits build in the background and reload when Stopped;

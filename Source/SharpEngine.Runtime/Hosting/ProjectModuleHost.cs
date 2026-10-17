@@ -96,6 +96,19 @@ internal sealed class ProjectModuleHost : IDisposable
                 root.GetProperty("engineVersion").GetString(), StringComparison.Ordinal))
             throw new InvalidDataException(
                 "Project Modules were built for a different engine. Rebuild the project.");
+        if (root.TryGetProperty("plugins", out var plugins))
+        {
+            foreach (var plugin in plugins.EnumerateArray())
+            {
+                var source = plugin.GetProperty("source").GetString() ?? string.Empty;
+                var pluginPath = ResolvePluginManifest(projectRoot, engineRoot, source);
+                if (!string.Equals(FileHash(pluginPath),
+                        plugin.GetProperty("manifestHash").GetString(),
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        $"Plugin manifest changed after Module build: {source}. Rebuild the project.");
+            }
+        }
 
         // Load immutable private copies so the unified builder can publish while
         // this generation is live. Keep shared engine contracts in the host ALC.
@@ -278,5 +291,33 @@ internal sealed class ProjectModuleHost : IDisposable
         if (!result.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Engine binaries path escapes the project root");
         return result;
+    }
+
+    private static string ResolvePluginManifest(string projectRoot, string engineRoot,
+        string source)
+    {
+        var separator = source.IndexOf("://", StringComparison.Ordinal);
+        if (separator <= 0)
+            throw new InvalidDataException($"Invalid Plugin URI: {source}");
+        var scheme = source[..separator];
+        var relative = source[(separator + 3)..].Replace('/', Path.DirectorySeparatorChar);
+        if (!relative.StartsWith("Plugins" + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin URI must remain under Plugins: {source}");
+        var root = scheme.Equals("project", StringComparison.OrdinalIgnoreCase)
+            ? projectRoot
+            : scheme.Equals("engine", StringComparison.OrdinalIgnoreCase)
+                ? engineRoot
+                : throw new InvalidDataException($"Unknown Plugin URI scheme: {scheme}");
+        var pluginsRoot = Path.GetFullPath(Path.Combine(root, "Plugins"));
+        var prefix = pluginsRoot.TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var path = Path.GetFullPath(Path.Combine(pluginsRoot,
+            relative[("Plugins" + Path.DirectorySeparatorChar).Length..]));
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+            !path.EndsWith(".sharpplugin", StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(path))
+            throw new InvalidDataException($"Plugin manifest is invalid or missing: {source}");
+        return path;
     }
 }

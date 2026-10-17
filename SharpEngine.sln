@@ -16,6 +16,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.ProjectSelector
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Runtime", "Source\SharpEngine.Runtime\SharpEngine.Runtime.csproj", "{0DC950DC-A1AB-0A1F-9C78-A23322F5A362}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Timeline.Editor", "Source\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj", "{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Timeline.Runtime", "Source\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj", "{94D4046B-79FF-1942-8D07-804FA1CE9AB9}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Editor Target", "Intermediate\ProjectFiles\SharpEngine.Editor.Target.csproj", "{F3FF6632-D874-F2A3-4208-E7451EC06B65}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Game Target", "Intermediate\ProjectFiles\SharpEngine.Game.Target.csproj", "{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A}"
@@ -66,6 +70,18 @@ Global
 		{0DC950DC-A1AB-0A1F-9C78-A23322F5A362}.Development Game|Win64.ActiveCfg = Development|Any CPU
 		{0DC950DC-A1AB-0A1F-9C78-A23322F5A362}.Shipping Editor|Win64.ActiveCfg = Shipping|Any CPU
 		{0DC950DC-A1AB-0A1F-9C78-A23322F5A362}.Shipping Game|Win64.ActiveCfg = Shipping|Any CPU
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}.Debug Editor|Win64.ActiveCfg = Debug|Any CPU
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}.Debug Game|Win64.ActiveCfg = Debug|Any CPU
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}.Development Editor|Win64.ActiveCfg = Development|Any CPU
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}.Development Game|Win64.ActiveCfg = Development|Any CPU
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}.Shipping Editor|Win64.ActiveCfg = Shipping|Any CPU
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}.Shipping Game|Win64.ActiveCfg = Shipping|Any CPU
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Debug Editor|Win64.ActiveCfg = Debug|Any CPU
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Debug Game|Win64.ActiveCfg = Debug|Any CPU
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Development Editor|Win64.ActiveCfg = Development|Any CPU
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Development Game|Win64.ActiveCfg = Development|Any CPU
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Shipping Editor|Win64.ActiveCfg = Shipping|Any CPU
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Shipping Game|Win64.ActiveCfg = Shipping|Any CPU
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65}.Debug Editor|Win64.ActiveCfg = Debug|Any CPU
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65}.Debug Editor|Win64.Build.0 = Debug|Any CPU
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65}.Debug Game|Win64.ActiveCfg = Debug|Any CPU
@@ -92,6 +108,8 @@ Global
 		{8B4C28E2-1B19-0436-119B-84D2DEB1D2AB} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
 		{C765C76E-2DA8-2803-48B7-2C7BD8AE9F75} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
 		{0DC950DC-A1AB-0A1F-9C78-A23322F5A362} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
 		{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
 	EndGlobalSection

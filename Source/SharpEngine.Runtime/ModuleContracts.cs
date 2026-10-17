@@ -1,5 +1,17 @@
 namespace SharpEngine.Runtime;
 
+[AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
+public sealed class SharpEngineModuleAttribute(string id, string type) : Attribute
+{
+    public string Id { get; } = string.IsNullOrWhiteSpace(id)
+        ? throw new ArgumentException("A module id is required", nameof(id))
+        : id.Trim();
+
+    public string Type { get; } = type is "Runtime" or "Editor"
+        ? type
+        : throw new ArgumentException("Module type must be Runtime or Editor", nameof(type));
+}
+
 public interface ISharpEngineModule
 {
     void Startup(ModuleContext context);

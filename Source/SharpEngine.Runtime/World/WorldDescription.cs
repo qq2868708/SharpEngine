@@ -36,6 +36,8 @@ public readonly record struct WorldVector3(float X, float Y, float Z)
 /// <summary>Renderer/editor view over component records, without duplicate authoritative fields.</summary>
 public sealed class WorldEntity
 {
+    internal static readonly string[] MeshComponentTypeIds =
+        ["engine.mesh-renderer", "engine.static-mesh", "engine.skeletal-mesh"];
     internal EntityRecord Record;
     internal WorldDocument? Document;
     private ComponentRecord? _renderComponent;
@@ -58,11 +60,17 @@ public sealed class WorldEntity
         .Where(c => c.TypeId == typeId && c.Enabled && ActiveInHierarchy)
         .OrderBy(c => c.ComponentId, StringComparer.Ordinal)
         .Select(c => new WorldEntity(Record, Document!) { _renderComponent = c });
+    internal static bool IsMeshComponentType(string typeId) =>
+        Array.IndexOf(MeshComponentTypeIds, typeId) >= 0;
+    private ComponentRecord? MeshComponent =>
+        _renderComponent is { } render && IsMeshComponentType(render.TypeId)
+            ? render
+            : MeshComponentTypeIds.Select(Component).FirstOrDefault(c => c is not null);
     private ComponentRecord? Component(string typeId) => _renderComponent?.TypeId == typeId ? _renderComponent :
         Record.Components.Where(c => c.TypeId == typeId).OrderBy(c => c.ComponentId, StringComparer.Ordinal).FirstOrDefault();
     public WorldEntityKind Kind
     {
-        get => HasComponent("engine.mesh-renderer") ? WorldEntityKind.Mesh : HasComponent("engine.camera") ? WorldEntityKind.Camera : HasComponent("engine.directional-light") ? WorldEntityKind.Light : WorldEntityKind.Empty;
+        get => MeshComponentTypeIds.Any(HasComponent) ? WorldEntityKind.Mesh : HasComponent("engine.camera") ? WorldEntityKind.Camera : HasComponent("engine.directional-light") ? WorldEntityKind.Light : WorldEntityKind.Empty;
         init { if (value != WorldEntityKind.Empty) Ensure(value == WorldEntityKind.Mesh ? "engine.mesh-renderer" : value == WorldEntityKind.Camera ? "engine.camera" : "engine.directional-light"); }
     }
     private ComponentRecord Ensure(string typeId)
@@ -86,14 +94,15 @@ public sealed class WorldEntity
     public WorldVector3 Position { get => Vector("Position"); set => Vector("Position", value); }
     public WorldVector3 Rotation { get => Vector("Rotation"); set => Vector("Rotation", value); }
     public WorldVector3 Scale { get => Vector("Scale"); set => Vector("Scale", value); }
-    public string Asset { get => Component("engine.mesh-renderer")?.State["Mesh"]?.GetValue<string>() ?? ""; init => Ensure("engine.mesh-renderer").State["Mesh"] = string.IsNullOrEmpty(value) ? null : value; }
-    public string Material { get => Component("engine.mesh-renderer")?.State["Material"]?.GetValue<string>() ?? ""; init => Ensure("engine.mesh-renderer").State["Material"] = string.IsNullOrEmpty(value) ? null : value; }
-    private string ColorType => _renderComponent?.TypeId is "engine.mesh-renderer" or "engine.directional-light" ? _renderComponent.TypeId : HasComponent("engine.directional-light") ? "engine.directional-light" : "engine.mesh-renderer";
+    private ComponentRecord EnsureMeshComponent() => MeshComponent ?? Ensure("engine.mesh-renderer");
+    public string Asset { get => MeshComponent?.State["Mesh"]?.GetValue<string>() ?? ""; init => EnsureMeshComponent().State["Mesh"] = string.IsNullOrEmpty(value) ? null : value; }
+    public string Material { get => MeshComponent?.State["Material"]?.GetValue<string>() ?? ""; init => EnsureMeshComponent().State["Material"] = string.IsNullOrEmpty(value) ? null : value; }
+    private string ColorType => _renderComponent is { TypeId: "engine.mesh-renderer" or "engine.static-mesh" or "engine.skeletal-mesh" or "engine.directional-light" } ? _renderComponent.TypeId : HasComponent("engine.directional-light") ? "engine.directional-light" : MeshComponent?.TypeId ?? "engine.mesh-renderer";
     public UiColor Color
     {
         get
         {
-            if (!HasComponent(ColorType)) return new(255, 255, 255);
+            if (!HasComponent(ColorType)) return new(255, 255, 255, 255);
             var a = State(ColorType)["Color"]!.AsArray();
             return new((byte)Math.Clamp(a[0]!.Deserialize<float>() * 255, 0, 255), (byte)Math.Clamp(a[1]!.Deserialize<float>() * 255, 0, 255),
                 (byte)Math.Clamp(a[2]!.Deserialize<float>() * 255, 0, 255), (byte)Math.Clamp(a[3]!.Deserialize<float>() * 255, 0, 255));
@@ -117,7 +126,7 @@ public sealed class WorldDocument
     public string ActiveCameraId => Data.ActiveCameraId ?? "";
     public WorldEntity? ActiveCamera => Entities.FirstOrDefault(e => e.HasEnabledComponent("engine.camera") && (ActiveCameraId.Length == 0 || e.Id == ActiveCameraId));
     public IReadOnlyList<WorldEntity> Entities => _entities.AsReadOnly();
-    public int MeshCount => Entities.Count(e => e.HasComponent("engine.mesh-renderer"));
+    public int MeshCount => Entities.Count(e => WorldEntity.MeshComponentTypeIds.Any(e.HasComponent));
     public WorldDocument(SceneData data, ComponentRegistry registry, string sourcePath = "<memory>")
     { Registry = registry; Data = data; SourcePath = sourcePath; Replace(data); }
     internal void SetSourcePath(string path) => SourcePath = Path.GetFullPath(path);

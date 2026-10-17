@@ -5,7 +5,8 @@ using System.Xml.Linq;
 
 namespace SharpEngine.ProjectSelector;
 
-internal sealed record EngineBuildProject(string Name, string Path, string Role);
+internal sealed record EngineBuildProject(string Name, string Path, string Role,
+    string? ModuleId = null, string? ModuleType = null);
 
 /// <summary>Project files own their role and references; no parallel project list.</summary>
 internal static class EngineBuildGraph
@@ -16,7 +17,7 @@ internal static class EngineBuildGraph
     {
         var source = Path.Combine(root, "Source");
         if (!Directory.Exists(source)) return [];
-        return Directory.EnumerateFiles(source, "*.*proj", SearchOption.AllDirectories)
+        var result = Directory.EnumerateFiles(source, "*.*proj", SearchOption.AllDirectories)
             .Where(path => Path.GetExtension(path) is ".csproj" or ".vcxproj")
             .Where(path => !Path.GetRelativePath(source, path).Split(Path.DirectorySeparatorChar)
                 .Any(part => part is "bin" or "obj"))
@@ -27,16 +28,42 @@ internal static class EngineBuildGraph
                     ?? throw new InvalidDataException($"Engine project must declare SharpEngineRole: {path}");
                 if (role is not ("Runtime" or "Editor" or "Host" or "NativeHost" or "Tool" or "Generator"))
                     throw new InvalidDataException($"Unknown engine project role '{role}': {path}");
-                return new EngineBuildProject(Path.GetFileNameWithoutExtension(path), Path.GetFullPath(path), role);
+                var moduleId = document.Descendants().SingleOrDefault(
+                    e => e.Name.LocalName == "SharpEngineModuleId")?.Value;
+                var moduleType = document.Descendants().SingleOrDefault(
+                    e => e.Name.LocalName == "SharpEngineModuleType")?.Value;
+                if (role is "Runtime" or "Editor")
+                {
+                    if (string.IsNullOrWhiteSpace(moduleId))
+                        throw new InvalidDataException(
+                            $"Engine {role} project must declare SharpEngineModuleId: {path}");
+                    if (!string.Equals(moduleType, role, StringComparison.Ordinal))
+                        throw new InvalidDataException(
+                            $"Engine {role} project must declare SharpEngineModuleType={role}: {path}");
+                }
+                return new EngineBuildProject(Path.GetFileNameWithoutExtension(path),
+                    Path.GetFullPath(path), role, moduleId, moduleType);
             }).OrderBy(project => project.Name, StringComparer.Ordinal).ToArray();
+        var duplicateModule = result.Where(project => project.ModuleId is not null)
+            .GroupBy(project => project.ModuleId!, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateModule is not null)
+            throw new InvalidDataException(
+                $"Engine projects must not share Module id '{duplicateModule.Key}'");
+        return result;
     }
 
-    internal static string Fingerprint(string root) => Convert.ToHexString(SHA256.HashData(
-        Encoding.UTF8.GetBytes(string.Join('\n', Discover(root).Select(project => project.Path)
+    internal static string Fingerprint(string root)
+    {
+        var files = Discover(root).Select(project => project.Path)
             .Concat(Directory.EnumerateFiles(Path.Combine(root, "Build"), "*", SearchOption.TopDirectoryOnly)
                 .Where(path => Path.GetExtension(path) is ".props" or ".targets"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.Ordinal)
-            .Select(path => Path.GetRelativePath(root, path) + "\n" + File.ReadAllText(path))))));
+            .Select(path => Path.GetRelativePath(root, path) + "\n" + File.ReadAllText(path));
+        return Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(string.Join('\n', files))));
+    }
 
     internal static void Build(string root, string target, string configuration, string platform)
     {

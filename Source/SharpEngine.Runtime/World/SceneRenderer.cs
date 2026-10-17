@@ -2,8 +2,12 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Collections.Concurrent;
+using System.Collections;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using SharpEngine.Assets;
+using SharpEngine.Animation;
 using SharpEngine.UI;
 
 namespace SharpEngine.World;
@@ -25,10 +29,14 @@ public sealed record WorldViewportFrame(UiRect Bounds,
 
 public static class SceneRenderer
 {
+    private sealed record SkinBone(string Id, string? ParentId, BoneTransform BindTransform);
+    private sealed record SkinData(SkinBone[] Bones, int[][] BoneIndices, float[][] Weights);
     private sealed record MeshGeometry(Vector3[] Positions, int[] Indices,
-        Vector4 BaseColor, string? Error = null);
+        Vector4 BaseColor, SkinData? Skin = null, string? Error = null);
     private static readonly ConditionalWeakTable<AssetRegistry,
         ConcurrentDictionary<string, MeshGeometry>> AssetCaches = new();
+    private static readonly ConditionalWeakTable<AssetRegistry,
+        ConcurrentDictionary<string, SkeletalAnimationAsset>> AnimationCaches = new();
     private static readonly Vector3[] CubeVertices =
     {
         new(-0.5f, -0.5f, -0.5f), new(0.5f, -0.5f, -0.5f),
@@ -73,15 +81,15 @@ public static class SceneRenderer
             })
             .ToArray();
 
-        foreach (var entity in world.Entities.SelectMany(e => e.RenderViews("engine.mesh-renderer")))
+        foreach (var (entity, componentType) in Renderables(world))
         {
-            var geometry = ResolveGeometry(entity, assets);
+            var geometry = ResolveGeometry(entity, componentType, assets);
             if (geometry.Error is not null)
             {
                 diagnostics.Add($"{entity.Id}: {geometry.Error}");
                 continue;
             }
-            var vertices = geometry.Positions;
+            var vertices = ApplySkin(geometry, entity, componentType, assets);
             var indices = geometry.Indices;
             var model = world.WorldMatrix(entity);
             var mvp = model * viewProjection;
@@ -156,19 +164,20 @@ public static class SceneRenderer
         var direction = Vector3.Normalize(end - origin);
         var nearest = float.MaxValue;
         var farDistance = Vector3.Distance(origin, end);
-        foreach (var candidate in world.Entities.SelectMany(e => e.RenderViews("engine.mesh-renderer")))
+        foreach (var (candidate, componentType) in Renderables(world))
         {
-            var geometry = ResolveGeometry(candidate, assets);
+            var geometry = ResolveGeometry(candidate, componentType, assets);
             if (geometry.Error is not null) continue;
+            var vertices = ApplySkin(geometry, candidate, componentType, assets);
             if (!Matrix4x4.Invert(world.WorldMatrix(candidate), out var modelInverse)) continue;
             var localOrigin = Vector3.Transform(origin, modelInverse);
             var localDirection = Vector3.TransformNormal(direction, modelInverse);
             for (var index = 0; index < geometry.Indices.Length; index += 3)
             {
                 if (RayTriangle(localOrigin, localDirection,
-                    geometry.Positions[geometry.Indices[index]],
-                    geometry.Positions[geometry.Indices[index + 1]],
-                    geometry.Positions[geometry.Indices[index + 2]],
+                    vertices[geometry.Indices[index]],
+                    vertices[geometry.Indices[index + 1]],
+                    vertices[geometry.Indices[index + 2]],
                     out var distance) && distance < nearest && distance <= farDistance)
                 {
                     nearest = distance;
@@ -238,48 +247,236 @@ public static class SceneRenderer
     internal static Vector3 ToVector(WorldVector3 vector) =>
         new(vector.X, vector.Y, vector.Z);
 
-    private static MeshGeometry ResolveGeometry(WorldEntity entity, AssetRegistry? assets)
+    private static IEnumerable<(WorldEntity Entity, string Type)> Renderables(WorldDocument world)
     {
+        foreach (var entity in world.Entities)
+            foreach (var type in new[] { "engine.mesh-renderer", "engine.static-mesh", "engine.skeletal-mesh" })
+                foreach (var view in entity.RenderViews(type))
+                    yield return (view, type);
+    }
+
+    private static MeshGeometry ResolveGeometry(WorldEntity entity, string componentType,
+        AssetRegistry? assets)
+    {
+        var state = ComponentState(entity, componentType);
+        var assetId = StateString(state, "Mesh");
+        if (assetId.Length == 0) assetId = entity.Asset;
+        var materialId = StateString(state, "Material");
+        if (materialId.Length == 0) materialId = entity.Material;
         if (assets is null)
         {
-            if (string.Equals(entity.Asset, "engine://meshes/cube",
+            if (string.Equals(assetId, "engine://meshes/cube",
                 StringComparison.OrdinalIgnoreCase))
                 return new MeshGeometry(CubeVertices, CubeTriangles, Vector4.One);
-            if (string.Equals(entity.Asset, "engine://meshes/plane",
+            if (string.Equals(assetId, "engine://meshes/plane",
                 StringComparison.OrdinalIgnoreCase))
                 return new MeshGeometry(PlaneVertices, PlaneTriangles, Vector4.One);
             return new MeshGeometry([], [], Vector4.One,
-                $"Mesh '{entity.Asset}' is unavailable without an asset registry");
+                Error: $"Mesh '{assetId}' is unavailable without an asset registry");
         }
 
         var cache = AssetCaches.GetOrCreateValue(assets);
-        return cache.GetOrAdd(entity.Asset + "|" + entity.Material, _ =>
+        return cache.GetOrAdd(componentType + "|" + assetId + "|" + materialId, _ =>
         {
             try
             {
-                var mesh = AssetContent.LoadMesh(assets, entity.Asset);
-                var materialId = entity.Material.Length > 0 ? entity.Material :
-                    mesh.DefaultMaterial;
+                object mesh;
+                if (componentType == "engine.static-mesh")
+                    mesh = AssetContent.LoadStaticMesh(assets, assetId);
+                else if (componentType == "engine.skeletal-mesh")
+                    mesh = AssetContent.LoadSkeletalMesh(assets, assetId);
+                else
+                    mesh = AssetContent.LoadMesh(assets, assetId);
+                var meshMaterial = GetString(mesh, "DefaultMaterial");
+                var resolvedMaterial = materialId.Length > 0 ? materialId : meshMaterial;
                 var baseColor = Vector4.One;
-                if (!string.IsNullOrWhiteSpace(materialId))
+                if (!string.IsNullOrWhiteSpace(resolvedMaterial))
                 {
-                    var material = AssetContent.LoadMaterial(assets, materialId);
+                    var material = AssetContent.LoadMaterial(assets, resolvedMaterial);
                     baseColor = new Vector4(material.BaseColor.R, material.BaseColor.G,
                         material.BaseColor.B, material.BaseColor.A);
                 }
-                return new MeshGeometry(mesh.Positions.Select(p =>
-                    new Vector3(p.X, p.Y, p.Z)).ToArray(), mesh.Indices.ToArray(), baseColor);
+                var positions = GetEnumerable(mesh, "Positions").Select(ReadVector3).ToArray();
+                var indices = GetEnumerable(mesh, "Indices").Select(ReadInt).ToArray();
+                var skin = componentType == "engine.skeletal-mesh"
+                    ? ReadSkin(mesh) : null;
+                return new MeshGeometry(positions, indices, baseColor, skin);
             }
             catch (Exception exception) when (exception is KeyNotFoundException or
                 IOException or InvalidDataException or JsonException or
                 UnauthorizedAccessException or InvalidOperationException)
             {
-                return new MeshGeometry([], [], Vector4.One, exception.Message);
+                return new MeshGeometry([], [], Vector4.One, Error: exception.Message);
             }
         });
     }
 
-    public static void InvalidateAssets(AssetRegistry assets) => AssetCaches.Remove(assets);
+    private static JsonObject? ComponentState(WorldEntity entity, string type) =>
+        entity.Components.FirstOrDefault(c => c.TypeId == type)?.State;
+
+    private static string StateString(JsonObject? state, string name)
+    {
+        var node = state?[name];
+        return node is null || node.GetValueKind() == JsonValueKind.Null
+            ? string.Empty : node.GetValue<string>();
+    }
+
+    private static IEnumerable<object> GetEnumerable(object value, string name) =>
+        (GetProperty(value, name) as IEnumerable)?.Cast<object>() ?? [];
+
+    private static object? GetProperty(object value, string name) =>
+        value.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance)?.GetValue(value);
+
+    private static string GetString(object value, string name) =>
+        GetProperty(value, name) as string ?? string.Empty;
+
+    private static int ReadInt(object value) => Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+
+    private static Vector3 ReadVector3(object value)
+    {
+        if (value is AssetVector3 vector) return new(vector.X, vector.Y, vector.Z);
+        return new(Convert.ToSingle(GetProperty(value, "X")), Convert.ToSingle(GetProperty(value, "Y")),
+            Convert.ToSingle(GetProperty(value, "Z")));
+    }
+
+    private static SkinData? ReadSkin(object mesh)
+    {
+        var rawBones = GetEnumerable(mesh, "Bones").ToArray();
+        var rawInfluences = GetEnumerable(mesh, "Influences").ToArray();
+        if (rawBones.Length == 0 || rawInfluences.Length == 0) return null;
+        var bones = rawBones.Select(ReadBone).ToArray();
+        var indices = new int[rawInfluences.Length][];
+        var weights = new float[rawInfluences.Length][];
+        for (var i = 0; i < rawInfluences.Length; i++)
+        {
+            var raw = rawInfluences[i];
+            indices[i] = ReadNumbers(raw, "BoneIndices", "Indices").Select(ReadInt).ToArray();
+            weights[i] = ReadNumbers(raw, "Weights").Select(Convert.ToSingle).ToArray();
+            if (indices[i].Length != weights[i].Length)
+                throw new InvalidDataException("Skeletal mesh influence indices and weights differ");
+        }
+        return new SkinData(bones, indices, weights);
+    }
+
+    private static SkinBone ReadBone(object value)
+    {
+        var id = GetString(value, "BoneId");
+        var parent = GetProperty(value, "ParentBoneId") as string;
+        var rawTransform = GetProperty(value, "BindTransform");
+        if (rawTransform is null) throw new InvalidDataException($"Bone '{id}' has no bind transform");
+        return new SkinBone(id, parent, ReadTransform(rawTransform));
+    }
+
+    private static BoneTransform ReadTransform(object value)
+    {
+        var position = ReadVector3(GetProperty(value, "Position") ?? throw new InvalidDataException("Transform position is missing"));
+        var rotation = ReadQuaternion(GetProperty(value, "Rotation") ?? throw new InvalidDataException("Transform rotation is missing"));
+        var scale = ReadVector3(GetProperty(value, "Scale") ?? throw new InvalidDataException("Transform scale is missing"));
+        return new BoneTransform(position, rotation, scale);
+    }
+
+    private static Quaternion ReadQuaternion(object value) => new(
+        Convert.ToSingle(GetProperty(value, "X")), Convert.ToSingle(GetProperty(value, "Y")),
+        Convert.ToSingle(GetProperty(value, "Z")), Convert.ToSingle(GetProperty(value, "W")));
+
+    private static IEnumerable<object> ReadNumbers(object value, params string[] names)
+    {
+        foreach (var name in names)
+            if (GetProperty(value, name) is IEnumerable values)
+                return values.Cast<object>();
+        throw new InvalidDataException("Skeletal mesh influence data is missing");
+    }
+
+    private static Vector3[] ApplySkin(MeshGeometry geometry, WorldEntity entity,
+        string componentType, AssetRegistry? assets)
+    {
+        if (geometry.Skin is null || assets is null || componentType != "engine.skeletal-mesh")
+            return geometry.Positions;
+        var result = geometry.Positions.ToArray();
+        var state = ComponentState(entity, componentType);
+        var animationId = StateString(state, "Animation");
+        SkeletalAnimationAsset? animation = null;
+        if (animationId.Length > 0)
+        {
+            try
+            {
+                var cache = AnimationCaches.GetOrCreateValue(assets);
+                animation = cache.GetOrAdd(animationId!, id => AssetContent.LoadSkeletalAnimation(assets, id));
+            }
+            catch (Exception exception) when (exception is KeyNotFoundException or IOException or
+                InvalidDataException or JsonException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // The mesh remains in bind pose when an optional animation is unavailable.
+            }
+        }
+        SkeletalPose? pose = null;
+        if (animation is not null)
+        {
+            try
+            {
+                var time = state?["AnimationTime"]?.GetValue<float>() ?? 0;
+                if (!float.IsFinite(time)) time = 0;
+                pose = (state?["LoopAnimation"]?.GetValue<bool>() ?? true)
+                    ? animation.SampleLooped(time) : animation.Sample(time);
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+            {
+                // Invalid optional animation state leaves the mesh in bind pose.
+            }
+        }
+        var bind = new Matrix4x4[geometry.Skin.Bones.Length];
+        var current = new Matrix4x4[geometry.Skin.Bones.Length];
+        var visiting = new HashSet<int>();
+        for (var i = 0; i < geometry.Skin.Bones.Length; i++)
+            ComputeBoneMatrices(i, geometry.Skin.Bones, pose, bind, current, visiting);
+        var skinMatrices = new Matrix4x4[bind.Length];
+        for (var i = 0; i < bind.Length; i++)
+            skinMatrices[i] = Matrix4x4.Invert(bind[i], out var inverse) ? inverse * current[i] : Matrix4x4.Identity;
+        for (var vertex = 0; vertex < result.Length && vertex < geometry.Skin.BoneIndices.Length; vertex++)
+        {
+            var total = 0f;
+            var skinned = Vector3.Zero;
+            var indices = geometry.Skin.BoneIndices[vertex];
+            var weights = geometry.Skin.Weights[vertex];
+            for (var influence = 0; influence < indices.Length; influence++)
+            {
+                var bone = indices[influence];
+                var weight = weights[influence];
+                if (bone < 0 || bone >= skinMatrices.Length || !float.IsFinite(weight) || weight <= 0) continue;
+                skinned += Vector3.Transform(result[vertex], skinMatrices[bone]) * weight;
+                total += weight;
+            }
+            if (total > 1e-6f) result[vertex] = skinned / total;
+        }
+        return result;
+    }
+
+    private static void ComputeBoneMatrices(int index, SkinBone[] bones, SkeletalPose? pose,
+        Matrix4x4[] bind, Matrix4x4[] current, HashSet<int> visiting)
+    {
+        if (bind[index] != default) return;
+        if (!visiting.Add(index)) throw new InvalidDataException("Skeletal mesh bone parent cycle");
+        var bone = bones[index];
+        var parent = bone.ParentId is null ? -1 : Array.FindIndex(bones,
+            candidate => string.Equals(candidate.Id, bone.ParentId, StringComparison.Ordinal));
+        if (parent >= 0) ComputeBoneMatrices(parent, bones, pose, bind, current, visiting);
+        bind[index] = LocalMatrix(bone.BindTransform) * (parent >= 0 ? bind[parent] : Matrix4x4.Identity);
+        var transform = pose is null ? bone.BindTransform :
+            pose.Bones.FirstOrDefault(item => string.Equals(item.Item1, bone.Id, StringComparison.Ordinal),
+                (BoneId: bone.Id, Transform: bone.BindTransform)).Transform;
+        current[index] = LocalMatrix(transform) * (parent >= 0 ? current[parent] : Matrix4x4.Identity);
+        visiting.Remove(index);
+    }
+
+    private static Matrix4x4 LocalMatrix(BoneTransform transform) =>
+        Matrix4x4.CreateScale(transform.Scale) * Matrix4x4.CreateFromQuaternion(transform.Rotation) *
+        Matrix4x4.CreateTranslation(transform.Position);
+
+    public static void InvalidateAssets(AssetRegistry assets)
+    {
+        AssetCaches.Remove(assets);
+        AnimationCaches.Remove(assets);
+    }
 
     internal static bool IsFinite(Vector3 v) =>
         float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);

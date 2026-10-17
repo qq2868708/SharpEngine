@@ -20,7 +20,8 @@ internal sealed record SharpProjectDescriptor(
     string EngineVersion,
     string EngineAssociation,
     string EngineManifest,
-    IReadOnlyList<string> Modules);
+    IReadOnlyList<string> Modules,
+    IReadOnlyList<string> Plugins);
 
 internal sealed record ResolvedSharpProject(
     SharpProjectDescriptor Project,
@@ -57,6 +58,16 @@ internal static class ProjectContracts
             if (!File.Exists(modulePath))
                 throw new FileNotFoundException("Project Module was not found", modulePath);
         }
+        var plugins = OptionalArray(root, "plugins");
+        foreach (var plugin in plugins)
+        {
+            if (string.IsNullOrWhiteSpace(plugin) ||
+                (!plugin.StartsWith("project://", StringComparison.OrdinalIgnoreCase) &&
+                 !plugin.StartsWith("engine://", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException(
+                    $"Plugin references must use project:// or engine:// URIs: {plugin}");
+            ValidatePluginUri(plugin);
+        }
         var association = RequiredString(engine, "association");
         if (association.Length > 128 ||
             (!Guid.TryParse(association, out _) &&
@@ -72,7 +83,8 @@ internal static class ProjectContracts
             RequiredString(engine, "version"),
             association,
             OptionalString(engine, "manifest") ?? "engine.json",
-            modules);
+            modules,
+            plugins);
     }
 
     internal static EngineDescriptor ReadEngine(string root, string manifestRelative = "engine.json")
@@ -113,6 +125,17 @@ internal static class ProjectContracts
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException(
                 $"Project requested unexpected Engine manifest '{project.EngineManifest}'");
+        foreach (var plugin in project.Plugins)
+        {
+            var manifestPath = ResolvePluginManifest(project.Root, engine.Root, plugin);
+            var descriptor = PluginContracts.Read(manifestPath);
+            foreach (var module in descriptor.Modules)
+            {
+                var modulePath = ResolvePluginModule(descriptor, module);
+                if (!File.Exists(modulePath))
+                    throw new FileNotFoundException("Plugin Module was not found", modulePath);
+            }
+        }
     }
 
     internal static string ResolveBinaries(EngineDescriptor engine, string platform,
@@ -151,4 +174,57 @@ internal static class ProjectContracts
         element.ValueKind == JsonValueKind.String
             ? element.GetString()
             : null;
+
+    private static string[] OptionalArray(JsonElement value, string property)
+    {
+        if (!value.TryGetProperty(property, out var element)) return [];
+        if (element.ValueKind != JsonValueKind.Array)
+            throw new InvalidDataException($"Project property '{property}' must be an array");
+        return element.EnumerateArray().Select(item => item.GetString() ?? string.Empty).ToArray();
+    }
+
+    internal static string ResolvePluginManifest(string projectRoot, string engineRoot, string uri)
+    {
+        var (root, relative) = SplitPluginUri(projectRoot, engineRoot, uri);
+        var pluginsRoot = Path.GetFullPath(Path.Combine(root, "Plugins"));
+        var fullPath = ResolveUnderRoot(pluginsRoot, relative, "Plugin manifest");
+        if (!fullPath.EndsWith(".sharpplugin", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin manifest must use .sharpplugin: {uri}");
+        return fullPath;
+    }
+
+    internal static string ResolvePluginModule(SharpPluginDescriptor plugin, string relative)
+    {
+        if (Path.IsPathRooted(relative) || string.IsNullOrWhiteSpace(relative))
+            throw new InvalidDataException($"Plugin Module paths must be relative: {relative}");
+        var root = Path.GetFullPath(plugin.Root).TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var result = Path.GetFullPath(Path.Combine(root, relative));
+        if (!result.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin Module path escapes its plugin root: {relative}");
+        return result;
+    }
+
+    private static (string Root, string Relative) SplitPluginUri(string projectRoot,
+        string engineRoot, string uri)
+    {
+        var separator = uri.IndexOf("://", StringComparison.Ordinal);
+        if (separator <= 0) throw new InvalidDataException($"Invalid Plugin URI: {uri}");
+        var scheme = uri[..separator];
+        var relative = uri[(separator + 3)..].Replace('/', Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(relative) ||
+            !relative.StartsWith("Plugins" + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin URI must remain under Plugins: {uri}");
+        return scheme.Equals("project", StringComparison.OrdinalIgnoreCase)
+            ? (projectRoot, relative[("Plugins" + Path.DirectorySeparatorChar).Length..])
+            : scheme.Equals("engine", StringComparison.OrdinalIgnoreCase)
+                ? (engineRoot, relative[("Plugins" + Path.DirectorySeparatorChar).Length..])
+                : throw new InvalidDataException($"Unknown Plugin URI scheme: {scheme}");
+    }
+
+    private static void ValidatePluginUri(string uri)
+    {
+        _ = SplitPluginUri(".", ".", uri);
+    }
 }

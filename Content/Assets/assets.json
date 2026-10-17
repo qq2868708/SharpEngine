@@ -31,6 +31,14 @@
       "tags": ["editor", "ui"]
     },
     {
+      "id": "ui/timeline-style",
+      "type": "StyleSheet",
+      "name": "Timeline View Style",
+      "path": "Content/UI/Rml/Timeline.rcss",
+      "importer": "RmlUi.StyleSheet",
+      "tags": ["editor", "ui", "timeline"]
+    },
+    {
       "id": "meshes/cube",
       "type": "Mesh",
       "name": "Cube",
@@ -49,12 +57,67 @@
       "metadata": {"primitive": "Plane", "vertices": "4", "triangles": "2"}
     },
     {
+      "id": "sources/robot-fbx",
+      "type": "FBXSource",
+      "name": "Robot FBX Source",
+      "path": "Content/Assets/Sources/Robot.fbx",
+      "readOnly": true,
+      "importer": "SharpEngine.FbxSource",
+      "tags": ["source", "fbx", "robot"],
+      "metadata": {"sha256": "7C7552CB66FC5E9CACBD6EE4788CA235ECF7553F676AAFFC1EA0E524EF175353"}
+    },
+    {
+      "id": "skeletons/robot",
+      "type": "Skeleton",
+      "name": "Robot Skeleton",
+      "path": "Content/Assets/Skeletons/Robot.skeleton.json",
+      "importer": "SharpEngine.SkeletonJson",
+      "tags": ["builtin", "skeleton", "robot"],
+      "metadata": {"bones": "3"}
+    },
+    {
+      "id": "meshes/robot-static",
+      "type": "StaticMesh",
+      "name": "Robot Static Mesh",
+      "path": "Content/Assets/StaticMeshes/Robot.staticmesh.json",
+      "importer": "SharpEngine.StaticMeshJson",
+      "tags": ["builtin", "mesh", "static", "robot"],
+      "metadata": {"source": "sources/robot-fbx", "vertices": "8", "triangles": "12"}
+    },
+    {
+      "id": "meshes/robot-skeletal",
+      "type": "SkeletalMesh",
+      "name": "Robot Skeletal Mesh",
+      "path": "Content/Assets/Meshes/Robot.skeletalmesh.json",
+      "importer": "SharpEngine.SkeletalMeshJson",
+      "tags": ["builtin", "mesh", "skeletal", "robot"],
+      "metadata": {"source": "sources/robot-fbx", "skeleton": "skeletons/robot", "vertices": "8", "triangles": "12"}
+    },
+    {
       "id": "materials/default",
       "type": "Material",
       "name": "Default Material",
       "path": "Content/Assets/Materials/Default.material.json",
       "importer": "SharpEngine.MaterialJson",
       "tags": ["builtin", "material"]
+    },
+    {
+      "id": "animations/robot-walk",
+      "type": "SkeletalAnimation",
+      "name": "Robot Walk",
+      "path": "Content/Assets/Animations/RobotWalk.skeletalanimation.json",
+      "importer": "SharpEngine.SkeletalAnimationJson",
+      "tags": ["builtin", "animation", "skeletal"],
+      "metadata": {"duration": "1.0", "sampleRate": "30"}
+    },
+    {
+      "id": "timelines/robot-walk",
+      "type": "Timeline",
+      "name": "Robot Walk Timeline",
+      "path": "Content/Assets/Timelines/RobotWalk.timeline.json",
+      "importer": "SharpEngine.TimelineJson",
+      "tags": ["builtin", "timeline", "sequencing"],
+      "metadata": {"duration": "3.0", "frameRate": "30"}
     },
     {
       "id": "ui/main",

@@ -30,6 +30,8 @@ internal static class Program
                 "list" => List(args, noUi),
                 "resolve" => Resolve(args, implicitProject, prompt: false),
                 "generate" => Generate(args, implicitProject, noUi),
+                "generateprojectfiles" or "generate-project-files" =>
+                    GenerateProjectFiles(args, implicitProject, noUi),
                 "open-solution" => OpenSolution(args, implicitProject, noUi),
                 "open-editor" => OpenEditor(args, implicitProject, noUi),
                 "run-game" => OpenEditor(args, implicitProject, noUi, "Game"),
@@ -132,6 +134,28 @@ internal static class Program
             generated.WrapperProjectPath,
             generated.GeneratedPropsPath,
             generated.StampPath,
+        });
+        return 0;
+    }
+
+    private static int GenerateProjectFiles(string[] args, string? implicitProject, bool noUi)
+    {
+        if (implicitProject is not null || Option(args, "--project") is not null)
+            return Generate(args, implicitProject, noUi);
+
+        var engineRoot = Option(args, "--engine-root") ??
+            Environment.GetEnvironmentVariable("SHARPENGINE_ROOT");
+        if (string.IsNullOrWhiteSpace(engineRoot))
+            throw new ArgumentException(
+                "Engine project-file generation requires --engine-root when --project is omitted");
+        engineRoot = Path.GetFullPath(engineRoot);
+        var engine = ProjectContracts.ReadEngine(engineRoot);
+        SolutionGenerator.GenerateEngine(engine.Root);
+        WriteResult(args, new
+        {
+            success = true,
+            engineRoot = engine.Root,
+            solutionPath = Path.Combine(engine.Root, "SharpEngine.sln"),
         });
         return 0;
     }
@@ -273,10 +297,18 @@ internal static class Program
             @"Software\Classes\SharpEngine.Project", writable: true)!;
         projectClass.SetValue(string.Empty, "SharpEngine Project", RegistryValueKind.String);
         SetShellCommand("open", "Open in SharpEngine", executable, "open-editor");
-        SetShellCommand("generate", "Generate Visual Studio project files", executable,
-            "generate");
+        DeleteShellCommand("generate");
+        SetShellCommand("GenerateProjectFiles", "Generate Project Files", executable,
+            "GenerateProjectFiles");
         SetShellCommand("solution", "Open Visual Studio Solution", executable,
             "open-solution");
+    }
+
+    private static void DeleteShellCommand(string verb)
+    {
+        using var shell = Registry.CurrentUser.OpenSubKey(
+            @"Software\Classes\SharpEngine.Project\shell", writable: true);
+        shell?.DeleteSubKeyTree(verb, throwOnMissingSubKey: false);
     }
 
     private static void SetShellCommand(string verb, string label, string executable,

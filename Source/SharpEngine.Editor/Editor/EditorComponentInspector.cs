@@ -33,7 +33,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
     public void CompleteComponentRegistration()
     {
         if (Components is not null) Components.AssetExists = (id, type) => _assets?.Find(id) is { Exists: true } asset &&
-            asset.Type.Equals(type.Name.Replace("Asset", ""), StringComparison.OrdinalIgnoreCase);
+            EditorAssetReferenceTypes.Matches(asset.Type, type);
         Components?.ValidateRegistrations();
         _world?.Data.Validate(Components!);
         RefreshComponentInspector(force: true);

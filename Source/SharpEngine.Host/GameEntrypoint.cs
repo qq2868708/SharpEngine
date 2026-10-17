@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using SharpEngine.Runtime.Interop;
+using SharpEngine.Timeline;
 using SharpEngine.UI;
 using SharpEngine.World;
 
@@ -19,7 +20,8 @@ public static unsafe class HostEntrypoint
         {
             s_api = (NativeEngineApiTable*)api;
             s_game = new GameSession(Environment.GetEnvironmentVariable("SHARPENGINE_ROOT")!,
-                Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST") ?? "");
+                Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST") ?? "",
+                typeof(TimelineRuntimeModule).Assembly);
             return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return -1; }

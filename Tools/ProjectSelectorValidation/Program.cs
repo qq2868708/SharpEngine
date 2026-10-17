@@ -33,6 +33,20 @@ try
         "<Project Sdk=\"Microsoft.NET.Sdk\" />");
     File.WriteAllText(Path.Combine(editorDirectory, "ForeignGame.Editor.csproj"),
         "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+    var pluginDirectory = Directory.CreateDirectory(Path.Combine(projectRoot,
+        "Plugins", "ForeignPlugin")).FullName;
+    var pluginModuleDirectory = Directory.CreateDirectory(Path.Combine(pluginDirectory,
+        "Source", "ForeignPlugin.Runtime")).FullName;
+    var pluginModulePath = Path.Combine(pluginModuleDirectory, "ForeignPlugin.Runtime.csproj");
+    File.WriteAllText(pluginModulePath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+    File.WriteAllText(Path.Combine(pluginDirectory, "ForeignPlugin.sharpplugin"),
+        JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            id = "foreign.plugin",
+            version = "1.0.0",
+            modules = new[] { "Source/ForeignPlugin.Runtime/ForeignPlugin.Runtime.csproj" },
+        }, new JsonSerializerOptions { WriteIndented = true }));
     var manifestPath = Path.Combine(projectRoot, "ForeignGame.sharpproject");
     File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
     {
@@ -51,11 +65,26 @@ try
             "Source/ForeignGame/ForeignGame.csproj",
             "Source/ForeignGame.Editor/ForeignGame.Editor.csproj",
         },
+        plugins = new[]
+        {
+            "project://Plugins/ForeignPlugin/ForeignPlugin.sharpplugin",
+            "engine://Plugins/EngineTestPlugin/EngineTestPlugin.sharpplugin",
+        },
     }, new JsonSerializerOptions { WriteIndented = true }));
 
     var project = ProjectContracts.ReadProject(manifestPath);
     var engine = ProjectContracts.ReadEngine(engineRoot, project.EngineManifest);
     ProjectContracts.ValidateBinding(project, engine);
+    Check(project.Plugins.Count == 2 &&
+          project.Plugins.Any(plugin => plugin.StartsWith("project://", StringComparison.Ordinal)) &&
+          project.Plugins.Any(plugin => plugin.StartsWith("engine://", StringComparison.Ordinal)),
+        "Project manifest must preserve project- and engine-level Plugin URIs");
+    var enginePlugin = PluginContracts.Read(ProjectContracts.ResolvePluginManifest(project.Root,
+        engine.Root, "engine://Plugins/EngineTestPlugin/EngineTestPlugin.sharpplugin"));
+    Check(enginePlugin.Modules.Count == 2 &&
+          enginePlugin.Modules.Any(module => module.Contains("EngineTestPlugin.Runtime", StringComparison.Ordinal)) &&
+          enginePlugin.Modules.Any(module => module.Contains("EngineTestPlugin.Editor", StringComparison.Ordinal)),
+        "Engine-level test Plugin must expose Runtime and Editor Modules");
     var generated = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
     var firstSolution = File.ReadAllText(generated.SolutionPath);
     var firstStamp = File.ReadAllText(generated.StampPath);
@@ -74,6 +103,19 @@ try
           firstSolution.Contains(Path.Combine(engineRoot, "Source", "Engine",
               "Engine.vcxproj"), StringComparison.OrdinalIgnoreCase),
         "Source Engine and generated Editor Target must coexist in the Solution");
+    var engineProjects = EngineBuildGraph.Discover(engineRoot);
+    Check(engineProjects.Any(project => project.ModuleId == "SharpEngine.Timeline.Runtime" &&
+            project.ModuleType == "Runtime") &&
+          engineProjects.Any(project => project.ModuleId == "SharpEngine.Timeline.Editor" &&
+            project.ModuleType == "Editor"),
+        "Engine discovery must expose Timeline Runtime and Editor as explicit Modules");
+    Check(firstSolution.Contains(Path.Combine(engineRoot, "Source",
+            "SharpEngine.Timeline.Runtime", "SharpEngine.Timeline.Runtime.csproj"),
+            StringComparison.OrdinalIgnoreCase) &&
+          firstSolution.Contains(Path.Combine(engineRoot, "Source",
+            "SharpEngine.Timeline.Editor", "SharpEngine.Timeline.Editor.csproj"),
+            StringComparison.OrdinalIgnoreCase),
+        "Generated Engine Solution must include Timeline Runtime and Editor projects");
     string SolutionId(string name) => System.Text.RegularExpressions.Regex.Match(firstSolution,
         "= \"" + System.Text.RegularExpressions.Regex.Escape(name) + "\", \"[^\"]+\", \"([^\"]+)\"").Groups[1].Value;
     var componentGeneratorGuid = SolutionId("SharpEngine.ComponentGenerator");

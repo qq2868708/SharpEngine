@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Text.Json.Nodes;
 
 namespace SharpEngine.Components;
@@ -56,7 +55,6 @@ public sealed class ComponentValidationException(string code, string path, strin
     public string Code { get; } = code;
     public string FieldPath { get; } = path;
 }
-
 public abstract class SharpComponent
 {
     private bool _enabled = true;
@@ -143,32 +141,4 @@ public sealed class SharpEntity
         World.AddComponent<T>(EntityId, initialState);
     public RuntimeMutation<bool> RemoveComponent(SharpComponent component) => World.RemoveComponent(EntityId, component.ComponentId);
     internal void EnsureAlive() { if (!IsAlive) throw new InvalidOperationException("Entity has been removed"); }
-}
-
-[ComponentTypeId("engine.transform"), ComponentSchemaVersion(1), DisallowMultipleComponent]
-public sealed partial class TransformComponent : SharpComponent
-{
-    public Vector3 Position = Vector3.Zero;
-    public Vector3 Rotation = Vector3.Zero;
-    public Vector3 Scale = Vector3.One;
-}
-[ComponentTypeId("engine.mesh-renderer"), ComponentSchemaVersion(1), AddComponentMenu("Rendering/Mesh Renderer")]
-public sealed partial class MeshRendererComponent : SharpComponent
-{
-    public AssetRef<MeshAsset> Mesh;
-    public AssetRef<MaterialAsset> Material;
-    public Color Color = Color.White;
-}
-[ComponentTypeId("engine.camera"), ComponentSchemaVersion(1), AddComponentMenu("Rendering/Camera")]
-public sealed partial class CameraComponent : SharpComponent
-{
-    [Range(1, 179)] public float FieldOfView = 60;
-    public float NearPlane = 0.1f;
-    public float FarPlane = 1000;
-}
-[ComponentTypeId("engine.directional-light"), ComponentSchemaVersion(1), AddComponentMenu("Rendering/Directional Light")]
-public sealed partial class DirectionalLightComponent : SharpComponent
-{
-    public Color Color = Color.White;
-    public float Intensity = 1;
 }

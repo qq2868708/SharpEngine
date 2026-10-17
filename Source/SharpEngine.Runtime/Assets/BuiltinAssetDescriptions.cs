@@ -1,4 +1,5 @@
 using System.Text.Json;
+using SharpEngine.Animation;
 
 namespace SharpEngine.Assets;
 
@@ -24,6 +25,45 @@ public sealed record MaterialAssetDescription(
 /// <summary>Loads the data-only engine mesh/material formats through the registry.</summary>
 public static class AssetContent
 {
+    /// <summary>Loads a manifest-backed skeletal animation source asset.</summary>
+    public static SkeletalAnimationAsset LoadSkeletalAnimation(AssetRegistry registry, string id) =>
+        SkeletalAnimationContent.Load(registry, id);
+
+    public static StaticMeshAsset LoadStaticMesh(AssetRegistry registry, string id)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        var descriptor = registry.Find(id) ?? throw new KeyNotFoundException(
+            $"Asset was not registered: '{id}'");
+        if (!string.Equals(descriptor.Type, "Mesh", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(descriptor.Type, "StaticMesh", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Asset '{id}' is {descriptor.Type}, expected Mesh or StaticMesh");
+        var path = registry.ResolvePath(descriptor) ?? throw new InvalidDataException(
+            $"Asset '{id}' has no resolved path");
+        if (path.EndsWith(".obj", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(descriptor.Importer, "SharpEngine.Obj", StringComparison.OrdinalIgnoreCase))
+        {
+            var mesh = WavefrontObjImporter.Load(path, descriptor.Name);
+            return new StaticMeshAsset(id, mesh.Name, mesh.Primitive, "Y-up",
+                mesh.Positions, mesh.Indices, mesh.DefaultMaterial);
+        }
+        var parsed = StaticMeshAsset.Parse(File.ReadAllText(path), path, id);
+        if (!string.Equals(parsed.AssetId, id, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Static mesh '{id}' does not match its serialized assetId '{parsed.AssetId}'");
+        if (parsed.SourcePath is not null)
+            SourceAssetContract.ResolveAndValidate(registry, descriptor, parsed.SourcePath,
+                parsed.SourceSha256!);
+        return parsed;
+    }
+
+    public static SkeletonAsset LoadSkeleton(AssetRegistry registry, string id) =>
+        SkeletonContent.Load(registry, id);
+
+    public static SkeletalMeshAsset LoadSkeletalMesh(AssetRegistry registry, string id) =>
+        SkeletalMeshContent.Load(registry, id);
+
+    public static string ExportOriginalFbx(AssetRegistry registry, string id,
+        string destination) => FbxSourceContract.ExportOriginalFbx(registry, id, destination);
+
     public static MeshAssetDescription LoadMesh(AssetRegistry registry, string id)
     {
         var asset = registry.Find(id) ?? throw new KeyNotFoundException(

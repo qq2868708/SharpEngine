@@ -1,12 +1,14 @@
 using System.Runtime.InteropServices;
 using SharpEngine.Editor;
 using SharpEngine.Runtime;
+using SharpEngine.Timeline;
 
 namespace SharpEngine.Host;
 
 public static class HostEntrypoint
 {
     private static EditorRuntime? s_runtime;
+    private static EngineModuleHost? s_engineModules;
     private static ProjectModuleHost? s_modules;
     private static ProjectCodeService? s_projectCode;
     private static InputRuntimeService? s_input;
@@ -27,6 +29,14 @@ public static class HostEntrypoint
                 throw new InvalidOperationException("The asset registry is unavailable"));
             s_runtime.AttachInputRuntime(s_input);
             RegisterEditorInput(s_runtime, s_input);
+            var moduleRoot = Path.GetDirectoryName(s_runtime.ProjectManifest ??
+                Path.Combine(s_runtime.EngineRoot, "engine.json"))!;
+            s_engineModules = EngineModuleHost.Prepare("Editor",
+                typeof(TimelineRuntimeModule).Assembly,
+                typeof(TimelineEditorModule).Assembly);
+            s_engineModules.Start((id, type) => type == "Editor"
+                ? new EditorModuleContext(moduleRoot, id, s_runtime, s_input)
+                : new ModuleContext(moduleRoot, id, type, s_runtime.UiRuntime, s_input, s_runtime));
             try
             {
                 s_modules = ProjectModuleIntegration.Load(s_runtime, s_input);
@@ -46,6 +56,8 @@ public static class HostEntrypoint
             Console.Error.WriteLine($"[Game] Initialize failed: {exception}");
             s_modules?.Dispose();
             s_modules = null;
+            s_engineModules?.Dispose();
+            s_engineModules = null;
             DisposeInputHandlers();
             s_runtime?.AttachInputRuntime(null);
             s_input = null;
@@ -87,6 +99,8 @@ public static class HostEntrypoint
             s_projectCode = null;
             s_modules?.Dispose();
             s_modules = null;
+            s_engineModules?.Dispose();
+            s_engineModules = null;
             DisposeInputHandlers();
             s_runtime?.AttachInputRuntime(null);
             s_input = null;

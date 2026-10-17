@@ -1,0 +1,14 @@
+.timeline-view { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; background-color: #171b22; color: #cbd4e2; }
+.timeline-ruler { position: absolute; left: 0px; top: 0px; right: 0px; height: 24px; background-color: #242b35; border-bottom: 1px #11151a; overflow: hidden; }
+.timeline-tick { position: absolute; top: 0px; height: 24px; padding-top: 5px; padding-left: 3px; border-left: 1px #3d4857; color: #75859a; font-size: 10px; white-space: nowrap; }
+.timeline-tick.major { border-left-color: #63748a; color: #b9c7d8; }
+.timeline-rows { position: absolute; left: 0px; top: 24px; right: 0px; bottom: 0px; overflow: auto; }
+.timeline-row { position: absolute; left: 0px; right: 0px; border-bottom: 1px #2c3541; background-color: #1d222a; }
+.timeline-row.selected { background-color: #26384a; }
+.timeline-row.muted { opacity: 0.55; }
+.timeline-track-label { position: absolute; left: 0px; top: 0px; width: 180px; height: 30px; padding: 8px 8px; overflow: hidden; white-space: nowrap; background-color: #222933; color: #aebbd0; border-right: 1px #11151a; }
+.timeline-clip { position: absolute; padding: 4px 8px; overflow: hidden; white-space: nowrap; text-align: left; background-color: #315d82; border: 1px #6a9ed1; border-radius: 2px; color: #ecf4ff; font-size: 10px; }
+.timeline-clip:hover { background-color: #3f76a4; }
+.timeline-clip.selected { background-color: #a16b35; border-color: #e4b06d; }
+.timeline-clip.muted { background-color: #46505b; border-color: #687584; }
+.timeline-playhead { position: absolute; top: 0px; bottom: 0px; width: 1px; background-color: #f08d67; pointer-events: none; }

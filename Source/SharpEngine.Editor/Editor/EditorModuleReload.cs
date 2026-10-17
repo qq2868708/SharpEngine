@@ -31,7 +31,7 @@ public sealed partial class EditorRuntime
         if (PlayState != EditorPlayState.Stopped) throw new InvalidOperationException("Stop Play before applying project code");
         var registry = ComponentRegistry.CreateBuiltin();
         registry.AssetExists = (id, type) => _assets?.Find(id) is { Exists: true } asset &&
-            asset.Type.Equals(type.Name.Replace("Asset", ""), StringComparison.OrdinalIgnoreCase);
+            EditorAssetReferenceTypes.Matches(asset.Type, type);
         var settings = new DevelopmentSettingsRegistry(_projectRoot, _engineRoot, install: false);
         try
         {

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "kind": "skeletal-animation",
+  "assetId": "engine://animations/robot-walk",
+  "name": "Robot Walk",
+  "duration": 1.0,
+  "sampleRate": 30.0,
+  "skeletonId": null,
+  "bones": [
+    {
+      "boneId": "root",
+      "name": "Root",
+      "parentBoneId": null,
+      "bindPosition": [0, 0, 0],
+      "bindRotation": [0, 0, 0, 1],
+      "bindScale": [1, 1, 1]
+    },
+    {
+      "boneId": "left-foot",
+      "name": "Left Foot",
+      "parentBoneId": "root",
+      "bindPosition": [-0.18, 0, 0],
+      "bindRotation": [0, 0, 0, 1],
+      "bindScale": [1, 1, 1]
+    },
+    {
+      "boneId": "right-foot",
+      "name": "Right Foot",
+      "parentBoneId": "root",
+      "bindPosition": [0.18, 0, 0],
+      "bindRotation": [0, 0, 0, 1],
+      "bindScale": [1, 1, 1]
+    }
+  ],
+  "tracks": [
+    {
+      "trackId": "root-motion",
+      "boneId": "root",
+      "keyframes": [
+        {
+          "time": 0,
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [1, 1, 1]
+        },
+        {
+          "time": 0.5,
+          "position": [0, 0.04, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [1, 1, 1]
+        },
+        {
+          "time": 1,
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0, 1],
+          "scale": [1, 1, 1]
+        }
+      ]
+    },
+    {
+      "trackId": "left-foot-swing",
+      "boneId": "left-foot",
+      "keyframes": [
+        {
+          "time": 0,
+          "position": [-0.18, 0, 0],
+          "rotation": [0, 0, 0.130526, 0.991445],
+          "scale": [1, 1, 1]
+        },
+        {
+          "time": 0.5,
+          "position": [-0.18, 0, 0],
+          "rotation": [0, 0, -0.130526, 0.991445],
+          "scale": [1, 1, 1]
+        },
+        {
+          "time": 1,
+          "position": [-0.18, 0, 0],
+          "rotation": [0, 0, 0.130526, 0.991445],
+          "scale": [1, 1, 1]
+        }
+      ]
+    },
+    {
+      "trackId": "right-foot-swing",
+      "boneId": "right-foot",
+      "keyframes": [
+        {
+          "time": 0,
+          "position": [0.18, 0, 0],
+          "rotation": [0, 0, -0.130526, 0.991445],
+          "scale": [1, 1, 1]
+        },
+        {
+          "time": 0.5,
+          "position": [0.18, 0, 0],
+          "rotation": [0, 0, 0.130526, 0.991445],
+          "scale": [1, 1, 1]
+        },
+        {
+          "time": 1,
+          "position": [0.18, 0, 0],
+          "rotation": [0, 0, -0.130526, 0.991445],
+          "scale": [1, 1, 1]
+        }
+      ]
+    }
+  ]
+}

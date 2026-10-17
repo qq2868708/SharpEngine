@@ -63,6 +63,7 @@ internal static class SolutionGenerator
         projectManifestHash = Hash(resolved.Project.ManifestPath), engineManifestHash = Hash(resolved.Engine.ManifestPath),
         engineProjectsHash = EngineBuildGraph.Fingerprint(resolved.Engine.Root), engineRoot = resolved.Engine.Root,
         association = resolved.Project.EngineAssociation, modules = resolved.Project.Modules,
+        plugins = resolved.Project.Plugins,
     }, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
 
     private static void WriteGeneratedProps(string path, ResolvedSharpProject resolved)

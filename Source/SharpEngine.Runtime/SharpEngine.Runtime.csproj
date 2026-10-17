@@ -1,5 +1,9 @@
 <Project>
-  <PropertyGroup><SharpEngineRole>Runtime</SharpEngineRole></PropertyGroup>
+  <PropertyGroup>
+    <SharpEngineRole>Runtime</SharpEngineRole>
+    <SharpEngineModuleId>SharpEngine.Runtime</SharpEngineModuleId>
+    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
+  </PropertyGroup>
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>

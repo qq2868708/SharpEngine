@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "skeleton",
+  "assetId": "engine://skeletons/robot",
+  "name": "Robot Skeleton",
+  "sourcePath": "Content/Assets/Sources/Robot.fbx",
+  "sourceSha256": "7C7552CB66FC5E9CACBD6EE4788CA235ECF7553F676AAFFC1EA0E524EF175353",
+  "bones": [
+    { "boneId": "root", "name": "Root", "parentBoneId": null, "bindPosition": [0, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] },
+    { "boneId": "left-foot", "name": "Left Foot", "parentBoneId": "root", "bindPosition": [-0.18, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] },
+    { "boneId": "right-foot", "name": "Right Foot", "parentBoneId": "root", "bindPosition": [0.18, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] }
+  ]
+}
