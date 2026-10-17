@@ -123,47 +123,6 @@ public static class WorldViewportRenderer
     };
     private static readonly int[] PlaneTriangles = { 0, 1, 2, 0, 2, 3 };
 
-    /// <summary>Builds the renderer-neutral submission for the 2D UI canvas.
-    /// The UI canvas uses screen pixels with its origin at the viewport's top
-    /// left: X increases to the right and Y increases down. Keeping this as a
-    /// viewport frame means the native backend and MCP can inspect the same
-    /// serializable representation in either editor mode.</summary>
-    public static WorldViewportFrame BuildUiFrame(UiRect bounds)
-    {
-        if (bounds.Width <= 0 || bounds.Height <= 0 ||
-            !float.IsFinite(bounds.Width) || !float.IsFinite(bounds.Height))
-            return new WorldViewportFrame(bounds, [], [], 0, 0, "ui2d");
-
-        var lines = new List<WorldViewportVertex>();
-        const float spacing = 32f;
-        const float originInset = 24f;
-        var originX = Math.Min(originInset, bounds.Width * 0.5f);
-        var originY = Math.Min(originInset, bounds.Height * 0.5f);
-        var minor = new Vector4(0.18f, 0.23f, 0.30f, 1);
-        var major = new Vector4(0.24f, 0.31f, 0.40f, 1);
-
-        // A lightweight canvas grid makes the UI coordinate system tangible
-        // while leaving room for a future retained UI scene submission.
-        for (var x = originX; x <= bounds.Width; x += spacing)
-        {
-            var color = Math.Abs(x - originX) < 0.5f ?
-                new Vector4(0.90f, 0.32f, 0.32f, 1) :
-                (Math.Abs((x - originX) % (spacing * 4)) < 0.5f ? major : minor);
-            AddUiLine(lines, x, 0, x, bounds.Height, color);
-        }
-        for (var y = originY; y <= bounds.Height; y += spacing)
-        {
-            var color = Math.Abs(y - originY) < 0.5f ?
-                new Vector4(0.31f, 0.84f, 0.50f, 1) :
-                (Math.Abs((y - originY) % (spacing * 4)) < 0.5f ? major : minor);
-            AddUiLine(lines, 0, y, bounds.Width, y, color);
-        }
-
-        AddCanvasGizmo(lines, bounds);
-
-        return new WorldViewportFrame(bounds, [], lines.ToArray(), 0, 0, "ui2d");
-    }
-
     public static WorldViewportFrame BuildFrame(WorldDocument world,
         UiRect bounds, string? selectedEntityId = null, AssetRegistry? assets = null,
         string transformTool = "move")
@@ -562,15 +521,6 @@ public static class WorldViewportRenderer
             color.X, color.Y, color.Z, color.W));
         lines.Add(new WorldViewportVertex(x1, y1, 0.02f,
             color.X, color.Y, color.Z, color.W));
-    }
-
-    private static void AddCanvasGizmo(List<WorldViewportVertex> lines, UiRect bounds)
-    {
-        var center = new Vector2(Math.Max(34, bounds.Width - 68), 58);
-        AddGizmoAxis(lines, center, new Vector2(1, 0), 42,
-            new Vector4(0.95f, 0.32f, 0.32f, 1));
-        AddGizmoAxis(lines, center, new Vector2(0, 1), 42,
-            new Vector4(0.32f, 0.88f, 0.52f, 1));
     }
 
     private static void AddTransformGizmo(List<WorldViewportVertex> lines,

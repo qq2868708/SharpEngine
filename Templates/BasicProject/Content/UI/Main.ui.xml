@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ui version="1">
-  <panel id="root" layout="column" padding="24" color="#161D29">
-    <text id="title" value="__DISPLAY_NAME__" fontSize="32" />
-    <text id="status" value="Project created with SharpEngine" />
-  </panel>
-</ui>

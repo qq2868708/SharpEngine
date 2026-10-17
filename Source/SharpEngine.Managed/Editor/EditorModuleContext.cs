@@ -7,7 +7,7 @@ public sealed class EditorModuleContext : ModuleContext
     private readonly EditorRuntime _runtime;
 
     internal EditorModuleContext(string projectRoot, string moduleId,
-        EditorRuntime runtime) : base(projectRoot, moduleId, "Editor")
+        EditorRuntime runtime) : base(projectRoot, moduleId, "Editor", runtime.UiRuntime)
     {
         _runtime = runtime;
     }

@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<ui version="1">
-  <panel id="root" layout="column" padding="24">
-    <text id="title" value="SharpEngine" fontSize="32" />
-    <text id="subtitle" value="C# managed game layer" />
-    <button id="start" text="Start" action="game.start" />
-  </panel>
-</ui>

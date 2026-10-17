@@ -157,7 +157,7 @@ internal sealed class ProjectModuleHost : IDisposable
         {
             ModuleContext context = type.Equals("Editor", StringComparison.OrdinalIgnoreCase)
                 ? new EditorModuleContext(projectRoot, id, runtime)
-                : new ModuleContext(projectRoot, id, type);
+                : new ModuleContext(projectRoot, id, type, runtime.UiRuntime);
             instance.Startup(context);
             _modules.Add(instance);
             Console.Error.WriteLine($"[Module] Started {id} ({type})");

@@ -1,0 +1,27 @@
+<rml data-sharpengine-schema-version="1" data-view-model="engine.sample-screen@1">
+<head>
+  <title>SharpEngine Sample UI</title>
+  <link type="text/rcss" href="Main.rcss" />
+</head>
+<body>
+  <div id="screen" class="screen">
+    <div id="topbar" class="topbar">
+      <div id="brandBlock" class="brand-block">
+        <span id="eyebrow" class="eyebrow">SHARPENGINE UI</span>
+        <span id="title" class="title" data-bind="screen.title">Sample Screen</span>
+      </div>
+      <div id="statusPill" class="status-pill"><span id="statusDot" class="status-dot" /><span id="status" data-bind="screen.status">CONNECTED</span></div>
+    </div>
+    <div id="content" class="content">
+      <div id="hero" class="hero">
+        <span id="kicker" class="kicker">SCREEN-SPACE UI</span>
+        <span id="headline" class="headline">Author the runtime document, not a viewport substitute.</span>
+        <span id="summary" class="summary">The dedicated UI Editor opens RML assets as documents and keeps the 3D viewport focused on scene work.</span>
+        <div id="actions" class="actions"><button id="continueButton" class="primary" data-command="screen.continue">Continue</button><button id="settingsButton" class="secondary" data-command="screen.settings">Settings</button></div>
+      </div>
+      <div id="metrics" class="metrics"><div id="metricHealth" class="metric-card"><span id="healthLabel" class="metric-label">HEALTH</span><span id="healthValue" class="metric-value" data-bind="player.health">100</span></div><div id="metricEnergy" class="metric-card accent-card"><span id="energyLabel" class="metric-label">ENERGY</span><span id="energyValue" class="metric-value" data-bind="player.energy">72</span></div></div>
+    </div>
+    <div id="footer" class="footer"><span id="hint">RML + RCSS</span><span id="resolution">1280 x 720 reference</span></div>
+  </div>
+</body>
+</rml>

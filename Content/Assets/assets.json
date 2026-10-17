@@ -53,22 +53,22 @@
       "tags": ["builtin", "material"]
     },
     {
-      "id": "ui/engine-shell",
-      "type": "UiDocument",
-      "name": "Engine Shell",
-      "path": "Content/UI/EngineShell.ui.xml",
+      "id": "ui/main",
+      "type": "RmlDocument",
+      "name": "Default Game UI",
+      "path": "Content/UI/Main.rml",
       "readOnly": true,
-      "importer": "SharpEngine.UiXml",
-      "tags": ["editor", "ui"]
+      "importer": "RmlUi.Document",
+      "tags": ["runtime", "ui"]
     },
     {
-      "id": "ui/main",
-      "type": "UiDocument",
-      "name": "Default Game UI",
-      "path": "Content/UI/Main.ui.xml",
+      "id": "ui/main-style",
+      "type": "StyleSheet",
+      "name": "Default Game UI Style",
+      "path": "Content/UI/Main.rcss",
       "readOnly": true,
-      "importer": "SharpEngine.UiXml",
-      "tags": ["runtime", "ui"]
+      "importer": "RmlUi.StyleSheet",
+      "tags": ["runtime", "ui", "style"]
     }
   ]
 }

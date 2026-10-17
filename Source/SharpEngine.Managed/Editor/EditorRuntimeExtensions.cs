@@ -45,6 +45,7 @@ public sealed partial class EditorRuntime
         _commands.Register(new EditorCommand("core.show-project-content", "Show Project Content",
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
+        RegisterPaneVisibilityCommand("view.ui-editor", "UI Editor", EditorPaneIds.UiEditor);
         RegisterPaneVisibilityCommand("view.content", "Content Manager", EditorPaneIds.Content);
         RegisterPaneVisibilityCommand("view.inspector", "Inspector", EditorPaneIds.Inspector);
         RegisterPaneVisibilityCommand("view.console", "Console", EditorPaneIds.Console);
@@ -89,9 +90,10 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.browse-current-level", 100));
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.show-project-content", 200));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.hierarchy", 100));
-        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content", 200));
-        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.inspector", 300));
-        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.console", 400));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.ui-editor", 200));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content", 300));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.inspector", 400));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.console", 500));
         _menus.RegisterItem(new EditorMenuItem("view", "layout", "view.save-layout", 100));
         _menus.RegisterItem(new EditorMenuItem("view", "layout", "view.reset-layout", 200));
 

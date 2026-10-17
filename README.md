@@ -157,12 +157,16 @@ Shift for a speed boost, RMB orbit, MMB pan, and the wheel for zoom. Orbit yaw a
 pitch follow the drag direction; `Engine Settings > Invert Y Axis` reverses the
 vertical pitch and is saved under the project `Saved/Config/EngineSettings.json`.
 The 3D viewport draws a fixed corner orientation gizmo with world X/Y/Z axes
-in red/green/blue, while the UI canvas draws a fixed 2D X-right/Y-down gizmo.
-The viewport tabs switch
-between `3D Scene` and `UI Canvas`; the latter renders a 2D canvas grid and
-uses the UI coordinate origin (X right, Y down), with 3D camera navigation
-disabled while it is active. The same state is exposed through the MCP actions
-`editor.mode-scene` and `editor.mode-ui` and through `editor.describe`.
+in red/green/blue. It is a scene-only surface; UI authoring no longer changes
+the viewport mode.
+
+RML assets open in the dedicated, dockable UI Editor. It owns document tabs,
+an element hierarchy, a 1280x720 screen preview, an Inspector, diagnostics, and
+document-local Undo/Redo and Save. The preview resolves linked RCSS rules and
+supports RmlUi-native Flex layout plus explicit Absolute positioning. RML stores
+stable element IDs, optional `data-view-model` contract IDs, `data-bind` paths,
+and `data-command` actions. Selecting a `RmlDocument` in Content Manager opens
+it as a UI document instead of embedding it in the 3D viewport.
 
 Directional lighting is derived only from serialized scene lights. Multiple
 lights accumulate linear RGB color and intensity in the current CPU preview;
@@ -174,7 +178,7 @@ The editor menu hierarchy follows the usual Unreal-style split: `File` contains
 New Project, Open Project, Save World, and scene export; `Edit` contains Engine
 Settings and navigation preferences. The toolbar keeps only frequent Save,
 Export, and Play/Pause/Stop controls. Move, Rotate, and Scale are scoped to the
-3D viewport header and disappear when the editor switches to the UI Canvas.
+3D viewport.
 
 ### Embedded MCP
 
@@ -322,8 +326,9 @@ later work.
 
 ### Dock layout
 
-The built-in Viewport, Hierarchy, Content Manager, Inspector, and Console are
-real Dock panes. A drag always keeps a floating pane ghost visible. Dropping on
+The built-in Viewport, UI Editor, Hierarchy, Content Manager, Inspector, and
+Console are real Dock panes. UI Editor contains its own asset-document tabs; it
+is not a viewport mode. A drag always keeps a floating pane ghost visible. Dropping on
 the nearest content edge splits left, right, top, or bottom and previews the
 exact result; dropping on a Tab bar merges at the shown insertion line. Dropping
 in the content center creates a floating window. Non-Viewport panes can detach
@@ -354,11 +359,10 @@ asset types and records define their editing workflow. The browser state is also
 available through `EditorRuntime.DescribeContentJson()`, the
 `content.describe` MCP tool, and the `sharpengine://content` resource.
 
-`Source/SharpEngine.Managed/UI/UiFramework.cs`, `EngineUi.cs`, and the old
-`*.ui.xml` files are
-legacy compatibility/experimentation APIs; they no longer lay out or render
-the editor. Their semantic snapshots likewise describe that legacy tree.
-The active UI source is `Content/UI/Rml/Editor.rml`.
+`Source/SharpEngine.Managed/UI/UiFramework.cs` and `EngineUi.cs` remain legacy
+compatibility/experimentation APIs; new projects no longer receive `*.ui.xml`
+assets. Runtime UI source assets use RML and RCSS, while the editor shell itself
+continues to use `Content/UI/Rml/Editor.rml`.
 
 World schema v2 uses the `.sworld` extension and requires explicit light colors.
 World data describes stable entity IDs, asset URIs, editable Transform,

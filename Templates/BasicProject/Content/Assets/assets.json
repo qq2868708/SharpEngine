@@ -4,11 +4,19 @@
   "assets": [
     {
       "id": "ui/main",
-      "type": "UiDocument",
+      "type": "RmlDocument",
       "name": "Main UI",
-      "path": "Content/UI/Main.ui.xml",
-      "importer": "SharpEngine.UiXml",
+      "path": "Content/UI/Main.rml",
+      "importer": "RmlUi.Document",
       "tags": ["ui"]
+    },
+    {
+      "id": "ui/main-style",
+      "type": "StyleSheet",
+      "name": "Main UI Style",
+      "path": "Content/UI/Main.rcss",
+      "importer": "RmlUi.StyleSheet",
+      "tags": ["ui", "style"]
     }
   ]
 }

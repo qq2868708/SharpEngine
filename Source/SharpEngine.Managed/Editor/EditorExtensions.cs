@@ -190,7 +190,6 @@ public sealed class EditorCommandContext
     public AssetDescriptor? SelectedAsset => _runtime.SelectedAsset;
     public string? SelectedFolderPath => _runtime.SelectedFolderPath;
     public EditorPlayState PlayState => _runtime.PlayState;
-    public EditorViewportMode ViewportMode => _runtime.ViewportMode;
     public bool TransformSnapEnabled
     {
         get => _runtime.TransformSnapEnabled;
@@ -235,7 +234,6 @@ public sealed class EditorContext
     public AssetDescriptor? SelectedAsset => Runtime.SelectedAsset;
     public string? SelectedFolderPath => Runtime.SelectedFolderPath;
     public EditorPlayState PlayState => Runtime.PlayState;
-    public EditorViewportMode ViewportMode => Runtime.ViewportMode;
     public bool TransformSnapEnabled
     {
         get => Runtime.TransformSnapEnabled;

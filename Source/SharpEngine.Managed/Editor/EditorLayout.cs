@@ -7,13 +7,14 @@ namespace SharpEngine.Editor.Layout;
 public static class EditorPaneIds
 {
     public const string Viewport = "viewport";
+    public const string UiEditor = "ui-editor";
     public const string Hierarchy = "hierarchy";
     public const string Content = "content";
     public const string Inspector = "inspector";
     public const string Console = "console";
 
     public static IReadOnlyList<string> BuiltIn { get; } =
-        [Viewport, Hierarchy, Content, Inspector, Console];
+        [Viewport, UiEditor, Hierarchy, Content, Inspector, Console];
 
     public static bool IsBuiltIn(string paneId) =>
         BuiltIn.Contains(paneId, StringComparer.Ordinal);

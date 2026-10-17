@@ -1,0 +1,26 @@
+.screen {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  padding: 42px; background-color: #10151c; color: #e8eef7;
+}
+.topbar { display: flex; flex-direction: row; align-items: center; }
+.brand-block { display: flex; flex-direction: column; flex-grow: 1; }
+.eyebrow { color: #51c2a5; font-size: 11px; }
+.title { margin-top: 5px; color: #f5f8fc; font-size: 24px; }
+.status-pill { display: flex; flex-direction: row; align-items: center; padding: 8px 12px; background-color: #1b2630; border: 1px #344554; border-radius: 3px; color: #a9bacb; font-size: 10px; }
+.status-dot { width: 7px; height: 7px; margin-right: 7px; background-color: #62d39f; border-radius: 4px; }
+.content { display: flex; flex-direction: row; align-items: center; flex-grow: 1; gap: 44px; }
+.hero { display: flex; flex-direction: column; flex-grow: 1; max-width: 610px; }
+.kicker { color: #6f88a2; font-size: 11px; }
+.headline { margin-top: 12px; color: #ffffff; font-size: 34px; }
+.summary { margin-top: 16px; color: #9eacbd; font-size: 15px; }
+.actions { display: flex; flex-direction: row; margin-top: 25px; gap: 10px; }
+.primary, .secondary { min-width: 126px; height: 38px; padding: 9px 18px; border-radius: 3px; font-size: 13px; }
+.primary { background-color: #278c74; color: #ffffff; border: 1px #55bca3; }
+.secondary { background-color: #202a35; color: #dce5ef; border: 1px #465666; }
+.metrics { display: flex; flex-direction: column; width: 210px; gap: 10px; }
+.metric-card { display: flex; flex-direction: column; padding: 18px; background-color: #18212b; border: 1px #33404e; border-radius: 4px; }
+.accent-card { border-color: #397c70; }
+.metric-label { color: #75879b; font-size: 10px; }
+.metric-value { margin-top: 8px; color: #f5f8fc; font-size: 28px; }
+.footer { display: flex; flex-direction: row; padding-top: 14px; border-top: 1px #2a3541; color: #66788c; font-size: 10px; }
+#hint { flex-grow: 1; }

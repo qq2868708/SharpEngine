@@ -214,9 +214,9 @@ internal static unsafe class EditorExtensionValidation
                 _ => throw new InvalidOperationException("Expected validation callback failure")));
             runtime.Update(0);
             runtime.InvokeUiAction("editor.command:validation.failure");
-            runtime.InvokeUiAction("editor.mode-ui");
-            require(runtime.ViewportMode == EditorViewportMode.Ui2D &&
-                Toolbar().Descendants("button").Any(element => element.Attribute("disabled") is not null),
+            runtime.InvokeUiAction("editor.select-scene");
+            require(Toolbar().Descendants("button").Any(element =>
+                    element.Attribute("disabled") is not null),
                 "A throwing project predicate or command must not break subsequent editor actions");
 
             var failingModule = new TransformExtension { FailStartup = true };

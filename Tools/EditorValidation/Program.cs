@@ -27,10 +27,24 @@ try
 {
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
+    var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));
     var worldPath = Path.Combine(worlds.FullName, "Main.sworld");
     File.Copy(Path.Combine(root, "Content", "Worlds", "Main.sworld"), worldPath);
+    var uiPath = Path.Combine(ui.FullName, "Main.rml");
+    File.WriteAllText(uiPath, """
+        <rml data-sharpengine-schema-version="1" data-view-model="validation.main@1">
+        <head><link type="text/rcss" href="Main.rcss" /></head>
+        <body><div id="screen" class="screen"><span id="headline" class="headline" data-bind="screen.title">Validation UI</span><button id="continue" data-command="screen.continue">Continue</button></div></body>
+        </rml>
+        """);
+    File.WriteAllText(Path.Combine(ui.FullName, "Main.rcss"),
+        ".screen { display: flex; flex-direction: column; } .headline { color: #ffffff; }");
     File.WriteAllText(Path.Combine(assets.FullName, "assets.json"), """
-        {"schemaVersion":1,"assets":[{"id":"worlds/main","type":"World","path":"Content/Worlds/Main.sworld"}]}
+        {"schemaVersion":1,"assets":[
+          {"id":"worlds/main","type":"World","path":"Content/Worlds/Main.sworld"},
+          {"id":"ui/main","type":"RmlDocument","path":"Content/UI/Main.rml"},
+          {"id":"ui/main-style","type":"StyleSheet","path":"Content/UI/Main.rcss"}
+        ]}
         """);
     var manifest = Path.Combine(temporary.FullName, "Validation.sharpproject");
     File.WriteAllText(manifest, """
@@ -40,15 +54,24 @@ try
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    using var uiContract = runtime.UiRuntime.RegisterViewModel<ValidationMainScreen>(
+        "validation.main", 1);
+    Require(runtime.UiRuntime.ViewModelContracts.Single().JsonSchema.Contains(
+            "\"screen\"", StringComparison.Ordinal) &&
+        runtime.UiRuntime.ViewModelContracts.Single().JsonSchema.Contains(
+            "\"title\"", StringComparison.Ordinal),
+        "Runtime Module ViewModel registration must publish a generated JSON Schema");
     var defaultLayout = new EditorLayoutStore().LoadDefault(root);
     var dockMarkup = EditorDockMarkup.Build(defaultLayout.MainHost, "Main Scene");
     Require(dockMarkup.Contains("data-dock-split-node=\"main.root\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("data-dock-split-part=\"first\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("data-dock-split-part=\"second\"", StringComparison.Ordinal) &&
-        dockMarkup.Contains("data-dock-split-ratio=\"0.17\"", StringComparison.Ordinal),
+        dockMarkup.Contains("data-dock-split-ratio=\"0.76\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("data-pane-id=\"ui-editor\"", StringComparison.Ordinal) &&
+        !dockMarkup.Contains("UI Canvas", StringComparison.Ordinal),
         "Dock markup must expose recursive split containers for transient resize preview");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
-    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 1,
+    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 3,
         "Public and project assets must both be available to a project editor");
     Require(runtime.Assets.Find("engine://worlds/main")?.ReadOnly == false &&
         runtime.Assets.Find("engine://meshes/cube")?.ReadOnly == true,
@@ -157,26 +180,28 @@ try
     runtime.InvokeUiAction("editor.dock-save-layout");
     Require(File.Exists(Path.Combine(temporary.FullName, "Saved", "Config", "EditorLayout.json")),
         "Layout persistence must occur only after the explicit Save Layout command");
-    Require(runtime.ViewportMode == EditorViewportMode.Scene3D &&
-        runtime.DescribeEditorJson().Contains("\"mode\": \"scene3d\"", StringComparison.Ordinal),
-        "Editor should start in serialized 3D scene mode");
-    var uiFrame = WorldViewportRenderer.BuildUiFrame(new UiRect(0, 0, 640, 360));
-    Require(uiFrame.CameraId == "ui2d" && uiFrame.Triangles.Length == 0 &&
-        uiFrame.Lines.Length > 0,
-        "UI canvas mode should submit a 2D grid and coordinate axes");
-    var uiCameraPosition = runtime.World!.ActiveCamera!.Position;
-    runtime.InvokeUiAction("editor.mode-ui");
-    Require(runtime.ViewportMode == EditorViewportMode.Ui2D &&
-        runtime.DescribeEditorJson().Contains("\"mode\": \"ui2d\"", StringComparison.Ordinal),
-        "UI canvas action should update the AI-facing viewport mode");
-    runtime.ViewportKey(0x57, true, true);
-    runtime.Update(0.1f);
-    runtime.ViewportKey(0x57, false, true);
-    Require(runtime.World.ActiveCamera!.Position == uiCameraPosition,
-        "UI canvas mode must not move the 3D editor camera");
-    runtime.InvokeUiAction("editor.mode-scene");
-    Require(runtime.ViewportMode == EditorViewportMode.Scene3D,
-        "Scene action should restore 3D navigation mode");
+    Require(runtime.DescribeEditorJson().Contains("\"mode\": \"scene3d\"",
+            StringComparison.Ordinal),
+        "The viewport must remain a dedicated 3D scene surface");
+    runtime.InvokeUiAction("editor.select-asset:project://ui/main");
+    Require(runtime.ActiveUiDocumentId == "project://ui/main" &&
+        runtime.OpenUiDocumentCount == 1 &&
+        runtime.DescribeUiEditorJson().Contains("validation.main@1", StringComparison.Ordinal) &&
+        runtime.DescribeUiEditorJson().Contains("\"viewModelContractAvailable\": true",
+            StringComparison.Ordinal),
+        "Selecting an RML asset must open it in the dedicated multi-document UI Editor");
+    runtime.InvokeUiAction("editor.ui-select:headline");
+    runtime.InvokeUiAction("editor.ui-change:text:Edited through UI Editor");
+    Require(runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
+        "UI property changes must dirty only the open UI document");
+    runtime.InvokeUiAction("editor.ui-undo");
+    Require(!runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
+        "UI edits must participate in document-local Undo");
+    runtime.InvokeUiAction("editor.ui-change:text:Saved UI headline");
+    runtime.InvokeUiAction("editor.ui-save");
+    Require(File.ReadAllText(uiPath).Contains("Saved UI headline", StringComparison.Ordinal) &&
+        !runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
+        "UI Save must validate and atomically replace the authoritative RML source");
     runtime.InvokeUiAction("editor.toggle-invert-y");
     Require(runtime.Settings.InvertYAxis &&
         EngineSettings.Load(root, temporary.FullName).InvertYAxis,
@@ -271,4 +296,14 @@ finally
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", previousRoot);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", previousManifest);
     temporary.Delete(true);
+}
+
+public sealed class ValidationMainScreen
+{
+    public ValidationScreenState Screen { get; } = new();
+}
+
+public sealed class ValidationScreenState
+{
+    public string Title { get; set; } = "Validation";
 }

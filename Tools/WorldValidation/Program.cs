@@ -142,10 +142,6 @@ Check(rotateFrame.LineCount > frame.LineCount,
     "Rotate gizmo should render projected rings instead of move arrows");
 Check(scaleFrame.LineCount > frame.LineCount,
     "Scale gizmo should render axis end boxes in addition to axes");
-var uiGizmo = WorldViewportRenderer.BuildUiFrame(new UiRect(0, 0, 640, 360));
-Check(uiGizmo.Triangles.Length == 0 &&
-    uiGizmo.Lines.Any(v => v.X > uiGizmo.Bounds.Width - 130 && v.Y < 130),
-    "UI canvas should submit a fixed top-right 2D orientation gizmo");
 Check(Marshal.SizeOf<WorldViewportVertex>() == 7 * sizeof(float), "Native vertex ABI");
 void CheckFinite(WorldViewportFrame f)
 {

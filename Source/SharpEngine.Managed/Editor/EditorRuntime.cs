@@ -7,13 +7,13 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Modules;
 using SharpEngine.UI;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
 
 public enum EditorPlayState { Stopped, Playing, Paused }
-public enum EditorViewportMode { Scene3D, Ui2D }
 
 /// <summary>The public managed editor session used by the built-in host and
 /// generated projects. RmlUi owns layout/input; this class owns scene and assets.</summary>
@@ -29,6 +29,7 @@ public sealed partial class EditorRuntime
     private readonly EditorContextMenuRegistry _contextMenus;
     private readonly EditorCommandContext _commandContext;
     private readonly EditorContext _context;
+    private readonly UiRuntimeService _uiRuntime = new();
     private readonly Dictionary<IEditorExtension, IDisposable> _extensions =
         new(ReferenceEqualityComparer.Instance);
     private readonly Queue<string> _messages = new();
@@ -63,7 +64,6 @@ public sealed partial class EditorRuntime
     private float _orbitDistance;
     private readonly HashSet<uint> _pressedKeys = new();
     private bool _viewportKeyFocus;
-    private EditorViewportMode _viewportMode = EditorViewportMode.Scene3D;
     private string _viewportTool = "move";
     private bool _gizmoDragging;
     private TransformGizmoAxis _gizmoAxis;
@@ -114,6 +114,7 @@ public sealed partial class EditorRuntime
     public EditorToolbarRegistry Toolbar => _toolbar;
     public EditorContextMenuRegistry ContextMenus => _contextMenus;
     public EditorContext Context => _context;
+    public IUiRuntime UiRuntime => _uiRuntime;
     public EditorSelection Selection => _selection;
     internal string EngineRoot => _engineRoot;
     internal string? ProjectManifest => _projectManifest;
@@ -127,7 +128,6 @@ public sealed partial class EditorRuntime
     public string? SelectedFolderPath => _selection.Kind == EditorSelectionKind.Folder ? _selection.Path : null;
     public EngineSettings Settings => _settings;
     public EditorPlayState PlayState { get; private set; }
-    public EditorViewportMode ViewportMode => _viewportMode;
     public bool TransformSnapEnabled { get; set; }
     public bool IsDirty => _worldIsUntitled || _dirty || (_authoring?.IsDirty ?? false);
     public ulong DocumentRevision => _authoring?.DocumentRevision ?? 0;
@@ -203,19 +203,18 @@ public sealed partial class EditorRuntime
         },
         viewport = new
         {
-            mode = _viewportMode == EditorViewportMode.Scene3D ? "scene3d" : "ui2d",
+            mode = "scene3d",
             selectedEntity = SelectedEntityId,
             transformTool = _viewportTool,
-            transformGizmoVisible = _viewportMode == EditorViewportMode.Scene3D &&
-                SelectedEntityId is not null,
+            transformGizmoVisible = SelectedEntityId is not null,
             transformGizmo = DescribeTransformGizmo(_viewportTool),
-            gizmo = new { position = "top-right", type = _viewportMode == EditorViewportMode.Scene3D ? "orientation-3d" : "orientation-2d" },
+            gizmo = new { position = "top-right", type = "orientation-3d" },
             worldAxes = new { x = "right", y = "up", z = "depth" },
-            uiAxes = new { x = "right", y = "down" },
             navigation = new[] { "WASD move", "QE vertical move", "RMB orbit", "MMB pan", "wheel zoom" },
             sceneDirectionalLightCount = _world?.Entities.Count(entity =>
                 entity.Kind == WorldEntityKind.Light) ?? 0,
         },
+        uiEditor = DescribeUiEditorState(),
         layout = _layout is null ? null : new
         {
             revision = _layout.Revision,
@@ -396,6 +395,7 @@ public sealed partial class EditorRuntime
         RefreshInspector();
         RefreshSettingsUi();
         RefreshViewportModeUi();
+        RefreshUiEditor();
         RefreshExtensionUi();
         SetStatus($"Loaded {_world.Name} · {_world.Entities.Count} entities · {_assets.Assets.Count} assets");
         foreach (var diagnostic in _assets.Diagnostics) Log(diagnostic.Message);
@@ -430,10 +430,8 @@ public sealed partial class EditorRuntime
         if (_nativeApi.TryGetViewportRect(out var viewport))
         {
             _lastViewport = viewport;
-            var frame = _viewportMode == EditorViewportMode.Scene3D
-                ? WorldViewportRenderer.BuildFrame(_world, viewport, SelectedEntityId, _assets,
-                    _viewportTool)
-                : WorldViewportRenderer.BuildUiFrame(viewport);
+            var frame = WorldViewportRenderer.BuildFrame(_world, viewport, SelectedEntityId,
+                _assets, _viewportTool);
             _nativeApi.SubmitViewportFrame(frame);
             if (_frameCount == 1)
             {
@@ -444,10 +442,9 @@ public sealed partial class EditorRuntime
             if (_statsElapsed > 0.3f || _frameCount == 1)
             {
                 SetText("fps", deltaSeconds > 0 ? $"{1 / deltaSeconds:0} FPS" : "— FPS");
-                SetText("viewportStats", _viewportMode == EditorViewportMode.Scene3D
-                    ? $"{frame.EntityCount} entities · {frame.TriangleCount} triangles · " +
-                      $"{_world.Entities.Count(entity => entity.Kind == WorldEntityKind.Light)} scene lights · {PlayState}"
-                    : $"UI Canvas · {frame.LineCount} guide lines · {PlayState}");
+                SetText("viewportStats",
+                    $"{frame.EntityCount} entities · {frame.TriangleCount} triangles · " +
+                    $"{_world.Entities.Count(entity => entity.Kind == WorldEntityKind.Light)} scene lights · {PlayState}");
                 SetText("assetSource", $"{PlayState} · {_seconds:0.0}s");
                 if (PlayState == EditorPlayState.Playing) RefreshInspector();
                 _statsElapsed = 0;
@@ -458,8 +455,7 @@ public sealed partial class EditorRuntime
 
     public void PointerDown(nint windowHandle, int x, int y, uint button)
     {
-        if (_viewportMode != EditorViewportMode.Scene3D || button != 1 ||
-            _world is null || _assets is null) return;
+        if (button != 1 || _world is null || _assets is null) return;
         if (_gizmoDragging) return;
         if (x < _lastViewport.X || y < _lastViewport.Y ||
             x > _lastViewport.Right || y > _lastViewport.Bottom) return;
@@ -471,7 +467,7 @@ public sealed partial class EditorRuntime
     public void ViewportInput(nint windowHandle, int x, int y, uint inputEvent,
         uint buttons, int wheelDelta)
     {
-        if (_viewportMode != EditorViewportMode.Scene3D || _world is null || _assets is null ||
+        if (_world is null || _assets is null ||
             (_lastViewport.Width > 0 &&
              (x < _lastViewport.X || y < _lastViewport.Y ||
               x > _lastViewport.Right || y > _lastViewport.Bottom)))
@@ -594,12 +590,6 @@ public sealed partial class EditorRuntime
     /// <summary>Receives Win32 virtual-key state while the viewport owns focus.</summary>
     public void ViewportKey(uint key, bool pressed, bool viewportFocused)
     {
-        if (_viewportMode != EditorViewportMode.Scene3D)
-        {
-            _pressedKeys.Clear();
-            _viewportKeyFocus = false;
-            return;
-        }
         if (key == 0)
         {
             _pressedKeys.Clear();
@@ -636,6 +626,7 @@ public sealed partial class EditorRuntime
         }
         MarkExtensionUiDirty();
         if (_commands.TryExecute(action, _commandContext)) return;
+        if (HandleUiEditorAction(action)) return;
         if (_world is null || _assets is null) return;
         if (action.StartsWith("editor.context:", StringComparison.Ordinal))
         { HandleContextRequest(action); return; }
@@ -797,19 +788,6 @@ public sealed partial class EditorRuntime
             case "editor.engine-settings":
                 SetStatus($"Engine Settings · Invert Y Axis {(_settings.InvertYAxis ? "On" : "Off")} · settings are project-local");
                 break;
-            case "editor.mode-scene":
-                _viewportMode = EditorViewportMode.Scene3D;
-                RefreshViewportModeUi();
-                SetStatus("Viewport mode · 3D Scene · Y up");
-                break;
-            case "editor.mode-ui":
-                _viewportMode = EditorViewportMode.Ui2D;
-                _gizmoDragging = false;
-                _pressedKeys.Clear();
-                _viewportKeyFocus = false;
-                RefreshViewportModeUi();
-                SetStatus("Viewport mode · UI Canvas · Y down");
-                break;
             case "editor.save":
                 SaveWorld();
                 break;
@@ -860,9 +838,7 @@ public sealed partial class EditorRuntime
                 _viewportTool = action.EndsWith("move", StringComparison.Ordinal) ? "move" :
                     action.EndsWith("rotate", StringComparison.Ordinal) ? "rotate" : "scale";
                 RefreshViewportModeUi();
-                SetStatus(_viewportMode == EditorViewportMode.Scene3D
-                    ? $"3D transform tool · {_viewportTool} · select an axis handle and drag"
-                    : "Switch to 3D Scene to use transform tools");
+                SetStatus($"3D transform tool · {_viewportTool} · select an axis handle and drag");
                 break;
             case "editor.new-project":
                 SetStatus("Create a project with SharpEngineProject -Command New; project files are generated automatically");
@@ -947,6 +923,8 @@ public sealed partial class EditorRuntime
         SetText("scale", asset.Exists ? "Available" : "File missing");
         SetText("parent", "—");
         SetStatus($"Selected {asset.Id}");
+        if (asset.Type.Equals("RmlDocument", StringComparison.OrdinalIgnoreCase))
+            OpenUiAsset(asset);
     }
 
     private void OpenContentEntry(string payload)
@@ -1369,6 +1347,7 @@ public sealed partial class EditorRuntime
         RefreshInspector();
         RefreshSettingsUi();
         RefreshViewportModeUi();
+        RefreshUiEditor();
         RefreshExtensionUi();
         RefreshWorldTitle();
     }
@@ -1692,34 +1671,23 @@ public sealed partial class EditorRuntime
 
     private void RefreshViewportModeUi()
     {
-        var scene = _viewportMode == EditorViewportMode.Scene3D;
         var selectedSceneEntity = SelectedEntityId is not null &&
             _world?.Entities.Any(entity => entity.Id == SelectedEntityId) == true;
-        foreach (var id in new[] { "sceneModeTab", "uiModeTab" })
-        {
-            var active = id == "sceneModeTab" ? scene : !scene;
-            _nativeApi.SetUiProperty(id, "background-color", active ? "#2b4056" : "transparent");
-            _nativeApi.SetUiProperty(id, "border-color", active ? "#5e91c1" : "transparent");
-            _nativeApi.SetUiProperty(id, "color", active ? "#f1f6ff" : "#8f9bad");
-        }
         foreach (var tool in new[] { "move", "rotate", "scale" })
         {
             var id = $"{tool}Tool";
-            _nativeApi.SetUiProperty(id, "display", scene && selectedSceneEntity ? "block" : "none");
+            _nativeApi.SetUiProperty(id, "display", selectedSceneEntity ? "block" : "none");
             _nativeApi.SetUiProperty(id, "background-color", _viewportTool == tool ? "#315f8b" : "#2a323e");
             _nativeApi.SetUiProperty(id, "border-color", _viewportTool == tool ? "#6a9ed1" : "#48576a");
         }
         _nativeApi.SetUiProperty("viewportProjection", "display", "block");
-        SetText("viewportProjection", scene ? "Perspective" : "2D Canvas");
-        SetText("viewportHelp", scene
-            ? "WASD/QE Move · RMB Orbit · MMB Pan · Wheel Zoom"
-            : "UI Canvas · X right · Y down · 3D navigation paused");
+        SetText("viewportProjection", "Perspective");
+        SetText("viewportHelp", "WASD/QE Move · RMB Orbit · MMB Pan · Wheel Zoom");
     }
 
     private void UpdateNavigationMovement(float deltaSeconds)
     {
-        if (_viewportMode != EditorViewportMode.Scene3D || !_viewportKeyFocus ||
-            !float.IsFinite(deltaSeconds) || deltaSeconds <= 0 ||
+        if (!_viewportKeyFocus || !float.IsFinite(deltaSeconds) || deltaSeconds <= 0 ||
             _world?.ActiveCamera is not { } camera || _pressedKeys.Count == 0)
             return;
         EnsureNavigationState();

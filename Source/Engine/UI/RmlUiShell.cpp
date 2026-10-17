@@ -1765,14 +1765,23 @@ struct RmlUiShell::Impl
             host.HierarchySource.clear();
             return;
         }
-        if (event.GetId() == Rml::EventId::Change && target &&
-            (target->GetId() == "projectSearch" ||
-             target->GetId() == "hierarchySearch"))
+        if (event.GetId() == Rml::EventId::Change && target)
         {
             const auto value = target->GetAttribute<Rml::String>("value", "");
-            EmitAction(host, Rml::String(target->GetId() == "projectSearch"
-                ? "editor.search-assets:" : "editor.search-hierarchy:") + value);
-            return;
+            if (target->GetId() == "projectSearch" ||
+                target->GetId() == "hierarchySearch")
+            {
+                EmitAction(host, Rml::String(target->GetId() == "projectSearch"
+                    ? "editor.search-assets:" : "editor.search-hierarchy:") + value);
+                return;
+            }
+            const auto changeAction = target->GetAttribute<Rml::String>(
+                "data-change-action", "");
+            if (!changeAction.empty())
+            {
+                EmitAction(host, changeAction + value);
+                return;
+            }
         }
         if (event.GetId() == Rml::EventId::Mouseup &&
             event.GetParameter<int>("button", -1) == 1)
