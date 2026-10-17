@@ -1,6 +1,7 @@
 using System.Text;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Editor;
 
@@ -60,6 +61,7 @@ public sealed partial class EditorRuntime
         RegisterPaneVisibilityCommand("view.content-4", "Content Manager 4", EditorPaneIds.Content4);
         RegisterPaneVisibilityCommand("view.inspector", "Inspector", EditorPaneIds.Inspector);
         RegisterPaneVisibilityCommand("view.console", "Console", EditorPaneIds.Console);
+        RegisterPaneVisibilityCommand("view.logs", "Logs", EditorPaneIds.Logs);
         _commands.Register(new EditorCommand("view.save-layout", "Save Layout",
             _ => InvokeUiAction("editor.dock-save-layout")));
         _commands.Register(new EditorCommand("view.reset-layout", "Reset Layout",
@@ -114,6 +116,7 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-4", 330));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.inspector", 400));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.console", 500));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.logs", 510));
         _menus.RegisterItem(new EditorMenuItem("view", "layout", "view.save-layout", 100));
         _menus.RegisterItem(new EditorMenuItem("view", "layout", "view.reset-layout", 200));
 
@@ -277,7 +280,7 @@ public sealed partial class EditorRuntime
         try { return EditorExtensionIds.RequireLabel(tool.GetLabel(_commandContext), "getLabel"); }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[EditorExtension] toolbar={tool.Id} GetLabel failed: {exception}");
+            SharpLog.Error("EditorExtension", $"Toolbar {tool.Id} GetLabel failed", exception);
             return tool.Label;
         }
     }
@@ -288,7 +291,7 @@ public sealed partial class EditorRuntime
         try { return EditorExtensionIds.ValidateIcon(tool.GetIcon(_commandContext), "getIcon"); }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[EditorExtension] toolbar={tool.Id} GetIcon failed: {exception}");
+            SharpLog.Error("EditorExtension", $"Toolbar {tool.Id} GetIcon failed", exception);
             return tool.Icon;
         }
     }
@@ -325,7 +328,7 @@ public sealed partial class EditorRuntime
         {
             try { label = EditorExtensionIds.RequireLabel(command.GetLabel(_commandContext), "getLabel"); }
             catch (Exception exception)
-            { Console.Error.WriteLine($"[EditorExtension] command={command.Id} GetLabel failed: {exception}"); }
+            { SharpLog.Error("EditorExtension", $"Command {command.Id} GetLabel failed", exception); }
         }
         markup.Append("<button id=\"").Append(Escape(surfaceId))
             .Append("-command-").Append(Escape(command.Id))

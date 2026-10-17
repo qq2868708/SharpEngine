@@ -1,5 +1,6 @@
 using System.Reflection;
 using SharpEngine.Runtime;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Runtime.Hosting;
 
@@ -67,7 +68,7 @@ internal sealed class EngineModuleHost : IDisposable
                     throw new InvalidDataException($"Could not construct Engine Module '{module.Id}'"));
                 _started.Add(instance);
                 instance.Startup(createContext(module.Id, module.Type));
-                Console.Error.WriteLine($"[EngineModule] Started {module.Id} ({module.Type})");
+                SharpLog.Info("EngineModule", $"Started {module.Id} ({module.Type})");
             }
         }
         catch
@@ -88,7 +89,8 @@ internal sealed class EngineModuleHost : IDisposable
             catch (Exception exception)
             {
                 ShutdownError = exception.ToString();
-                Console.Error.WriteLine($"[EngineModule] Shutdown failed: {exception}");
+                SharpLog.Error("EngineModule", "Shutdown failed", exception,
+                    new Dictionary<string, string> { ["module"] = _started[index].GetType().FullName ?? string.Empty });
             }
         }
         _started.Clear();

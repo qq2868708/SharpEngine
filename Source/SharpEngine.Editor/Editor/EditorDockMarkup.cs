@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Editor;
 
@@ -30,8 +31,36 @@ internal static class EditorDockMarkup
                 EditorPaneIds.Hierarchy => "Hierarchy",
                 EditorPaneIds.Inspector => "Inspector",
                 EditorPaneIds.Console => "Console",
+                EditorPaneIds.Logs => "Logs",
                 _ => paneId,
             };
+
+    internal static string LogEntriesId(string hostId) => $"logs-{hostId}";
+
+    internal static string BuildLogEntriesMarkup(IEnumerable<SharpLogEvent> entries)
+    {
+        var markup = new StringBuilder();
+        foreach (var entry in entries)
+        {
+            markup.Append("<div class=\"log-entry log-level-")
+                .Append(Escape(entry.LevelName)).Append("\">")
+                .Append("<span class=\"log-time\">")
+                .Append(Escape(entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")))
+                .Append("</span><span class=\"log-level\">")
+                .Append(Escape(entry.LevelName.ToUpperInvariant()))
+                .Append("</span><span class=\"log-source\">")
+                .Append(Escape(entry.Source)).Append("</span><span class=\"log-category\">")
+                .Append(Escape(entry.Category)).Append("</span><span class=\"log-message\">")
+                .Append(Escape(entry.Message));
+            if (!string.IsNullOrWhiteSpace(entry.Exception))
+                markup.Append("<span class=\"log-exception\">")
+                    .Append(Escape(entry.Exception!)).Append("</span>");
+            markup.Append("</span></div>");
+        }
+        return markup.Length == 0
+            ? "<div class=\"logs-empty\">No log records yet.</div>"
+            : markup.ToString();
+    }
 
     private static void AppendNode(StringBuilder markup, DockNodeState node, string hostId,
         string viewportTitle, string activeContentManagerId,
@@ -122,7 +151,7 @@ internal static class EditorDockMarkup
                 .Append(active ? " active" : string.Empty).Append("\" data-pane-id=\"")
                 .Append(Escape(pane.PaneId)).Append("\" style=\"display:")
                 .Append(active ? "flex" : "none").Append(";\">");
-            AppendPane(markup, pane.PaneId, activeContentManagerId, contentManagers);
+            AppendPane(markup, hostId, pane.PaneId, activeContentManagerId, contentManagers);
             markup.Append("</div>");
         }
         markup.Append("</div><div class=\"dock-drop-preview\" data-dock-preview=\"result\" />")
@@ -137,7 +166,7 @@ internal static class EditorDockMarkup
             .Append("</div>");
     }
 
-    private static void AppendPane(StringBuilder markup, string paneId,
+    private static void AppendPane(StringBuilder markup, string hostId, string paneId,
         string activeContentManagerId,
         IReadOnlyDictionary<string, ContentManagerLayoutState> contentManagers)
     {
@@ -156,7 +185,14 @@ internal static class EditorDockMarkup
                 markup.Append("<div id=\"inspectorContent\" class=\"pane-content\"><div id=\"selectedObject\">Main Scene</div><div class=\"object-kind\" id=\"selectedKind\">World</div><div id=\"componentInspector\"></div><div class=\"legacy-inspector-details\"><div class=\"component-title\">Details</div><div class=\"field\"><label>Parent</label><span id=\"parent\">None</span></div><div class=\"field\"><label>Position</label><span id=\"position\">0 / 0 / 0</span></div><div class=\"field\"><label>Rotation</label><span id=\"rotation\">0 / 0 / 0</span></div><div class=\"field\"><label>Scale</label><span id=\"scale\">1 / 1 / 1</span></div></div><div class=\"component\"><div class=\"component-title\">Properties</div><div class=\"field\"><label>State</label><span id=\"status\">Ready</span></div><div class=\"field\"><label>Source</label><span id=\"assetSource\">Engine</span></div></div></div>");
                 break;
             case EditorPaneIds.Console:
-                markup.Append("<div class=\"console-header\"><span class=\"good\">0 errors</span></div><div class=\"console-line\"><span class=\"log-time\">[Editor]</span><span id=\"detailsText\">Engine initialized.</span></div><div class=\"console-line muted\"><span class=\"log-time\">[UI]</span><span>RmlUi 6.1 / OpenGL renderer</span></div>");
+                markup.Append("<div class=\"console-header\"><span class=\"good\">Editor status</span></div><div class=\"console-line\"><span class=\"log-time\">[Editor]</span><span id=\"detailsText\">Engine initialized.</span></div><div class=\"console-line muted\"><span class=\"log-time\">[UI]</span><span>RmlUi 6.1 / OpenGL renderer</span></div>");
+                break;
+            case EditorPaneIds.Logs:
+                markup.Append("<div class=\"logs-pane\"><div class=\"logs-header\"><span class=\"logs-title\">Unified Log</span><span class=\"logs-hint\">time · level · source · category · message</span></div><div id=\"")
+                    .Append(Escape(LogEntriesId(hostId)))
+                    .Append("\" class=\"log-entries\">")
+                    .Append(BuildLogEntriesMarkup([]))
+                    .Append("</div></div>");
                 break;
             case EditorPaneIds.Viewport:
                 markup.Append("<div class=\"viewport-pane\"><viewport id=\"viewportCanvas\" tabindex=\"0\" /><div id=\"viewportOverlay\"><button id=\"moveTool\" class=\"viewport-tool icon-button active\" action=\"editor.tool-move\" title=\"Move\"><img class=\"icon\" src=\"Icons/move.tga\" /></button><button id=\"rotateTool\" class=\"viewport-tool icon-button\" action=\"editor.tool-rotate\" title=\"Rotate\"><img class=\"icon\" src=\"Icons/rotate.tga\" /></button><button id=\"scaleTool\" class=\"viewport-tool icon-button\" action=\"editor.tool-scale\" title=\"Scale\"><img class=\"icon\" src=\"Icons/scale.tga\" /></button><button id=\"viewportProjection\" class=\"viewport-projection\">Perspective</button></div><div class=\"viewport-footer\"><span id=\"viewportStats\">Scene ready</span><div class=\"grow\" /><span id=\"viewportHelp\">WASD/QE Move - RMB Orbit - MMB Pan - Wheel Zoom</span></div></div>");

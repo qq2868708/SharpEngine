@@ -77,6 +77,26 @@ input:focus { border-color: #5d94d2; }
 .log-time { margin-right: 10px; color: #5a8cb4; }
 .muted { color: #748093; }
 .good { color: #78b893; }
+.logs-pane { display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; background-color: #1d222a; }
+.logs-header { display: flex; flex-shrink: 0; align-items: center; height: 30px; padding: 0px 10px; border-bottom: 1px #303744; }
+.logs-title { color: #d5deeb; font-size: 11px; }
+.logs-hint { margin-left: 12px; color: #6e7d91; font-size: 9px; }
+.log-entries { flex-grow: 1; min-width: 0px; min-height: 0px; overflow: auto; padding: 2px 0px; }
+.log-entry { display: flex; align-items: flex-start; min-width: 0px; padding: 4px 10px; border-bottom: 1px #29313a; font-size: 10px; line-height: 14px; }
+.log-entry:hover { background-color: #29323d; }
+.log-entry .log-time { width: 78px; flex-shrink: 0; margin-right: 8px; color: #6f89a5; }
+.log-level { width: 58px; flex-shrink: 0; margin-right: 8px; color: #8ea1b8; font-size: 9px; }
+.log-source { width: 62px; flex-shrink: 0; margin-right: 8px; color: #718399; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.log-category { width: 112px; flex-shrink: 0; margin-right: 8px; color: #9eb8d2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.log-message { flex-grow: 1; min-width: 0px; color: #cbd4df; white-space: normal; }
+.log-exception { display: block; margin-top: 2px; color: #d99aa4; white-space: pre-wrap; }
+.log-level-warning .log-level { color: #e2bd79; }
+.log-level-error .log-level, .log-level-critical .log-level { color: #e08b96; }
+.log-level-debug .log-level, .log-level-trace .log-level { color: #8091a7; }
+.logs-empty { padding: 12px 10px; color: #6d7c90; font-size: 10px; }
+.log-entries scrollbarvertical { width: 12px; background-color: #191d24; }
+.log-entries scrollbarvertical sliderbar { width: 10px; min-height: 16px; margin-left: 1px; background-color: #48576a; border-radius: 3px; }
+.log-entries scrollbarvertical sliderbar:hover { background-color: #6a9ed1; }
 #inspector { width: 286px; border-left: 1px #111419; display: flex; flex-direction: column; }
 #selectedObject { font-size: 16px; color: #e0e6f0; margin: 4px 0px; }
 .object-kind { color: #6e7e94; font-size: 11px; margin-bottom: 20px; }

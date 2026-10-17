@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Editor;
 
@@ -163,8 +164,12 @@ internal sealed class EditorMcpSessionHost : IDisposable
         _runtime = runtime;
         _registration = McpSessionRegistry.Register(runtime);
         _serverTask = Task.Run(RunServerAsync);
-        Console.Error.WriteLine($"[MCP] session={_registration.Descriptor.SessionId} " +
-            $"mode={_registration.Descriptor.Mode} pipe={_registration.Descriptor.PipeName}");
+        SharpLog.Info("MCP", "Session started", new Dictionary<string, string>
+        {
+            ["sessionId"] = _registration.Descriptor.SessionId,
+            ["mode"] = _registration.Descriptor.Mode,
+            ["pipe"] = _registration.Descriptor.PipeName,
+        });
     }
 
     internal McpEditorSessionDescriptor Descriptor => _registration.Descriptor;
@@ -224,7 +229,7 @@ internal sealed class EditorMcpSessionHost : IDisposable
             }
             catch (Exception exception) when (!cancellation.IsCancellationRequested)
             {
-                Console.Error.WriteLine($"[MCP] session pipe failed: {exception}");
+                SharpLog.Error("MCP", "Session pipe failed", exception);
             }
         }
     }

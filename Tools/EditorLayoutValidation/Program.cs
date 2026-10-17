@@ -63,8 +63,9 @@ Require(migrated.SchemaVersion == EditorLayoutDocument.CurrentSchemaVersion &&
 
 try
 {
-    EditorLayoutJson.Parse(firstJson.Replace("\"schemaVersion\": 2,",
-        "\"schemaVersion\": 2,\n  \"unknown\": true,"));
+    var schemaField = $"\"schemaVersion\": {EditorLayoutDocument.CurrentSchemaVersion},";
+    EditorLayoutJson.Parse(firstJson.Replace(schemaField,
+        $"{schemaField}\n  \"unknown\": true,"));
     throw new Exception("Unknown JSON fields must be rejected.");
 }
 catch (EditorLayoutException exception)
@@ -75,9 +76,9 @@ catch (EditorLayoutException exception)
 
 foreach (var invalidJson in new[]
 {
-    firstJson.Replace("\"schemaVersion\": 2,", string.Empty),
-    firstJson.Replace("\"schemaVersion\": 2,",
-        "\"schemaVersion\": 2,\n  \"schemaVersion\": 2,"),
+    firstJson.Replace($"\"schemaVersion\": {EditorLayoutDocument.CurrentSchemaVersion},", string.Empty),
+    firstJson.Replace($"\"schemaVersion\": {EditorLayoutDocument.CurrentSchemaVersion},",
+        $"\"schemaVersion\": {EditorLayoutDocument.CurrentSchemaVersion},\n  \"schemaVersion\": {EditorLayoutDocument.CurrentSchemaVersion},"),
 })
 {
     try

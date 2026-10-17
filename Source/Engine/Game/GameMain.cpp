@@ -10,6 +10,7 @@
 #include <vector>
 #include "ManagedHost.h"
 #include "Platform/Windows/SharpEngineBranding.h"
+#include "Logging/EngineLog.h"
 #include "RenderCore/Public/PreviewRenderer.h"
 
 namespace {
@@ -85,7 +86,7 @@ int wmain(int argc,wchar_t** argv) {
         else if(arg==L"--screenshot"&&i+1<argc) screenshot=argv[++i];
         else if(arg==L"--hidden") hidden=true;
     }
-    if(project.empty()) { std::cerr<<"GAME_PROJECT_REQUIRED: use --project <file.sharpproject>\n"; return 2; }
+    if(project.empty()) { EngineLog::Error("Game", "GAME_PROJECT_REQUIRED: use --project <file.sharpproject>"); return 2; }
     std::wstring exe(32768,L'\0');exe.resize(GetModuleFileNameW(nullptr,exe.data(),static_cast<DWORD>(exe.size())));
     const auto directory=std::filesystem::path(exe).parent_path();
     auto root=directory;
@@ -95,6 +96,7 @@ int wmain(int argc,wchar_t** argv) {
     if(!ResolveManagedProject(project,selection)) return 2;
     SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST",selection.ProjectManifest.c_str());
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT",selection.EngineRoot.c_str());
+    EngineLog::Configure(selection.ProjectRoot, "Game");
     SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Game");
     WNDCLASSW wc{};wc.lpfnWndProc=Procedure;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"SharpEngineGameWindow";wc.style=CS_OWNDC;wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
     wc.hIcon=SharpEngine::Windows::LoadBrandIcon(wc.hInstance,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON));

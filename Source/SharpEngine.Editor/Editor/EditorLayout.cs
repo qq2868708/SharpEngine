@@ -16,10 +16,11 @@ public static class EditorPaneIds
     public const string Content4 = "content-4";
     public const string Inspector = "inspector";
     public const string Console = "console";
+    public const string Logs = "logs";
 
     public static IReadOnlyList<string> BuiltIn { get; } =
         [Viewport, UiEditor, Hierarchy, Content, Content2, Content3, Content4,
-            Inspector, Console];
+            Inspector, Console, Logs];
 
     public static IReadOnlyList<string> ContentManagers { get; } =
         [Content, Content2, Content3, Content4];
@@ -45,7 +46,7 @@ public enum DockEdge { Left, Right, Top, Bottom }
 
 public sealed class EditorLayoutDocument
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     [JsonRequired, JsonPropertyOrder(0)] public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     [JsonRequired, JsonPropertyOrder(1)] public DockHostState MainHost { get; set; } = new();
@@ -226,22 +227,62 @@ public static class EditorLayoutJson
 
     private static void Migrate(JsonObject root)
     {
-        if (root["schemaVersion"]?.GetValue<int>() != 1) return;
-        if (root.ContainsKey("activeContentManagerId") || root.ContainsKey("contentManagers"))
-            throw new JsonException("Schema v1 cannot contain schema v2 content manager fields.");
-        var hidden = root["hiddenPaneIds"]?.AsArray() ??
-            throw new JsonException("The hiddenPaneIds collection is required.");
-        if (hidden.Any(value => EditorPaneIds.ContentManagers.Skip(1).Contains(
-                value?.GetValue<string>(), StringComparer.Ordinal)))
-            throw new JsonException("Schema v1 cannot contain additional content manager panes.");
-        foreach (var paneId in EditorPaneIds.ContentManagers.Skip(1))
-            if (!hidden.Any(value => string.Equals(value?.GetValue<string>(), paneId,
-                    StringComparison.Ordinal)))
-                hidden.Add(paneId);
-        root["schemaVersion"] = EditorLayoutDocument.CurrentSchemaVersion;
-        root["activeContentManagerId"] = EditorPaneIds.Content;
-        root["contentManagers"] = JsonSerializer.SerializeToNode(
-            EditorLayoutDocument.CreateDefaultContentManagers(), Options);
+        var version = root["schemaVersion"]?.GetValue<int>();
+        if (version == 1)
+        {
+            if (root.ContainsKey("activeContentManagerId") || root.ContainsKey("contentManagers"))
+                throw new JsonException("Schema v1 cannot contain schema v2 content manager fields.");
+            var hidden = root["hiddenPaneIds"]?.AsArray() ??
+                throw new JsonException("The hiddenPaneIds collection is required.");
+            if (hidden.Any(value => EditorPaneIds.ContentManagers.Skip(1).Contains(
+                    value?.GetValue<string>(), StringComparer.Ordinal)))
+                throw new JsonException("Schema v1 cannot contain additional content manager panes.");
+            foreach (var paneId in EditorPaneIds.ContentManagers.Skip(1))
+                if (!hidden.Any(value => string.Equals(value?.GetValue<string>(), paneId,
+                        StringComparison.Ordinal)))
+                    hidden.Add(paneId);
+            root["activeContentManagerId"] = EditorPaneIds.Content;
+            root["contentManagers"] = JsonSerializer.SerializeToNode(
+                EditorLayoutDocument.CreateDefaultContentManagers(), Options);
+            version = 2;
+        }
+
+        if (version == 2)
+        {
+            if (!AddLogsToConsoleGroup(root))
+                throw new JsonException("Schema v2 layout does not contain a Console tab group.");
+            root["schemaVersion"] = EditorLayoutDocument.CurrentSchemaVersion;
+        }
+    }
+
+    private static bool AddLogsToConsoleGroup(JsonObject root)
+    {
+        if (root["mainHost"] is not JsonObject mainHost ||
+            mainHost["root"] is not JsonObject node)
+            return false;
+        return AddLogsToConsoleGroupNode(node);
+    }
+
+    private static bool AddLogsToConsoleGroupNode(JsonObject node)
+    {
+        if (string.Equals(node["kind"]?.GetValue<string>(), "tabs", StringComparison.Ordinal))
+        {
+            if (node["tabGroup"] is not JsonObject tabGroup ||
+                tabGroup["panes"] is not JsonArray panes)
+                return false;
+            var hasConsole = panes.Any(pane => string.Equals(
+                (pane as JsonObject)?["paneId"]?.GetValue<string>(),
+                EditorPaneIds.Console, StringComparison.Ordinal));
+            if (!hasConsole) return false;
+            if (!panes.Any(pane => string.Equals(
+                    (pane as JsonObject)?["paneId"]?.GetValue<string>(),
+                    EditorPaneIds.Logs, StringComparison.Ordinal)))
+                panes.Add(new JsonObject { ["paneId"] = EditorPaneIds.Logs });
+            return true;
+        }
+
+        return (node["first"] is JsonObject first && AddLogsToConsoleGroupNode(first)) ||
+            (node["second"] is JsonObject second && AddLogsToConsoleGroupNode(second));
     }
 
     private static string? FindDuplicateProperty(JsonElement element, string path,
@@ -694,6 +735,7 @@ public static class DockLayoutCalculator
             EditorPaneIds.Hierarchy => new(180, 140),
             EditorPaneIds.Inspector => new(240, 180),
             EditorPaneIds.Console => new(300, 100),
+            EditorPaneIds.Logs => new(420, 160),
             _ => new(160, 100),
         };
 }

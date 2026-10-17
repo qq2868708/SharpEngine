@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using SharpEngine.Editor;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Editor.Hosting;
 
@@ -69,6 +70,7 @@ internal sealed class ProjectCodeService : IDisposable
             catch (OperationCanceledException) { break; }
             catch (Exception error)
             {
+                SharpLog.Error("ProjectBuild", "Project build watcher failed", error);
                 _updates.Enqueue(new("BuildFailed", error.Message));
             }
         }
@@ -92,7 +94,14 @@ internal sealed class ProjectCodeService : IDisposable
         var output = await stdout + Environment.NewLine + await stderr;
         var logDirectory = Path.Combine(_root, "Saved", "Logs");
         Directory.CreateDirectory(logDirectory);
-        File.WriteAllText(Path.Combine(logDirectory, "ProjectBuild.log"), output);
+        var logPath = Path.Combine(logDirectory, "ProjectBuild.log");
+        File.WriteAllText(logPath, output);
+        SharpLog.Info("ProjectBuild", "Project build completed", new Dictionary<string, string>
+        {
+            ["success"] = (process.ExitCode == 0).ToString(),
+            ["exitCode"] = process.ExitCode.ToString(),
+            ["logPath"] = logPath,
+        });
         return (process.ExitCode == 0, process.ExitCode == 0 ? "Project build complete; ready to reload" :
             output.Length <= 12000 ? output : output[^12000..]);
     }
@@ -131,6 +140,7 @@ internal sealed class ProjectCodeService : IDisposable
         }
         catch (Exception error)
         {
+            SharpLog.Error("ProjectModules", "Project module reload failed", error);
             candidate?.Dispose();
             preparation?.Dispose();
             if (switching) _runtime.SetProjectCodeAvailable(false, "Project reload failed. Edit code and rebuild to recover; Editor remains open.");

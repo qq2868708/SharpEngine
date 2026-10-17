@@ -1,4 +1,5 @@
 #include "VkContext.h"
+#include "../../../Logging/EngineLog.h"
 
 #include <cassert>
 #include <cstring>
@@ -27,7 +28,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDebugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
     void* userData)
 {
-    std::cerr << "[Vulkan] " << callbackData->pMessage << std::endl;
+    EngineLog::Warning("Vulkan", callbackData->pMessage ? callbackData->pMessage : "Validation callback without a message");
     return VK_FALSE;
 }
 
@@ -109,7 +110,7 @@ bool VkContext::CreateInstance(const RenderInitDesc* desc)
     VkResult result = vkCreateInstance(&createInfo, nullptr, &Instance);
     if (result != VK_SUCCESS)
     {
-        std::cerr << "Failed to create Vulkan Instance!" << std::endl;
+        EngineLog::Error("Vulkan", "Failed to create Vulkan Instance");
         return false;
     }
 
@@ -136,13 +137,13 @@ bool VkContext::SetupDebugMessenger()
 
     if (!func)
     {
-        std::cerr << "vkCreateDebugUtilsMessengerEXT not found!" << std::endl;
+        EngineLog::Error("Vulkan", "vkCreateDebugUtilsMessengerEXT not found");
         return false;
     }
 
     if (func(Instance, &createInfo, nullptr, &DebugMessenger) != VK_SUCCESS)
     {
-        std::cerr << "Failed to create Debug Messenger!" << std::endl;
+        EngineLog::Error("Vulkan", "Failed to create Debug Messenger");
         return false;
     }
 
@@ -193,7 +194,7 @@ bool VkContext::PickPhysicalDevice()
 
     if (deviceCount == 0)
     {
-        std::cerr << "No Vulkan physical devices found!" << std::endl;
+        EngineLog::Error("Vulkan", "No Vulkan physical devices found");
         return false;
     }
 
@@ -237,7 +238,7 @@ bool VkContext::PickPhysicalDevice()
         }
     }
 
-    std::cerr << "Failed to find suitable GPU!" << std::endl;
+    EngineLog::Error("Vulkan", "Failed to find suitable GPU");
     return false;
 }
 
@@ -288,7 +289,7 @@ bool VkContext::CreateLogicalDevice()
 
     if (vkCreateDevice(PhysicalDevice, &createInfo, nullptr, &Device) != VK_SUCCESS)
     {
-        std::cerr << "Failed to create logical device!" << std::endl;
+        EngineLog::Error("Vulkan", "Failed to create logical device");
         return false;
     }
 

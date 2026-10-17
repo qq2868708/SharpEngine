@@ -56,6 +56,18 @@ try
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    var logPath = Path.Combine(temporary.FullName, "Saved", "Logs", "Engine.log");
+    using (var logStream = new FileStream(logPath, FileMode.Append, FileAccess.Write,
+        FileShare.ReadWrite | FileShare.Delete))
+    using (var logWriter = new StreamWriter(logStream, new System.Text.UTF8Encoding(false)))
+        logWriter.WriteLine(
+            "{\"schemaVersion\":1,\"timestamp\":\"2026-10-18T00:00:00.000Z\",\"level\":\"warning\",\"source\":\"Editor\",\"category\":\"RmlUi\",\"message\":\"native validation record\",\"processId\":1,\"threadId\":1,\"exception\":null,\"properties\":{}}");
+    runtime.Update(0);
+    using var loggingSnapshot = System.Text.Json.JsonDocument.Parse(runtime.DescribeEditorJson());
+    Require(loggingSnapshot.RootElement.GetProperty("logging").GetProperty("recentEvents")
+            .EnumerateArray().Any(value => value.GetProperty("category").GetString() == "RmlUi" &&
+                value.GetProperty("message").GetString() == "native validation record"),
+        "Logs pane history must include records appended by the native unified log sink");
     runtime.RegisterProjectSettingsAssembly(typeof(ValidationProjectSettings).Assembly);
     using var uiContract = runtime.UiRuntime.RegisterViewModel<ValidationMainScreen>(
         "validation.main", 1);
@@ -241,6 +253,18 @@ try
     Require(player.ParentId.Length == 0,
         "Hierarchy drag must be disabled while its search filter is active");
     runtime.InvokeUiAction("editor.search-hierarchy:");
+    runtime.InvokeUiAction("editor.dock-close:logs");
+    using var logsHiddenSnapshot = System.Text.Json.JsonDocument.Parse(runtime.DescribeEditorJson());
+    Require(logsHiddenSnapshot.RootElement.GetProperty("layout").GetProperty("hiddenPaneIds")
+            .EnumerateArray().Any(value => value.GetString() == "logs") &&
+        !logsHiddenSnapshot.RootElement.GetProperty("layout").GetProperty("hiddenPaneIds")
+            .EnumerateArray().Any(value => value.GetString() == "console"),
+        "Closing Logs must hide Logs while keeping Console visible");
+    runtime.InvokeUiAction("editor.dock-toggle:logs");
+    Require(runtime.DescribeEditorJson().Contains("\"hostId\": \"float.logs",
+            StringComparison.Ordinal),
+        "View menu reopen must create a distinct floating Logs host");
+    runtime.InvokeUiAction("editor.dock-close:logs");
     runtime.InvokeUiAction("editor.dock-close:console");
     using var hiddenSnapshot = System.Text.Json.JsonDocument.Parse(runtime.DescribeEditorJson());
     Require(hiddenSnapshot.RootElement.GetProperty("layout").GetProperty("hiddenPaneIds")

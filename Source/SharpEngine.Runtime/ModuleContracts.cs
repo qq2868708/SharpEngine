@@ -1,5 +1,7 @@
 namespace SharpEngine.Runtime;
 
+using SharpEngine.Logging;
+
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
 public sealed class SharpEngineModuleAttribute(string id, string type) : Attribute
 {
@@ -41,6 +43,7 @@ public class ModuleContext
         Ui = ui;
         Input = input;
         Components = components;
+        Logger = SharpLog.For(moduleId);
     }
 
     public string ProjectRoot { get; }
@@ -49,6 +52,8 @@ public class ModuleContext
     public IUiRuntime? Ui { get; }
     public IInputRuntime? Input { get; }
     public IComponentRuntime? Components { get; }
+    /// <summary>Structured logger scoped to this module id.</summary>
+    public ISharpLogger Logger { get; }
 }
 
 public interface IComponentRuntime

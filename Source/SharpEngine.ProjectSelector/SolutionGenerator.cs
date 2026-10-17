@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using SharpEngine.Logging;
 using System.Xml.Linq;
 
 namespace SharpEngine.ProjectSelector;
@@ -111,7 +112,7 @@ internal static class SolutionGenerator
                 using System.Diagnostics;
                 var configuration = new DirectoryInfo(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Name;
                 var executable = Path.Combine({{JsonSerializer.Serialize(engine.Root)}}, "Binaries", "Win64", configuration, "{{target}}", "Engine.exe");
-                if (!File.Exists(executable)) { Console.Error.WriteLine($"Build this Target first: {executable}"); return 1; }
+                if (!File.Exists(executable)) { SharpLog.Error("ProjectSelector", $"Build this Target first: {executable}"); return 1; }
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = {{JsonSerializer.Serialize(manifest is null ? engine.Root : Path.GetDirectoryName(manifest))}} };
                 {{(manifest is null ? "" : "start.ArgumentList.Add(\"--project\"); start.ArgumentList.Add(" + JsonSerializer.Serialize(manifest) + ");")}}
                 foreach (var argument in args) start.ArgumentList.Add(argument);

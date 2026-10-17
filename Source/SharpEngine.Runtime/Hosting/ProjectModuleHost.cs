@@ -3,6 +3,7 @@ using System.Runtime.Loader;
 using System.Security.Cryptography;
 using System.Text.Json;
 using SharpEngine.Runtime;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Runtime.Hosting;
 
@@ -162,7 +163,7 @@ internal sealed class ProjectModuleHost : IDisposable
             catch (Exception exception)
             {
                 ShutdownError = exception.ToString();
-                Console.Error.WriteLine($"[Module] Shutdown failed: {exception}");
+                SharpLog.Error("Module", "Shutdown failed", exception);
             }
         }
         _modules.Clear();
@@ -234,7 +235,8 @@ internal sealed class ProjectModuleHost : IDisposable
             _modules.Add(instance);
             ModuleContext context = createContext(id, type);
             instance.Startup(context);
-            Console.Error.WriteLine($"[Module] Started {id} ({type})");
+            SharpLog.Info("Module", $"Started {id} ({type})",
+                new Dictionary<string, string> { ["module"] = id, ["type"] = type });
         }
     }
 

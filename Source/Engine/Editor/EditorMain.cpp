@@ -9,6 +9,7 @@
 #include <thread>
 #include "Platform/Platform.h"
 #include "ManagedHost.h"
+#include "Logging/EngineLog.h"
 #include "UI/RmlUiShell.h"
 
 namespace
@@ -211,8 +212,7 @@ int wmain(int argc,wchar_t** argv)
     auto engineRoot=FindEngineRoot(executableDirectory);
     if (engineRoot.empty())
     {
-        std::cerr<<"[Editor] could not locate engine.json from "
-                 <<executableDirectory<<std::endl;
+        EngineLog::Error("Editor", "Could not locate engine.json from " + executableDirectory.string());
         return -1;
     }
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT", engineRoot.c_str());
@@ -225,6 +225,8 @@ int wmain(int argc,wchar_t** argv)
     }
     else SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST", nullptr);
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT", engineRoot.c_str());
+    EngineLog::Configure(selection.ProjectRoot.empty() ? engineRoot : selection.ProjectRoot,
+                         "Editor");
 
     if (mcpStdio)
     {
@@ -237,7 +239,7 @@ int wmain(int argc,wchar_t** argv)
             (executableDirectory/L"SharpEngine.Host.dll").wstring());
         if (!loaded)
         {
-            std::cerr<<"[MCP] managed bridge initialization failed"<<std::endl;
+            EngineLog::Error("MCP", "Managed bridge initialization failed");
             managed.Shutdown();
             return -1;
         }
@@ -254,7 +256,7 @@ int wmain(int argc,wchar_t** argv)
     RmlUiShell ui;
     if (!ui.Initialize(static_cast<HWND>(window.Window),engineRoot))
     {
-        std::cerr<<"[RmlUi] initialization failed"<<std::endl;
+        EngineLog::Error("RmlUi", "Initialization failed");
         ui.Shutdown(); Platform::Shutdown(); return -1;
     }
     GUi=&ui;
@@ -266,7 +268,7 @@ int wmain(int argc,wchar_t** argv)
         (executableDirectory/L"SharpEngine.Host.dll").wstring());
     if (!loaded || !managed.Start(window.Window,1440,900,&api))
     {
-        std::cerr<<"[ManagedHost] initialization failed"<<std::endl;
+        EngineLog::Error("ManagedHost", "Initialization failed");
         GManaged=nullptr; GUi=nullptr; ui.Shutdown(); Platform::Shutdown(); return -1;
     }
     ui.SetActionHandler([&managed, &ui](const char* hostId,
@@ -312,13 +314,13 @@ int wmain(int argc,wchar_t** argv)
         if (!running) break;
         const auto now=std::chrono::steady_clock::now();
         managed.Update(std::chrono::duration<float>(now-previous).count()); previous=now;
-        if (!ui.Render()) { std::cerr<<"[RmlUi] present failed"<<std::endl; renderFailed=true; break; }
+        if (!ui.Render()) { EngineLog::Error("RmlUi", "Present failed"); renderFailed=true; break; }
         ++frames; if (frameLimit && frames>=frameLimit) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
-    std::cout<<"[Editor] frames="<<frames<<std::endl;
+    EngineLog::Info("Editor", "Frames rendered=" + std::to_string(frames));
     if (!screenshot.empty() && !ui.CaptureScreenshot(screenshot))
-    { std::cerr<<"[RmlUi] screenshot write failed"<<std::endl; renderFailed=true; }
+    { EngineLog::Error("RmlUi", "Screenshot write failed"); renderFailed=true; }
     managed.Shutdown(); GUi=nullptr; ui.Shutdown(); Platform::Shutdown();
     GManaged=nullptr;
     return renderFailed ? -1 : 0;

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using SharpEngine.Assets;
+using SharpEngine.Logging;
 using SharpEngine.Runtime;
 
 namespace SharpEngine.Input;
@@ -456,7 +457,13 @@ internal sealed class InputRuntimeService : IInputRuntime
                     exception.GetType().Name, _stateRevision, true, exception.Message);
                 _diagnostics.Add(diagnostic);
                 if (_diagnostics.Count > RecentEventLimit) _diagnostics.RemoveAt(0);
-                Console.Error.WriteLine($"[Input] {diagnostic.Code} {action.Id}: {exception}");
+                SharpLog.Error("Input", $"{diagnostic.Code} {action.Id}", exception,
+                    new Dictionary<string, string>
+                    {
+                        ["code"] = diagnostic.Code,
+                        ["action"] = action.Id,
+                        ["stateRevision"] = _stateRevision.ToString(),
+                    });
             }
         }
         return false;

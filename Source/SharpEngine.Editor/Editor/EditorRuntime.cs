@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Diagnostics;
 using System.Net;
@@ -7,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Logging;
 using SharpEngine.Runtime;
 using SharpEngine.UI;
 using SharpEngine.World;
@@ -33,6 +35,14 @@ public sealed partial class EditorRuntime
     private readonly Dictionary<IEditorExtension, IDisposable> _extensions =
         new(ReferenceEqualityComparer.Instance);
     private readonly Queue<string> _messages = new();
+    private readonly Queue<string> _consoleMessages = new();
+    private readonly Queue<SharpLogEvent> _logHistory = new();
+    private readonly ConcurrentQueue<SharpLogEvent> _pendingLogs = new();
+    private readonly ConcurrentDictionary<string, byte> _knownLogEntries = new(StringComparer.Ordinal);
+    private const int LogHistoryLimit = 200;
+    private readonly IDisposable _logSubscription;
+    private long _logFilePosition;
+    private string _logFileRemainder = string.Empty;
     private AssetRegistry? _assets;
     private ContentManagerCoordinator? _contentManagers;
     private WorldDocument? _world;
@@ -103,6 +113,11 @@ public sealed partial class EditorRuntime
         _contextMenus = new EditorContextMenuRegistry(_commands, MarkExtensionUiDirty);
         _commandContext = new EditorCommandContext(this);
         _context = new EditorContext(this, _commands, _menus, _toolbar, _contextMenus);
+        _logSubscription = SharpLog.Subscribe(entry =>
+        {
+            if (_knownLogEntries.TryAdd(LogIdentity(entry), 0))
+                _pendingLogs.Enqueue(entry);
+        });
     }
 
     public WorldDocument? World => _world;
@@ -199,6 +214,23 @@ public sealed partial class EditorRuntime
         mcp = DescribeMcpLinks(),
         input = JsonNode.Parse(DescribeInputJson()),
         projectCode = JsonNode.Parse(DescribeProjectCodeJson()),
+        logging = new
+        {
+            filePath = SharpLog.FilePath,
+            minimumLevel = SharpLog.MinimumLevel.ToString(),
+            recent = _messages.ToArray(),
+            consoleRecent = _consoleMessages.ToArray(),
+            recentEvents = _logHistory.Select(entry => new
+            {
+                timestamp = entry.Timestamp,
+                level = entry.LevelName,
+                source = entry.Source,
+                category = entry.Category,
+                message = entry.Message,
+                exception = entry.Exception,
+                properties = entry.Properties,
+            }).ToArray(),
+        },
         inputDemo = new { open = _inputDemoOpen, uiConsumes = _inputDemoConsume,
             uiCount = _inputDemoUiCount, gameplayCount = _inputDemoGameCount,
             x = _inputDemoX, y = _inputDemoY },
@@ -363,6 +395,8 @@ public sealed partial class EditorRuntime
         _projectManifest = FindProjectManifest();
         _projectRoot = _projectManifest is null ? null :
             Path.GetDirectoryName(_projectManifest)!;
+        SharpLog.Initialize("Editor", _projectRoot, _engineRoot);
+        ResetLogFileTail();
         InitializeDevelopmentSettings();
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
         _defaultLayout = _layoutStore.LoadDefault(_engineRoot);
@@ -373,9 +407,9 @@ public sealed partial class EditorRuntime
         }
         catch (EditorLayoutException exception)
         {
-            Console.Error.WriteLine($"[EditorLayout] {exception.Message}");
+            SharpLog.Error("EditorLayout", exception.Message, exception);
             foreach (var diagnostic in exception.Diagnostics)
-                Console.Error.WriteLine($"[EditorLayout] {diagnostic.Code} {diagnostic.Path}: {diagnostic.Message}");
+                SharpLog.Error("EditorLayout", $"{diagnostic.Code} {diagnostic.Path}: {diagnostic.Message}");
             _layout = new EditorLayoutSession(_defaultLayout);
         }
         var contentLayout = _layout.Document;
@@ -412,17 +446,33 @@ public sealed partial class EditorRuntime
         RefreshSettingsUi();
         RefreshViewportModeUi();
         RefreshUiEditor();
+        RefreshLogUi();
         RefreshExtensionUi();
         SetStatus($"Loaded {_world.Name} · {_world.Entities.Count} entities · {_assets.Assets.Count} assets");
         foreach (var diagnostic in _assets.Diagnostics) Log(diagnostic.Message);
-        Console.Error.WriteLine($"[World] source={_world.SourcePath}, entities={_world.Entities.Count}, meshes={_world.MeshCount}, camera={_world.ActiveCameraId}");
-        Console.Error.WriteLine($"[Assets] engine={_assets.EngineAssets.Count()}, project={_assets.ProjectAssets.Count()}, diagnostics={_assets.Diagnostics.Count}");
-        Console.Error.WriteLine($"[ManagedUI] RmlUi bridge={_nativeApi.HasDocumentUi}, public-api={typeof(EditorRuntime).Assembly.GetName().Name}");
+        SharpLog.Info("World", $"Loaded source={_world.SourcePath}", new Dictionary<string, string>
+        {
+            ["entities"] = _world.Entities.Count.ToString(),
+            ["meshes"] = _world.MeshCount.ToString(),
+            ["camera"] = _world.ActiveCameraId ?? string.Empty,
+        });
+        SharpLog.Info("Assets", "Asset registry loaded", new Dictionary<string, string>
+        {
+            ["engine"] = _assets.EngineAssets.Count().ToString(),
+            ["project"] = _assets.ProjectAssets.Count().ToString(),
+            ["diagnostics"] = _assets.Diagnostics.Count.ToString(),
+        });
+        SharpLog.Info("ManagedUI", "Managed UI bridge initialized", new Dictionary<string, string>
+        {
+            ["documentUi"] = _nativeApi.HasDocumentUi.ToString(),
+            ["assembly"] = typeof(EditorRuntime).Assembly.GetName().Name ?? string.Empty,
+        });
         if (HasLiveUi) _mcpSession = new EditorMcpSessionHost(this);
     }
 
     public void Update(float deltaSeconds)
     {
+        DrainLogs();
         PollDevelopmentSettings();
         UpdateInputDemo();
         // Conditions can depend on project C# state. Compare the resulting markup
@@ -448,7 +498,12 @@ public sealed partial class EditorRuntime
             _nativeApi.SubmitViewportFrame(frame);
             if (_frameCount == 1)
             {
-                Console.Error.WriteLine($"[Viewport] bounds={viewport}, triangles={frame.TriangleCount}, lines={frame.LineCount}, camera={frame.CameraId}");
+                SharpLog.Info("Viewport", $"First frame bounds={viewport}", new Dictionary<string, string>
+                {
+                    ["triangles"] = frame.TriangleCount.ToString(),
+                    ["lines"] = frame.LineCount.ToString(),
+                    ["camera"] = frame.CameraId ?? string.Empty,
+                });
                 foreach (var diagnostic in frame.Diagnostics) Log(diagnostic);
             }
             _statsElapsed += Math.Max(0, deltaSeconds);
@@ -902,7 +957,7 @@ public sealed partial class EditorRuntime
             _extensions.Remove(extension);
             try { extension.Shutdown(); }
             catch (Exception exception)
-            { Console.Error.WriteLine($"[EditorExtension] Shutdown failed: {exception}"); }
+            { SharpLog.Error("EditorExtension", "Shutdown failed", exception); }
             MarkExtensionUiDirty();
         });
         _extensions.Add(extension, registration);
@@ -929,7 +984,10 @@ public sealed partial class EditorRuntime
         _menus.Clear();
         _commands.Clear();
         RefreshExtensionUi();
-        Console.Error.WriteLine($"[Game] Shutdown after {_frameCount} managed frames");
+        SharpLog.Info("Editor", $"Shutdown after {_frameCount} managed frames",
+            new Dictionary<string, string> { ["frames"] = _frameCount.ToString() });
+        _logSubscription.Dispose();
+        SharpLog.Flush();
     }
 
     private void SelectEntity(string id)
@@ -2137,7 +2195,7 @@ public sealed partial class EditorRuntime
         process.WaitForExit();
         Task.WaitAll(output, errors);
         if (process.ExitCode != 0) throw new IOException($"{fileName} exited {process.ExitCode}: {errors.Result} {output.Result}");
-        Console.Error.WriteLine(output.Result);
+        if (!string.IsNullOrWhiteSpace(output.Result)) SharpLog.Info("EditorTool", output.Result.Trim());
     }
 
     private void SetStatus(string value)
@@ -2149,11 +2207,162 @@ public sealed partial class EditorRuntime
 
     private void Log(string value)
     {
-        Console.Error.WriteLine($"[Editor] {value}");
-        _messages.Enqueue(value);
-        while (_messages.Count > 6) _messages.Dequeue();
-        SetText("detailsText", string.Join('\n', _messages));
+        SharpLog.Info("Editor", value);
     }
+
+    private void DrainLogs()
+    {
+        DrainLogFile();
+        var consoleChanged = false;
+        var logsChanged = false;
+        var pending = new List<SharpLogEvent>();
+        while (_pendingLogs.TryDequeue(out var entry)) pending.Add(entry);
+        foreach (var entry in pending.OrderBy(value => value.Timestamp))
+        {
+            _logHistory.Enqueue(entry);
+            while (_logHistory.Count > LogHistoryLimit) _logHistory.Dequeue();
+            logsChanged = true;
+            var value = $"[{entry.LevelName}][{entry.Category}] {entry.Message}";
+            _messages.Enqueue(value);
+            while (_messages.Count > 6) _messages.Dequeue();
+            if (!IsConsoleEntry(entry)) continue;
+            _consoleMessages.Enqueue(value);
+            while (_consoleMessages.Count > 6) _consoleMessages.Dequeue();
+            consoleChanged = true;
+        }
+        if (consoleChanged && _nativeApi.HasDocumentUi)
+            SetText("detailsText", string.Join('\n', _consoleMessages));
+        if (logsChanged) RefreshLogUi();
+    }
+
+    private void RefreshLogUi()
+    {
+        if (_layout is null) return;
+        var markup = EditorDockMarkup.BuildLogEntriesMarkup(_logHistory);
+        PublishLogEntries(_layout.Document.MainHost, markup);
+        foreach (var floating in _layout.FloatingHosts)
+            PublishLogEntries(new DockHostState
+            {
+                HostId = floating.HostId,
+                Root = floating.Root,
+            }, markup);
+    }
+
+    private void PublishLogEntries(DockHostState host, string markup)
+    {
+        if (!EditorLayoutValidator.EnumeratePanes(host.Root)
+                .Contains(EditorPaneIds.Logs, StringComparer.Ordinal)) return;
+        _nativeApi.SetHostMarkup(host.HostId, EditorDockMarkup.LogEntriesId(host.HostId), markup);
+    }
+
+    private static bool IsConsoleEntry(SharpLogEvent entry) =>
+        entry.Category.Equals("Editor", StringComparison.Ordinal) ||
+        entry.Category.StartsWith("Editor", StringComparison.Ordinal);
+
+    private void ResetLogFileTail()
+    {
+        _logFileRemainder = string.Empty;
+        _logFilePosition = 0;
+        try
+        {
+            if (SharpLog.FilePath is { } path && File.Exists(path))
+                _logFilePosition = new FileInfo(path).Length;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    private void DrainLogFile()
+    {
+        if (SharpLog.FilePath is not { } path || !File.Exists(path)) return;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            if (stream.Length < _logFilePosition)
+            {
+                _logFilePosition = 0;
+                _logFileRemainder = string.Empty;
+            }
+            if (stream.Length == _logFilePosition) return;
+            stream.Position = _logFilePosition;
+            using var reader = new StreamReader(stream, Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
+            var text = _logFileRemainder + reader.ReadToEnd();
+            _logFilePosition = stream.Position;
+            var lines = text.Split('\n');
+            _logFileRemainder = lines[^1];
+            foreach (var line in lines[..^1])
+            {
+                if (TryParseLogEvent(line.TrimEnd('\r'), out var entry) &&
+                    _knownLogEntries.TryAdd(LogIdentity(entry), 0))
+                    _pendingLogs.Enqueue(entry);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    private static bool TryParseLogEvent(string line, out SharpLogEvent entry)
+    {
+        entry = default;
+        if (string.IsNullOrWhiteSpace(line)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("timestamp", out var timestamp) ||
+                !root.TryGetProperty("level", out var level) ||
+                !root.TryGetProperty("category", out var category) ||
+                !root.TryGetProperty("message", out var message) ||
+                !DateTimeOffset.TryParse(timestamp.GetString(), CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind, out var parsedTimestamp) ||
+                !TryParseLogLevel(level.GetString(), out var parsedLevel)) return false;
+            var properties = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("properties", out var propertyObject) &&
+                propertyObject.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in propertyObject.EnumerateObject())
+                    properties[property.Name] = property.Value.ValueKind == JsonValueKind.String
+                        ? property.Value.GetString() ?? string.Empty
+                        : property.Value.GetRawText();
+            }
+            var exception = root.TryGetProperty("exception", out var exceptionValue) &&
+                exceptionValue.ValueKind != JsonValueKind.Null
+                ? exceptionValue.GetString() : null;
+            entry = new SharpLogEvent(parsedTimestamp, parsedLevel,
+                root.TryGetProperty("source", out var source) ? source.GetString() ?? "Unknown" : "Unknown",
+                category.GetString() ?? "General", message.GetString() ?? string.Empty,
+                root.TryGetProperty("processId", out var processId) && processId.TryGetInt32(out var pid)
+                    ? pid : 0,
+                root.TryGetProperty("threadId", out var threadId) && threadId.TryGetInt32(out var tid)
+                    ? tid : 0,
+                exception, properties);
+            return true;
+        }
+        catch (JsonException) { return false; }
+        catch (FormatException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
+    private static bool TryParseLogLevel(string? value, out SharpLogLevel level)
+    {
+        level = value switch
+        {
+            "trace" => SharpLogLevel.Trace,
+            "debug" => SharpLogLevel.Debug,
+            "info" => SharpLogLevel.Information,
+            "warning" => SharpLogLevel.Warning,
+            "error" => SharpLogLevel.Error,
+            "critical" => SharpLogLevel.Critical,
+            _ => SharpLogLevel.Trace,
+        };
+        return value is "trace" or "debug" or "info" or "warning" or "error" or "critical";
+    }
+
+    private static string LogIdentity(SharpLogEvent entry) =>
+        string.Create(CultureInfo.InvariantCulture,
+            $"{entry.Timestamp:O}|{entry.LevelName}|{entry.Source}|{entry.Category}|{entry.Message}|{entry.ProcessId}|{entry.ThreadId}|{entry.Exception}");
 
     private void SetText(string id, string value)
     {

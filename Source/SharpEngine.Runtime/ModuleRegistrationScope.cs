@@ -44,7 +44,7 @@ public sealed class ModuleRegistrationScope : IDisposable
         }
         foreach (var registration in registrations.Reverse())
             try { registration.Dispose(); }
-            catch (Exception error) { Console.Error.WriteLine($"[Module] Registration cleanup: {error}"); }
+            catch (Exception error) { SharpEngine.Logging.SharpLog.Error("Module", "Registration cleanup failed", error); }
     }
 
     private sealed class Restore(Action restore) : IDisposable

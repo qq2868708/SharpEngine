@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using SharpEngine.Logging;
 
 namespace SharpEngine.Components;
 
@@ -273,7 +274,14 @@ public sealed class RuntimeWorld : IDisposable
     private void Report(string code, string id, string stage, Exception error)
     {
         _diagnostics.Add(new(code, id, stage, error.ToString(), Revision: Revision));
-        Console.Error.WriteLine($"[Component:{id}:{stage}] {error}");
+        SharpLog.Error("Component", $"{stage} failed", error,
+            new Dictionary<string, string>
+            {
+                ["componentId"] = id,
+                ["stage"] = stage,
+                ["code"] = code,
+                ["revision"] = Revision.ToString(),
+            });
     }
     public void Dispose()
     {

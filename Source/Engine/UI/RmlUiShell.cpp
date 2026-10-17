@@ -9,6 +9,7 @@
 #include "RmlUi_Platform_Win32.h"
 #include "RmlUi_Renderer_GL2.h"
 #include "Platform/Windows/SharpEngineBranding.h"
+#include "../Logging/EngineLog.h"
 #include <gl/GL.h>
 #include <windowsx.h>
 #include <algorithm>
@@ -109,6 +110,7 @@ namespace
         if (pane == "content-4") return L"Content Manager 4";
         if (pane == "inspector") return L"Inspector";
         if (pane == "console") return L"Console";
+        if (pane == "logs") return L"Logs";
         return Utf8ToWide(std::string(pane).c_str());
     }
 
@@ -1911,8 +1913,7 @@ struct RmlUiShell::Impl
                     return;
                 }
                 EmitAction(host, action);
-                std::cout << "[RmlUi] host=" << host.Id
-                          << " action=" << action << std::endl;
+                EngineLog::Info("RmlUi", "Host action host=" + host.Id + " action=" + action);
                 return;
             }
             target = target->GetParentNode();
@@ -1932,8 +1933,7 @@ struct RmlUiShell::Impl
             {
                 if (result)
                 {
-                    std::cerr << "[RmlUi] element id is not unique across hosts: "
-                              << id << std::endl;
+                    EngineLog::Warning("RmlUi", "Element id is not unique across hosts: " + std::string(id));
                     return nullptr;
                 }
                 result = element;
@@ -1972,7 +1972,7 @@ struct RmlUiShell::Impl
             if (host.Dc) ReleaseDC(host.Window, host.Dc);
             DestroyWindow(host.Window);
         }
-        std::cout << "[RmlUi] dock host destroyed id=" << host.Id << std::endl;
+        EngineLog::Info("RmlUi", "Dock host destroyed id=" + host.Id);
         Hosts.erase(found);
         return true;
     }
@@ -2067,8 +2067,7 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     main.OriginalProcedure = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(
         window, GWLP_WNDPROC,
         reinterpret_cast<LONG_PTR>(&RmlUiShell::WindowProcedure)));
-    std::cout << "[RmlUi] version=6.1 context=editor.main document="
-              << documentPath << std::endl;
+    EngineLog::Info("RmlUi", "Initialized version=6.1 context=editor.main document=" + documentPath);
     return true;
 }
 
@@ -2173,8 +2172,8 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     state.Hosts.push_back(std::move(host));
     ShowWindow(result, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
     UpdateWindow(result);
-    std::cout << "[RmlUi] dock host created id=" << hostId
-              << " document=" << documentPath << std::endl;
+    EngineLog::Info("RmlUi", "Dock host created id=" + std::string(hostId) +
+        " document=" + documentPath);
     return result;
 }
 
@@ -2531,8 +2530,7 @@ bool RmlUiShell::Render()
         if (client.right <= 0 || client.bottom <= 0) continue;
         if (!state.SetCurrentHost(host))
         {
-            std::cerr << "[RmlUi] could not bind OpenGL context for host="
-                      << host.Id << std::endl;
+            EngineLog::Error("RmlUi", "Could not bind OpenGL context for host=" + host.Id);
             presented = false;
             continue;
         }
@@ -2564,18 +2562,19 @@ bool RmlUiShell::Render()
         if (hostPresented) frame.Hosts.push_back(Impl::FrameHostMetadata(host));
         if (hostPresented && !host.Reported)
         {
-            std::cout << "[RmlUi] first-frame presented host=" << host.Id
-                      << " ui-draw-calls=" << state.Renderer.DrawCalls;
+            std::ostringstream firstFrame;
+            firstFrame << "First frame presented host=" << host.Id
+                       << " ui-draw-calls=" << state.Renderer.DrawCalls;
             if (host.Id == "main")
             {
                 UiViewportRect viewport{};
                 GetViewport(viewport);
-                std::cout << " viewport=" << viewport.X << "," << viewport.Y
-                          << "," << viewport.Width << "," << viewport.Height
-                          << " scene-triangles=" << state.Triangles.size() / 3
-                          << " scene-lines=" << state.Lines.size() / 2;
+                firstFrame << " viewport=" << viewport.X << "," << viewport.Y
+                           << "," << viewport.Width << "," << viewport.Height
+                           << " scene-triangles=" << state.Triangles.size() / 3
+                           << " scene-lines=" << state.Lines.size() / 2;
             }
-            std::cout << std::endl;
+            EngineLog::Info("RmlUi", firstFrame.str());
             host.Reported = true;
         }
     }

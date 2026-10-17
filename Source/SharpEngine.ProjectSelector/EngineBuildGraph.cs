@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
+using SharpEngine.Logging;
 
 namespace SharpEngine.ProjectSelector;
 
@@ -100,7 +101,16 @@ internal static class EngineBuildGraph
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
         process.WaitForExit(); Task.WaitAll(output, errors);
-        Console.Write(output.Result); Console.Error.Write(errors.Result);
+        if (!string.IsNullOrWhiteSpace(output.Result)) Console.Write(output.Result);
+        if (!string.IsNullOrWhiteSpace(errors.Result)) Console.Error.Write(errors.Result);
+        var properties = new Dictionary<string, string>
+        {
+            ["exitCode"] = process.ExitCode.ToString(),
+            ["stdoutLength"] = output.Result.Length.ToString(),
+            ["stderrLength"] = errors.Result.Length.ToString(),
+        };
+        if (process.ExitCode == 0) SharpLog.Info("EngineBuild", $"{executable} completed", properties);
+        else SharpLog.Error("EngineBuild", $"{executable} failed", properties: properties);
         if (process.ExitCode != 0) throw new InvalidOperationException($"{executable} exited {process.ExitCode}: {output.Result} {errors.Result}");
     }
 

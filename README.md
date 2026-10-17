@@ -522,11 +522,15 @@ The viewport applies model/view/projection,
 frustum clipping, lighting, and native depth testing. Mesh and material data
 are resolved through the same asset registry as the Project panel. See
 `Content/Worlds/README.md` for the format. The `.sasset` format for non-World
-assets and the full log/output data pipeline remain later work.
+assets remains later work. Engine and project diagnostics use the unified
+structured logging pipeline described in
+`Documentation/Logging.md`; compiler transcripts remain in
+`Saved/Logs/ProjectBuild.log`.
 
 ```powershell
 dotnet run --project Tools/WorldValidation/SharpEngine.WorldValidation.csproj -- D:/SharpEngine
 dotnet run --project Tools/WorldAuthoringValidation/SharpEngine.WorldAuthoringValidation.csproj
 dotnet run --project Tools/EditorLayoutValidation/SharpEngine.EditorLayoutValidation.csproj
 dotnet run --project Tools/EditorValidation/SharpEngine.EditorValidation.csproj -- D:/SharpEngine
+dotnet run --project Tools/LoggingValidation/SharpEngine.LoggingValidation.csproj -- D:/SharpEngine/Saved/Validation/Logging
 ```

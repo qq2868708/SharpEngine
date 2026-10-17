@@ -133,6 +133,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="SharpEngineResource.h" />
+    <ClInclude Include="Logging\EngineLog.h" />
     <ClInclude Include="ManagedHost.h" />
     <ClInclude Include="Platform\Platform.h" />
     <ClInclude Include="Platform\PlatformTypes.h" />
@@ -158,6 +159,7 @@
     <ClCompile Include="Game\GameMain.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\PreviewRenderer.cpp" />
     <ClCompile Include="ManagedHost.cpp" />
+    <ClCompile Include="Logging\EngineLog.cpp" />
     <ClCompile Include="Platform\Windows\WindowsPlatform.cpp" />
     <ClCompile Include="Platform\Windows\Window\Win32Window.cpp" />
     <ClCompile Include="RenderCore\Private\Common\*.cpp;RenderCore\Private\Vulkan\*.cpp;RenderCore\Private\RenderCore.cpp;UI\*.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />

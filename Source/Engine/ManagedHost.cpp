@@ -1,4 +1,5 @@
 #include "ManagedHost.h"
+#include "Logging/EngineLog.h"
 
 #include <Windows.h>
 
@@ -257,9 +258,10 @@ namespace
 
     void PrintHostError(const char* operation, int result)
     {
-        std::cerr << "[ManagedHost] " << operation
-                  << " failed, HRESULT=0x" << std::hex
-                  << static_cast<uint32_t>(result) << std::dec << std::endl;
+        std::ostringstream message;
+        message << operation << " failed, HRESULT=0x" << std::hex
+                << static_cast<uint32_t>(result) << std::dec;
+        EngineLog::Error("ManagedHost", message.str());
     }
 }
 
@@ -274,8 +276,7 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
     std::ifstream input(projectManifest, std::ios::binary);
     if (!input)
     {
-        std::wcerr << L"[ManagedHost] Could not open project manifest: "
-                   << projectManifest << std::endl;
+        EngineLog::Error("ManagedHost", "Could not open project manifest: " + projectManifest.string());
         return false;
     }
 
@@ -291,8 +292,7 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
         !ReadJsonString(json, "id", requestedEngineId) ||
         !ReadJsonString(json, "version", requestedEngineVersion))
     {
-        std::wcerr << L"[ManagedHost] Project manifest requires engine association, id, and version.\n"
-                   << projectManifest << std::endl;
+        EngineLog::Error("ManagedHost", "Project manifest requires engine association, id, and version: " + projectManifest.string());
         return false;
     }
 
@@ -305,17 +305,14 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
     const auto resolvedEngineRoot = ReadEnvironmentPath("SHARPENGINE_ROOT");
     if (resolvedEngineRoot.empty())
     {
-        std::wcerr << L"[ManagedHost] SHARPENGINE_ROOT is not configured. "
-                   << L"Open .sharpproject files through SharpEngine.ProjectSelector."
-                   << std::endl;
+        EngineLog::Error("ManagedHost", "SHARPENGINE_ROOT is not configured. Open .sharpproject files through SharpEngine.ProjectSelector.");
         return false;
     }
 
     const auto engineManifestPath = ResolvePath(resolvedEngineRoot, engineManifest);
     if (!std::filesystem::exists(engineManifestPath))
     {
-        std::wcerr << L"[ManagedHost] Engine manifest is missing: "
-                   << engineManifestPath << std::endl;
+        EngineLog::Error("ManagedHost", "Engine manifest is missing: " + engineManifestPath.string());
         return false;
     }
     std::ifstream engineInput(engineManifestPath, std::ios::binary);
@@ -328,8 +325,7 @@ bool ResolveManagedProject(const std::filesystem::path& projectManifest,
         resolvedEngineId != requestedEngineId ||
         resolvedEngineVersion != requestedEngineVersion)
     {
-        std::wcerr << L"[ManagedHost] The selected Engine does not match the project binding."
-                   << std::endl;
+        EngineLog::Error("ManagedHost", "The selected Engine does not match the project binding.");
         return false;
     }
 
@@ -348,23 +344,23 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
     if (!std::filesystem::exists(runtimeConfigPath) ||
         !std::filesystem::exists(assemblyPath))
     {
-        std::wcerr << L"[ManagedHost] Managed files are missing. runtimeConfig="
-                   << runtimeConfigPath << L" assembly=" << assemblyPath << std::endl;
+        EngineLog::Error("ManagedHost", "Managed files are missing. runtimeConfig=" +
+            std::filesystem::path(runtimeConfigPath).string() + " assembly=" +
+            std::filesystem::path(assemblyPath).string());
         return false;
     }
 
     const auto hostFxrPath = FindHostFxr();
     if (hostFxrPath.empty())
     {
-        std::cerr << "[ManagedHost] Could not find hostfxr.dll." << std::endl;
+        EngineLog::Error("ManagedHost", "Could not find hostfxr.dll.");
         return false;
     }
 
     HostFxrModule = LoadLibraryW(hostFxrPath.c_str());
     if (!HostFxrModule)
     {
-        std::wcerr << L"[ManagedHost] LoadLibrary failed for "
-                   << hostFxrPath << std::endl;
+        EngineLog::Error("ManagedHost", "LoadLibrary failed for " + hostFxrPath.string());
         return false;
     }
 
@@ -382,7 +378,7 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
 
     if (!initialize || !getDelegate || !close)
     {
-        std::cerr << "[ManagedHost] hostfxr exports are incomplete." << std::endl;
+        EngineLog::Error("ManagedHost", "hostfxr exports are incomplete.");
         ResetRuntime();
         return false;
     }

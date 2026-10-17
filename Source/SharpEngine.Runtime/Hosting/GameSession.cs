@@ -3,6 +3,7 @@ using System.Reflection;
 using SharpEngine.Assets;
 using SharpEngine.Components;
 using SharpEngine.Input;
+using SharpEngine.Logging;
 using SharpEngine.Settings;
 using SharpEngine.UI;
 using SharpEngine.World;
@@ -38,6 +39,7 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
         if (!worldPath.StartsWith(projectRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
             !worldPath.EndsWith(".sworld", StringComparison.OrdinalIgnoreCase) || !File.Exists(worldPath))
             throw new InvalidDataException("GAME_STARTUP_INVALID: world.startup must resolve to an existing project .sworld");
+        SharpLog.Initialize("Game", projectRoot, engineRoot);
         Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", engineRoot);
         Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifestPath);
         Assets = AssetRegistry.Load(engineRoot, projectRoot, manifestPath);
@@ -65,7 +67,13 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
             Input.SetRouteEnabled(InputRoute.Editor, false);
             Input.SetRouteEnabled(InputRoute.RuntimeUi, true);
             Input.SetRouteEnabled(InputRoute.Gameplay, true);
-            Console.Error.WriteLine($"[Game] Started {manifestPath}; World={worldPath}; entities={World.Entities.Count}");
+            SharpLog.Info("Game", $"Started {manifestPath}; World={worldPath}; entities={World.Entities.Count}",
+                new Dictionary<string, string>
+                {
+                    ["projectManifest"] = manifestPath,
+                    ["world"] = worldPath,
+                    ["entityCount"] = World.Entities.Count.ToString(),
+                });
         }
         catch { Dispose(); throw; }
     }

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using SharpEngine.Editor;
+using SharpEngine.Logging;
 using SharpEngine.Runtime;
 using SharpEngine.Timeline;
 
@@ -45,6 +46,7 @@ public static class HostEntrypoint
             catch (Exception error)
             {
                 s_runtime.SetProjectCodeAvailable(false, "Project code failed to load; edit code and rebuild to recover");
+                SharpLog.Error("ProjectModules", "Project code failed to load", error);
                 s_runtime.SetProjectBuildStatus("ReloadFailed", error.ToString());
             }
             s_projectCode = new ProjectCodeService(s_runtime, s_input, s_modules);
@@ -53,7 +55,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] Initialize failed: {exception}");
+            SharpLog.Critical("Editor", "Initialize failed", exception);
             s_modules?.Dispose();
             s_modules = null;
             s_engineModules?.Dispose();
@@ -86,7 +88,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] Update failed: {exception}");
+            SharpLog.Error("Editor", "Update failed", exception);
         }
     }
 
@@ -108,13 +110,14 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] Shutdown failed: {exception}");
+            SharpLog.Error("Editor", "Shutdown failed", exception);
         }
         finally
         {
             s_modules = null;
             s_input = null;
             s_runtime = null;
+            SharpLog.Shutdown();
         }
     }
 
@@ -127,7 +130,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] PointerDown failed: {exception}");
+            SharpLog.Error("EditorInput", "PointerDown failed", exception);
         }
     }
 
@@ -141,7 +144,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] UI action failed: {exception}");
+            SharpLog.Error("EditorInput", "UI action failed", exception);
         }
     }
 
@@ -155,7 +158,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] ViewportInput failed: {exception}");
+            SharpLog.Error("EditorInput", "ViewportInput failed", exception);
         }
     }
 
@@ -168,7 +171,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] ViewportKey failed: {exception}");
+            SharpLog.Error("EditorInput", "ViewportKey failed", exception);
         }
     }
 
@@ -224,7 +227,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] InputEvent failed: {exception}");
+            SharpLog.Error("EditorInput", "InputEvent failed", exception);
         }
     }
 
@@ -237,7 +240,7 @@ public static class HostEntrypoint
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[Game] MCP failed: {exception}");
+            SharpLog.Error("MCP", "MCP failed", exception);
             return -1;
         }
     }

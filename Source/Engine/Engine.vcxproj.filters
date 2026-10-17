@@ -40,6 +40,9 @@
     <Filter Include="Editor">
       <UniqueIdentifier>{713169ef-dd79-4d80-a32c-8beaf4670bbe}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Logging">
+      <UniqueIdentifier>{3a9f1e2a-1f3b-4ff6-8e53-0d9c5c8d4e11}</UniqueIdentifier>
+    </Filter>
     <Filter Include="UI">
       <UniqueIdentifier>{7ea719b5-10c6-46a2-9dfb-ad31017a0182}</UniqueIdentifier>
     </Filter>
@@ -47,6 +50,9 @@
   <ItemGroup>
     <ClInclude Include="SharpEngineResource.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Logging\EngineLog.h">
+      <Filter>Logging</Filter>
     </ClInclude>
     <ClInclude Include="ManagedHost.h">
       <Filter>源文件</Filter>
@@ -135,6 +141,9 @@
     </ClCompile>
     <ClCompile Include="Editor\EditorMain.cpp">
       <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Logging\EngineLog.cpp">
+      <Filter>Logging</Filter>
     </ClCompile>
     <ClCompile Include="ManagedHost.cpp">
       <Filter>源文件</Filter>

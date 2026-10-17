@@ -1,4 +1,5 @@
 using SharpEngine.Assets;
+using SharpEngine.Logging;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
@@ -307,7 +308,7 @@ public sealed class EditorCommandRegistry
         catch (Exception exception)
         {
             context.SetStatus($"Command failed: {command.Label}");
-            Console.Error.WriteLine($"[EditorExtension] command={command.Id} failed: {exception}");
+            SharpLog.Error("EditorExtension", $"Command {command.Id} failed", exception);
         }
         _changed();
         return true;
@@ -325,7 +326,7 @@ public sealed class EditorCommandRegistry
         catch (Exception exception)
         {
             if (_failedConditions.Add(command.Id))
-                Console.Error.WriteLine($"[EditorExtension] command={command.Id} CanExecute failed: {exception}");
+                SharpLog.Error("EditorExtension", $"Command {command.Id} CanExecute failed", exception);
             return false;
         }
     }
@@ -342,7 +343,7 @@ public sealed class EditorCommandRegistry
         catch (Exception exception)
         {
             if (_failedChecked.Add(command.Id))
-                Console.Error.WriteLine($"[EditorExtension] command={command.Id} GetChecked failed: {exception}");
+                SharpLog.Error("EditorExtension", $"Command {command.Id} GetChecked failed", exception);
             return false;
         }
     }

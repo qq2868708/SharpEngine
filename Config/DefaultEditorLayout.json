@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "mainHost": {
     "hostId": "main",
     "root": {
@@ -76,7 +76,8 @@
             "groupId": "main.console.tabs",
             "activePaneId": "console",
             "panes": [
-              { "paneId": "console" }
+              { "paneId": "console" },
+              { "paneId": "logs" }
             ]
           }
         }

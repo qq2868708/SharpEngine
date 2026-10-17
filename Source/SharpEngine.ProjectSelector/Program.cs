@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Win32;
+using SharpEngine.Logging;
 
 namespace SharpEngine.ProjectSelector;
 
@@ -11,6 +12,7 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
         var noUi = HasFlag(args, "--no-ui");
+        SharpLog.Initialize("ProjectSelector", engineRoot: FindEngineRoot());
         try
         {
             if (args.Length == 0)
@@ -44,7 +46,7 @@ internal static class Program
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            SharpLog.Error("ProjectSelector", exception.Message, exception);
             WriteResult(args, new
             {
                 success = false,
@@ -56,6 +58,16 @@ internal static class Program
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+        finally { SharpLog.Shutdown(); }
+    }
+
+    private static string FindEngineRoot()
+    {
+        var configured = Environment.GetEnvironmentVariable("SHARPENGINE_ROOT");
+        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
+        for (var current = new DirectoryInfo(AppContext.BaseDirectory); current is not null; current = current.Parent)
+            if (File.Exists(Path.Combine(current.FullName, "engine.json"))) return current.FullName;
+        return AppContext.BaseDirectory;
     }
 
     private static int Register(string[] args, bool noUi)

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using SharpEngine.Runtime.Interop;
+using SharpEngine.Logging;
 using SharpEngine.Timeline;
 using SharpEngine.UI;
 using SharpEngine.World;
@@ -24,7 +25,12 @@ public static unsafe class HostEntrypoint
                 typeof(TimelineRuntimeModule).Assembly);
             return 0;
         }
-        catch (Exception error) { Console.Error.WriteLine(error); return -1; }
+        catch (Exception error)
+        {
+            SharpLog.Critical("Game", "Initialization failed", error);
+            SharpLog.Shutdown();
+            return -1;
+        }
     }
 
     [UnmanagedCallersOnly]
@@ -42,11 +48,17 @@ public static unsafe class HostEntrypoint
                 s_api->SubmitViewportFrame((float*)triangles, (uint)frame.Triangles.Length,
                     (float*)lines, (uint)frame.Lines.Length);
             if (++s_frames == 1)
-                Console.Error.WriteLine($"[Game] First runtime frame: {frame.TriangleCount} triangles; editorAssemblyLoaded={AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "SharpEngine.Editor")}");
+                SharpLog.Info("Game", $"First runtime frame: {frame.TriangleCount} triangles",
+                    new Dictionary<string, string>
+                    {
+                        ["triangleCount"] = frame.TriangleCount.ToString(),
+                        ["editorAssemblyLoaded"] = AppDomain.CurrentDomain.GetAssemblies()
+                            .Any(a => a.GetName().Name == "SharpEngine.Editor").ToString(),
+                    });
         }
         catch (Exception error)
         {
-            Console.Error.WriteLine($"[Game] Runtime failed: {error}");
+            SharpLog.Critical("Game", "Runtime failed", error);
             try { s_game?.Dispose(); }
             finally { Environment.Exit(5); }
         }
@@ -59,13 +71,18 @@ public static unsafe class HostEntrypoint
         if (s_game is null || !Enum.IsDefined(typeof(NativeInputEventKind), kind)) return;
         try { s_game.Input.ProcessNative("game", (NativeInputEventKind)kind, code,
             x, y, valueX, valueY, modifiers, handled != 0, focused != 0); }
-        catch (Exception error) { Console.Error.WriteLine(error); }
+        catch (Exception error) { SharpLog.Error("Input", "Input event failed", error); }
     }
 
     [UnmanagedCallersOnly]
     public static void Shutdown()
     {
         try { s_game?.Dispose(); }
-        finally { s_game = null; s_api = null; Console.Error.WriteLine($"[Game] Stopped after {s_frames} frames"); }
+        finally
+        {
+            SharpLog.Info("Game", $"Stopped after {s_frames} frames",
+                new Dictionary<string, string> { ["frames"] = s_frames.ToString() });
+            s_game = null; s_api = null; SharpLog.Shutdown();
+        }
     }
 }
