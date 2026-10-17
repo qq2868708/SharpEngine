@@ -5,443 +5,178 @@ using System.Xml.Linq;
 
 namespace SharpEngine.ProjectSelector;
 
-internal sealed record GeneratedSolution(
-    string SolutionPath,
-    string WrapperProjectPath,
-    string TargetSourcePath,
-    string LaunchSettingsPath,
-    string TargetPropsPath,
-    string GeneratedPropsPath,
-    string StampPath);
+internal sealed record GeneratedSolution(string SolutionPath, string WrapperProjectPath,
+    string TargetSourcePath, string LaunchSettingsPath, string TargetPropsPath,
+    string GeneratedPropsPath, string StampPath);
 
 internal static class SolutionGenerator
 {
-    private const int GeneratorVersion = 5;
-    private const string CppProjectType = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
-    private const string CSharpProjectType = "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}";
-    private const string FolderProjectType = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
-    private static readonly string[] Configurations = ["Debug", "Development", "Shipping"];
+    private const int GeneratorVersion = 6;
+    private const string CsType = "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}";
+    private const string CppType = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
+    private const string FolderType = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
+    private sealed record Entry(string Name, string Path, string Id, bool Native, string Folder, string? Target);
 
     internal static GeneratedSolution Generate(ResolvedSharpProject resolved)
     {
-        var project = resolved.Project;
-        var paths = GetGeneratedPaths(project);
-        Directory.CreateDirectory(Path.GetDirectoryName(paths.StampPath)!);
-        var obsoleteNMakeProject = Path.Combine(Path.GetDirectoryName(paths.StampPath)!,
-            SafeFileName(project.DisplayName) + ".Editor.vcxproj");
-        if (File.Exists(obsoleteNMakeProject)) File.Delete(obsoleteNMakeProject);
-        var obsoleteNMakeOutput = Path.Combine(Path.GetDirectoryName(paths.StampPath)!, "x64");
-        if (Directory.Exists(obsoleteNMakeOutput))
-            Directory.Delete(obsoleteNMakeOutput, recursive: true);
-
+        var paths = Paths(resolved.Project);
         WriteGeneratedProps(paths.GeneratedPropsPath, resolved);
-        var wrapperGuid = StableGuid("wrapper:" + project.ManifestPath);
-        WriteTargetProject(paths, wrapperGuid, resolved);
-        WriteTargetSource(paths.TargetSourcePath, resolved);
-        WriteLaunchSettings(paths.LaunchSettingsPath, resolved);
-        WriteTargetProps(paths.TargetPropsPath);
-        WriteSolution(paths.SolutionPath, paths.WrapperProjectPath, wrapperGuid, resolved);
-        WriteStamp(paths.StampPath, paths.SolutionPath, paths.WrapperProjectPath, resolved);
+        var wrappers = WriteTargets(Path.GetDirectoryName(paths.StampPath)!, resolved.Project.DisplayName,
+            resolved.Engine, resolved.Project.ManifestPath);
+        WriteSolution(paths.SolutionPath, resolved.Engine, wrappers, resolved.Project);
+        WriteText(paths.StampPath, Stamp(resolved));
         return paths;
+    }
+
+    internal static void GenerateEngine(string root)
+    {
+        var engine = ProjectContracts.ReadEngine(root);
+        var wrappers = WriteTargets(Path.Combine(engine.Root, "Intermediate", "ProjectFiles"), engine.Id, engine, null);
+        WriteSolution(Path.Combine(engine.Root, "SharpEngine.sln"), engine, wrappers, null);
     }
 
     internal static GeneratedSolution EnsureCurrent(ResolvedSharpProject resolved)
     {
-        var paths = GetGeneratedPaths(resolved.Project);
-        return IsCurrent(paths, resolved) ? paths : Generate(resolved);
+        var p = Paths(resolved.Project);
+        if (new[] { p.SolutionPath, p.WrapperProjectPath, p.TargetSourcePath, p.LaunchSettingsPath,
+                p.TargetPropsPath, p.GeneratedPropsPath, p.StampPath,
+                p.WrapperProjectPath.Replace(".Editor.Target.csproj", ".Game.Target.csproj", StringComparison.Ordinal),
+                p.TargetSourcePath.Replace(".Editor.Target.cs", ".Game.Target.cs", StringComparison.Ordinal) }.All(File.Exists) &&
+            File.ReadAllText(p.StampPath) == Stamp(resolved)) return p;
+        return Generate(resolved);
     }
 
-    private static GeneratedSolution GetGeneratedPaths(SharpProjectDescriptor project)
+    private static GeneratedSolution Paths(SharpProjectDescriptor project)
     {
-        var projectFilesDirectory = Path.Combine(project.Root, "Intermediate", "ProjectFiles");
-        return new GeneratedSolution(
-            Path.Combine(project.Root, SafeFileName(project.DisplayName) + ".sln"),
-            Path.Combine(projectFilesDirectory,
-                SafeFileName(project.DisplayName) + ".Editor.Target.csproj"),
-            Path.Combine(projectFilesDirectory,
-                SafeFileName(project.DisplayName) + ".Editor.Target.cs"),
-            Path.Combine(projectFilesDirectory, "Properties", "launchSettings.json"),
-            Path.Combine(projectFilesDirectory, "Directory.Build.props"),
-            Path.Combine(projectFilesDirectory, "SharpEngine.Generated.props"),
-            Path.Combine(projectFilesDirectory, "SharpEngine.ProjectFiles.json"));
+        var name = SafeName(project.DisplayName);
+        var dir = Path.Combine(project.Root, "Intermediate", "ProjectFiles");
+        return new(Path.Combine(project.Root, name + ".sln"), Path.Combine(dir, name + ".Editor.Target.csproj"),
+            Path.Combine(dir, name + ".Editor.Target.cs"), Path.Combine(dir, "Properties", "launchSettings.json"),
+            Path.Combine(dir, "Directory.Build.props"), Path.Combine(dir, "SharpEngine.Generated.props"),
+            Path.Combine(dir, "SharpEngine.ProjectFiles.json"));
     }
 
-    private static bool IsCurrent(GeneratedSolution paths, ResolvedSharpProject resolved)
+    private static string Stamp(ResolvedSharpProject resolved) => JsonSerializer.Serialize(new
     {
-        if (!File.Exists(paths.SolutionPath) || !File.Exists(paths.WrapperProjectPath) ||
-            !File.Exists(paths.TargetSourcePath) || !File.Exists(paths.LaunchSettingsPath) ||
-            !File.Exists(paths.TargetPropsPath) ||
-            !File.Exists(paths.GeneratedPropsPath) || !File.Exists(paths.StampPath)) return false;
-        try
-        {
-            using var document = JsonDocument.Parse(File.ReadAllText(paths.StampPath));
-            var root = document.RootElement;
-            if (root.GetProperty("schemaVersion").GetInt32() != 1 ||
-                root.GetProperty("generatorVersion").GetInt32() != GeneratorVersion ||
-                !string.Equals(root.GetProperty("projectManifestHash").GetString(),
-                    FileHash(resolved.Project.ManifestPath), StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(root.GetProperty("engineManifestHash").GetString(),
-                    FileHash(resolved.Engine.ManifestPath), StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(root.GetProperty("engineRoot").GetString(),
-                    resolved.Engine.Root, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(root.GetProperty("association").GetString(),
-                    resolved.Project.EngineAssociation, StringComparison.Ordinal)) return false;
-            var modules = root.GetProperty("modules").EnumerateArray()
-                .Select(value => value.GetString()).ToArray();
-            return modules.SequenceEqual(resolved.Project.Modules,
-                StringComparer.OrdinalIgnoreCase);
-        }
-        catch (Exception exception) when (exception is IOException or JsonException or
-                                          InvalidOperationException or KeyNotFoundException)
-        {
-            return false;
-        }
-    }
+        schemaVersion = 1, generatorVersion = GeneratorVersion,
+        generatorBuildId = typeof(SolutionGenerator).Module.ModuleVersionId,
+        projectManifestHash = Hash(resolved.Project.ManifestPath), engineManifestHash = Hash(resolved.Engine.ManifestPath),
+        engineProjectsHash = EngineBuildGraph.Fingerprint(resolved.Engine.Root), engineRoot = resolved.Engine.Root,
+        association = resolved.Project.EngineAssociation, modules = resolved.Project.Modules,
+    }, new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
 
     private static void WriteGeneratedProps(string path, ResolvedSharpProject resolved)
     {
-        var engine = resolved.Engine;
-        var root = EnsureTrailingSeparator(engine.Root);
-        var document = new XDocument(
-            new XElement("Project",
-                new XElement("PropertyGroup",
-                    new XElement("SharpEngineGeneratedProjectFiles", "true"),
-                    new XElement("SharpEngineAssociation",
-                        resolved.Project.EngineAssociation),
-                    new XElement("SharpEngineRoot", root),
-                    new XElement("SharpEngineManagedApi",
-                        root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.Managed.dll"),
-                    new XElement("SharpEngineModulesApi",
-                        root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.Modules.dll"),
-                    new XElement("SharpEngineComponentGenerator",
-                        root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.ComponentGenerator.dll"),
-                    new XElement("CustomAfterMicrosoftCommonTargets", root + @"Build\SharpEngine.Components.targets"))));
-        WriteXmlAtomic(path, document);
+        var root = Path.TrimEndingDirectorySeparator(resolved.Engine.Root) + Path.DirectorySeparatorChar;
+        WriteXml(path, new XElement("Project", new XElement("PropertyGroup",
+            new XElement("SharpEngineGeneratedProjectFiles", "true"),
+            new XElement("SharpEngineAssociation", resolved.Project.EngineAssociation), new XElement("SharpEngineRoot", root),
+            new XElement("SharpEngineTarget", new XAttribute("Condition", "'$(SharpEngineTarget)' == ''"), "Editor"),
+            new XElement("SharpEngineEditorApi", root + @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.Editor.dll"),
+            new XElement("SharpEngineRuntimeApi", root + @"Binaries\Win64\$(Configuration)\$(SharpEngineTarget)\SharpEngine.Runtime.dll"),
+            new XElement("SharpEngineComponentGenerator", root + @"Binaries\Win64\$(Configuration)\Tools\SharpEngine.ComponentGenerator.dll"),
+            new XElement("CustomAfterMicrosoftCommonTargets", root + @"Build\SharpEngine.Components.targets"))));
     }
 
-    private static void WriteTargetProject(GeneratedSolution paths, string projectGuid,
-        ResolvedSharpProject resolved)
+    private static Entry[] WriteTargets(string directory, string displayName, EngineDescriptor engine, string? manifest)
     {
-        var project = resolved.Project;
-        var engine = resolved.Engine;
-        var script = Path.Combine(engine.Root, "Tools", "SharpEngineProject.ps1");
-        var common = $"-ProjectFile {Quote(project.ManifestPath)} -EngineRoot {Quote(engine.Root)} " +
-                     "-Target Editor -Configuration $(Configuration) -Platform Win64";
-        var build = $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File {Quote(script)} " +
-                    $"-Command Build {common}";
-        var clean = $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File {Quote(script)} " +
-                    $"-Command Clean {common}";
-        var document = new XDocument(
-            new XElement("Project", new XAttribute("Sdk", "Microsoft.NET.Sdk"),
-                new XElement("PropertyGroup",
-                    new XElement("OutputType", "Exe"),
-                    new XElement("TargetFramework", "net8.0-windows"),
-                    new XElement("AssemblyName",
-                        SafeFileName(project.DisplayName) + ".Editor.Target"),
-                    new XElement("RootNamespace",
-                        SafeFileName(project.DisplayName) + ".Editor.Target"),
-                    new XElement("ProjectGuid", projectGuid),
-                    new XElement("EnableDefaultCompileItems", "false"),
-                    new XElement("ImplicitUsings", "enable"),
-                    new XElement("Nullable", "enable"),
-                    new XElement("AppendTargetFrameworkToOutputPath", "false")),
-                new XElement("ItemGroup",
-                    new XElement("Compile", new XAttribute("Include",
-                        paths.TargetSourcePath))),
-                new XElement("Target", new XAttribute("Name", "BuildSharpEngineProject"),
-                    new XAttribute("AfterTargets", "Build"),
-                    new XAttribute("Condition", "'$(DesignTimeBuild)' != 'true'"),
-                    new XElement("Exec", new XAttribute("Command", build))),
-                new XElement("Target", new XAttribute("Name", "CleanSharpEngineProject"),
-                    new XAttribute("AfterTargets", "Clean"),
-                    new XAttribute("Condition", "'$(DesignTimeBuild)' != 'true'"),
-                    new XElement("Exec", new XAttribute("Command", clean)))));
-        WriteXmlAtomic(paths.WrapperProjectPath, document);
-    }
-
-    private static void WriteTargetProps(string path)
-    {
-        var projectFiles = Path.GetDirectoryName(path)!;
-        var targetRoot = Path.Combine(projectFiles, "EditorTarget");
-        var document = new XDocument(
-            new XElement("Project",
-                new XElement("PropertyGroup",
-                    new XElement("Configuration",
-                        new XAttribute("Condition", "'$(Configuration)' == ''"), "Debug"),
-                    new XElement("BaseIntermediateOutputPath",
-                        EnsureTrailingSeparator(Path.Combine(targetRoot, "obj"))),
-                    new XElement("OutputPath",
-                        EnsureTrailingSeparator(Path.Combine(targetRoot, "bin",
-                            "$(Configuration)"))),
-                    new XElement("AppendTargetFrameworkToOutputPath", "false"))));
-        WriteXmlAtomic(path, document);
-    }
-
-    private static void WriteTargetSource(string path, ResolvedSharpProject resolved)
-    {
-        var engineRoot = CSharpString(resolved.Engine.Root);
-        var projectManifest = CSharpString(resolved.Project.ManifestPath);
-        var source = $$"""
-            using System.Diagnostics;
-
-            var configuration = new DirectoryInfo(
-                Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Name;
-            var engineRoot = {{engineRoot}};
-            var projectManifest = {{projectManifest}};
-            var executable = Path.Combine(engineRoot, "Binaries", "Win64",
-                configuration, "Editor", "Engine.exe");
-            if (!File.Exists(executable))
-            {
-                Console.Error.WriteLine($"SharpEngine Editor is not built: {executable}");
-                return 1;
-            }
-            var start = new ProcessStartInfo(executable)
-            {
-                UseShellExecute = false,
-                WorkingDirectory = Path.GetDirectoryName(projectManifest)!,
-            };
-            start.ArgumentList.Add("--project");
-            start.ArgumentList.Add(projectManifest);
-            start.Environment["SHARPENGINE_ROOT"] = engineRoot;
-            using var process = Process.Start(start) ??
-                throw new IOException("Could not start the SharpEngine Editor");
-            process.WaitForExit();
-            return process.ExitCode;
-            """ + Environment.NewLine;
-        WriteTextAtomic(path, source);
-    }
-
-    private static void WriteLaunchSettings(string path, ResolvedSharpProject resolved)
-    {
-        var profiles = new Dictionary<string, object>();
-        foreach (var configuration in Configurations)
+        Directory.CreateDirectory(directory);
+        var name = SafeName(displayName);
+        WriteXml(Path.Combine(directory, "Directory.Build.props"), new XElement("Project", new XElement("PropertyGroup",
+            new XElement("BaseIntermediateOutputPath", Path.Combine(directory, @"obj\$(MSBuildProjectName)\")),
+            new XElement("OutputPath", Path.Combine(directory, @"bin\$(MSBuildProjectName)\$(Configuration)\")),
+            new XElement("AppendTargetFrameworkToOutputPath", "false"))));
+        var result = new List<Entry>();
+        foreach (var target in EngineBuildGraph.Targets)
         {
-            profiles[$"{configuration} Editor"] = new
+            var path = Path.Combine(directory, $"{name}.{target}.Target.csproj");
+            var source = Path.ChangeExtension(path, ".cs");
+            var script = Path.Combine(engine.Root, "Tools", manifest is null ? "SharpEngineBuild.ps1" : "SharpEngineProject.ps1");
+            var common = $"-EngineRoot {Quote(engine.Root)} -Target {target} -Configuration $(Configuration) -Platform Win64";
+            if (manifest is not null) common += " -ProjectFile " + Quote(manifest);
+            WriteXml(path, new XElement("Project", new XAttribute("Sdk", "Microsoft.NET.Sdk"),
+                new XElement("PropertyGroup", new XElement("OutputType", "Exe"), new XElement("TargetFramework", "net8.0-windows"),
+                    new XElement("ImplicitUsings", "enable"), new XElement("Nullable", "enable"),
+                    new XElement("EnableDefaultCompileItems", "false"), new XElement("AssemblyName", $"{name}.{target}.Target"),
+                    new XElement("ProjectGuid", Id(path))),
+                new XElement("ItemGroup", new XElement("Compile", new XAttribute("Include", source))),
+                new XElement("Target", new XAttribute("Name", "BuildSharpEngineTarget"), new XAttribute("AfterTargets", "Build"),
+                    new XAttribute("Condition", "'$(DesignTimeBuild)' != 'true'"), new XElement("Exec", new XAttribute("Command",
+                        $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File {Quote(script)} -Command Build {common}"))),
+                new XElement("Target", new XAttribute("Name", "CleanSharpEngineTarget"), new XAttribute("AfterTargets", "Clean"),
+                    new XAttribute("Condition", "'$(DesignTimeBuild)' != 'true'"), new XElement("Exec", new XAttribute("Command",
+                        $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File {Quote(script)} -Command Clean {common}")))));
+            WriteText(source, $$"""
+                using System.Diagnostics;
+                var configuration = new DirectoryInfo(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Name;
+                var executable = Path.Combine({{JsonSerializer.Serialize(engine.Root)}}, "Binaries", "Win64", configuration, "{{target}}", "Engine.exe");
+                if (!File.Exists(executable)) { Console.Error.WriteLine($"Build this Target first: {executable}"); return 1; }
+                var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = {{JsonSerializer.Serialize(manifest is null ? engine.Root : Path.GetDirectoryName(manifest))}} };
+                {{(manifest is null ? "" : "start.ArgumentList.Add(\"--project\"); start.ArgumentList.Add(" + JsonSerializer.Serialize(manifest) + ");")}}
+                foreach (var argument in args) start.ArgumentList.Add(argument);
+                start.Environment["SHARPENGINE_ROOT"] = {{JsonSerializer.Serialize(engine.Root)}};
+                using var process = Process.Start(start) ?? throw new IOException("Could not start engine Target");
+                process.WaitForExit();
+                return process.ExitCode;
+                """ + Environment.NewLine);
+            result.Add(new($"{name}.{target} Target", path, Id(path), false, manifest is null ? "Engine" : "Project", target));
+        }
+        var profiles = new Dictionary<string, object>();
+        foreach (var configuration in EngineBuildGraph.Configurations)
+        foreach (var target in EngineBuildGraph.Targets)
+            profiles[$"{configuration} {target}"] = new
             {
                 commandName = "Executable",
-                executablePath = Path.Combine(ProjectContracts.ResolveBinaries(resolved.Engine,
-                    "Win64", configuration, "Editor"), "Engine.exe"),
-                commandLineArgs = "--project " + Quote(resolved.Project.ManifestPath),
-                workingDirectory = resolved.Project.Root,
-                environmentVariables = new Dictionary<string, string>
-                {
-                    ["SHARPENGINE_ROOT"] = resolved.Engine.Root,
-                },
+                executablePath = Path.Combine(ProjectContracts.ResolveBinaries(engine, "Win64", configuration, target), "Engine.exe"),
+                commandLineArgs = manifest is null ? "" : "--project " + Quote(manifest),
+                workingDirectory = manifest is null ? engine.Root : Path.GetDirectoryName(manifest),
+                environmentVariables = new Dictionary<string, string> { ["SHARPENGINE_ROOT"] = engine.Root },
             };
-        }
-        WriteTextAtomic(path, JsonSerializer.Serialize(new { profiles },
-            new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
+        WriteText(Path.Combine(directory, "Properties", "launchSettings.json"), JsonSerializer.Serialize(new { profiles }, new JsonSerializerOptions { WriteIndented = true }));
+        return result.ToArray();
     }
 
-    private static void WriteSolution(string path, string wrapperPath,
-        string wrapperGuid, ResolvedSharpProject resolved)
+    private static void WriteSolution(string path, EngineDescriptor engine, Entry[] wrappers, SharpProjectDescriptor? project)
     {
-        var project = resolved.Project;
-        var engine = resolved.Engine;
-        var engineFolderGuid = StableGuid("folder:engine:" + project.ManifestPath);
-        var gameFolderGuid = StableGuid("folder:game:" + project.ManifestPath);
-        var entries = new List<SolutionProject>();
-
-        var nativeEnginePath = Path.Combine(engine.Root, engine.SourcePath,
-            "Engine", "Engine.vcxproj");
-        if (File.Exists(nativeEnginePath))
-            entries.Add(new SolutionProject("Engine", nativeEnginePath,
-                ReadVcxProjectGuid(nativeEnginePath), CppProjectType, engineFolderGuid,
-                ProjectConfigurationKind.Cpp, Build: true));
-        foreach (var name in new[]
-                 {
-                     "SharpEngine.Game", "SharpEngine.Managed", "SharpEngine.Modules",
-                     "SharpEngine.ComponentGenerator",
-                     "SharpEngine.ProjectSelector",
-                 })
+        var entries = EngineBuildGraph.Discover(engine.Root).Select(p => new Entry(p.Name, p.Path,
+            p.Role == "NativeHost" ? XDocument.Load(p.Path).Descendants().Single(e => e.Name.LocalName == "ProjectGuid").Value.ToUpperInvariant() : Id(p.Path),
+            p.Role == "NativeHost", "Engine", null)).ToList();
+        if (project is not null) entries.AddRange(project.Modules.Select(module => Path.GetFullPath(Path.Combine(project.Root, module)))
+            .Select(p => new Entry(Path.GetFileNameWithoutExtension(p), p, Id(p), false, "Project", null)));
+        entries.AddRange(wrappers);
+        var b = new StringBuilder("Microsoft Visual Studio Solution File, Format Version 12.00\n# Visual Studio Version 18\n");
+        foreach (var folder in new[] { "Engine", "Project" }) b.AppendLine($"Project(\"{FolderType}\") = \"{folder}\", \"{folder}\", \"{Id(path + folder)}\"\nEndProject");
+        foreach (var e in entries) b.AppendLine($"Project(\"{(e.Native ? CppType : CsType)}\") = \"{e.Name}\", \"{Path.GetRelativePath(Path.GetDirectoryName(path)!, e.Path)}\", \"{e.Id}\"\nEndProject");
+        b.AppendLine("Global\n\tGlobalSection(SolutionConfigurationPlatforms) = preSolution");
+        foreach (var c in EngineBuildGraph.Configurations)
+        foreach (var t in EngineBuildGraph.Targets) b.AppendLine($"\t\t{c} {t}|Win64 = {c} {t}|Win64");
+        b.AppendLine("\tEndGlobalSection\n\tGlobalSection(ProjectConfigurationPlatforms) = postSolution");
+        foreach (var e in entries)
+        foreach (var c in EngineBuildGraph.Configurations)
+        foreach (var t in EngineBuildGraph.Targets)
         {
-            var engineProject = Path.Combine(engine.Root, engine.SourcePath, name,
-                name + ".csproj");
-            if (!File.Exists(engineProject)) continue;
-            entries.Add(new SolutionProject(name, engineProject,
-                StableGuid("project:" + engineProject), CSharpProjectType, engineFolderGuid,
-                ProjectConfigurationKind.CSharp, Build: true));
+            var key = $"\t\t{e.Id}.{c} {t}|Win64";
+            var value = c + (e.Native ? "|x64" : "|Any CPU");
+            b.AppendLine($"{key}.ActiveCfg = {value}");
+            if (e.Target == t) b.AppendLine($"{key}.Build.0 = {value}");
         }
-        var managedBootstrap = entries.FirstOrDefault(entry => entry.Name == "SharpEngine.Game");
-        foreach (var module in project.Modules)
-        {
-            var modulePath = Path.GetFullPath(Path.Combine(project.Root, module));
-            entries.Add(new SolutionProject(Path.GetFileNameWithoutExtension(modulePath),
-                modulePath, StableGuid("project:" + modulePath), CSharpProjectType,
-                gameFolderGuid, ProjectConfigurationKind.CSharp, Build: false));
-        }
-        var nativeEngine = entries.FirstOrDefault(entry => entry.Name == "Engine");
-        var targetDependencies = new[] { nativeEngine?.Guid, managedBootstrap?.Guid }
-            .OfType<string>().ToArray();
-        entries.Add(new SolutionProject(project.DisplayName + ".Editor Target", wrapperPath,
-            wrapperGuid, CSharpProjectType, gameFolderGuid, ProjectConfigurationKind.CSharp,
-            Build: true, DependencyGuids: targetDependencies));
-
-        var builder = new StringBuilder();
-        builder.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");
-        builder.AppendLine("# Visual Studio Version 18");
-        builder.AppendLine("VisualStudioVersion = 18.3.11312.210 d18.3");
-        builder.AppendLine("MinimumVisualStudioVersion = 10.0.40219.1");
-        AppendFolder(builder, "Engine", engineFolderGuid);
-        AppendFolder(builder, "Game", gameFolderGuid, project.ManifestPath, path);
-        foreach (var entry in entries)
-        {
-            builder.Append("Project(\"").Append(entry.TypeGuid).Append("\") = \"")
-                .Append(entry.Name).Append("\", \"")
-                .Append(SolutionPath(path, entry.Path)).Append("\", \"")
-                .Append(entry.Guid).AppendLine("\"");
-            if (entry.DependencyGuids is { Count: > 0 })
-            {
-                builder.AppendLine("\tProjectSection(ProjectDependencies) = postProject");
-                foreach (var dependencyGuid in entry.DependencyGuids)
-                    builder.Append('\t').Append('\t').Append(dependencyGuid).Append(" = ")
-                        .AppendLine(dependencyGuid);
-                builder.AppendLine("\tEndProjectSection");
-            }
-            builder.AppendLine("EndProject");
-        }
-        builder.AppendLine("Global");
-        builder.AppendLine("\tGlobalSection(SolutionConfigurationPlatforms) = preSolution");
-        foreach (var configuration in Configurations)
-            builder.Append('\t').Append('\t').Append(configuration)
-                .Append(" Editor|Win64 = ").Append(configuration)
-                .AppendLine(" Editor|Win64");
-        builder.AppendLine("\tEndGlobalSection");
-        builder.AppendLine("\tGlobalSection(ProjectConfigurationPlatforms) = postSolution");
-        foreach (var entry in entries)
-            foreach (var configuration in Configurations)
-            {
-                var solutionConfiguration = configuration + " Editor|Win64";
-                var projectConfiguration = configuration + (entry.Kind ==
-                    ProjectConfigurationKind.CSharp ? "|Any CPU" : "|x64");
-                builder.Append('\t').Append('\t').Append(entry.Guid).Append('.')
-                    .Append(solutionConfiguration).Append(".ActiveCfg = ")
-                    .AppendLine(projectConfiguration);
-                if (entry.Build)
-                    builder.Append('\t').Append('\t').Append(entry.Guid).Append('.')
-                        .Append(solutionConfiguration).Append(".Build.0 = ")
-                        .AppendLine(projectConfiguration);
-            }
-        builder.AppendLine("\tEndGlobalSection");
-        builder.AppendLine("\tGlobalSection(SolutionProperties) = preSolution");
-        builder.AppendLine("\t\tHideSolutionNode = FALSE");
-        builder.AppendLine("\tEndGlobalSection");
-        builder.AppendLine("\tGlobalSection(NestedProjects) = preSolution");
-        foreach (var entry in entries)
-            builder.Append('\t').Append('\t').Append(entry.Guid).Append(" = ")
-                .AppendLine(entry.FolderGuid);
-        builder.AppendLine("\tEndGlobalSection");
-        builder.AppendLine("\tGlobalSection(ExtensibilityGlobals) = postSolution");
-        builder.Append("\t\tSolutionGuid = ")
-            .AppendLine(StableGuid("solution:" + project.ManifestPath));
-        builder.AppendLine("\tEndGlobalSection");
-        builder.AppendLine("EndGlobal");
-        WriteTextAtomic(path, builder.ToString());
+        b.AppendLine("\tEndGlobalSection\n\tGlobalSection(NestedProjects) = preSolution");
+        foreach (var e in entries) b.AppendLine($"\t\t{e.Id} = {Id(path + e.Folder)}");
+        b.AppendLine("\tEndGlobalSection\nEndGlobal");
+        WriteText(path, b.ToString());
     }
 
-    private static void AppendFolder(StringBuilder builder, string name, string guid,
-        string? solutionItem = null, string? solutionPath = null)
-    {
-        builder.Append("Project(\"").Append(FolderProjectType).Append("\") = \"")
-            .Append(name).Append("\", \"").Append(name).Append("\", \"")
-            .Append(guid).AppendLine("\"");
-        if (solutionItem is not null && solutionPath is not null)
-        {
-            var item = SolutionPath(solutionPath, solutionItem);
-            builder.AppendLine("\tProjectSection(SolutionItems) = preProject");
-            builder.Append('\t').Append('\t').Append(item).Append(" = ").AppendLine(item);
-            builder.AppendLine("\tEndProjectSection");
-        }
-        builder.AppendLine("EndProject");
-    }
-
-    private static void WriteStamp(string path, string solutionPath, string wrapperPath,
-        ResolvedSharpProject resolved)
-    {
-        var value = new
-        {
-            schemaVersion = 1,
-            generatorVersion = GeneratorVersion,
-            projectManifestHash = FileHash(resolved.Project.ManifestPath),
-            engineManifestHash = FileHash(resolved.Engine.ManifestPath),
-            engineRoot = resolved.Engine.Root,
-            association = resolved.Project.EngineAssociation,
-            solution = Path.GetFileName(solutionPath),
-            wrapperProject = Path.GetRelativePath(resolved.Project.Root, wrapperPath)
-                .Replace('\\', '/'),
-            modules = resolved.Project.Modules,
-        };
-        WriteTextAtomic(path, JsonSerializer.Serialize(value,
-            new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
-    }
-
-    private static string ReadVcxProjectGuid(string path)
-    {
-        var document = XDocument.Load(path);
-        var value = document.Descendants().FirstOrDefault(element =>
-            element.Name.LocalName == "ProjectGuid")?.Value;
-        return string.IsNullOrWhiteSpace(value) ? StableGuid("project:" + path) :
-            value.ToUpperInvariant();
-    }
-
-    private static string SolutionPath(string solutionPath, string projectPath) =>
-        Path.GetRelativePath(Path.GetDirectoryName(solutionPath)!, projectPath)
-            .Replace('/', '\\');
-
-    private static string StableGuid(string value)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(
-            value.Replace('\\', '/').ToLowerInvariant()));
-        return "{" + new Guid(bytes.AsSpan(0, 16)).ToString().ToUpperInvariant() + "}";
-    }
-
-    private static string FileHash(string path) =>
-        Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();
-
-    private static string EnsureTrailingSeparator(string path) =>
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;
-
-    private static string SafeFileName(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var result = new string(value.Select(character => invalid.Contains(character) ? '_' :
-            character).ToArray());
-        return string.IsNullOrWhiteSpace(result) ? "SharpEngineProject" : result;
-    }
-
-    private static string Quote(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
-
-    private static string CSharpString(string value) => JsonSerializer.Serialize(value);
-
-    private static void WriteXmlAtomic(string path, XDocument document)
+    private static string SafeName(string value) => string.Concat(value.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    private static string Quote(string value) => "\"" + value + "\"";
+    private static string Id(string value) => "{" + new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(value.ToUpperInvariant())).AsSpan(0, 16)).ToString().ToUpperInvariant() + "}";
+    private static string Hash(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+    private static void WriteXml(string path, XElement root) => WriteText(path, new XDocument(root).ToString());
+    private static void WriteText(string path, string text)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (File.Exists(path) && File.ReadAllText(path) == text) return;
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        document.Save(temporary);
-        File.Move(temporary, path, true);
+        try { File.WriteAllText(temporary, text, new UTF8Encoding(false)); File.Move(temporary, path, true); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
-
-    private static void WriteTextAtomic(string path, string text)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(temporary, text, new UTF8Encoding(false));
-        File.Move(temporary, path, true);
-    }
-
-    private enum ProjectConfigurationKind
-    {
-        Cpp,
-        CSharp,
-    }
-
-    private sealed record SolutionProject(
-        string Name,
-        string Path,
-        string Guid,
-        string TypeGuid,
-        string FolderGuid,
-        ProjectConfigurationKind Kind,
-        bool Build,
-        IReadOnlyList<string>? DependencyGuids = null);
 }

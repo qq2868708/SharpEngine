@@ -9,12 +9,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="SharpEngine.Modules">
-      <HintPath>$(SharpEngineModulesApi)</HintPath>
+    <Reference Include="SharpEngine.Runtime">
+      <HintPath>$(SharpEngineRuntimeApi)</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="SharpEngine.Managed">
-      <HintPath>$(SharpEngineManagedApi)</HintPath>
+    <Reference Include="SharpEngine.Editor">
+      <HintPath>$(SharpEngineEditorApi)</HintPath>
       <Private>false</Private>
     </Reference>
     <ProjectReference Include="..\__PROJECT_NAMESPACE__\__PROJECT_NAMESPACE__.csproj" />
@@ -23,7 +23,7 @@
           Condition="'$(DesignTimeBuild)' != 'true'">
     <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
            Text="Direct Module builds are unsupported. Build the generated Solution or use SharpEngineProject -Command Build." />
-    <Error Condition="'$(SharpEngineManagedApi)' == '' or !Exists('$(SharpEngineManagedApi)') or '$(SharpEngineModulesApi)' == '' or !Exists('$(SharpEngineModulesApi)')"
+    <Error Condition="'$(SharpEngineEditorApi)' == '' or !Exists('$(SharpEngineEditorApi)') or '$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
            Text="SharpEngine managed APIs are missing. Use the SharpEngine project build command." />
   </Target>
 </Project>

@@ -16,6 +16,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
+    <SharpEngineRole>NativeHost</SharpEngineRole>
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{7f2e41ab-acc9-4c33-8782-a67a6ed902e5}</ProjectGuid>
@@ -46,7 +47,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
     <SharpEnginePlatform>Win64</SharpEnginePlatform>
-    <SharpEngineTarget>Editor</SharpEngineTarget>
+    <SharpEngineTarget Condition="'$(SharpEngineTarget)' == ''">Editor</SharpEngineTarget>
   </PropertyGroup>
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="Shared" />
@@ -80,13 +81,15 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir);$(SharpEngineRoot)\External\RmlUi\Include;$(SharpEngineRoot)\External\RmlUi\Backends;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions Condition="'$(SharpEngineTarget)' == 'Game'">SHARPENGINE_GAME;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EntryPointSymbol>wmainCRTStartup</EntryPointSymbol>
       <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(SharpUiBuildDir)\$(SharpUiConfiguration);$(SharpUiBuildDir)\FreeType\$(SharpUiConfiguration);$(VULKAN_SDK)\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>rmlui.lib;opengl32.lib;ole32.lib;uuid.lib;$(SharpFreeTypeLibrary);vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(SharpEngineTarget)' != 'Game'">rmlui.lib;opengl32.lib;ole32.lib;uuid.lib;$(SharpFreeTypeLibrary);vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(SharpEngineTarget)' == 'Game'">opengl32.lib;ole32.lib;uuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -146,28 +149,22 @@
     <ClInclude Include="UI\RmlUiShell.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Editor\EditorMain.cpp" />
+    <ClCompile Include="Editor\EditorMain.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
+    <ClCompile Include="Game\GameMain.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
+    <ClCompile Include="RenderCore\Private\PreviewRenderer.cpp" />
     <ClCompile Include="ManagedHost.cpp" />
     <ClCompile Include="Platform\Windows\WindowsPlatform.cpp" />
     <ClCompile Include="Platform\Windows\Window\Win32Window.cpp" />
-    <ClCompile Include="RenderCore\Private\Common\VkUtils.cpp" />
-    <ClCompile Include="RenderCore\Private\RenderCore.cpp" />
-    <ClCompile Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.cpp" />
-    <ClCompile Include="RenderCore\Private\Vulkan\VkContext.cpp" />
-    <ClCompile Include="RenderCore\Private\Vulkan\VkFrame.cpp" />
-    <ClCompile Include="RenderCore\Private\Vulkan\VkPipeline.cpp" />
-    <ClCompile Include="RenderCore\Private\Vulkan\VkSurface.cpp" />
-    <ClCompile Include="RenderCore\Private\Vulkan\VkSwapchain.cpp" />
-    <ClCompile Include="UI\RmlUiShell.cpp" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" />
+    <ClCompile Include="RenderCore\Private\Common\*.cpp;RenderCore\Private\Vulkan\*.cpp;RenderCore\Private\RenderCore.cpp;UI\*.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
   <Target Name="CheckSharpEngineLayout">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)Tools\SharpEngineLayout.ps1&quot; -EngineRoot &quot;$(SharpEngineRoot)Build\..&quot; -Mode Check -Platform $(SharpEnginePlatform) -Configuration $(Configuration) -Target $(SharpEngineTarget)" />
   </Target>
-  <Target Name="BuildUiDependencies" BeforeTargets="PrepareForBuild">
+  <Target Name="BuildUiDependencies" BeforeTargets="PrepareForBuild" Condition="'$(SharpEngineTarget)' != 'Game'">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)\Tools\BuildUiDependencies.ps1&quot; -Configuration $(Configuration)" />
   </Target>
 </Project>

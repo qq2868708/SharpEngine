@@ -1,7 +1,7 @@
 using System.Text.Json;
 using SharpEngine.Assets;
-using SharpEngine.Game;
-using SharpEngine.Modules;
+using SharpEngine.Host;
+using SharpEngine.Runtime;
 
 var root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 var assertions = 0;

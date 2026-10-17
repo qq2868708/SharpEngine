@@ -24,12 +24,12 @@ $ErrorActionPreference = 'Stop'
 
 $SupportedPlatforms = @('Win64')
 $SupportedConfigurations = @('Debug', 'Development', 'Shipping')
-$EngineTargets = @('Editor', 'Tools')
+$EngineTargets = @('Editor', 'Game', 'Tools')
 $ProjectTargets = @('Editor', 'Game')
 $BinaryTemplate = 'Binaries/{platform}/{configuration}/{target}'
 $IntermediateTemplate = 'Intermediate/{platform}/{configuration}/{target}'
-$PropsBinariesDir = '$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\'
-$PropsIntermediateDir = '$(SharpEngineRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\'
+$PropsBinariesDir = '$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)\'
+$PropsIntermediateDir = '$(SharpEngineRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)\'
 
 function Get-AbsolutePath([string]$Path, [string]$BaseDirectory = (Get-Location).Path) {
     if ([System.IO.Path]::IsPathRooted($Path)) {
@@ -268,13 +268,8 @@ function Assert-EngineContract([string]$Root) {
         throw 'Engine manifest binaries/intermediate templates must match Build props.'
     }
 
-    foreach ($relativePath in @(
-        'Config\DefaultEditorLayout.json',
-        'Source\Engine\Engine.vcxproj',
-        'Source\SharpEngine.Game\SharpEngine.Game.csproj',
-        'Source\SharpEngine.Managed\SharpEngine.Managed.csproj',
-        'Source\SharpEngine.Modules\SharpEngine.Modules.csproj',
-        'Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj')) {
+    # Project discovery belongs to EngineBuildGraph; do not keep a second list here.
+    foreach ($relativePath in @('Config\DefaultEditorLayout.json')) {
         $requiredPath = Join-Path $Root $relativePath
         if (!(Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
             throw "Required engine file not found: $requiredPath"
@@ -339,7 +334,7 @@ function Invoke-Check([string]$Root, [bool]$IsEngine) {
         $allowedTargets = $ProjectTargets
     }
     Assert-OutputHierarchy $Root 'Binaries' $allowedTargets
-    Assert-OutputHierarchy $Root 'Intermediate' $allowedTargets (!$IsEngine)
+    Assert-OutputHierarchy $Root 'Intermediate' $allowedTargets $true
     Write-Output "Layout check passed: $Root"
 }
 

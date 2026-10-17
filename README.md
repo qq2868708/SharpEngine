@@ -12,24 +12,39 @@ The native solution builds the RmlUi/FreeType dependencies and the managed
 projects as part of the Win64 build. It requires Visual Studio C++, CMake, and
 .NET 8. Dependency source versions and licenses are preserved under External.
 
-    & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe' SharpEngine.sln /m /restore /p:Configuration=Debug /p:Platform=x64
+    .\Tools\SharpEngineBuild.ps1 -Command Generate
+    .\Tools\SharpEngineBuild.ps1 -Target Editor -Configuration Debug
+    .\Tools\SharpEngineBuild.ps1 -Target Game -Configuration Development
 
-Engine, `SharpEngine.Game`, `SharpEngine.Managed`, `SharpEngine.Modules`, and
-`SharpEngine.ProjectSelector`
+Engine, `SharpEngine.Host`, `SharpEngine.Editor`, `SharpEngine.Runtime`, and
+`SharpEngine.ComponentGenerator`, and `SharpEngine.ProjectSelector`
 build from `Source/<BuildModule>`. Their products are flat in
-`Binaries/Win64/<Configuration>/Editor`; intermediates use the matching
-`Intermediate/Win64/<Configuration>/Editor/<BuildModule>` hierarchy. Supported
+`Binaries/Win64/<Configuration>/<Target>`; intermediates use the matching
+`Intermediate/Win64/<Configuration>/<Target>/<BuildModule>` hierarchy. Supported
 configurations are Debug, Development, and Shipping. The managed projects target
 net8.0, so a compatible .NET 8 runtime must be installed on the machine. The
-Project Selector is emitted separately under
+Project Selector and compile-time component generator are emitted separately under
 `Binaries/Win64/<Configuration>/Tools`.
+
+Project roles and references are declared in project files. Solutions, Target wrappers
+and launch profiles are generated; do not maintain another engine-project list.
+See [project organization and startup contracts](Documentation/ProjectOrganization.md).
 
 ## Run
 
     .\Binaries\Win64\Debug\Editor\Engine.exe
 
-The host loads the engine-owned `SharpEngine.Game.dll` bootstrap, the shared
-`SharpEngine.Modules.dll` contract, and `SharpEngine.Managed.dll` editor API.
+Standalone Game uses a different Target binary and requires a project with a valid
+saved `world.startup`:
+
+    .\Binaries\Win64\Development\Game\Engine.exe --project D:\Games\MyGame\MyGame.sharpproject
+
+Game loads Runtime Modules only, starts the World immediately and does not load the
+Editor assembly. Editor can open without a project; Game rejects a missing project
+or startup World. Both use the same component RuntimeWorld and scene renderer.
+
+The host loads the engine-owned `SharpEngine.Host.dll` bootstrap, the shared
+`SharpEngine.Runtime.dll` contract, and `SharpEngine.Editor.dll` editor API.
 RmlUi loads `Content/UI/Rml/Editor.rml` and `Editor.rcss`. The C# editor session
 loads the startup `.sworld` and the asset registry, then sends real
 mesh triangles and lines to the viewport. Hierarchy selection and viewport
@@ -50,14 +65,14 @@ For a bounded run and an actual framebuffer capture:
 
 The native host calls:
 
-    GameEntrypoint.Initialize
-    GameEntrypoint.Update
-    GameEntrypoint.Shutdown
-    GameEntrypoint.PointerDown     (optional)
-    GameEntrypoint.InvokeUiAction  (optional)
-    GameEntrypoint.ViewportInput  (optional)
-    GameEntrypoint.ViewportKey    (optional)
-    GameEntrypoint.RunMcp         (optional, used by --mcp-stdio)
+    HostEntrypoint.Initialize
+    HostEntrypoint.Update
+    HostEntrypoint.Shutdown
+    HostEntrypoint.InputEvent
+
+Editor Target additionally exposes UI actions, viewport interaction and MCP callbacks.
+The common Host project compiles the appropriate entry for each Target; it is a library
+loaded by the native executable, not a second executable with an empty Main method.
 
 These callbacks belong only to the engine bootstrap; user projects no longer
 copy an unmanaged entry point. The bootstrap loads every project Module from
@@ -96,11 +111,11 @@ Create a project from the checked-out engine or an installed distribution:
 
 `New` also generates `MyGame.sln`. `GenerateProjectFiles` forces a refresh,
 while `OpenSolution` refreshes only when its stamp is stale and then opens it.
-A source Engine Solution shows the Engine and Game logical folders, including
+A source Engine Solution shows the Engine and Project logical folders, including
 Engine Build Modules and project Modules even when they live on different drives.
-The generated SDK-style `MyGame.Editor Target` is the only Solution build entry
-for project code; Module projects remain visible for editing and IntelliSense but
-cannot be built directly.
+The generated SDK-style `MyGame.Editor Target` and `MyGame.Game Target` invoke the
+unified build pipeline. The selected Target owns the entire build; other projects
+remain visible for editing and IntelliSense and are not built a second time by the solution.
 
 Each Module is one `.csproj`, one DLL, and one `ISharpEngineModule` entry.
 Module ID/type come from evaluated MSBuild properties; dependencies come from
@@ -311,9 +326,9 @@ provide the query surface used by the Project dock and viewport. An entry is
 portable because its `path` is relative to the owning engine/project root;
 `AssetDescriptor.ResolvePath` validates that it cannot escape that root.
 
-`Source/SharpEngine.Modules/SharpEngine.Modules.csproj` builds the minimal
+`Source/SharpEngine.Runtime/SharpEngine.Runtime.csproj` builds the minimal
 Runtime-safe Module contract. Runtime Modules reference only this DLL.
-`Source/SharpEngine.Managed/SharpEngine.Managed.csproj` builds the asset, world,
+`Source/SharpEngine.Editor/SharpEngine.Editor.csproj` builds the asset, world,
 UI, and editor APIs; Editor Modules reference both public DLLs. The unified
 project builder supplies their resolved paths to MSBuild and copies no engine
 source.
@@ -376,7 +391,7 @@ var tool = editor.Toolbar.RegisterTool(new EditorToolbarTool(
     ["project.reset-position"]));
 ```
 
-These types live in `SharpEngine.Editor` in the public `SharpEngine.Managed.dll`.
+These types live in `SharpEngine.Editor` in the public `SharpEngine.Editor.dll`.
 The BasicProject template includes a working top-level `Project` menu and Scene,
 Object, Asset, and Folder context menus. `EditorContext` and command callbacks
 expose the current world, assets, unified `EditorSelection`, play state, dirty
@@ -465,7 +480,7 @@ and `dotnet run --project Tools/McpUiValidation -c Debug -- Debug --content-only
 The latter launches an isolated rendered editor and saves frame evidence under
 `Saved/Validation/ContentManager` without saving the user's layout.
 
-`Source/SharpEngine.Managed/UI/UiFramework.cs` and `EngineUi.cs` remain legacy
+`Source/SharpEngine.Editor/UI/UiFramework.cs` and `EngineUi.cs` remain legacy
 compatibility/experimentation APIs; new projects no longer receive `*.ui.xml`
 assets. Runtime UI source assets use RML and RCSS, while the editor shell itself
 continues to use `Content/UI/Rml/Editor.rml`.

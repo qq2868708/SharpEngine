@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Source\SharpEngine.Managed\SharpEngine.Managed.csproj" />
+    <ProjectReference Include="..\..\Source\SharpEngine.Editor\SharpEngine.Editor.csproj" />
   </ItemGroup>
 </Project>

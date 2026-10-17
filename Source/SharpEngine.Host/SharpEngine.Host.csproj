@@ -1,0 +1,33 @@
+<Project>
+  <PropertyGroup><SharpEngineRole>Host</SharpEngineRole></PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <DefineConstants Condition="'$(SharpEngineTarget)' == 'Editor'">$(DefineConstants);SHARPENGINE_EDITOR</DefineConstants>
+    <OutputType>Library</OutputType>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>SharpEngine.Host</AssemblyName>
+    <RootNamespace>SharpEngine.Host</RootNamespace>
+    <Version>0.2.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseAppHost>false</UseAppHost>
+    <OutputPath>$(SharpEngineBinariesDir)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateDir)SharpEngine.Host\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpEngine.Runtime\SharpEngine.Runtime.csproj" />
+    <ProjectReference Include="..\SharpEngine.Editor\SharpEngine.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SharpEngineTarget)' == 'Game'">
+    <Compile Remove="EditorEntrypoint.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SharpEngineTarget)' != 'Game'">
+    <Compile Remove="GameEntrypoint.cs" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

@@ -418,7 +418,7 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
         LoadAssemblyAndGetFunctionPointerFunction);
 
     const wchar_t* const typeName = entryPointTypeName.empty()
-        ? L"SharpEngine.Game.GameEntrypoint, SharpEngine.Game"
+        ? L"SharpEngine.Host.HostEntrypoint, SharpEngine.Host"
         : entryPointTypeName.c_str();
 
     const auto loadManagedFunction = [&](const wchar_t* methodName,
@@ -449,6 +449,7 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
         return false;
     }
 
+#ifndef SHARPENGINE_GAME
     // PointerDown is an optional extension so older managed game assemblies
     // remain loadable with the versioned native API.
     if (!loadManagedFunction(L"PointerDown", &ManagedPointerDownFunction))
@@ -462,13 +463,16 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
         ManagedViewportInputFunction = nullptr;
     if (!loadManagedFunction(L"ViewportKey", &ManagedViewportKeyFunction))
         ManagedViewportKeyFunction = nullptr;
+#endif
     if (!loadManagedFunction(L"InputEvent", &ManagedInputEventFunction))
     {
         ResetRuntime();
         return false;
     }
+#ifndef SHARPENGINE_GAME
     if (!loadManagedFunction(L"RunMcp", &ManagedRunMcpFunction))
         ManagedRunMcpFunction = nullptr;
+#endif
     return true;
 }
 

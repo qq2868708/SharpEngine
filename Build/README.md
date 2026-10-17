@@ -13,8 +13,11 @@ Intermediate/<Platform>/<Configuration>/<Target>/
 ```
 
 Supported values are `Win64` and `Debug` / `Development` / `Shipping`. Engine
-outputs use `Editor` and `Tools`; project outputs use `Editor` and `Game`.
-`Game` remains a build-only project Target until its native host is implemented.
+outputs use `Editor`, `Game`, and `Tools`; project outputs use `Editor` and `Game`.
+Game has a standalone native/managed entry and does not depend on Editor. Projects
+declare `SharpEngineRole` before SDK props. Tool and Generator roles use the Tools
+output directory; Runtime and Host follow the selected Target. `EngineBuildGraph`
+discovers engine projects and invokes their real project-reference graph.
 
 Use `Tools/SharpEngineLayout.ps1` to inspect or maintain this structure:
 

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('New', 'Resolve', 'Doctor', 'Build', 'Clean', 'Rebuild',
-        'GenerateProjectFiles', 'OpenSolution', 'OpenEditor')]
+        'GenerateProjectFiles', 'OpenSolution', 'OpenEditor', 'RunGame', 'Migrate')]
     [string]$Command = 'New',
     [string]$Name,
     [string]$Directory = (Get-Location).Path,
@@ -192,6 +192,7 @@ function Invoke-NewProject {
         Write-Utf8NoBom (Join-Path $projectRoot $file.Target) $text
     }
     $manifestPath = Join-Path $projectRoot "$Name.sharpproject"
+    Invoke-Selector 'initialize-world' $manifestPath $true $engineFull
     Invoke-GenerateProjectFiles $manifestPath $engineFull
     $result = [pscustomobject]@{
         ProjectRoot = $projectRoot
@@ -242,6 +243,8 @@ function Invoke-Doctor([string]$Path) {
 
 function Invoke-Build([string]$Path) {
     $resolved = Resolve-ProjectManifest $Path
+    & (Join-Path $resolved.EngineRoot 'Tools/SharpEngineBuild.ps1') -EngineRoot $resolved.EngineRoot -Target $Target -Configuration $Configuration -Platform $Platform
+    if ($LASTEXITCODE) { throw 'Engine Target build failed' }
     $layout = Join-Path $resolved.EngineRoot 'Tools\SharpEngineLayout.ps1'
     if (!(Test-Path -LiteralPath $layout -PathType Leaf)) {
         throw "SharpEngine layout checker not found: $layout"
@@ -327,4 +330,6 @@ switch ($Command) {
     'GenerateProjectFiles' { Invoke-GenerateProjectFiles (Find-ProjectFile) }
     'OpenSolution' { Invoke-OpenSolution (Find-ProjectFile) }
     'OpenEditor' { Invoke-OpenEditor (Find-ProjectFile) }
+    'RunGame' { Invoke-Selector 'run-game' (Find-ProjectFile) $true }
+    'Migrate' { Invoke-Selector 'migrate' (Find-ProjectFile) $true }
 }

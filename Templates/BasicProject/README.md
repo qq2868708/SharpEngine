@@ -7,13 +7,13 @@ override its Engine association for CI and automation.
 The project contains two C# Modules:
 
 - `Source/__PROJECT_NAMESPACE__`: Runtime Module, referencing only
-  `SharpEngine.Modules.dll`.
+  `SharpEngine.Runtime.dll`.
 - `Source/__PROJECT_NAMESPACE__.Editor`: Editor Module, depending on the Runtime
   Module and registering project menus and context commands.
 
 `__DISPLAY_NAME__.sln` is generated when the project is created. It shows the
 associated source Engine and the project Modules even when they are in unrelated
-directories. Build from the generated `__DISPLAY_NAME__.Editor Target`, or use
+directories. Build from the generated Editor or Game Target, or use
 the engine-owned project builder:
 
 ```powershell
@@ -36,6 +36,7 @@ File > New C# Class to create a class or Component in an existing Module, or
 File > Build Project Code to retry a failed build. Reload failure keeps the
 Editor open and can be retried after fixing source; no automatic restart occurs.
 
-The first editor session creates an unsaved World instance from the engine's
-default World. Saving it creates a project-owned `.sworld`, registers it in
-`Content/Assets/assets.json`, and selects it as the project's startup World.
+Creation copies the configured engine World preset into `Content/Worlds/Main.sworld`
+and records it as `world.startup`. Game requires this explicit saved World; Editor
+can also work with unsaved Worlds. Use `-Target Game` to build the standalone runtime
+and `-Command RunGame` to launch it. Game never loads the Editor Module.

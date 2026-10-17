@@ -74,14 +74,16 @@ try
           firstSolution.Contains(Path.Combine(engineRoot, "Source", "Engine",
               "Engine.vcxproj"), StringComparison.OrdinalIgnoreCase),
         "Source Engine and generated Editor Target must coexist in the Solution");
-    var engineBootstrapGuid = StableGuid("project:" + Path.Combine(engineRoot, "Source",
-        "SharpEngine.Game", "SharpEngine.Game.csproj"));
-    var componentGeneratorGuid = StableGuid("project:" + Path.Combine(engineRoot, "Source",
-        "SharpEngine.ComponentGenerator", "SharpEngine.ComponentGenerator.csproj"));
+    string SolutionId(string name) => System.Text.RegularExpressions.Regex.Match(firstSolution,
+        "= \"" + System.Text.RegularExpressions.Regex.Escape(name) + "\", \"[^\"]+\", \"([^\"]+)\"").Groups[1].Value;
+    var componentGeneratorGuid = SolutionId("SharpEngine.ComponentGenerator");
     foreach (var configuration in new[] { "Debug", "Development", "Shipping" })
+    foreach (var target in new[] { "Editor", "Game" })
         Check(firstSolution.Contains(componentGeneratorGuid + "." + configuration +
-                " Editor|Win64.Build.0 = " + configuration + "|Any CPU", StringComparison.Ordinal),
-            "Component generator must build in the selected Solution configuration: " + configuration);
+                " " + target + "|Win64.ActiveCfg = " + configuration + "|Any CPU", StringComparison.Ordinal) &&
+            firstSolution.Contains(SolutionId("ForeignGame." + target + " Target") + "." + configuration +
+                " " + target + "|Win64.Build.0", StringComparison.Ordinal),
+            "Each configuration must select its own unified Target: " + configuration + " " + target);
     var nativeEnginePath = Path.Combine(engineRoot, "Source", "Engine", "Engine.vcxproj");
     var nativeEngineDocument = XDocument.Load(nativeEnginePath);
     var nativeEngineGuid = nativeEngineDocument.Descendants().First(element =>
@@ -90,41 +92,39 @@ try
         StringComparison.Ordinal);
     var targetEnd = firstSolution.IndexOf("EndProject", targetStart, StringComparison.Ordinal);
     var targetBlock = firstSolution[targetStart..targetEnd];
-    Check(targetBlock.Contains(engineBootstrapGuid, StringComparison.OrdinalIgnoreCase) &&
-          targetBlock.Contains(nativeEngineGuid, StringComparison.OrdinalIgnoreCase),
-        "Editor Target must depend on both native Engine and managed bootstrap projects");
+    Check(!targetBlock.Contains("ProjectDependencies", StringComparison.Ordinal) &&
+        EngineBuildGraph.Discover(engineRoot).Count(p => p.Role == "Host") == 1,
+        "The unified builder must own the graph without a duplicate solution dependency list");
     var nativeEngineProject = File.ReadAllText(nativeEnginePath);
     Check(!nativeEngineProject.Contains("<ProjectReference", StringComparison.Ordinal) &&
-          !nativeEngineProject.Contains("..\\SharpEngine.Game", StringComparison.Ordinal),
+          !nativeEngineProject.Contains("..\\SharpEngine.Host", StringComparison.Ordinal),
         "Native Engine must not expose or invoke managed projects outside the Solution graph");
     Check(firstSolution.Contains("{2150E333-8FDC-42A3-9474-1A3956D46DE8}",
               StringComparison.OrdinalIgnoreCase) &&
           !firstSolution.Contains("= \"Build\", \"Build\"", StringComparison.Ordinal),
         "Generated Solution must use real Solution folders without exposing Build plumbing");
-    var runtimeGuid = StableGuid("project:" + Path.Combine(runtimeDirectory,
-        "ForeignGame.csproj"));
+    var runtimeGuid = SolutionId("ForeignGame");
     Check(!firstSolution.Contains(runtimeGuid + ".Debug Editor|Win64.Build.0",
             StringComparison.Ordinal),
         "User Module projects must not participate in Solution Build directly");
     Check(firstWrapper.Contains("-Command Build", StringComparison.Ordinal) &&
-          firstWrapper.Contains("-Command Clean", StringComparison.Ordinal) &&
-          firstWrapper.Contains("BuildSharpEngineProject", StringComparison.Ordinal) &&
+          firstWrapper.Contains("BuildSharpEngineTarget", StringComparison.Ordinal) &&
           !firstWrapper.Contains("MakeFileProj", StringComparison.Ordinal),
-        "SDK Editor Target must own unified Build/Clean without NMake");
+        "SDK Editor Target must own unified Build without NMake");
     Check(launchSettings.Contains("Debug Editor", StringComparison.Ordinal) &&
           launchSettings.Contains("Development Editor", StringComparison.Ordinal) &&
           launchSettings.Contains("Shipping Editor", StringComparison.Ordinal),
         "Editor Target must publish launch profiles for every approved configuration");
     var props = File.ReadAllText(generated.GeneratedPropsPath);
-    Check(props.Contains("SharpEngineManagedApi", StringComparison.Ordinal) &&
-          props.Contains("SharpEngineModulesApi", StringComparison.Ordinal) &&
+    Check(props.Contains("SharpEngineEditorApi", StringComparison.Ordinal) &&
+          props.Contains("SharpEngineRuntimeApi", StringComparison.Ordinal) &&
           !props.Contains("SharpEngineUnifiedBuild>true", StringComparison.Ordinal),
         "Generated design-time props must resolve APIs without authorizing direct builds");
     var generatedProps = XDocument.Load(generated.GeneratedPropsPath);
     var generatorPath = generatedProps.Descendants("SharpEngineComponentGenerator").Single().Value;
     var componentTargets = generatedProps.Descendants("CustomAfterMicrosoftCommonTargets").Single().Value;
     Check(generatorPath == Path.Combine(engineRoot,
-            @"Binaries\Win64\$(Configuration)\Editor\SharpEngine.ComponentGenerator.dll") &&
+            @"Binaries\Win64\$(Configuration)\Tools\SharpEngine.ComponentGenerator.dll") &&
         componentTargets == Path.Combine(engineRoot, @"Build\SharpEngine.Components.targets"),
         "Runtime Module IDE builds must resolve the generator for the selected configuration");
 
@@ -154,6 +154,10 @@ try
     var installed = store.Register(engineRoot, null, installed: true);
     Check(installed.Association == "0.2" && store.Unregister(installed.Association),
         "Installed Engine registration must use a stable major.minor association");
+    var launchIndex = Array.IndexOf(args, "--game-launch");
+    if (launchIndex >= 0)
+        TargetLaunchValidation.Run(engineRoot, args[launchIndex + 1],
+            args.Length > launchIndex + 2 ? args[launchIndex + 2] : "Development", Check);
     Console.WriteLine($"PASS: {assertions} Project Selector assertions");
     return 0;
 }
@@ -192,10 +196,3 @@ static bool SamePath(string left, string right) =>
     string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
         StringComparison.OrdinalIgnoreCase);
-
-static string StableGuid(string value)
-{
-    var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(
-        value.Replace('\\', '/').ToLowerInvariant()));
-    return "{" + new Guid(bytes.AsSpan(0, 16)).ToString().ToUpperInvariant() + "}";
-}

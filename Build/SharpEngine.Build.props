@@ -4,11 +4,12 @@
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
     <SharpEnginePlatform Condition="'$(SharpEnginePlatform)' == ''">Win64</SharpEnginePlatform>
     <SharpEngineTarget Condition="'$(SharpEngineTarget)' == ''">Editor</SharpEngineTarget>
+    <SharpEngineOutputTarget Condition="'$(SharpEngineOutputTarget)' == ''">$(SharpEngineTarget)</SharpEngineOutputTarget>
 
     <SharpEngineBinariesTemplate>Binaries/{platform}/{configuration}/{target}</SharpEngineBinariesTemplate>
     <SharpEngineIntermediateTemplate>Intermediate/{platform}/{configuration}/{target}</SharpEngineIntermediateTemplate>
-    <SharpEngineBinariesDir>$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\</SharpEngineBinariesDir>
-    <SharpEngineIntermediateDir>$(SharpEngineRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\</SharpEngineIntermediateDir>
+    <SharpEngineBinariesDir>$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)\</SharpEngineBinariesDir>
+    <SharpEngineIntermediateDir>$(SharpEngineRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)\</SharpEngineIntermediateDir>
 
     <OutDir>$(SharpEngineBinariesDir)</OutDir>
     <IntDir>$(SharpEngineIntermediateDir)$(MSBuildProjectName)\</IntDir>

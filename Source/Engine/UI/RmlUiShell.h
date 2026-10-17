@@ -5,9 +5,9 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include "RenderCore/Public/PreviewRenderer.h"
 
 struct UiViewportRect { float X, Y, Width, Height; };
-struct UiSceneVertex { float X, Y, Z, R, G, B, A; };
 
 // RmlUi owns layout, fonts, controls, clipping, focus, and input. Engine/game
 // state is passed through small semantic text/action calls.

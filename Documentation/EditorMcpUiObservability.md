@@ -19,7 +19,7 @@ authoring, project capabilities, or the Dock layout file format.
 
 ## Current Implementation
 
-The embedded server in `Source/SharpEngine.Managed/Editor/McpEndpoint.cs`
+The embedded server in `Source/SharpEngine.Editor/Editor/McpEndpoint.cs`
 currently exposes:
 
 - `scene.describe`
@@ -42,7 +42,7 @@ currently exposes:
 - `sharpengine://ui`
 - `sharpengine://ui/frames/{frameId}/{hostId}.png`
 
-`editor.describe` in `Source/SharpEngine.Managed/Editor/EditorRuntime.cs`
+`editor.describe` in `Source/SharpEngine.Editor/Editor/EditorRuntime.cs`
 includes the committed Dock tree and links to the capability and UI resources.
 The full computed RmlUi tree remains in `sharpengine://ui` rather than being
 duplicated into the editor snapshot.

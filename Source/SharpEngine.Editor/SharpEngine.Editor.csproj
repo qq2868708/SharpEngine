@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup><SharpEngineRole>Editor</SharpEngineRole></PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.Editor</AssemblyName>
+    <RootNamespace>SharpEngine</RootNamespace>
+    <Version>0.2.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputPath>$(SharpEngineBinariesDir)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateDir)SharpEngine.Editor\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpEngine.Runtime\SharpEngine.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

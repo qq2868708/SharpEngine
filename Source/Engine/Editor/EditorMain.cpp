@@ -233,8 +233,8 @@ int wmain(int argc,wchar_t** argv)
         // user explicitly attaches to an existing or isolated Editor.
         ManagedHost managed;
         const bool loaded=managed.Initialize(
-            (executableDirectory/L"SharpEngine.Game.runtimeconfig.json").wstring(),
-            (executableDirectory/L"SharpEngine.Game.dll").wstring());
+            (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),
+            (executableDirectory/L"SharpEngine.Host.dll").wstring());
         if (!loaded)
         {
             std::cerr<<"[MCP] managed bridge initialization failed"<<std::endl;
@@ -261,8 +261,8 @@ int wmain(int argc,wchar_t** argv)
     GManaged=&managed;
     const ManagedHostApi api{9,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput,&CreateDockWindow,&DestroyDockWindow,&SetHostMarkup,&ChooseWorldSavePath,&GetUiSnapshot,&UiPointer,&UiKey,&ReadUiFrame};
     const bool loaded=managed.Initialize(
-        (executableDirectory/L"SharpEngine.Game.runtimeconfig.json").wstring(),
-        (executableDirectory/L"SharpEngine.Game.dll").wstring());
+        (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),
+        (executableDirectory/L"SharpEngine.Host.dll").wstring());
     if (!loaded || !managed.Start(window.Window,1440,900,&api))
     {
         std::cerr<<"[ManagedHost] initialization failed"<<std::endl;

@@ -65,10 +65,11 @@ using (var engineDocument = JsonDocument.Parse(File.ReadAllText(engineManifestPa
 }
 
 var engineOutputDirectory = ResolveLayoutPath(engineRoot, binariesTemplate,
-    platform, configuration, "Editor");
-var managedApi = Path.Combine(engineOutputDirectory, "SharpEngine.Managed.dll");
-var modulesApi = Path.Combine(engineOutputDirectory, "SharpEngine.Modules.dll");
-if (!File.Exists(managedApi) || !File.Exists(modulesApi))
+    platform, configuration, target);
+var managedApi = Path.Combine(ResolveLayoutPath(engineRoot, binariesTemplate,
+    platform, configuration, "Editor"), "SharpEngine.Editor.dll");
+var modulesApi = Path.Combine(engineOutputDirectory, "SharpEngine.Runtime.dll");
+if ((target == "Editor" && !File.Exists(managedApi)) || !File.Exists(modulesApi))
     Fail("SEBUILD006", $"SharpEngine managed APIs are not built: {managedApi}, {modulesApi}");
 
 var outputDirectory = ResolveLayoutPath(projectRoot, binariesTemplate,
@@ -122,15 +123,15 @@ foreach (var module in modules)
         Fail("SEMOD003", $"Module type is not declared in {module.ProjectPath}: SharpEngineModuleId is required");
     if (module.Type is not ("Runtime" or "Editor"))
         Fail("SEMOD004", $"Module '{module.Id}' must explicitly declare Runtime or Editor");
-    if (!module.AssemblyReferences.Contains("SharpEngine.Modules",
+    if (!module.AssemblyReferences.Contains("SharpEngine.Runtime",
             StringComparer.OrdinalIgnoreCase))
-        Fail("SEMOD016", $"Module '{module.Id}' must directly reference SharpEngine.Modules");
+        Fail("SEMOD016", $"Module '{module.Id}' must directly reference SharpEngine.Runtime");
     if (module.Type == "Runtime" && module.AssemblyReferences.Contains(
-            "SharpEngine.Managed", StringComparer.OrdinalIgnoreCase))
-        Fail("SEMOD017", $"Runtime Module '{module.Id}' cannot reference SharpEngine.Managed editor API");
+            "SharpEngine.Editor", StringComparer.OrdinalIgnoreCase))
+        Fail("SEMOD017", $"Runtime Module '{module.Id}' cannot reference SharpEngine.Editor editor API");
     if (module.Type == "Editor" && !module.AssemblyReferences.Contains(
-            "SharpEngine.Managed", StringComparer.OrdinalIgnoreCase))
-        Fail("SEMOD018", $"Editor Module '{module.Id}' must directly reference SharpEngine.Managed");
+            "SharpEngine.Editor", StringComparer.OrdinalIgnoreCase))
+        Fail("SEMOD018", $"Editor Module '{module.Id}' must directly reference SharpEngine.Editor");
     if (!byId.TryAdd(module.Id, module))
         Fail("SEMOD005", $"Duplicate Module id '{module.Id}'");
 }
@@ -156,7 +157,7 @@ foreach (var module in modules)
 
 var ordered = TopologicalOrder(modules);
 var selected = ordered.Where(module => target == "Editor" || module.Type == "Runtime").ToArray();
-foreach (var module in ordered)
+foreach (var module in selected)
 {
     Console.WriteLine($"[Validate] {module.Id} ({module.Type})");
     BuildModule(module.ProjectPath, configuration, platform, target,
@@ -165,7 +166,7 @@ foreach (var module in ordered)
 
 var typeOwners = new Dictionary<string, string>(StringComparer.Ordinal);
 var componentOwners = new Dictionary<string, string>(StringComparer.Ordinal);
-foreach (var module in ordered)
+foreach (var module in selected)
 {
     if (!File.Exists(module.TargetPath))
         Fail("SEMOD008", $"Module output is missing: {module.TargetPath}");
@@ -206,8 +207,8 @@ var selectedModules = selected.ToDictionary(module => module.AssemblyName + ".dl
     StringComparer.OrdinalIgnoreCase);
 var engineAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
-    "SharpEngine.Managed.dll",
-    "SharpEngine.Modules.dll",
+    "SharpEngine.Editor.dll",
+    "SharpEngine.Runtime.dll",
 };
 var published = new Dictionary<string, PublishedFile>(StringComparer.OrdinalIgnoreCase);
 foreach (var (owner, directory) in inputDirectories)
@@ -390,9 +391,9 @@ static IReadOnlyList<string> BuildProperties(string configuration, string platfo
     $"-p:SharpEngineTarget={target}",
     $"-p:SharpEngineOutputRoot={EnsureTrailingSeparator(outputRoot)}",
     $"-p:SharpEngineIntermediateRoot={EnsureTrailingSeparator(intermediateRoot)}",
-    $"-p:SharpEngineManagedApi={managedApi}",
-    $"-p:SharpEngineModulesApi={modulesApi}",
-    $"-p:SharpEngineComponentGenerator={Path.Combine(Path.GetDirectoryName(modulesApi)!, "SharpEngine.ComponentGenerator.dll")}",
+    $"-p:SharpEngineEditorApi={managedApi}",
+    $"-p:SharpEngineRuntimeApi={modulesApi}",
+    $"-p:SharpEngineComponentGenerator={Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(modulesApi))!, "Tools", "SharpEngine.ComponentGenerator.dll")}",
     $"-p:CustomAfterMicrosoftCommonTargets={Path.GetFullPath(Path.Combine(Path.GetDirectoryName(modulesApi)!, "..", "..", "..", "..", "Build", "SharpEngine.Components.targets"))}",
     "-p:SharpEngineUnifiedBuild=true",
 ];
@@ -537,7 +538,7 @@ static AssemblyMetadata InspectAssembly(string path)
         var directlyImplementsModule = definition.GetInterfaceImplementations()
             .Select(reader.GetInterfaceImplementation)
             .Any(value => InterfaceName(reader, value.Interface) ==
-                "SharpEngine.Modules.ISharpEngineModule");
+                "SharpEngine.Runtime.ISharpEngineModule");
         if (!directlyImplementsModule) continue;
         var visibility = definition.Attributes & TypeAttributes.VisibilityMask;
         var isPublic = visibility is TypeAttributes.Public or TypeAttributes.NestedPublic;

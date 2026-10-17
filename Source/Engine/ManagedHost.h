@@ -98,7 +98,7 @@ struct ManagedHostApi
     ManagedSetUiPropertyFn SetUiProperty = nullptr;
     ManagedViewportInputFn ViewportInput = nullptr;
     // Version 7 appends transient native Dock Host operations. Field order is
-    // ABI-significant and must match Source/SharpEngine.Managed/Editor/NativeEngineApi.cs.
+    // ABI-significant and must match Source/SharpEngine.Editor/Editor/NativeEngineApi.cs.
     ManagedCreateDockWindowFn CreateDockWindow = nullptr;
     ManagedDestroyDockWindowFn DestroyDockWindow = nullptr;
     ManagedSetHostMarkupFn SetHostMarkup = nullptr;

@@ -32,11 +32,17 @@ internal static class Program
                 "generate" => Generate(args, implicitProject, noUi),
                 "open-solution" => OpenSolution(args, implicitProject, noUi),
                 "open-editor" => OpenEditor(args, implicitProject, noUi),
+                "run-game" => OpenEditor(args, implicitProject, noUi, "Game"),
+                "build-engine" => BuildEngine(args),
+                "generate-engine" => GenerateEngine(args),
+                "migrate" => Migrate(args),
+                "initialize-world" => InitializeWorld(args),
                 _ => throw new ArgumentException($"Unknown Project Selector command '{command}'"),
             };
         }
         catch (Exception exception)
         {
+            Console.Error.WriteLine(exception.Message);
             WriteResult(args, new
             {
                 success = false,
@@ -142,7 +148,7 @@ internal static class Program
         return 0;
     }
 
-    private static int OpenEditor(string[] args, string? implicitProject, bool noUi)
+    private static int OpenEditor(string[] args, string? implicitProject, bool noUi, string target = "Editor")
     {
         var resolved = ResolveProject(args, implicitProject, prompt: !noUi);
         var requestedConfiguration = Option(args, "--configuration");
@@ -151,7 +157,7 @@ internal static class Program
             : new[] { ValidateConfiguration(requestedConfiguration) };
         var executable = configurations.Select(configuration => Path.Combine(
                 ProjectContracts.ResolveBinaries(resolved.Engine, "Win64", configuration,
-                    "Editor"), "Engine.exe"))
+                    target), "Engine.exe"))
             .FirstOrDefault(File.Exists) ??
             throw new FileNotFoundException(
                 "No built Editor was found for the associated Engine. Build the Engine first.");
@@ -184,6 +190,33 @@ internal static class Program
                     $"SharpEngine Editor exited with code {process.ExitCode}");
         }
         WriteResult(args, new { success = true, executable, project = resolved.Project.ManifestPath });
+        return 0;
+    }
+
+    private static int BuildEngine(string[] args)
+    {
+        EngineBuildGraph.Build(RequiredOption(args, "--engine-root"), Option(args, "--target") ?? "Editor",
+            Option(args, "--configuration") ?? "Debug", Option(args, "--platform") ?? "Win64");
+        return 0;
+    }
+
+    private static int Migrate(string[] args)
+    {
+        var resolved = ResolveProject(args, null, prompt: false);
+        ProjectMigration.Migrate(resolved);
+        SolutionGenerator.Generate(resolved);
+        return 0;
+    }
+
+    private static int InitializeWorld(string[] args)
+    {
+        ProjectMigration.CreateStartupWorld(ResolveProject(args, null, prompt: false));
+        return 0;
+    }
+
+    private static int GenerateEngine(string[] args)
+    {
+        SolutionGenerator.GenerateEngine(RequiredOption(args, "--engine-root"));
         return 0;
     }
 

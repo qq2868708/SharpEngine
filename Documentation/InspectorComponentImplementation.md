@@ -6,14 +6,14 @@
 
 | 内容 | 代码入口 |
 | --- | --- |
-| 组件基类、特性、实体与初始状态契约 | `Source/SharpEngine.Modules/Components/ComponentContracts.cs` |
-| 组件描述、JSON Schema、校验与字段编码 | `Source/SharpEngine.Modules/Components/ComponentRegistry.cs` |
-| v3 World/Prefab 记录、身份和引用处理 | `Source/SharpEngine.Modules/Components/SceneData.cs` |
-| Runtime 世界、阶段调度、动态创建和清理 | `Source/SharpEngine.Modules/Components/RuntimeWorld.cs` |
+| 组件基类、特性、实体与初始状态契约 | `Source/SharpEngine.Runtime/Components/ComponentContracts.cs` |
+| 组件描述、JSON Schema、校验与字段编码 | `Source/SharpEngine.Runtime/Components/ComponentRegistry.cs` |
+| v3 World/Prefab 记录、身份和引用处理 | `Source/SharpEngine.Runtime/Components/SceneData.cs` |
+| Runtime 世界、阶段调度、动态创建和清理 | `Source/SharpEngine.Runtime/Components/RuntimeWorld.cs` |
 | 编译期字段、默认值、访问器及工厂生成 | `Source/SharpEngine.ComponentGenerator/ComponentGenerator.cs` |
-| World 与共享 Authoring 事务 | `Source/SharpEngine.Managed/World/WorldDescription.cs`、`WorldAuthoring.cs` |
-| Inspector 控件与 UI/MCP 共享修改 | `Source/SharpEngine.Managed/Editor/EditorComponentInspector.cs` |
-| Prefab 文档选择、历史、保存及实例化 | `Source/SharpEngine.Managed/Editor/EditorPrefabDocuments.cs` |
+| World 与共享 Authoring 事务 | `Source/SharpEngine.Runtime/World/WorldDescription.cs`、`Source/SharpEngine.Editor/World/WorldAuthoring.cs` |
+| Inspector 控件与 UI/MCP 共享修改 | `Source/SharpEngine.Editor/Editor/EditorComponentInspector.cs` |
+| Prefab 文档选择、历史、保存及实例化 | `Source/SharpEngine.Editor/Editor/EditorPrefabDocuments.cs` |
 | 真实输入、编辑提交和拖放 | `Source/Engine/UI/RmlUiShell.cpp` |
 
 Inspector 支持组件搜索添加、依赖补齐、启用切换、字段编辑、Reset、Remove、组件重排及实体创建/销毁。字段元数据来自构建期生成器，包含公开和显式标记的私有字段。常见控件包括数值、Range 滑条、布尔、枚举、引用选择、向量、颜色预设及 RGBA 输入、列表和嵌套数据。

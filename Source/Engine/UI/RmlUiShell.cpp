@@ -2588,61 +2588,14 @@ void RmlUiShell::RenderViewport(const UiViewportRect& viewport)
 {
     auto& state = *State;
     auto* host = state.FindMainHost();
-    if (!host || (state.Triangles.empty() && state.Lines.empty())) return;
+    if (!host) return;
     RECT client{};
     GetClientRect(host->Window, &client);
-    glPushAttrib(GL_ALL_ATTRIB_BITS);
-    glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glViewport(static_cast<int>(viewport.X),
-        client.bottom - static_cast<int>(viewport.Y + viewport.Height),
-        static_cast<int>(viewport.Width), static_cast<int>(viewport.Height));
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(static_cast<int>(viewport.X),
-        client.bottom - static_cast<int>(viewport.Y + viewport.Height),
-        static_cast<int>(viewport.Width), static_cast<int>(viewport.Height));
-    glDisable(GL_TEXTURE_2D);
-    glDisable(GL_BLEND);
-    glDisable(GL_STENCIL_TEST);
-    glClearColor(0.055f, 0.065f, 0.08f, 1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, viewport.Width, viewport.Height, 0, 0, -1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(1.0f, 1.0f);
-    glBegin(GL_TRIANGLES);
-    for (const auto& vertex : state.Triangles)
-    {
-        glColor4f(vertex.R, vertex.G, vertex.B, vertex.A);
-        glVertex3f(vertex.X, vertex.Y, vertex.Z);
-    }
-    glEnd();
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    glBegin(GL_LINES);
-    for (const auto& vertex : state.Lines)
-    {
-        glColor4f(vertex.R, vertex.G, vertex.B, vertex.A);
-        glVertex3f(vertex.X, vertex.Y, vertex.Z);
-    }
-    glEnd();
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_SCISSOR_TEST);
-    glMatrixMode(GL_MODELVIEW);
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glPopClientAttrib();
-    glPopAttrib();
+    RenderPreviewScene(viewport.X, viewport.Y, viewport.Width, viewport.Height,
+        static_cast<float>(client.bottom), state.Triangles.data(),
+        static_cast<uint32_t>(state.Triangles.size()), state.Lines.data(),
+        static_cast<uint32_t>(state.Lines.size()));
 }
-
 void RmlUiShell::SetText(const char* id, const char* utf8)
 {
     if (!id || !utf8) return;

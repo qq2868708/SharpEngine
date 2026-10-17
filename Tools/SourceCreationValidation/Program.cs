@@ -6,12 +6,14 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpEngine.Components;
 using SharpEngine.Editor;
-using SharpEngine.Game;
-using SharpEngine.Modules;
+using SharpEngine.Host;
+using SharpEngine.Runtime;
 
 var repository = Path.GetFullPath(args[0]);
 var engine = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
-if (engine.Equals(repository, StringComparison.OrdinalIgnoreCase)) throw new Exception("Run in the isolated CodeCreationValidation engine layout");
+if (engine.Equals(repository, StringComparison.OrdinalIgnoreCase) ||
+    engine.StartsWith(Path.Combine(repository, "Tools") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+    throw new Exception("Run with -p:SharpEngineRoot=<isolated engine directory>/ to isolate reload outputs");
 var root = Path.Combine(engine, "Projects", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 File.Copy(Path.Combine(repository, "Templates", "BasicProject", "Directory.Build.props"), Path.Combine(root, "Directory.Build.props"));
@@ -37,11 +39,11 @@ foreach (var name in new[] { "Game", "Game.Editor" })
 <SharpEngineModuleId>{{name}}</SharpEngineModuleId><SharpEngineModuleType>{{(editor ? "Editor" : "Runtime")}}</SharpEngineModuleType>
 <RootNamespace>Sample.{{name}}</RootNamespace><AssemblyName>{{name}}</AssemblyName>
 <OutputPath>$(SharpEngineOutputRoot)</OutputPath><AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-</PropertyGroup><ItemGroup><Reference Include="SharpEngine.Modules"><HintPath>$(SharpEngineModulesApi)</HintPath><Private>false</Private></Reference>
-{{(editor ? "<Reference Include=\"SharpEngine.Managed\"><HintPath>$(SharpEngineManagedApi)</HintPath><Private>false</Private></Reference>" : "")}}
+</PropertyGroup><ItemGroup><Reference Include="SharpEngine.Runtime"><HintPath>$(SharpEngineRuntimeApi)</HintPath><Private>false</Private></Reference>
+{{(editor ? "<Reference Include=\"SharpEngine.Editor\"><HintPath>$(SharpEngineEditorApi)</HintPath><Private>false</Private></Reference>" : "")}}
 </ItemGroup></Project>
 """);
-    File.WriteAllText(Path.Combine(path, "Module.cs"), $"using SharpEngine.Modules; namespace Sample.{name}; public class Module : ISharpEngineModule {{ public void Startup(ModuleContext c) {{ }} public void Shutdown() {{ }} }}");
+    File.WriteAllText(Path.Combine(path, "Module.cs"), $"using SharpEngine.Runtime; namespace Sample.{name}; public class Module : ISharpEngineModule {{ public void Startup(ModuleContext c) {{ }} public void Shutdown() {{ }} }}");
     if (!editor) File.AppendAllText(Path.Combine(path, "Module.cs"), """
 
 [DevelopmentSettings("sample.reload", SettingsScope.Project)]
@@ -182,7 +184,7 @@ void WaitFor(string expected)
     throw new Exception("Timeout: " + runtime.DescribeProjectCodeJson());
 }
 static string EditorModule(bool fail) => $$"""
-using SharpEngine.Modules;
+using SharpEngine.Runtime;
 using SharpEngine.Editor;
 namespace Sample.Game.Editor;
 public class Module : ISharpEngineModule {

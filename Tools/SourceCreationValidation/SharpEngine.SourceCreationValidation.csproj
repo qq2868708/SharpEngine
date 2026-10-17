@@ -4,10 +4,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <OutputPath>$(SharpEngineRoot)Binaries/Win64/Debug/Editor/</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../Source/SharpEngine.Game/SharpEngine.Game.csproj" />
+    <Compile Include="Program.cs;GlobalUsings.cs" />
+    <ProjectReference Include="../../Source/SharpEngine.Host/SharpEngine.Host.csproj" />
   </ItemGroup>
 </Project>
