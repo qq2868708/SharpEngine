@@ -36,6 +36,15 @@ using ManagedViewportInputFn = void(__cdecl*)(void* windowHandle,
                                               int32_t x, int32_t y,
                                               uint32_t event, uint32_t buttons,
                                               int32_t wheelDelta);
+using ManagedInputEventFn = void(__cdecl*)(const char* hostIdUtf8,
+                                           uint32_t eventKind,
+                                           uint32_t code,
+                                           int32_t x, int32_t y,
+                                           float valueX, float valueY,
+                                           uint32_t buttons,
+                                           uint32_t modifiers,
+                                           uint8_t uiHandled,
+                                           uint8_t viewportFocused);
 using ManagedCreateDockWindowFn = void*(__cdecl*)(const char* hostIdUtf8,
                                                    const char* titleUtf8);
 using ManagedDestroyDockWindowFn = uint8_t(__cdecl*)(const char* hostIdUtf8);
@@ -140,6 +149,10 @@ public:
     void ViewportInput(void* windowHandle, int32_t x, int32_t y,
                        uint32_t event, uint32_t buttons, int32_t wheelDelta);
     void ViewportKey(uint32_t key, uint8_t pressed, uint8_t viewportFocused);
+    void InputEvent(const char* hostIdUtf8, uint32_t eventKind, uint32_t code,
+                    int32_t x, int32_t y, float valueX, float valueY,
+                    uint32_t buttons, uint32_t modifiers,
+                    uint8_t uiHandled, uint8_t viewportFocused);
     // Runs the embedded MCP stdio transport. The managed entry point owns
     // JSON-RPC dispatch so the same serialized scene/asset model is exposed
     // to AI clients without desktop automation.
@@ -162,6 +175,7 @@ private:
     void* ManagedInvokeUiActionFunction = nullptr;
     void* ManagedViewportInputFunction = nullptr;
     void* ManagedViewportKeyFunction = nullptr;
+    void* ManagedInputEventFunction = nullptr;
     void* ManagedRunMcpFunction = nullptr;
 };
 

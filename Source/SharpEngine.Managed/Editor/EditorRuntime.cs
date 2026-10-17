@@ -91,6 +91,7 @@ public sealed partial class EditorRuntime
     private readonly Dictionary<string, string> _dockMarkup = new(StringComparer.Ordinal);
     private readonly HashSet<string> _liveDockHosts = new(StringComparer.Ordinal);
     private EditorMcpSessionHost? _mcpSession;
+    private IInputRuntime? _inputRuntime;
 
     public EditorRuntime(nint windowHandle, uint width, uint height, nint nativeApi)
     {
@@ -115,6 +116,7 @@ public sealed partial class EditorRuntime
     public EditorContextMenuRegistry ContextMenus => _contextMenus;
     public EditorContext Context => _context;
     public IUiRuntime UiRuntime => _uiRuntime;
+    public IInputRuntime? InputRuntime => _inputRuntime;
     public EditorSelection Selection => _selection;
     internal string EngineRoot => _engineRoot;
     internal string? ProjectManifest => _projectManifest;
@@ -156,6 +158,15 @@ public sealed partial class EditorRuntime
     public string DescribeSceneJson() => _world?.ToJson() ?? "{}";
     public string DescribeAssetsJson() => _assets?.ToJson() ?? "{}";
     public string DescribeContentJson() => _content?.ToJson() ?? "{}";
+    public string DescribeInputJson() => _inputRuntime?.DescribeJson() ??
+        "{\"schemaVersion\":1,\"available\":false}";
+
+    internal void AttachInputRuntime(IInputRuntime? inputRuntime)
+    {
+        CloseInputDemo();
+        _inputRuntime = inputRuntime;
+        if (inputRuntime is not null) RegisterInputDemoCommand();
+    }
     private static object DescribeTransformGizmo(string tool)
     {
         var definition = WorldViewportRenderer.GetTransformGizmoDefinition(tool);
@@ -186,6 +197,10 @@ public sealed partial class EditorRuntime
     {
         schemaVersion = 1,
         mcp = DescribeMcpLinks(),
+        input = JsonNode.Parse(DescribeInputJson()),
+        inputDemo = new { open = _inputDemoOpen, uiConsumes = _inputDemoConsume,
+            uiCount = _inputDemoUiCount, gameplayCount = _inputDemoGameCount,
+            x = _inputDemoX, y = _inputDemoY },
         scene = _world?.Describe(),
         isDirty = IsDirty,
         documentRevision = DocumentRevision,
@@ -320,6 +335,7 @@ public sealed partial class EditorRuntime
             sessionId = McpSessionDescriptor?.SessionId,
             capabilitiesResource = "sharpengine://capabilities",
             uiResource = HasLiveUi ? "sharpengine://ui" : null,
+            inputResource = "sharpengine://input",
             stateRevision,
             frameId,
         };
@@ -407,6 +423,7 @@ public sealed partial class EditorRuntime
 
     public void Update(float deltaSeconds)
     {
+        UpdateInputDemo();
         // Conditions can depend on project C# state. Compare the resulting markup
         // before publishing, so an unchanged state preserves RmlUi focus/hover.
         RefreshExtensionUi();
@@ -619,6 +636,7 @@ public sealed partial class EditorRuntime
             actionHostId = action[hostPrefix.Length..separator];
             action = action[(separator + 1)..];
         }
+        if (HandleInputDemoAction(actionHostId, action)) return;
         if (action == "window.close-requested")
         {
             HandleMainWindowClose();

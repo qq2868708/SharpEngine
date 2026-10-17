@@ -343,6 +343,9 @@ struct RmlUiShell::Impl
         std::string HierarchySource;
         Rml::Element* HierarchyDropTarget{};
         std::string HierarchyDropClass;
+        int PointerX{};
+        int PointerY{};
+        bool PointerKnown{};
 
         void ProcessEvent(Rml::Event& event) override;
     };
@@ -364,6 +367,8 @@ struct RmlUiShell::Impl
     std::function<void(int, int)> Pointer;
     std::function<void(int, int, uint32_t, uint32_t, int32_t)> ViewportInput;
     std::function<void(uint32_t, bool, bool)> ViewportKey;
+    std::function<void(const char*, uint32_t, uint32_t, int32_t, int32_t,
+                       float, float, uint32_t, uint32_t, bool, bool)> InputEvent;
     std::vector<UiSceneVertex> Triangles;
     std::vector<UiSceneVertex> Lines;
     UiViewportRect SceneRect{};
@@ -591,6 +596,7 @@ struct RmlUiShell::Impl
         const auto role = ElementRole(element);
         return role == "splitter" || role == "tab" || role == "button" ||
             role == "input" || role == "viewport" || role == "menu-item" ||
+            element->HasAttribute("data-input-surface") ||
             element->HasAttribute("action") || element->HasAttribute("data-action");
     }
 
@@ -2010,7 +2016,7 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     if (auto* existing = state.FindHost(hostId))
     {
         if (titleUtf8) SetWindowTextW(existing->Window, Utf8ToWide(titleUtf8).c_str());
-        ShowWindow(existing->Window, SW_SHOW);
+        ShowWindow(existing->Window, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
         return existing->Window;
     }
 
@@ -2031,7 +2037,7 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     GetWindowRect(state.MainWindow, &mainBounds);
     const std::wstring title = Utf8ToWide(titleUtf8);
     host->Window = CreateWindowExW(
-        WS_EX_TOOLWINDOW, DockWindowClass,
+        WS_EX_TOOLWINDOW | (IsWindowVisible(state.MainWindow) ? 0 : WS_EX_NOACTIVATE), DockWindowClass,
         title.empty() ? L"SharpEngine" : title.c_str(),
         WS_OVERLAPPEDWINDOW, mainBounds.left + 64, mainBounds.top + 64,
         720, 520, state.MainWindow, nullptr, GetModuleHandleW(nullptr), nullptr);
@@ -2093,7 +2099,7 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
         reinterpret_cast<LONG_PTR>(&RmlUiShell::WindowProcedure)));
     const HWND result = host->Window;
     state.Hosts.push_back(std::move(host));
-    ShowWindow(result, SW_SHOW);
+    ShowWindow(result, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
     UpdateWindow(result);
     std::cout << "[RmlUi] dock host created id=" << hostId
               << " document=" << documentPath << std::endl;
@@ -2149,6 +2155,7 @@ void RmlUiShell::Shutdown()
     state.Pointer = {};
     state.ViewportInput = {};
     state.ViewportKey = {};
+    state.InputEvent = {};
     if (state.Ready)
     {
         Rml::Shutdown();
@@ -2235,81 +2242,66 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         EndPaint(window, &paint);
         return 0;
     }
-    if (message == WM_KEYDOWN &&
-        (GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
-        (wParam == 'Z' || wParam == 'Y'))
-    {
-        bool textInputFocused = false;
-        for (auto* element = host->Context->GetFocusElement(); element;
-             element = element->GetParentNode())
-        {
-            const auto& tag = element->GetTagName();
-            if (tag == "input" || tag == "select" || tag == "textarea")
-            {
-                textInputFocused = true;
-                break;
-            }
-        }
-        if (!textInputFocused)
-        {
-            const bool redo = wParam == 'Y' ||
-                ((GetKeyState(VK_SHIFT) & 0x8000) != 0 && wParam == 'Z');
-            state.EmitAction(*host, redo ? "editor.redo" : "editor.undo");
-            return 0;
-        }
-    }
+    bool viewportFocused = false;
+    bool textFocused = host->Ime.IsComposing();
+    for (auto* element = host->Context->GetFocusElement(); element;
+         element = element->GetParentNode())
+        if (element->GetTagName() == "input" || element->GetTagName() == "textarea" ||
+            element->GetTagName() == "select") textFocused = true;
     if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN ||
         message == WM_KEYUP || message == WM_SYSKEYUP ||
         message == WM_KILLFOCUS)
     {
-        bool viewportFocused = false;
         if (message != WM_KILLFOCUS)
             for (auto* element = host->Context->GetFocusElement(); element;
                  element = element->GetParentNode())
-                if (element->GetId() == "viewportCanvas")
+                if (element->GetId() == "viewportCanvas" || element->HasAttribute("data-input-surface"))
                 {
                     viewportFocused = true;
                     break;
                 }
-        if (state.ViewportKey)
-        {
-            const bool pressed = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-            state.ViewportKey(message == WM_KILLFOCUS
-                ? 0u : static_cast<uint32_t>(wParam), pressed, viewportFocused);
-        }
     }
     const bool buttonMessage = message == WM_LBUTTONDOWN ||
         message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN ||
         message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
-        message == WM_MBUTTONUP;
+        message == WM_MBUTTONUP || message == WM_XBUTTONDOWN || message == WM_XBUTTONUP;
     if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
         message == WM_MBUTTONDOWN) SetCapture(window);
-    if (buttonMessage || message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL)
+    bool pointerRouted = false;
+    bool pointerViewport = false;
+    int pointerX = 0;
+    int pointerY = 0;
+    float pointerDeltaX = 0;
+    float pointerDeltaY = 0;
+    uint32_t pointerButtons = 0;
+    uint32_t pointerCode = 0;
+    bool pointerMoveHandled = false;
+    if (buttonMessage || message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
     {
         int x = static_cast<short>(LOWORD(lParam));
         int y = static_cast<short>(HIWORD(lParam));
-        if (message == WM_MOUSEWHEEL)
+        if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
         {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(window, &point);
             x = point.x;
             y = point.y;
         }
-        host->Context->ProcessMouseMove(x, y, state.ModifierState());
+        pointerMoveHandled = !host->Context->ProcessMouseMove(x, y, state.ModifierState());
         POINT screen{x, y};
         ClientToScreen(window, &screen);
         bool viewport = false;
         Rml::Element* viewportElement = nullptr;
         for (auto* element = host->Context->GetHoverElement(); element;
              element = element->GetParentNode())
-            if (element->GetId() == "viewportCanvas")
+            if (element->GetId() == "viewportCanvas" || element->HasAttribute("data-input-surface"))
             {
                 viewport = true;
                 viewportElement = element;
                 break;
             }
         const bool buttonDown = message == WM_LBUTTONDOWN ||
-            message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN;
+            message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN;
         if (buttonDown && viewport)
             state.ViewportCaptureWindow = window;
         if (message == WM_LBUTTONDOWN)
@@ -2331,27 +2323,29 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
             }
         }
         const bool captured = state.ViewportCaptureWindow == window;
+        pointerRouted = true;
+        pointerViewport = viewport || captured;
+        pointerX = x;
+        pointerY = y;
+        pointerDeltaX = host->PointerKnown ? static_cast<float>(x - host->PointerX) : 0;
+        pointerDeltaY = host->PointerKnown ? static_cast<float>(y - host->PointerY) : 0;
+        host->PointerX = x;
+        host->PointerY = y;
+        host->PointerKnown = true;
+        pointerButtons = static_cast<uint32_t>(wParam) &
+            (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON | MK_SHIFT | MK_CONTROL);
+        if (message == WM_LBUTTONUP) pointerButtons |= MK_LBUTTON;
+        if (message == WM_RBUTTONUP) pointerButtons |= MK_RBUTTON;
+        if (message == WM_MBUTTONUP) pointerButtons |= MK_MBUTTON;
+        if (message == WM_RBUTTONDOWN || message == WM_RBUTTONUP) pointerCode = 1;
+        else if (message == WM_MBUTTONDOWN || message == WM_MBUTTONUP) pointerCode = 2;
+        else if (message == WM_XBUTTONDOWN || message == WM_XBUTTONUP)
+            pointerCode = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4;
         if (viewport || captured)
         {
-            uint32_t buttons = static_cast<uint32_t>(wParam) &
-                (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON | MK_SHIFT | MK_CONTROL);
-            if (message == WM_LBUTTONUP) buttons |= MK_LBUTTON;
-            if (message == WM_RBUTTONUP) buttons |= MK_RBUTTON;
-            if (message == WM_MBUTTONUP) buttons |= MK_MBUTTON;
-            uint32_t inputEvent = 0;
-            if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
-                message == WM_MBUTTONDOWN) inputEvent = 1;
-            else if (message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
-                message == WM_MBUTTONUP) inputEvent = 2;
-            else if (message == WM_MOUSEWHEEL) inputEvent = 3;
-            const int32_t wheel = message == WM_MOUSEWHEEL
-                ? GET_WHEEL_DELTA_WPARAM(wParam) : 0;
-            if (state.ViewportInput)
-                state.ViewportInput(x, y, inputEvent, buttons, wheel);
             if (message == WM_LBUTTONDOWN && viewport)
             {
                 if (viewportElement) viewportElement->Focus();
-                if (state.Pointer) state.Pointer(x, y);
             }
         }
         if ((message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
@@ -2360,17 +2354,29 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
               (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)))
             state.ViewportCaptureWindow = nullptr;
     }
-    if (message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
-        message == WM_MBUTTONUP) ReleaseCapture();
     if (message == WM_CAPTURECHANGED &&
         reinterpret_cast<HWND>(lParam) != window)
     {
         state.ViewportCaptureWindow = nullptr;
         state.CancelDockDrag();
         state.CancelSplitterDrag();
+        if (state.InputEvent)
+            state.InputEvent(host->Id.c_str(), 7, 0, 0, 0, 0, 0, 0,
+                static_cast<uint32_t>(state.ModifierState()), true, false);
     }
     bool propagate = true;
-    if (state.InjectedModifiers >= 0 &&
+    if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+        propagate = host->Context->ProcessKeyDown(RmlWin32::ConvertKey(static_cast<int>(wParam)), state.ModifierState());
+    else if (message == WM_KEYUP || message == WM_SYSKEYUP)
+        propagate = host->Context->ProcessKeyUp(RmlWin32::ConvertKey(static_cast<int>(wParam)), state.ModifierState());
+    else if (message == WM_MOUSEMOVE) propagate = !pointerMoveHandled;
+    else if (message == WM_XBUTTONDOWN)
+        propagate = host->Context->ProcessMouseButtonDown(static_cast<int>(pointerCode), state.ModifierState());
+    else if (message == WM_XBUTTONUP)
+        propagate = host->Context->ProcessMouseButtonUp(static_cast<int>(pointerCode), state.ModifierState());
+    else if (message == WM_MOUSEHWHEEL)
+        propagate = host->Context->ProcessMouseWheel({static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA, 0}, state.ModifierState());
+    else if (state.InjectedModifiers >= 0 &&
         (buttonMessage || message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL))
     {
         const int modifiers = state.InjectedModifiers;
@@ -2387,6 +2393,50 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     else
         propagate = RmlWin32::WindowProcedure(
             host->Context, host->Ime, window, message, wParam, lParam);
+    if (state.InputEvent)
+    {
+        const bool uiHandled = !propagate && !pointerViewport;
+        if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN ||
+            message == WM_KEYUP || message == WM_SYSKEYUP)
+        {
+            const uint32_t kind = message == WM_KEYDOWN || message == WM_SYSKEYDOWN
+                ? 0u : 1u;
+            state.InputEvent(host->Id.c_str(), kind,
+                static_cast<uint32_t>(wParam), 0, 0, 0, 0, 0,
+                static_cast<uint32_t>(state.ModifierState()), !propagate || textFocused,
+                viewportFocused);
+        }
+        else if (message == WM_KILLFOCUS)
+        {
+            host->PointerKnown = false;
+            state.InputEvent(host->Id.c_str(), 6, 0, 0, 0, 0, 0, 0, 0,
+                true, false);
+        }
+        else if (pointerRouted)
+        {
+            uint32_t kind = 2;
+            float valueX = pointerDeltaX;
+            float valueY = pointerDeltaY;
+            if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
+                message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN) kind = 3;
+            else if (message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
+                message == WM_MBUTTONUP || message == WM_XBUTTONUP) kind = 4;
+            else if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
+            {
+                kind = 5;
+                valueX = 0;
+                valueY = static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+                    static_cast<float>(WHEEL_DELTA);
+                if (message == WM_MOUSEHWHEEL) { valueX = valueY; valueY = 0; }
+            }
+            state.InputEvent(host->Id.c_str(), kind, pointerCode,
+                pointerX, pointerY, valueX, valueY, pointerButtons,
+                static_cast<uint32_t>(state.ModifierState()), uiHandled,
+                pointerViewport);
+        }
+    }
+    if ((message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP) &&
+        !(static_cast<uint32_t>(wParam) & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON))) ReleaseCapture();
     if (!propagate) return 0;
     return callOriginal();
 }
@@ -2611,6 +2661,12 @@ void RmlUiShell::SetViewportKeyHandler(
 {
     State->ViewportKey = std::move(handler);
 }
+void RmlUiShell::SetInputEventHandler(
+    std::function<void(const char*, uint32_t, uint32_t, int32_t, int32_t,
+        float, float, uint32_t, uint32_t, bool, bool)> handler)
+{
+    State->InputEvent = std::move(handler);
+}
 bool RmlUiShell::IsInitialized() const { return State->Ready; }
 
 std::string RmlUiShell::DescribeUi(uint64_t layoutRevision,
@@ -2752,11 +2808,15 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
         }
         message = button == 1 ? WM_LBUTTONUP :
             button == 2 ? WM_RBUTTONUP : WM_MBUTTONUP;
+        // Win32 button-up carries the buttons that remain held, excluding
+        // the released button. Otherwise WindowProcedure never releases capture.
+        state.McpButtons &= ~buttonBit;
+        buttons &= ~buttonBit;
     }
     else if (event == 3)
     {
         if (GetCapture() == host->Window)
-            SendMessageW(host->Window, WM_CAPTURECHANGED, 0, 0);
+            ReleaseCapture();
         state.McpButtons = 0;
     }
     else if (event == 4) message = WM_MOUSEWHEEL;
@@ -2791,6 +2851,14 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
         return failure("UI_RENDER_UNAVAILABLE", "frameId", "a completed presentation",
                        std::to_string(state.FrameId), true);
     state.PinCurrentFrame();
+    // A click can close the floating host. Render drains deferred destruction,
+    // so the pre-dispatch Host pointer must not be dereferenced afterwards.
+    host = state.FindHost(hostId);
+    if (!host || !host->Context)
+        return "{\"accepted\":true,\"beforeStateRevision\":" + std::to_string(beforeRevision) +
+            ",\"afterStateRevision\":" + std::to_string(state.StateRevision) +
+            ",\"frameId\":" + std::to_string(state.FrameId) +
+            ",\"targetElementId\":null,\"eventPath\":[],\"capture\":null,\"diagnostics\":[]}";
     target = host->Context->GetHoverElement();
     if (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host)
         target = state.SplitterDrag.Element;
@@ -2855,14 +2923,13 @@ std::string RmlUiShell::KeyInput(std::string_view hostId, uint32_t event,
     const auto beforeRevision = state.StateRevision;
     state.System.SetWindow(host->Window);
     state.SetCurrentHost(*host);
-    if (event == 0)
-        host->Context->ProcessKeyDown(RmlWin32::ConvertKey(static_cast<int>(key)),
-                                      static_cast<int>(modifiers));
-    else if (event == 1)
-        host->Context->ProcessKeyUp(RmlWin32::ConvertKey(static_cast<int>(key)),
-                                    static_cast<int>(modifiers));
-    else
-        host->Context->ProcessTextInput(Rml::String(text));
+    if (event <= 1)
+    {
+        state.InjectedModifiers = static_cast<int>(modifiers);
+        SendMessageW(host->Window, event == 0 ? WM_KEYDOWN : WM_KEYUP, key, 0);
+        state.InjectedModifiers = -1;
+    }
+    else host->Context->ProcessTextInput(Rml::String(text));
     if (!Render())
         return failure("UI_RENDER_UNAVAILABLE", "The input was accepted but no frame was presented", true);
     state.PinCurrentFrame();

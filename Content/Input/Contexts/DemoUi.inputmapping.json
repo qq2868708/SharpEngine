@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "contextId": "engine://input/contexts/demo-ui",
+  "route": "RuntimeUi",
+  "priority": 100,
+  "activateByDefault": false,
+  "bindings": [
+    {
+      "action": "engine://input/actions/demo.confirm",
+      "control": "Keyboard/Space",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    }
+  ]
+}

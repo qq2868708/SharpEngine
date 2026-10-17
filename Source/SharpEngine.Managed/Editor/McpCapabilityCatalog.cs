@@ -72,6 +72,7 @@ internal static class McpCapabilityCatalog
             Read("assets.describe", "Return the engine and project asset registry with source and importer metadata."),
             Read("content.describe", "Return the content manager query, filters, selection, and visible assets."),
             Read("editor.describe", "Return the committed editor snapshot and links to capability and live UI resources."),
+            Read("input.describe", "Return loaded InputActions, mapping contexts, live control state, and recent routed events."),
             new("scene.reparent", 1,
                 "Atomically reparent or reorder one World entity through the shared Authoring transaction layer.",
                 "edit", ReparentInput(), EditOutput(),

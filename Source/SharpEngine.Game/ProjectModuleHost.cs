@@ -16,7 +16,7 @@ internal sealed class ProjectModuleHost : IDisposable
     private string? _assemblyDirectory;
     private Func<AssemblyLoadContext, AssemblyName, Assembly?>? _resolver;
 
-    public static ProjectModuleHost? Load(EditorRuntime runtime)
+    public static ProjectModuleHost? Load(EditorRuntime runtime, IInputRuntime input)
     {
         var projectManifest = Environment.GetEnvironmentVariable(
             "SHARPENGINE_PROJECT_MANIFEST");
@@ -107,7 +107,7 @@ internal sealed class ProjectModuleHost : IDisposable
         try
         {
             foreach (var module in root.GetProperty("modules").EnumerateArray())
-                host.StartModule(projectRoot, runtime, module);
+                host.StartModule(projectRoot, runtime, input, module);
             return host;
         }
         catch
@@ -134,7 +134,7 @@ internal sealed class ProjectModuleHost : IDisposable
     }
 
     private void StartModule(string projectRoot, EditorRuntime runtime,
-        JsonElement descriptor)
+        IInputRuntime input, JsonElement descriptor)
     {
         var id = descriptor.GetProperty("id").GetString()!;
         var type = descriptor.GetProperty("type").GetString()!;
@@ -156,8 +156,8 @@ internal sealed class ProjectModuleHost : IDisposable
         try
         {
             ModuleContext context = type.Equals("Editor", StringComparison.OrdinalIgnoreCase)
-                ? new EditorModuleContext(projectRoot, id, runtime)
-                : new ModuleContext(projectRoot, id, type, runtime.UiRuntime);
+                ? new EditorModuleContext(projectRoot, id, runtime, input)
+                : new ModuleContext(projectRoot, id, type, runtime.UiRuntime, input);
             instance.Startup(context);
             _modules.Add(instance);
             Console.Error.WriteLine($"[Module] Started {id} ({type})");

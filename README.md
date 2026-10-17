@@ -156,6 +156,49 @@ Viewport navigation uses W/A/S/D for planar movement, Q/E for vertical movement,
 Shift for a speed boost, RMB orbit, MMB pan, and the wheel for zoom. Orbit yaw and
 pitch follow the drag direction; `Engine Settings > Invert Y Axis` reverses the
 vertical pitch and is saved under the project `Saved/Config/EngineSettings.json`.
+### Unified input routing
+
+Win64 keyboard and mouse input enter one engine route. RmlUi receives the
+normalized event first so focus, hit testing, pointer capture, text, and IME
+retain native UI behavior. An event consumed by UI stops there; an unhandled
+event is evaluated by active `InputMappingContext` assets in deterministic
+`Editor`, `RuntimeUi`, then `Gameplay` order. Project code does not subscribe to
+Win32 or maintain a separate UI input configuration.
+
+`InputAction` and `InputMappingContext` are versioned JSON assets registered in
+the normal asset manifest. Runtime Modules bind semantic actions through the
+shared service:
+
+```csharp
+_move = context.Input?.BindAction(InputRoute.Gameplay,
+    "project://input/actions/gameplay.move", 0, input =>
+    {
+        if (input.Phase == InputActionPhase.Performed)
+            Move(input.Value.X, input.Value.Y);
+        return true;
+    });
+```
+
+Returning `true` consumes the action before lower routes. The default project
+template maps W/A/S/D to a continuous Axis2D move action and the left mouse
+button to a primary Button action. Engine Editor actions use the same router:
+F5 toggles Play/Pause and F8 stops. `sharpengine://input` and `input.describe`
+expose loaded actions, active contexts, live controls, diagnostics, and recent
+routed events. Native platform events remain an internal engine SPI.
+
+Open **Window > Input Routing Demo** to try the first Win64 keyboard/mouse
+implementation. It starts Play and opens a focusable play area, a text field,
+and an on/off UI consumption switch. Space increments either the UI counter or
+the Gameplay counter; W/A/S/D moves a marker. Typing in the text field does not
+activate Gameplay. Stop with F8 after returning focus to the play area.
+
+Run `dotnet run --project Tools/InputValidation/SharpEngine.InputValidation.csproj -c Debug -- .`
+for routing and asset validation, and
+`dotnet run --project Tools/InputUiValidation/SharpEngine.InputUiValidation.csproj -c Debug -- .`
+for rendered RmlUi input acceptance and a PNG capture. This first version loads
+input assets at startup; live rebinding/editor authoring, multi-player device
+assignment, persistent replay files and a Gamepad backend are not implemented.
+
 The 3D viewport draws a fixed corner orientation gizmo with world X/Y/Z axes
 in red/green/blue. It is a scene-only surface; UI authoring no longer changes
 the viewport mode.

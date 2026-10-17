@@ -1,0 +1,7 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/input-action-v1.json",
+  "schemaVersion": 1,
+  "actionId": "project://input/actions/gameplay.move",
+  "valueType": "Axis2D",
+  "continuous": true
+}

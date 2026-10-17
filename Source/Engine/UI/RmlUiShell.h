@@ -54,6 +54,8 @@ public:
     // key is a Win32 virtual-key code. viewportFocused is derived from the
     // RmlUi focus tree, so text fields do not drive 3D camera movement.
     void SetViewportKeyHandler(std::function<void(uint32_t, bool, bool)> handler);
+    void SetInputEventHandler(std::function<void(const char*, uint32_t, uint32_t,
+        int32_t, int32_t, float, float, uint32_t, uint32_t, bool, bool)> handler);
     bool IsInitialized() const;
 private:
     static LRESULT CALLBACK WindowProcedure(HWND window, UINT message,

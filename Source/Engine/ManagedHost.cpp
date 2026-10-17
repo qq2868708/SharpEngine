@@ -55,6 +55,15 @@ namespace
                                                  int32_t wheelDelta);
     using ManagedViewportKey = void(__cdecl*)(uint32_t key, uint8_t pressed,
                                                uint8_t viewportFocused);
+    using ManagedInputEvent = void(__cdecl*)(const char* hostIdUtf8,
+                                              uint32_t eventKind,
+                                              uint32_t code,
+                                              int32_t x, int32_t y,
+                                              float valueX, float valueY,
+                                              uint32_t buttons,
+                                              uint32_t modifiers,
+                                              uint8_t uiHandled,
+                                              uint8_t viewportFocused);
     using ManagedRunMcp = int(__cdecl*)();
 
     const wchar_t* const UnmanagedCallersOnlyMethod =
@@ -453,6 +462,11 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
         ManagedViewportInputFunction = nullptr;
     if (!loadManagedFunction(L"ViewportKey", &ManagedViewportKeyFunction))
         ManagedViewportKeyFunction = nullptr;
+    if (!loadManagedFunction(L"InputEvent", &ManagedInputEventFunction))
+    {
+        ResetRuntime();
+        return false;
+    }
     if (!loadManagedFunction(L"RunMcp", &ManagedRunMcpFunction))
         ManagedRunMcpFunction = nullptr;
     return true;
@@ -511,6 +525,18 @@ void ManagedHost::ViewportKey(uint32_t key, uint8_t pressed, uint8_t viewportFoc
             key, pressed, viewportFocused);
 }
 
+void ManagedHost::InputEvent(const char* hostIdUtf8, uint32_t eventKind,
+                             uint32_t code, int32_t x, int32_t y,
+                             float valueX, float valueY, uint32_t buttons,
+                             uint32_t modifiers, uint8_t uiHandled,
+                             uint8_t viewportFocused)
+{
+    if (ManagedInputEventFunction)
+        reinterpret_cast<ManagedInputEvent>(ManagedInputEventFunction)(
+            hostIdUtf8, eventKind, code, x, y, valueX, valueY, buttons,
+            modifiers, uiHandled, viewportFocused);
+}
+
 int ManagedHost::RunMcp()
 {
     if (!ManagedRunMcpFunction) return -1;
@@ -537,6 +563,7 @@ void ManagedHost::ResetRuntime()
     ManagedInvokeUiActionFunction = nullptr;
     ManagedViewportInputFunction = nullptr;
     ManagedViewportKeyFunction = nullptr;
+    ManagedInputEventFunction = nullptr;
     ManagedRunMcpFunction = nullptr;
     LoadAssemblyAndGetFunctionPointerFunction = nullptr;
 

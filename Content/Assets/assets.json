@@ -2,6 +2,10 @@
   "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
   "schemaVersion": 1,
   "assets": [
+{"id":"input/actions/demo.confirm","type":"InputAction","name":"DemoConfirm","path":"Content/Input/Actions/DemoConfirm.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
+{"id":"input/actions/demo.move","type":"InputAction","name":"DemoMove","path":"Content/Input/Actions/DemoMove.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
+{"id":"input/contexts/demo-ui","type":"InputMappingContext","name":"DemoUi","path":"Content/Input/Contexts/DemoUi.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
+{"id":"input/contexts/demo-gameplay","type":"InputMappingContext","name":"DemoGameplay","path":"Content/Input/Contexts/DemoGameplay.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
     {
       "id": "worlds/main",
       "type": "World",
@@ -69,6 +73,51 @@
       "readOnly": true,
       "importer": "RmlUi.StyleSheet",
       "tags": ["runtime", "ui", "style"]
+    },
+    {
+      "id": "input/actions/editor.play-pause",
+      "type": "InputAction",
+      "name": "Editor Play Pause",
+      "path": "Content/Input/Actions/EditorPlayPause.inputaction.json",
+      "readOnly": true,
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["editor", "input"]
+    },
+    {
+      "id": "input/actions/editor.stop",
+      "type": "InputAction",
+      "name": "Editor Stop",
+      "path": "Content/Input/Actions/EditorStop.inputaction.json",
+      "readOnly": true,
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["editor", "input"]
+    },
+    {
+      "id": "input/actions/editor.undo",
+      "type": "InputAction",
+      "name": "Editor Undo",
+      "path": "Content/Input/Actions/EditorUndo.inputaction.json",
+      "readOnly": true,
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["editor", "input"]
+    },
+    {
+      "id": "input/actions/editor.redo",
+      "type": "InputAction",
+      "name": "Editor Redo",
+      "path": "Content/Input/Actions/EditorRedo.inputaction.json",
+      "readOnly": true,
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["editor", "input"]
+    },
+    {
+      "id": "input/contexts/editor",
+      "type": "InputMappingContext",
+      "name": "Editor Input",
+      "path": "Content/Input/Contexts/Editor.inputmapping.json",
+      "readOnly": true,
+      "importer": "SharpEngine.InputMappingContextJson",
+      "tags": ["editor", "input"]
     }
   ]
 }

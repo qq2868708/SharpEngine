@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using SharpEngine.Editor;
+using SharpEngine.Modules;
 
 namespace SharpEngine.Game;
 
@@ -7,6 +8,8 @@ public static class GameEntrypoint
 {
     private static EditorRuntime? s_runtime;
     private static ProjectModuleHost? s_modules;
+    private static InputRuntimeService? s_input;
+    private static readonly List<IDisposable> s_inputHandlers = new();
 
     [UnmanagedCallersOnly]
     public static int Initialize(
@@ -19,7 +22,11 @@ public static class GameEntrypoint
         {
             s_runtime = new EditorRuntime(windowHandle, width, height, nativeApi);
             s_runtime.Initialize();
-            s_modules = ProjectModuleHost.Load(s_runtime);
+            s_input = InputRuntimeService.Load(s_runtime.Assets ??
+                throw new InvalidOperationException("The asset registry is unavailable"));
+            s_runtime.AttachInputRuntime(s_input);
+            RegisterEditorInput(s_runtime, s_input);
+            s_modules = ProjectModuleHost.Load(s_runtime, s_input);
             return 0;
         }
         catch (Exception exception)
@@ -27,6 +34,9 @@ public static class GameEntrypoint
             Console.Error.WriteLine($"[Game] Initialize failed: {exception}");
             s_modules?.Dispose();
             s_modules = null;
+            DisposeInputHandlers();
+            s_runtime?.AttachInputRuntime(null);
+            s_input = null;
             s_runtime?.Shutdown();
             s_runtime = null;
             return -1;
@@ -38,6 +48,15 @@ public static class GameEntrypoint
     {
         try
         {
+            if (s_runtime is { } runtime && s_input is { } input)
+            {
+                input.SetRouteEnabled(InputRoute.Editor, true);
+                input.SetRouteEnabled(InputRoute.RuntimeUi,
+                    runtime.PlayState != EditorPlayState.Stopped);
+                input.SetRouteEnabled(InputRoute.Gameplay,
+                    runtime.PlayState == EditorPlayState.Playing);
+                input.AdvanceFrame(deltaSeconds);
+            }
             s_runtime?.Update(deltaSeconds);
         }
         catch (Exception exception)
@@ -53,6 +72,9 @@ public static class GameEntrypoint
         {
             s_modules?.Dispose();
             s_modules = null;
+            DisposeInputHandlers();
+            s_runtime?.AttachInputRuntime(null);
+            s_input = null;
             s_runtime?.Shutdown();
         }
         catch (Exception exception)
@@ -62,6 +84,7 @@ public static class GameEntrypoint
         finally
         {
             s_modules = null;
+            s_input = null;
             s_runtime = null;
         }
     }
@@ -121,6 +144,62 @@ public static class GameEntrypoint
     }
 
     [UnmanagedCallersOnly]
+    public static void InputEvent(nint hostIdUtf8, uint eventKind, uint code,
+        int x, int y, float valueX, float valueY, uint buttons, uint modifiers,
+        byte uiHandled, byte viewportFocused)
+    {
+        try
+        {
+            if (s_runtime is not { } runtime || s_input is not { } input) return;
+            var hostId = Marshal.PtrToStringUTF8(hostIdUtf8) ?? "main";
+            if (!Enum.IsDefined(typeof(NativeInputEventKind), eventKind)) return;
+            var kind = (NativeInputEventKind)eventKind;
+            input.SetRouteEnabled(InputRoute.RuntimeUi, runtime.PlayState != EditorPlayState.Stopped);
+            input.SetRouteEnabled(InputRoute.Gameplay, runtime.PlayState == EditorPlayState.Playing);
+            var handled = input.ProcessNative(hostId, kind, code, x, y, valueX,
+                valueY, modifiers, uiHandled != 0, viewportFocused != 0);
+            if (kind == NativeInputEventKind.FocusLost)
+            {
+                runtime.ViewportKey(0, false, false);
+                return;
+            }
+            if (hostId != "main") return;
+            if (viewportFocused == 0 && kind is NativeInputEventKind.KeyDown or NativeInputEventKind.PointerDown)
+                runtime.ViewportKey(0, false, false);
+            if (kind == NativeInputEventKind.CaptureLost)
+            {
+                runtime.ViewportInput(0, x, y, 2, 0x13, 0);
+                return;
+            }
+            if (kind is NativeInputEventKind.KeyUp)
+                runtime.ViewportKey(code, false, viewportFocused != 0);
+            else if (!handled && kind is NativeInputEventKind.KeyDown &&
+                     viewportFocused != 0)
+                runtime.ViewportKey(code, true, true);
+            if (viewportFocused == 0) return;
+            var viewportEvent = kind switch
+            {
+                NativeInputEventKind.PointerDown => 1u,
+                NativeInputEventKind.PointerUp => 2u,
+                NativeInputEventKind.Wheel => 3u,
+                NativeInputEventKind.PointerMove => 0u,
+                _ => uint.MaxValue,
+            };
+            if (viewportEvent == uint.MaxValue) return;
+            if (!handled || kind == NativeInputEventKind.PointerUp)
+                runtime.ViewportInput(0, x, y, viewportEvent, buttons,
+                    kind == NativeInputEventKind.Wheel
+                        ? (int)MathF.Round(valueY * 120) : 0);
+            if (!handled && kind == NativeInputEventKind.PointerDown && code == 0)
+                runtime.PointerDown(0, x, y, 1);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine($"[Game] InputEvent failed: {exception}");
+        }
+    }
+
+    [UnmanagedCallersOnly]
     public static int RunMcp()
     {
         try
@@ -132,5 +211,46 @@ public static class GameEntrypoint
             Console.Error.WriteLine($"[Game] MCP failed: {exception}");
             return -1;
         }
+    }
+
+    private static void RegisterEditorInput(EditorRuntime runtime,
+        InputRuntimeService input)
+    {
+        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
+            "engine://input/actions/editor.play-pause", int.MaxValue, value =>
+            {
+                if (value.Phase != InputActionPhase.Performed) return false;
+                runtime.InvokeUiAction(runtime.PlayState == EditorPlayState.Playing
+                    ? "editor.pause" : "editor.play");
+                return true;
+            }));
+        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
+            "engine://input/actions/editor.stop", int.MaxValue, value =>
+            {
+                if (value.Phase != InputActionPhase.Performed) return false;
+                runtime.InvokeUiAction("editor.stop");
+                return true;
+            }));
+        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
+            "engine://input/actions/editor.undo", int.MaxValue, value =>
+            {
+                if (value.Phase != InputActionPhase.Performed) return false;
+                runtime.InvokeUiAction("editor.undo");
+                return true;
+            }));
+        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
+            "engine://input/actions/editor.redo", int.MaxValue, value =>
+            {
+                if (value.Phase != InputActionPhase.Performed) return false;
+                runtime.InvokeUiAction("editor.redo");
+                return true;
+            }));
+    }
+
+    private static void DisposeInputHandlers()
+    {
+        for (var index = s_inputHandlers.Count - 1; index >= 0; index--)
+            s_inputHandlers[index].Dispose();
+        s_inputHandlers.Clear();
     }
 }

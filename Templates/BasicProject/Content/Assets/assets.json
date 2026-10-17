@@ -17,6 +17,30 @@
       "path": "Content/UI/Main.rcss",
       "importer": "RmlUi.StyleSheet",
       "tags": ["ui", "style"]
+    },
+    {
+      "id": "input/actions/gameplay.move",
+      "type": "InputAction",
+      "name": "Move",
+      "path": "Content/Input/Actions/Move.inputaction.json",
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["input", "gameplay"]
+    },
+    {
+      "id": "input/actions/gameplay.primary",
+      "type": "InputAction",
+      "name": "Primary",
+      "path": "Content/Input/Actions/Primary.inputaction.json",
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["input", "gameplay"]
+    },
+    {
+      "id": "input/contexts/gameplay",
+      "type": "InputMappingContext",
+      "name": "Gameplay",
+      "path": "Content/Input/Contexts/Gameplay.inputmapping.json",
+      "importer": "SharpEngine.InputMappingContextJson",
+      "tags": ["input", "gameplay"]
     }
   ]
 }

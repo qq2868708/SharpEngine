@@ -294,16 +294,13 @@ int wmain(int argc,wchar_t** argv)
         routed.append(command);
         managed.InvokeUiAction(routed.c_str());
     });
-    ui.SetPointerHandler([&managed, &window](int x, int y) { managed.PointerDown(window.Window, x, y, 1); });
-    ui.SetViewportInputHandler(
-        [&managed, &window](int x, int y, uint32_t inputEvent,
-                            uint32_t buttons, int32_t wheelDelta) {
-            managed.ViewportInput(window.Window, x, y, inputEvent, buttons, wheelDelta);
-        });
-    ui.SetViewportKeyHandler(
-        [&managed](uint32_t key, bool pressed, bool viewportFocused) {
-            managed.ViewportKey(key, pressed ? 1 : 0, viewportFocused ? 1 : 0);
-        });
+    ui.SetInputEventHandler([&managed](const char* hostId, uint32_t eventKind,
+        uint32_t code, int32_t x, int32_t y, float valueX, float valueY,
+        uint32_t buttons, uint32_t modifiers, bool uiHandled,
+        bool viewportFocused) {
+        managed.InputEvent(hostId, eventKind, code, x, y, valueX, valueY,
+            buttons, modifiers, uiHandled ? 1 : 0, viewportFocused ? 1 : 0);
+    });
     auto previous=std::chrono::steady_clock::now();
     uint32_t frames=0;
     bool renderFailed=false;

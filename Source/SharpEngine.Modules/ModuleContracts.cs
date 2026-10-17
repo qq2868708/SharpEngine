@@ -21,16 +21,18 @@ public interface IUiRuntime
 public class ModuleContext
 {
     protected internal ModuleContext(string projectRoot, string moduleId,
-        string moduleType, IUiRuntime? ui = null)
+        string moduleType, IUiRuntime? ui = null, IInputRuntime? input = null)
     {
         ProjectRoot = projectRoot;
         ModuleId = moduleId;
         ModuleType = moduleType;
         Ui = ui;
+        Input = input;
     }
 
     public string ProjectRoot { get; }
     public string ModuleId { get; }
     public string ModuleType { get; }
     public IUiRuntime? Ui { get; }
+    public IInputRuntime? Input { get; }
 }

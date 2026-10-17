@@ -1,0 +1,50 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/input-mapping-context-v1.json",
+  "schemaVersion": 1,
+  "contextId": "project://input/contexts/gameplay",
+  "route": "Gameplay",
+  "priority": 0,
+  "activateByDefault": true,
+  "bindings": [
+    {
+      "action": "project://input/actions/gameplay.move",
+      "control": "Keyboard/W",
+      "scaleX": 0,
+      "scaleY": 1,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "project://input/actions/gameplay.move",
+      "control": "Keyboard/S",
+      "scaleX": 0,
+      "scaleY": -1,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "project://input/actions/gameplay.move",
+      "control": "Keyboard/A",
+      "scaleX": -1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "project://input/actions/gameplay.move",
+      "control": "Keyboard/D",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "project://input/actions/gameplay.primary",
+      "control": "Mouse/Left",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    }
+  ]
+}

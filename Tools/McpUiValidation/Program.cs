@@ -282,6 +282,70 @@ try
             observedInput["value"]!.GetValue<string>().Contains("mcp", StringComparison.Ordinal),
         "Semantic UI snapshot must expose the focused input value after text entry");
 
+    var viewport = afterText["hosts"]![0]?["elements"]?.AsArray()
+        .Select(node => node!.AsObject()).First(element =>
+            element["elementId"]?.GetValue<string>() == "host/main/id/viewportCanvas" &&
+            element["visible"]!.GetValue<bool>() && element["hitTarget"]!.GetValue<bool>()) ??
+        throw new InvalidDataException("The visible viewport input surface was unavailable");
+    var viewportBounds = viewport["bounds"]!.AsObject();
+    var viewportX = (int)Math.Floor(viewportBounds["x"]!.GetValue<double>() +
+        viewportBounds["width"]!.GetValue<double>() / 2);
+    var viewportY = (int)Math.Floor(viewportBounds["y"]!.GetValue<double>() +
+        viewportBounds["height"]!.GetValue<double>() / 2);
+    var viewportDown = Structured(Tool(100, "ui.pointer",
+        PointerArguments("down", "left", afterText["frameId"]!.GetValue<ulong>(),
+            "host/main/id/viewportCanvas", viewportX, viewportY)));
+    var viewportUp = Structured(Tool(101, "ui.pointer",
+        PointerArguments("up", "left", viewportDown["frameId"]!.GetValue<ulong>(),
+            "host/main/id/viewportCanvas", viewportX, viewportY, ["left"])));
+    var playKeyDown = Structured(Tool(102, "ui.key", new JsonObject
+    {
+        ["hostId"] = host["hostId"]!.GetValue<string>(),
+        ["event"] = "down",
+        ["key"] = 0x74,
+        ["modifiers"] = new JsonArray(),
+        ["expectedFrameId"] = viewportUp["frameId"]!.GetValue<ulong>(),
+    }));
+    var inputResource = Call(103, "resources/read", new JsonObject
+    {
+        ["uri"] = "sharpengine://input",
+    });
+    var inputSnapshot = JsonNode.Parse(inputResource["result"]?["contents"]?[0]?
+        ["text"]?.GetValue<string>() ?? throw new InvalidDataException(
+            "Input resource had no JSON content"))?.AsObject() ??
+        throw new InvalidDataException("Input resource was not a JSON object");
+    Require(playKeyDown["accepted"]!.GetValue<bool>() &&
+            inputSnapshot["recentEvents"]!.AsArray().Any(node =>
+                node?["actionId"]?.GetValue<string>() ==
+                    "engine://input/actions/editor.play-pause" &&
+                node?["phase"]?.GetValue<string>() == "Performed"),
+        "Viewport F5 must traverse RmlUi and the unified InputRouter before executing the Editor action");
+    var playKeyUp = Structured(Tool(104, "ui.key", new JsonObject
+    {
+        ["hostId"] = host["hostId"]!.GetValue<string>(),
+        ["event"] = "up",
+        ["key"] = 0x74,
+        ["modifiers"] = new JsonArray(),
+        ["expectedFrameId"] = playKeyDown["frameId"]!.GetValue<ulong>(),
+    }));
+    var stopKeyDown = Structured(Tool(105, "ui.key", new JsonObject
+    {
+        ["hostId"] = host["hostId"]!.GetValue<string>(),
+        ["event"] = "down",
+        ["key"] = 0x77,
+        ["modifiers"] = new JsonArray(),
+        ["expectedFrameId"] = playKeyUp["frameId"]!.GetValue<ulong>(),
+    }));
+    _ = Structured(Tool(106, "ui.key", new JsonObject
+    {
+        ["hostId"] = host["hostId"]!.GetValue<string>(),
+        ["event"] = "up",
+        ["key"] = 0x77,
+        ["modifiers"] = new JsonArray(),
+        ["expectedFrameId"] = stopKeyDown["frameId"]!.GetValue<ulong>(),
+    }));
+
+    afterText = Structured(Tool(107, "ui.describe", new JsonObject()));
     var splitterAfterText = afterText["hosts"]![0]?["elements"]?.AsArray()
         .Select(node => node!.AsObject()).First(element =>
             element["elementId"]?.GetValue<string>() == elementId) ??

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/input-mapping-context-v1.json",
+  "schemaVersion": 1,
+  "contextId": "engine://input/contexts/editor",
+  "route": "Editor",
+  "priority": 1000,
+  "activateByDefault": true,
+  "bindings": [
+    {
+      "action": "engine://input/actions/editor.play-pause",
+      "control": "Keyboard/F5",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/editor.stop",
+      "control": "Keyboard/F8",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/editor.undo",
+      "control": "Keyboard/Z",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": ["Keyboard/Control"],
+      "exactModifiers": true
+    },
+    {
+      "action": "engine://input/actions/editor.redo",
+      "control": "Keyboard/Y",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": ["Keyboard/Control"],
+      "exactModifiers": true
+    },
+    {
+      "action": "engine://input/actions/editor.redo",
+      "control": "Keyboard/Z",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": ["Keyboard/Control", "Keyboard/Shift"],
+      "exactModifiers": true
+    }
+  ]
+}

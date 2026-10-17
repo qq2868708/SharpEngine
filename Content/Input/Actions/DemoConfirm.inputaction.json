@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "actionId": "engine://input/actions/demo.confirm",
+  "valueType": "Button",
+  "continuous": false
+}
