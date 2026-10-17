@@ -13,10 +13,6 @@
     "Source/__PROJECT_NAMESPACE__/__PROJECT_NAMESPACE__.csproj",
     "Source/__PROJECT_NAMESPACE__.Editor/__PROJECT_NAMESPACE__.Editor.csproj"
   ],
-  "plugins": [
-    "project://Plugins/ProjectTestPlugin/ProjectTestPlugin.sharpplugin",
-    "engine://Plugins/EngineTestPlugin/EngineTestPlugin.sharpplugin"
-  ],
   "assets": {
     "manifest": "Content/Assets/assets.json",
     "root": "Content/Assets"

@@ -67,6 +67,16 @@ internal static unsafe class EditorExtensionValidation
         runtime.Initialize();
         try
         {
+            var contentResourceRejected = false;
+            try
+            {
+                _ = new EditorToolbarTool("validation.invalid-resource", "validation",
+                    "Invalid", ["validation.invalid"], icon:
+                        "sharpengine-resource://project/Plugins/ValidationPlugin/Content/icon.tga");
+            }
+            catch (ArgumentException) { contentResourceRejected = true; }
+            require(contentResourceRejected,
+                "Editor resource URIs must reject Plugin Content paths");
             var module = new TransformExtension();
             var registration = runtime.RegisterExtension(module);
             using var projectMenu = runtime.Menus.RegisterMenu(new EditorMenu(

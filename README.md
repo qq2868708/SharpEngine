@@ -118,8 +118,12 @@ Create a project from the checked-out engine or an installed distribution:
 project, while `Tools\GenerateProjectFiles.ps1` can regenerate either the Engine
 solution or a project solution. `OpenSolution` refreshes only when its stamp is
 stale and then opens it.
-A source Engine Solution shows the Engine and Project logical folders, including
-Engine Build Modules and project Modules even when they live on different drives.
+A generated solution shows three logical roots: `Engine` contains engine source,
+engine `Plugins`, and engine `Config`, while `Project` contains project `Source`,
+project `Plugins`, and `Config`. `BuildTarget` contains the generated build-entry
+wrappers. Plugin Modules are nested below their owning
+`Plugins/<Name>/Source` folder instead of being mixed with ordinary project
+Modules. An Engine-only solution omits the empty `Project` root.
 The generated SDK-style `MyGame.Editor Target` and `MyGame.Game Target` invoke the
 unified build pipeline. The selected Target owns the entire build; other projects
 remain visible for editing and IntelliSense and are not built a second time by the solution.
@@ -152,10 +156,13 @@ projects for Editor. A source folder inside `SharpEngine.Runtime` or
 
 Plugins are explicit containers around reusable Modules. Add a `.sharpplugin` path to
 the project's `plugins` array using `project://Plugins/...` or
-`engine://Plugins/...`; the descriptor lists its Module `.csproj` files. Plugin Modules
-use the same `ISharpEngineModule` contract and are merged into the project's dependency
-graph. The Plugin container has no startup callback, and ordinary project Modules do not
-need a Plugin descriptor.
+`engine://Plugins/...`; the descriptor lists its Module `.csproj` files and may declare
+an `assets.manifest` under the Plugin's `Content/` directory. Plugin Modules use the
+same `ISharpEngineModule` contract and are merged into the project's dependency graph.
+Declared Plugin Content is registered under `engine://plugins/<plugin-id>/...` or
+`project://plugins/<plugin-id>/...` and appears below `Plugins/<Name>/Content` in the
+Content Manager. The Plugin container has no startup callback, and ordinary project
+Modules do not need a Plugin descriptor.
 
 Use **File > New C# Class...** to create a Component or plain class in an existing
 Module. Project source edits build in the background and reload when Stopped;
@@ -345,8 +352,14 @@ IDs. Ownership does not pretend to be a filesystem permission boundary. Engine
 Worlds are ordinary editable Worlds; using one as a preset explicitly deep-copies
 it, so later changes to the source do not alter existing instances.
 
-`SharpEngine.Assets.AssetRegistry.Load(engineRoot, projectRoot)` loads both
-manifests. `Assets`, `EngineAssets`, `ProjectAssets`, `Find`, and `Search`
+`Content` is the authoritative asset root. Non-asset implementation files belong under
+`Resources`; editor and plugin icons use `sharpengine-resource://...` references and
+are not added to `assets.json`. The built-in editor icons live in
+`Resources/Editor/Icons`, while RML source documents remain under `Content/UI/Rml`.
+
+`SharpEngine.Assets.AssetRegistry.Load(engineRoot, projectRoot)` loads the engine and
+project manifests plus every Plugin manifest declared by them. `Assets`,
+`EngineAssets`, `ProjectAssets`, `PluginAssets`, `Plugins`, `Find`, and `Search`
 provide the query surface used by the Project dock and viewport. An entry is
 portable because its `path` is relative to the owning engine/project root;
 `AssetDescriptor.ResolvePath` validates that it cannot escape that root.
@@ -415,6 +428,19 @@ var tool = editor.Toolbar.RegisterTool(new EditorToolbarTool(
     "project-transform", "project", "Transform",
     ["project.reset-position"]));
 ```
+
+Toolbar icons use a built-in name or a path-safe resource URI. A plugin-owned
+editor icon stays under that plugin's `Resources` directory:
+
+```csharp
+var tool = editor.Toolbar.RegisterTool(new EditorToolbarTool(
+    "plugin-open", "plugin", "Plugin",
+    ["plugin.open"], icon:
+        "sharpengine-resource://engine/Plugins/EngineTestPlugin/Resources/Editor/Icons/plugin.tga"));
+```
+
+Use `project` instead of `engine` in the URI for a project plugin. Resource URIs are
+resolved by the native RmlUi file interface and cannot escape the selected root.
 
 These types live in `SharpEngine.Editor` in the public `SharpEngine.Editor.dll`.
 The BasicProject template includes a working top-level `Project` menu and Scene,

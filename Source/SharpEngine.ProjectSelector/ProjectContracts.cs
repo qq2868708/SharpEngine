@@ -135,6 +135,14 @@ internal static class ProjectContracts
                 if (!File.Exists(modulePath))
                     throw new FileNotFoundException("Plugin Module was not found", modulePath);
             }
+            if (descriptor.AssetManifest is not null)
+            {
+                var assetManifest = ResolvePluginAssetManifest(descriptor,
+                    descriptor.AssetManifest);
+                if (!File.Exists(assetManifest))
+                    throw new FileNotFoundException(
+                        "Plugin asset manifest was not found", assetManifest);
+            }
         }
     }
 
@@ -204,6 +212,9 @@ internal static class ProjectContracts
             throw new InvalidDataException($"Plugin Module path escapes its plugin root: {relative}");
         return result;
     }
+
+    internal static string ResolvePluginAssetManifest(SharpPluginDescriptor plugin,
+        string relative) => ResolvePluginModule(plugin, relative);
 
     private static (string Root, string Relative) SplitPluginUri(string projectRoot,
         string engineRoot, string uri)

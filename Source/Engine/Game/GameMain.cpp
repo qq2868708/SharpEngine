@@ -1,7 +1,6 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <shobjidl.h>
-#include <GL/gl.h>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +10,7 @@
 #include "ManagedHost.h"
 #include "Platform/Windows/SharpEngineBranding.h"
 #include "Logging/EngineLog.h"
+#include "RenderCore/Public/RenderCore.h"
 #include "RenderCore/Public/PreviewRenderer.h"
 
 namespace {
@@ -30,6 +30,8 @@ namespace {
         if (nl) { auto* p=reinterpret_cast<const UiSceneVertex*>(l); Lines.assign(p,p+nl); }
     }
     LRESULT CALLBACK Procedure(HWND window,UINT message,WPARAM wp,LPARAM lp) {
+        const bool uiHandled = RC_HandleWindowMessage(window, message,
+            static_cast<uintptr_t>(wp), static_cast<intptr_t>(lp));
         if (message==WM_CLOSE) { PostQuitMessage(0); return 0; }
         if (message==WM_ERASEBKGND) return 1;
         if (Managed) {
@@ -60,19 +62,11 @@ namespace {
             }
             if (message==WM_KILLFOCUS) {kind=6;PointerKnown=false;}
             if (message==WM_CAPTURECHANGED) kind=7;
-            if (kind!=99) Managed->InputEvent("game",kind,code,x,y,dx,dy,0,modifiers,0,1);
+            if (kind!=99) Managed->InputEvent("game",kind,code,x,y,dx,dy,0,modifiers,
+                uiHandled ? 1 : 0, RC_IsUiFocused() ? 1 : 0);
         }
+        if (uiHandled) return 0;
         return DefWindowProcW(window,message,wp,lp);
-    }
-    void Screenshot(const std::filesystem::path& path,int width,int height) {
-        std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*4);
-        glReadPixels(0,0,width,height,0x80E1,GL_UNSIGNED_BYTE,pixels.data());
-        BITMAPFILEHEADER file{}; file.bfType=0x4d42; file.bfOffBits=sizeof(file)+sizeof(BITMAPINFOHEADER);
-        file.bfSize=file.bfOffBits+static_cast<DWORD>(pixels.size());
-        BITMAPINFOHEADER info{}; info.biSize=sizeof(info); info.biWidth=width;info.biHeight=height;
-        info.biPlanes=1;info.biBitCount=32;info.biSizeImage=static_cast<DWORD>(pixels.size());
-        std::ofstream stream(path,std::ios::binary); stream.write(reinterpret_cast<char*>(&file),sizeof(file));
-        stream.write(reinterpret_cast<char*>(&info),sizeof(info)); stream.write(reinterpret_cast<char*>(pixels.data()),pixels.size());
     }
 }
 
@@ -104,15 +98,14 @@ int wmain(int argc,wchar_t** argv) {
     Window=CreateWindowW(wc.lpszClassName,L"SharpEngine Game",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1280,720,nullptr,nullptr,wc.hInstance,nullptr);
     if(!Window) return 3;
     SharpEngine::Windows::ApplyBrandIcon(Window, wc.hInstance);
-    auto dc=GetDC(Window);
-    PIXELFORMATDESCRIPTOR format{};format.nSize=sizeof(format);format.nVersion=1;
-    format.dwFlags=PFD_DRAW_TO_WINDOW|PFD_SUPPORT_OPENGL|PFD_DOUBLEBUFFER;format.iPixelType=PFD_TYPE_RGBA;format.cColorBits=32;format.cDepthBits=24;
-    if(!SetPixelFormat(dc,ChoosePixelFormat(dc,&format),&format)) return 3;
-    auto gl=wglCreateContext(dc);if(!gl||!wglMakeCurrent(dc,gl)) return 3;
+    const RenderInitDesc renderDesc{Window,1280,720,false,RenderBackendType::Vulkan};
+    if(!RC_Initialize(&renderDesc)) {
+        DestroyWindow(Window);return 3;
+    }
     ManagedHost managed;
     ManagedHostApi api{};api.GetViewportRect=Viewport;api.SubmitViewportFrame=Submit;
     if(!managed.Initialize((directory/L"SharpEngine.Host.runtimeconfig.json").wstring(),(directory/L"SharpEngine.Host.dll").wstring())||
-        !managed.Start(Window,1280,720,&api)) { managed.Shutdown();wglMakeCurrent(nullptr,nullptr);wglDeleteContext(gl);ReleaseDC(Window,dc);DestroyWindow(Window);return 4; }
+        !managed.Start(Window,1280,720,&api)) { managed.Shutdown();RC_Shutdown();DestroyWindow(Window);return 4; }
     Managed=&managed;
     if(!hidden)ShowWindow(Window,SW_SHOW);
     auto last=std::chrono::steady_clock::now();uint32_t frames=0;bool running=true;
@@ -123,11 +116,11 @@ int wmain(int argc,wchar_t** argv) {
         managed.Update(limit?1.0f/60.0f:(delta>0.1f?0.1f:delta));
         RECT bounds{};GetClientRect(Window,&bounds);
         RenderPreviewScene(0,0,static_cast<float>(bounds.right),static_cast<float>(bounds.bottom),static_cast<float>(bounds.bottom),Triangles.data(),static_cast<uint32_t>(Triangles.size()),Lines.data(),static_cast<uint32_t>(Lines.size()));
-        if(limit&&frames+1>=limit&&!screenshot.empty()) Screenshot(screenshot,bounds.right,bounds.bottom);
-        SwapBuffers(dc);++frames;
+        if(limit&&frames+1>=limit&&!screenshot.empty()) RC_RequestScreenshot(screenshot.c_str());
+        ++frames;
         if(limit&&frames>=limit)break;
         Sleep(1);
     }
-    Managed=nullptr;managed.Shutdown();wglMakeCurrent(nullptr,nullptr);wglDeleteContext(gl);ReleaseDC(Window,dc);DestroyWindow(Window);
+    Managed=nullptr;managed.Shutdown();RC_Shutdown();DestroyWindow(Window);
     return 0;
 }

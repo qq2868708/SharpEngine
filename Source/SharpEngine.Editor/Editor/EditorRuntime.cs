@@ -276,11 +276,19 @@ public sealed partial class EditorRuntime
             type = asset.Type,
             name = asset.Name,
             source = asset.Source.ToString(),
+            plugin = asset.OwnerId,
             path = asset.RelativePath,
             importer = asset.Importer,
             exists = asset.Exists,
             tags = asset.Tags,
             metadata = asset.Metadata,
+        }),
+        plugins = _assets?.Plugins.Select(plugin => new
+        {
+            id = plugin.Id,
+            version = plugin.Version,
+            source = plugin.Source.ToString(),
+            manifest = plugin.ManifestPath,
         }),
         content = _contentManagers is null ? null :
             JsonNode.Parse(_contentManagers.ToJson()),
@@ -446,7 +454,6 @@ public sealed partial class EditorRuntime
         RefreshSettingsUi();
         RefreshViewportModeUi();
         RefreshUiEditor();
-        RefreshLogUi();
         RefreshExtensionUi();
         SetStatus($"Loaded {_world.Name} · {_world.Entities.Count} entities · {_assets.Assets.Count} assets");
         foreach (var diagnostic in _assets.Diagnostics) Log(diagnostic.Message);
@@ -1036,7 +1043,9 @@ public sealed partial class EditorRuntime
         var relativePath = payload[(separator + 1)..];
         var root = source == AssetSource.Engine ? _engineRoot : _projectRoot;
         if (root is null) return;
-        var fullPath = Path.Combine(root, "Content",
+        var browserRoot = relativePath.StartsWith("Plugins/",
+            StringComparison.OrdinalIgnoreCase) ? root : Path.Combine(root, "Content");
+        var fullPath = Path.Combine(browserRoot,
             relativePath.Replace('/', Path.DirectorySeparatorChar));
         if (Directory.Exists(fullPath))
         {
@@ -1584,6 +1593,7 @@ public sealed partial class EditorRuntime
         RefreshSettingsUi();
         RefreshViewportModeUi();
         RefreshUiEditor();
+        RefreshLogUi();
         RefreshExtensionUi();
         RefreshWorldTitle();
     }
@@ -1851,7 +1861,7 @@ public sealed partial class EditorRuntime
                 var contextKind = entry.IsDirectory ? "folder" : "asset";
                 var contextId = entry.AssetId ?? entry.RelativePath;
                 var readOnly = entry.ReadOnly
-                    ? "<img class=\"readonly-icon\" src=\"Icons/lock.tga\" />"
+                    ? $"<img class=\"readonly-icon\" src=\"{EditorResourceUris.IconSource("lock")}\" />"
                     : string.Empty;
                 markup.Append("<button ").Append(entry.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase)
                         ? "draggable=\"true\" data-prefab-asset=\"" + Escape(entry.AssetId ?? "") + "\" " : "")
@@ -1946,7 +1956,7 @@ public sealed partial class EditorRuntime
             "empty" => "all",
             _ => "file",
         };
-        return $"<img class=\"icon item-icon\" src=\"Icons/{name}.tga\" />";
+        return $"<img class=\"icon item-icon\" src=\"{EditorResourceUris.IconSource(name)}\" />";
     }
 
     private void RefreshInspector()

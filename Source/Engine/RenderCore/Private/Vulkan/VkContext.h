@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <string>
+#include "VkSurface.h"
 
 // 前向声明（避免头文件污染）
 struct RenderInitDesc;
@@ -45,6 +46,8 @@ public:
     VkInstance       GetInstance() const        { return Instance; }
     VkPhysicalDevice GetPhysicalDevice() const  { return PhysicalDevice; }
     VkDevice         GetDevice() const          { return Device; }
+    VkSurfaceKHR     GetSurface() const        { return Surface.Get(); }
+    const VkSurface&  GetSurfaceObject() const  { return Surface; }
 
     uint32_t GetGraphicsQueueFamily() const { return GraphicsQueueFamily; }
     VkQueue  GetGraphicsQueue() const       { return GraphicsQueue; }
@@ -57,6 +60,7 @@ public:
 private:
     // === Instance / Validation ===
     bool CreateInstance(const RenderInitDesc* desc);
+    bool CreateSurface(const RenderInitDesc* desc);
     bool SetupDebugMessenger();
     void DestroyDebugMessenger();
 
@@ -72,6 +76,7 @@ private:
 
     VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
     VkDevice Device = VK_NULL_HANDLE;
+    VkSurface Surface;
 
     VkQueue GraphicsQueue = VK_NULL_HANDLE;
     VkQueue PresentQueue  = VK_NULL_HANDLE;

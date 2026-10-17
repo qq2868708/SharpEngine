@@ -6,6 +6,8 @@
   </PropertyGroup>
   <Import Project="..\..\..\..\Build\SharpEngine.Build.props" />
   <PropertyGroup>
+    <SharpEngineOutputRoot Condition="'$(SharpEngineOutputRoot)' == ''">$(SharpEngineBinariesDir)</SharpEngineOutputRoot>
+    <SharpEngineIntermediateRoot Condition="'$(SharpEngineIntermediateRoot)' == ''">$(SharpEngineIntermediateDir)</SharpEngineIntermediateRoot>
     <OutDir>$(SharpEngineOutputRoot)</OutDir>
     <IntDir>$(SharpEngineIntermediateRoot)SharpEngine.Test.EnginePlugin.Runtime\</IntDir>
     <OutputPath>$(SharpEngineOutputRoot)</OutputPath>

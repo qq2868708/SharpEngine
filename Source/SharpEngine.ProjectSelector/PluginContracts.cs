@@ -7,7 +7,8 @@ internal sealed record SharpPluginDescriptor(
     string Root,
     string Id,
     string Version,
-    IReadOnlyList<string> Modules);
+    IReadOnlyList<string> Modules,
+    string? AssetManifest);
 
 internal static class PluginContracts
 {
@@ -27,8 +28,32 @@ internal static class PluginContracts
         if (modules.Any(string.IsNullOrWhiteSpace))
             throw new InvalidDataException("Plugin Module paths cannot be empty");
         var pluginRoot = Path.GetDirectoryName(fullPath)!;
+        string? assetManifest = null;
+        if (root.TryGetProperty("assets", out var assets))
+        {
+            if (assets.ValueKind != JsonValueKind.Object ||
+                !assets.TryGetProperty("manifest", out var manifest) ||
+                manifest.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(manifest.GetString()))
+                throw new InvalidDataException(
+                    "Plugin assets.manifest must be a non-empty relative path");
+            assetManifest = manifest.GetString()!;
+            if (Path.IsPathRooted(assetManifest) ||
+                assetManifest.Replace('\\', '/').Split('/').Any(
+                    segment => segment.Length == 0 || segment is "." or ".."))
+                throw new InvalidDataException(
+                    $"Plugin assets.manifest escapes its plugin root: {assetManifest}");
+            if (!assetManifest.Replace('\\', '/').StartsWith("Content/",
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException(
+                    "Plugin assets.manifest must remain under the plugin Content directory");
+        }
+        var id = RequiredString(root, "id");
+        if (!IsValidId(id))
+            throw new InvalidDataException($"Plugin id is invalid: {id}");
         return new SharpPluginDescriptor(fullPath, pluginRoot,
-            RequiredString(root, "id"), RequiredString(root, "version"), modules);
+            id, RequiredString(root, "version"), modules,
+            assetManifest);
     }
 
     private static string RequiredString(JsonElement value, string property)
@@ -39,4 +64,9 @@ internal static class PluginContracts
             throw new InvalidDataException($"Required Plugin property is missing: {property}");
         return element.GetString()!;
     }
+
+    private static bool IsValidId(string value) =>
+        value.Length > 0 && char.IsLetterOrDigit(value[0]) &&
+        value.All(character => char.IsLetterOrDigit(character) ||
+            character is '.' or '_' or '-');
 }

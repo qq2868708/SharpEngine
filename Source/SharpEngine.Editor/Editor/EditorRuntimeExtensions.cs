@@ -257,7 +257,7 @@ public sealed partial class EditorRuntime
             markup.Append(" data-popup-id=\"").Append(Escape(popupId)).Append("\"");
         markup.Append(" title=\"").Append(Escape(tool.Tooltip ?? label)).Append("\">");
         if (icon is not null)
-            markup.Append("<img class=\"icon\" src=\"Icons/").Append(Escape(icon)).Append(".tga\" />");
+            markup.Append("<img class=\"icon\" src=\"").Append(Escape(EditorResourceUris.IconSource(icon))).Append("\" />");
         else
             markup.Append(Escape(label));
         if (commands.Length > 1) markup.Append("<span class=\"dropdown-arrow\">v</span>");

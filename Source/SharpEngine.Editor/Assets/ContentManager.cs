@@ -65,7 +65,9 @@ public sealed class ContentManager
     public string CurrentFolder => _currentFolder;
     public string CurrentFolderDisplay => _currentFolder.Length == 0
         ? "Content"
-        : $"Content/{_currentFolder}";
+        : _currentFolder.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase)
+            ? _currentFolder
+            : $"Content/{_currentFolder}";
     public string ContentRoot => GetContentRoot(_source == ContentSourceFilter.Engine
         ? AssetSource.Engine
         : AssetSource.Project);
@@ -127,8 +129,7 @@ public sealed class ContentManager
     public bool OpenFolder(string? relativePath)
     {
         var normalized = NormalizeFolder(relativePath);
-        if (!Sources().Any(source => Directory.Exists(Path.Combine(
-                GetContentRoot(source), normalized.Replace('/', Path.DirectorySeparatorChar)))))
+        if (!Sources().Any(source => Directory.Exists(ResolveBrowsePath(source, normalized))))
             return false;
         _currentFolder = normalized;
         _selectedPath = null;
@@ -171,8 +172,7 @@ public sealed class ContentManager
     public bool SelectFile(AssetSource source, string relativePath)
     {
         var normalized = NormalizeFolder(relativePath);
-        var fullPath = Path.Combine(GetContentRoot(source),
-            normalized.Replace('/', Path.DirectorySeparatorChar));
+        var fullPath = ResolveBrowsePath(source, normalized);
         if (!File.Exists(fullPath)) return false;
         _selectedId = FindDescriptor(source, fullPath)?.Id;
         _selectedPath = normalized;
@@ -183,8 +183,7 @@ public sealed class ContentManager
     public bool SelectFolder(AssetSource source, string relativePath)
     {
         var normalized = NormalizeFolder(relativePath);
-        var fullPath = Path.Combine(GetContentRoot(source),
-            normalized.Replace('/', Path.DirectorySeparatorChar));
+        var fullPath = ResolveBrowsePath(source, normalized);
         if (!Directory.Exists(fullPath)) return false;
         _selectedId = null;
         _selectedPath = normalized;
@@ -223,8 +222,8 @@ public sealed class ContentManager
             type = TypeFilter,
             contentRoot = ContentRoot,
             currentFolder = CurrentFolder,
-            currentFolderExists = Sources().Any(source => Directory.Exists(Path.Combine(
-                GetContentRoot(source), CurrentFolder.Replace('/', Path.DirectorySeparatorChar)))),
+            currentFolderExists = Sources().Any(source => Directory.Exists(
+                ResolveBrowsePath(source, CurrentFolder))),
             selected = SelectedId,
             selectedPath = SelectedPath,
             selectedSource = SelectedSource?.ToString(),
@@ -261,27 +260,72 @@ public sealed class ContentManager
 
     private IEnumerable<ContentBrowserEntry> Enumerate(AssetSource source)
     {
-        var root = GetContentRoot(source);
-        var folderPath = Path.Combine(root,
-            _currentFolder.Replace('/', Path.DirectorySeparatorChar));
-        if (!Directory.Exists(folderPath)) yield break;
+        if (_currentFolder.Length == 0)
+        {
+            foreach (var entry in EnumerateDirectory(source,
+                         Path.Combine(GetSourceRoot(source) ?? _registry.EngineRoot,
+                             "Content")))
+                yield return entry;
+            if (string.IsNullOrWhiteSpace(_search) &&
+                _registry.Plugins.Any(plugin => plugin.Source == source))
+                yield return new ContentBrowserEntry("Plugins", "Plugins", true,
+                    source, "Folder", null, true, source == AssetSource.Engine);
+            yield break;
+        }
 
+        if (_currentFolder.Equals("Plugins", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var plugin in _registry.Plugins.Where(plugin => plugin.Source == source)
+                         .OrderBy(plugin => plugin.Root, StringComparer.OrdinalIgnoreCase))
+            {
+                var name = Path.GetFileName(plugin.Root);
+                if (Matches($"Plugins/{name}", name, null))
+                    yield return new ContentBrowserEntry(name, $"Plugins/{name}", true,
+                        source, "Folder", null, true, source == AssetSource.Engine);
+            }
+            yield break;
+        }
+
+        if (_currentFolder.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase) &&
+            _currentFolder.Split('/').Length == 2)
+        {
+            var pluginName = _currentFolder.Split('/')[1];
+            if (_registry.Plugins.Any(plugin => plugin.Source == source &&
+                    string.Equals(Path.GetFileName(plugin.Root), pluginName,
+                        StringComparison.OrdinalIgnoreCase)))
+                yield return new ContentBrowserEntry("Content",
+                    $"Plugins/{pluginName}/Content", true, source, "Folder", null,
+                    true, source == AssetSource.Engine);
+            yield break;
+        }
+
+        var folderPath = ResolveBrowsePath(source, _currentFolder);
+        foreach (var entry in EnumerateDirectory(source, folderPath))
+            yield return entry;
+    }
+
+    private IEnumerable<ContentBrowserEntry> EnumerateDirectory(AssetSource source,
+        string folderPath)
+    {
+        if (!Directory.Exists(folderPath)) yield break;
         IEnumerable<string> directories;
         IEnumerable<string> files;
         try
         {
-            var searchRoot = string.IsNullOrWhiteSpace(_search) ? folderPath : root;
-            directories = Directory.EnumerateDirectories(searchRoot, "*",
-                string.IsNullOrWhiteSpace(_search) ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories);
-            files = Directory.EnumerateFiles(searchRoot, "*",
-                string.IsNullOrWhiteSpace(_search) ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories);
+            var searchRoot = string.IsNullOrWhiteSpace(_search)
+                ? folderPath
+                : SearchRoot(source);
+            var option = string.IsNullOrWhiteSpace(_search)
+                ? SearchOption.TopDirectoryOnly : SearchOption.AllDirectories;
+            directories = Directory.EnumerateDirectories(searchRoot, "*", option);
+            files = Directory.EnumerateFiles(searchRoot, "*", option);
         }
         catch (IOException) { yield break; }
         catch (UnauthorizedAccessException) { yield break; }
 
         foreach (var directory in directories)
         {
-            var relative = ToContentRelative(root, directory);
+            var relative = ToBrowserRelative(source, directory);
             if (Matches(relative, Path.GetFileName(directory), null))
                 yield return new ContentBrowserEntry(Path.GetFileName(directory), relative,
                     true, source, "Folder", null, true, source == AssetSource.Engine);
@@ -289,7 +333,7 @@ public sealed class ContentManager
 
         foreach (var file in files)
         {
-            var relative = ToContentRelative(root, file);
+            var relative = ToBrowserRelative(source, file);
             var asset = FindDescriptor(source, file);
             var type = asset?.Type ?? InferType(file);
             if (Matches(relative, Path.GetFileName(file), type) &&
@@ -307,8 +351,49 @@ public sealed class ContentManager
 
     private string GetContentRoot(AssetSource source)
     {
-        var root = source == AssetSource.Project ? _registry.ProjectRoot : _registry.EngineRoot;
+        var root = GetSourceRoot(source);
         return Path.Combine(root ?? _registry.EngineRoot, "Content");
+    }
+
+    private string? GetSourceRoot(AssetSource source) =>
+        source == AssetSource.Project ? _registry.ProjectRoot : _registry.EngineRoot;
+
+    private string ResolveBrowsePath(AssetSource source, string folder)
+    {
+        var root = GetSourceRoot(source) ?? _registry.EngineRoot;
+        if (folder.Length == 0)
+            return Path.Combine(root, "Content");
+        if (!folder.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase))
+            return Path.Combine(GetContentRoot(source),
+                folder.Replace('/', Path.DirectorySeparatorChar));
+
+        var parts = folder.Split('/');
+        if (parts.Length < 2 || !string.Equals(parts[0], "Plugins",
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Content folder must remain under Content: '{folder}'");
+        var plugin = _registry.Plugins.FirstOrDefault(value => value.Source == source &&
+            string.Equals(Path.GetFileName(value.Root), parts[1],
+                StringComparison.OrdinalIgnoreCase));
+        if (plugin is null)
+            return Path.Combine(root, "Plugins", parts[1]);
+        if (parts.Length == 2)
+            return plugin.Root;
+        if (!string.Equals(parts[2], "Content", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin browser paths must remain under Content: '{folder}'");
+        var suffix = string.Join('/', parts.Skip(3));
+        return Path.Combine(plugin.Root, "Content",
+            suffix.Replace('/', Path.DirectorySeparatorChar));
+    }
+
+    private string SearchRoot(AssetSource source)
+    {
+        if (!_currentFolder.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase))
+            return GetContentRoot(source);
+        var parts = _currentFolder.Split('/');
+        if (parts.Length >= 3)
+            return ResolveBrowsePath(source,
+                $"Plugins/{parts[1]}/Content");
+        return ResolveBrowsePath(source, _currentFolder);
     }
 
     private AssetDescriptor? FindDescriptor(AssetSource source, string path) =>
@@ -317,10 +402,19 @@ public sealed class ContentManager
                 StringComparison.OrdinalIgnoreCase));
 
     private string ToContentRelative(AssetDescriptor asset) =>
-        ToContentRelative(GetContentRoot(asset.Source), _registry.ResolvePath(asset) ?? asset.RelativePath);
+        ToBrowserRelative(asset.Source, _registry.ResolvePath(asset) ?? asset.RelativePath);
 
-    private static string ToContentRelative(string root, string path) =>
-        Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/');
+    private string ToBrowserRelative(AssetSource source, string path)
+    {
+        var root = GetSourceRoot(source) ?? _registry.EngineRoot;
+        var contentRoot = GetContentRoot(source);
+        var fullPath = Path.GetFullPath(path);
+        var relative = Path.GetRelativePath(contentRoot, fullPath);
+        if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal) || Path.IsPathRooted(relative))
+            relative = Path.GetRelativePath(root, fullPath);
+        return relative.Replace(Path.DirectorySeparatorChar, '/');
+    }
 
     private static string NormalizeFolder(string? path)
     {

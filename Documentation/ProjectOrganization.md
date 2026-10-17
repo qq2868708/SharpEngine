@@ -4,6 +4,42 @@ Each engine `.csproj` or `.vcxproj` declares one `SharpEngineRole`. Project refe
 define managed build dependencies. `EngineBuildGraph` discovers these declarations;
 there is no second engine-project list in the solution generator or layout checker.
 
+## Content and Resources
+
+`Content` is the authoritative asset root. Files represented by an engine or project
+asset manifest receive stable `engine://` or `project://` IDs, can appear in Content
+Manager, and participate in dependency discovery and Cook. `Resources` is for
+implementation files loaded by a known subsystem, such as editor icons, fonts, and
+plugin editor support files. Resource files do not become asset records merely because
+they are present on disk.
+
+The engine resource URI is `sharpengine-resource://engine/<relative-path>` or
+`sharpengine-resource://project/<relative-path>`. The relative path must be under the
+corresponding `Resources/` directory or under a plugin's `Plugins/<Name>/Resources/`
+directory. Built-in toolbar icon names are shorthand for
+`sharpengine-resource://engine/Resources/Editor/Icons/<name>.tga`.
+
+The intended layout is:
+
+```text
+EngineRoot/
+  Content/                  # registered engine assets and UI source documents
+  Resources/                # engine implementation resources
+Plugins/<Name>/
+  Content/                  # plugin assets (when registered by a manifest)
+  Resources/                # plugin implementation/editor resources
+ProjectRoot/
+  Content/                  # registered project assets
+  Resources/                # project implementation resources
+```
+
+Plugin manifests declare Modules and may declare an `assets.manifest` under the
+plugin's `Content/` directory. A declared plugin manifest is loaded into the
+`AssetRegistry` with a stable `engine://plugins/<plugin-id>/...` or
+`project://plugins/<plugin-id>/...` namespace and is browsable below
+`Plugins/<Name>/Content`. Files merely placed under `Plugins/` remain invisible.
+The full Cook pipeline still owns packaging and derived output publication.
+
 | Project | Role | Owns |
 | --- | --- | --- |
 | SharpEngine.Runtime | Runtime Module | Core module contracts, components, RuntimeWorld, assets, input, runtime UI contracts, settings storage and scene rendering |
@@ -67,7 +103,11 @@ Run `Tools/GenerateProjectFiles.ps1 -EngineRoot <engine>` to regenerate the Engi
 solution. Use `Tools/SharpEngineProject.ps1 -Command GenerateProjectFiles
 -ProjectFile <project>` for a user solution, or pass `-ProjectFile` to the same
 `GenerateProjectFiles.ps1` wrapper. Solutions expose Debug/Development/Shipping ×
-Editor/Game.
+Editor/Game. The generated solution keeps three roots: `Engine` contains engine
+source and Plugins, `Project` contains project `Source`, project `Plugins`, and
+`Config`, and `BuildTarget` contains the generated `Editor`/`Game` build
+wrappers. A Plugin's Modules are nested below its own `Plugins/<Name>/Source`
+folder. An Engine-only solution omits the empty `Project` root.
 After registering the Engine, the `.sharpproject` context menu exposes the same
 `Generate Project Files` operation and writes the generated solution beside the
 project manifest.

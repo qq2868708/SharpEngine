@@ -30,6 +30,26 @@ try
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));
+    var pluginRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "Plugins", "ValidationPlugin"));
+    var pluginAssets = Directory.CreateDirectory(Path.Combine(pluginRoot.FullName,
+        "Content", "Assets"));
+    var pluginData = Directory.CreateDirectory(Path.Combine(pluginRoot.FullName,
+        "Content", "PluginData"));
+    var pluginIcons = Directory.CreateDirectory(Path.Combine(pluginRoot.FullName,
+        "Resources", "Editor", "Icons"));
+    File.WriteAllBytes(Path.Combine(pluginIcons.FullName, "validation.tga"), [0]);
+    File.WriteAllText(Path.Combine(pluginData.FullName, "Sample.pluginasset.json"),
+        "{\"schemaVersion\":1,\"value\":\"validation\"}\n");
+    File.WriteAllText(Path.Combine(pluginAssets.FullName, "assets.json"), """
+        {"schemaVersion":1,"assets":[
+          {"id":"sample","type":"PluginData","path":"Content/PluginData/Sample.pluginasset.json"}
+        ]}
+        """);
+    File.WriteAllText(Path.Combine(pluginRoot.FullName, "ValidationPlugin.sharpplugin"), """
+        {"schemaVersion":1,"id":"validation.plugin","version":"1.0.0",
+         "modules":[],"assets":{"manifest":"Content/Assets/assets.json"}}
+        """);
     var worldPath = Path.Combine(worlds.FullName, "Main.sworld");
     File.Copy(Path.Combine(root, "Content", "Worlds", "Main.sworld"), worldPath);
     var uiPath = Path.Combine(ui.FullName, "Main.rml");
@@ -50,7 +70,7 @@ try
         """);
     var manifest = Path.Combine(temporary.FullName, "Validation.sharpproject");
     File.WriteAllText(manifest, """
-        {"schemaVersion":3,"projectId":"validation","engine":{"id":"SharpEngine","version":"0.2.0-dev","association":"validation","manifest":"engine.json"},"modules":[],"assets":{"manifest":"Content/Assets/assets.json"},"world":{"startup":"Content/Worlds/Main.sworld"}}
+        {"schemaVersion":3,"projectId":"validation","engine":{"id":"SharpEngine","version":"0.2.0-dev","association":"validation","manifest":"engine.json"},"modules":[],"plugins":["project://Plugins/ValidationPlugin/ValidationPlugin.sharpplugin"],"assets":{"manifest":"Content/Assets/assets.json"},"world":{"startup":"Content/Worlds/Main.sworld"}}
         """);
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", root);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
@@ -90,9 +110,25 @@ try
         dockMarkup.Contains("editor.content.view:content:tile", StringComparison.Ordinal) &&
         dockMarkup.Contains("editor.content.view:content:list", StringComparison.Ordinal),
         "Content Manager markup must expose instance-scoped search and Tile/List controls");
+    Require(dockMarkup.Contains("data-pane-id=\"console\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("data-pane-id=\"logs\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("id=\"logs-main\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("Unified Log", StringComparison.Ordinal),
+        "Console and Logs must be separate dock panes with distinct markup");
+    Require(runtime.Commands.Commands.Any(command => command.Id == "view.console") &&
+        runtime.Commands.Commands.Any(command => command.Id == "view.logs") &&
+        runtime.Menus.Items.Any(item => item.CommandId == "view.console") &&
+        runtime.Menus.Items.Any(item => item.CommandId == "view.logs"),
+        "View menu must expose independent Console and Logs commands");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
-    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 3,
-        "Public and project assets must both be available to a project editor");
+    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 4,
+        "Public, project, and Plugin Content assets must both be available to a project editor");
+    var pluginAsset = runtime.Assets.Find("project://plugins/validation.plugin/sample");
+    Require(pluginAsset?.OwnerId == "validation.plugin" &&
+        pluginAsset.RelativePath == "Plugins/ValidationPlugin/Content/PluginData/Sample.pluginasset.json" &&
+        runtime.Assets.ResolvePath(pluginAsset) == Path.Combine(pluginRoot.FullName,
+            "Content", "PluginData", "Sample.pluginasset.json"),
+        "Plugin Content must be namespaced, rooted at its Plugin, and resolvable");
     Require(runtime.Assets.Find("engine://worlds/main")?.ReadOnly == false &&
         runtime.Assets.Find("engine://meshes/cube")?.ReadOnly == true,
         "Engine Worlds must remain ordinary editable assets without changing other asset policies");
@@ -102,6 +138,15 @@ try
         runtime.Content.VisibleEntries.Any(entry => entry.IsDirectory && entry.Name == "Worlds"),
         "Content manager should open the project Content folder and show directories");
     var content = runtime.Content!;
+    var hasPluginFolder = content.VisibleEntries.Any(entry => entry.IsDirectory && entry.Name == "Plugins");
+    runtime.InvokeUiAction("editor.content.open:project|Plugins/ValidationPlugin/Content/PluginData");
+    var pluginFolderOpened = content.CurrentFolder == "Plugins/ValidationPlugin/Content/PluginData";
+    Require(hasPluginFolder &&
+        pluginFolderOpened &&
+        content.VisibleEntries.Any(entry => entry.Name == "Sample.pluginasset.json" &&
+            entry.AssetId == "project://plugins/validation.plugin/sample"),
+        "Content manager must browse declared Plugin Content through the project source");
+    content.ResetFolder();
     runtime.InvokeUiAction("editor.content.open:project|Worlds");
     Require(content.CurrentFolder == "Worlds" &&
         content.VisibleEntries.Any(entry => entry.Name == "Main.sworld"),
@@ -215,10 +260,14 @@ try
         new EditorToolbarCategory("validation", 500));
     using var toolbarRegistration = runtime.Toolbar.RegisterTool(new EditorToolbarTool(
         "validation.raise-status", "validation", "Raise Status",
-        ["validation.raise-status"], 10));
+        ["validation.raise-status"], 10, icon:
+            "sharpengine-resource://project/Plugins/ValidationPlugin/Resources/Editor/Icons/validation.tga"));
     var extensionSnapshot = runtime.DescribeEditorJson();
     Require(extensionSnapshot.Contains("validation.raise-status", StringComparison.Ordinal) &&
-        extensionSnapshot.Contains("Raise Status", StringComparison.Ordinal),
+        extensionSnapshot.Contains("Raise Status", StringComparison.Ordinal) &&
+        extensionSnapshot.Contains(
+            "sharpengine-resource://project/Plugins/ValidationPlugin/Resources/Editor/Icons/validation.tga",
+            StringComparison.Ordinal),
         "Managed editor commands and Toolbar contributions must be discoverable");
     runtime.InvokeUiAction("editor.select-entity:player");
     runtime.InvokeUiAction("editor.command:validation.raise-status");

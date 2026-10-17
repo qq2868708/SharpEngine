@@ -9,6 +9,7 @@
     "binaries": "Binaries/{platform}/{configuration}/{target}",
     "intermediate": "Intermediate/{platform}/{configuration}/{target}",
     "content": "Content",
+    "resources": "Resources",
     "tools": "Tools"
   },
   "assets": {

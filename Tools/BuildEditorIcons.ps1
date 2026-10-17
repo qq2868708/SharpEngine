@@ -1,7 +1,8 @@
-# Regenerate the editor's original 24-unit icons. RmlUi's GL2 backend loads
-# uncompressed TGA textures, so no icon font or SVG runtime is required.
+# Regenerate the editor's original 24-unit icons. They are editor resources,
+# rather than Content assets. RmlUi's GL2 backend loads uncompressed TGA
+# textures, so no icon font or SVG runtime is required.
 [CmdletBinding()]
-param([string]$OutputDirectory = (Join-Path $PSScriptRoot '..\Content\UI\Rml\Icons'))
+param([string]$OutputDirectory = (Join-Path $PSScriptRoot '..\Resources\Editor\Icons'))
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing

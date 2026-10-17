@@ -11,6 +11,14 @@ public enum AssetSource : byte
     Project = 1,
 }
 
+/// <summary>One declared plugin content owner discovered from a project manifest.</summary>
+public sealed record AssetPluginDescriptor(
+    string Id,
+    string Version,
+    AssetSource Source,
+    string ManifestPath,
+    string Root);
+
 /// <summary>A renderer-neutral asset record exposed to editor panels and the viewport.</summary>
 public sealed class AssetDescriptor
 {
@@ -21,6 +29,8 @@ public sealed class AssetDescriptor
     public string RelativePath { get; init; } = string.Empty;
     public AssetSource Source { get; init; }
     public bool ReadOnly { get; init; }
+    /// <summary>Plugin id when the asset is declared by a plugin manifest.</summary>
+    public string? OwnerId { get; init; }
     public bool Exists { get; internal set; }
     public string? Importer { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
@@ -95,6 +105,9 @@ public sealed class AssetRegistry
     private readonly Dictionary<string, AssetDescriptor> _byId =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly List<AssetRegistryDiagnostic> _diagnostics = new();
+    private readonly List<AssetPluginDescriptor> _plugins = new();
+    private readonly HashSet<string> _pluginIds =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private AssetRegistry(string engineRoot, string? projectRoot)
     {
@@ -108,6 +121,7 @@ public sealed class AssetRegistry
     public string? ProjectRoot { get; }
     public string? DefaultWorldId { get; private set; }
     public IReadOnlyList<AssetDescriptor> Assets => _assets;
+    public IReadOnlyList<AssetPluginDescriptor> Plugins => _plugins;
     public IReadOnlyList<AssetRegistryDiagnostic> Diagnostics => _diagnostics;
 
     public IEnumerable<AssetDescriptor> EngineAssets =>
@@ -115,6 +129,9 @@ public sealed class AssetRegistry
 
     public IEnumerable<AssetDescriptor> ProjectAssets =>
         _assets.Where(asset => asset.Source == AssetSource.Project);
+
+    public IEnumerable<AssetDescriptor> PluginAssets =>
+        _assets.Where(asset => asset.OwnerId is not null);
 
     public AssetDescriptor? Find(string? id) =>
         id is not null && _byId.TryGetValue(id, out var asset) ? asset : null;
@@ -153,11 +170,19 @@ public sealed class AssetRegistry
                 name = asset.Name,
                 source = asset.Source.ToString(),
                 readOnly = asset.ReadOnly,
+                plugin = asset.OwnerId,
                 exists = asset.Exists,
                 path = asset.RelativePath,
                 importer = asset.Importer,
                 tags = asset.Tags,
                 metadata = asset.Metadata,
+            }),
+            plugins = Plugins.Select(plugin => new
+            {
+                id = plugin.Id,
+                version = plugin.Version,
+                source = plugin.Source.ToString(),
+                manifest = plugin.ManifestPath,
             }),
             diagnostics = Diagnostics,
         }, options ?? new JsonSerializerOptions
@@ -248,6 +273,7 @@ public sealed class AssetRegistry
 
             var descriptor = new AssetDescriptor { RelativePath = relativePath };
             LoadManifest(descriptor.ResolvePath(sourceRoot)!, source, sourceRoot);
+            LoadPlugins(document.RootElement, manifestPath);
             if (source == AssetSource.Engine &&
                 document.RootElement.TryGetProperty("worldPresets", out var presets) &&
                 presets.ValueKind == JsonValueKind.Object &&
@@ -255,7 +281,7 @@ public sealed class AssetRegistry
                 defaultWorld.ValueKind == JsonValueKind.String)
             {
                 var rawId = defaultWorld.GetString();
-                if (rawId is null || !TryNormalizeId(rawId, AssetSource.Engine, out var id))
+                if (rawId is null || !TryNormalizeId(rawId, AssetSource.Engine, "", out var id))
                     throw new InvalidDataException("worldPresets.default must be a valid engine asset id");
                 var asset = Find(id);
                 if (asset is null || !string.Equals(asset.Type, "World",
@@ -279,7 +305,8 @@ public sealed class AssetRegistry
     }
 
     private void LoadManifest(string manifestPath, AssetSource source,
-        string sourceRoot)
+        string sourceRoot, string pathPrefix = "", string idPrefix = "",
+        string? ownerId = null)
     {
         if (!File.Exists(manifestPath))
         {
@@ -307,7 +334,8 @@ public sealed class AssetRegistry
 
             foreach (var item in manifest.Assets ?? new List<AssetManifestItem?>())
             {
-                AddAsset(item, source, sourceRoot, manifestPath);
+                AddAsset(item, source, sourceRoot, manifestPath,
+                    pathPrefix, idPrefix, ownerId);
             }
         }
         catch (Exception exception) when (exception is JsonException or
@@ -319,7 +347,8 @@ public sealed class AssetRegistry
     }
 
     private void AddAsset(AssetManifestItem? item, AssetSource source,
-        string sourceRoot, string manifestPath)
+        string sourceRoot, string manifestPath, string pathPrefix,
+        string idPrefix, string? ownerId)
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Id) ||
             string.IsNullOrWhiteSpace(item.Path))
@@ -329,7 +358,7 @@ public sealed class AssetRegistry
             return;
         }
 
-        if (!TryNormalizeId(item.Id, source, out var id))
+        if (!TryNormalizeId(item.Id, source, idPrefix, out var id))
         {
             _diagnostics.Add(new AssetRegistryDiagnostic(
                 $"Invalid asset id or source namespace: '{item.Id}' (source={source})",
@@ -343,7 +372,18 @@ public sealed class AssetRegistry
             return;
         }
 
-        var relativePath = item.Path.Replace('\\', '/');
+        var itemRelativePath = item.Path.Replace('\\', '/');
+        if (ownerId is not null &&
+            (!itemRelativePath.StartsWith("Content/", StringComparison.OrdinalIgnoreCase) ||
+             itemRelativePath.Split('/').Any(segment =>
+                 segment.Length == 0 || segment is "." or "..")))
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Plugin asset path must remain under Content: '{item.Path}'",
+                manifestPath, true));
+            return;
+        }
+        var relativePath = pathPrefix + itemRelativePath;
         var descriptor = new AssetDescriptor
         {
             Id = id,
@@ -353,6 +393,7 @@ public sealed class AssetRegistry
                 : item.Name,
             RelativePath = relativePath,
             Source = source,
+            OwnerId = ownerId,
             ReadOnly = item.ReadOnly || (source == AssetSource.Engine &&
                 !string.Equals(item.Type, "World", StringComparison.OrdinalIgnoreCase)),
             Importer = item.Importer,
@@ -384,7 +425,140 @@ public sealed class AssetRegistry
         _byId.Add(descriptor.Id, descriptor);
     }
 
-    private static bool TryNormalizeId(string id, AssetSource source, out string normalized)
+    private void LoadPlugins(JsonElement owner, string ownerManifestPath)
+    {
+        if (!owner.TryGetProperty("plugins", out var plugins)) return;
+        if (plugins.ValueKind != JsonValueKind.Array)
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                "Source manifest plugins must be an array", ownerManifestPath, true));
+            return;
+        }
+
+        foreach (var pluginValue in plugins.EnumerateArray())
+        {
+            if (pluginValue.ValueKind != JsonValueKind.String)
+            {
+                _diagnostics.Add(new AssetRegistryDiagnostic(
+                    "Plugin references must be strings", ownerManifestPath, true));
+                continue;
+            }
+
+            var uri = pluginValue.GetString() ?? string.Empty;
+            try
+            {
+                var (source, root, manifestPath) = ResolvePluginManifest(uri);
+                using var pluginDocument = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                var plugin = pluginDocument.RootElement;
+                if (plugin.ValueKind != JsonValueKind.Object ||
+                    !plugin.TryGetProperty("schemaVersion", out var schema) ||
+                    schema.ValueKind != JsonValueKind.Number || schema.GetInt32() != 1)
+                    throw new InvalidDataException(
+                        $"Plugin manifest schemaVersion must be 1: {manifestPath}");
+                var id = RequiredString(plugin, "id");
+                if (!IsValidPluginId(id))
+                    throw new InvalidDataException($"Plugin id is invalid: {id}");
+                var version = RequiredString(plugin, "version");
+                var pluginRoot = Path.GetDirectoryName(manifestPath)!;
+                if (!_pluginIds.Add(id))
+                    throw new InvalidDataException($"Duplicate Plugin id '{id}'");
+
+                _plugins.Add(new AssetPluginDescriptor(id, version, source,
+                    manifestPath, pluginRoot));
+
+                if (!plugin.TryGetProperty("assets", out var assets)) continue;
+                if (assets.ValueKind != JsonValueKind.Object ||
+                    !assets.TryGetProperty("manifest", out var assetManifest) ||
+                    assetManifest.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(assetManifest.GetString()))
+                    throw new InvalidDataException(
+                        $"Plugin assets.manifest must be a non-empty relative path: {manifestPath}");
+
+                var assetManifestRelative = assetManifest.GetString()!;
+                if (!assetManifestRelative.Replace('\\', '/').StartsWith("Content/",
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        $"Plugin assets.manifest must remain under Content: {manifestPath}");
+
+                var assetManifestPath = ResolveUnder(pluginRoot,
+                    assetManifestRelative, "Plugin asset manifest");
+                var pluginName = Path.GetFileName(pluginRoot);
+                var pathPrefix = $"Plugins/{pluginName}/";
+                var idPrefix = $"plugins/{id}/";
+                LoadManifest(assetManifestPath, source, root, pathPrefix,
+                    idPrefix, id);
+            }
+            catch (Exception exception) when (exception is JsonException or
+                InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                _diagnostics.Add(new AssetRegistryDiagnostic(
+                    $"Invalid Plugin manifest '{uri}': {exception.Message}",
+                    ownerManifestPath, true));
+            }
+        }
+    }
+
+    private (AssetSource Source, string Root, string ManifestPath) ResolvePluginManifest(
+        string uri)
+    {
+        var separator = uri.IndexOf("://", StringComparison.Ordinal);
+        if (separator <= 0) throw new InvalidDataException($"Invalid Plugin URI: {uri}");
+        var scheme = uri[..separator];
+        var relative = uri[(separator + 3)..].Replace('\\', '/');
+        if (!relative.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin URI must remain under Plugins: {uri}");
+
+        var source = scheme.Equals("engine", StringComparison.OrdinalIgnoreCase)
+            ? AssetSource.Engine
+            : scheme.Equals("project", StringComparison.OrdinalIgnoreCase)
+                ? AssetSource.Project
+                : throw new InvalidDataException($"Unknown Plugin URI scheme: {scheme}");
+        var root = source == AssetSource.Engine ? EngineRoot : ProjectRoot;
+        if (root is null) throw new InvalidDataException($"Plugin root is unavailable: {uri}");
+        var pluginRelative = relative["Plugins/".Length..];
+        if (pluginRelative.Length == 0 || pluginRelative.Split('/').Any(
+                segment => segment.Length == 0 || segment is "." or ".."))
+            throw new InvalidDataException($"Plugin URI contains an invalid path: {uri}");
+        var pluginsRoot = Path.Combine(root, "Plugins");
+        var manifestPath = ResolveUnder(pluginsRoot, pluginRelative, "Plugin manifest");
+        if (!manifestPath.EndsWith(".sharpplugin", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Plugin manifest must use .sharpplugin: {uri}");
+        if (!File.Exists(manifestPath))
+            throw new FileNotFoundException("Plugin manifest was not found", manifestPath);
+        return (source, root, manifestPath);
+    }
+
+    private static string ResolveUnder(string root, string relative, string label)
+    {
+        if (Path.IsPathRooted(relative) || relative.Contains(':') ||
+            relative.Replace('\\', '/').Split('/').Any(
+                segment => segment.Length == 0 || segment is "." or ".."))
+            throw new InvalidDataException($"{label} path is invalid: {relative}");
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var result = Path.GetFullPath(Path.Combine(fullRoot,
+            relative.Replace('/', Path.DirectorySeparatorChar)));
+        if (!result.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"{label} path escapes its root: {relative}");
+        return result;
+    }
+
+    private static string RequiredString(JsonElement value, string property)
+    {
+        if (!value.TryGetProperty(property, out var element) ||
+            element.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(element.GetString()))
+            throw new InvalidDataException($"Plugin property '{property}' is required");
+        return element.GetString()!;
+    }
+
+    private static bool IsValidPluginId(string value) =>
+        value.Length > 0 && char.IsLetterOrDigit(value[0]) &&
+        value.All(character => char.IsLetterOrDigit(character) ||
+            character is '.' or '_' or '-');
+
+    private static bool TryNormalizeId(string id, AssetSource source,
+        string idPrefix, out string normalized)
     {
         var value = id.Trim().Replace('\\', '/');
         var prefix = source == AssetSource.Engine ? "engine://" : "project://";
@@ -404,6 +578,8 @@ public sealed class AssetRegistry
             return false;
         }
 
+        if (idPrefix.Length > 0)
+            value = idPrefix + value;
         normalized = prefix + value;
         return true;
     }

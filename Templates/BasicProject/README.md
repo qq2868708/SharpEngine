@@ -11,12 +11,6 @@ The project contains two C# Modules:
 - `Source/__PROJECT_NAMESPACE__.Editor`: Editor Module, depending on the Runtime
   Module and registering project menus and context commands.
 
-It also enables two no-op Plugin fixtures so the generated project exercises both
-Plugin roots: `project://Plugins/ProjectTestPlugin/ProjectTestPlugin.sharpplugin`
-and the Engine-owned `engine://Plugins/EngineTestPlugin/EngineTestPlugin.sharpplugin`.
-Their Runtime and Editor Modules follow the same unified build and loading rules as
-ordinary project Modules.
-
 `__DISPLAY_NAME__.sln` is generated when the project is created. It shows the
 associated source Engine and the project Modules even when they are in unrelated
 directories. Build from the generated Editor or Game Target, or use

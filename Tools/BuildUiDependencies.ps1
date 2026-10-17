@@ -1,8 +1,10 @@
-param([ValidateSet('Debug', 'Development', 'Shipping')][string]$Configuration='Debug')
+param(
+    [ValidateSet('Debug', 'Development', 'Shipping')][string]$Configuration='Debug',
+    [ValidateSet('Editor', 'Game')][string]$Target='Editor')
 $ErrorActionPreference='Stop'
 $engineRoot=Split-Path $PSScriptRoot -Parent
 $cmakeConfiguration=switch ($Configuration) { 'Debug' {'Debug'} 'Development' {'RelWithDebInfo'} 'Shipping' {'Release'} }
-$buildDirectory=Join-Path $engineRoot "Intermediate/Win64/$Configuration/Editor/External/UI"
+$buildDirectory=Join-Path $engineRoot "Intermediate/Win64/$Configuration/$Target/External/UI"
 $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio=& $vswhere -latest -prerelease -property installationPath
 $cmake=Join-Path $visualStudio 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'

@@ -200,7 +200,8 @@ public sealed partial class EditorRuntime
             var selected = ReferenceEquals(document, active) ? " active" : string.Empty;
             tabs.Append("<button class=\"ui-document-tab").Append(selected)
                 .Append("\" action=\"editor.ui-activate:")
-                .Append(EscapeUi(document.Asset.Id)).Append("\"><img class=\"icon\" src=\"Icons/ui.tga\" /><span>")
+                .Append(EscapeUi(document.Asset.Id)).Append("\"><img class=\"icon\" src=\"")
+                .Append(EditorResourceUris.IconSource("ui")).Append("\" /><span>")
                 .Append(EscapeUi(document.Title)).Append("</span><span class=\"ui-document-close\" data-action=\"editor.ui-close:")
                 .Append(EscapeUi(document.Asset.Id)).Append("\">x</span></button>");
         }

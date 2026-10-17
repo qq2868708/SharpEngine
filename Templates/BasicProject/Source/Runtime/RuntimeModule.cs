@@ -17,14 +17,14 @@ public sealed class __PROJECT_NAMESPACE__Module : ISharpEngineModule
             {
                 // Consume the shared Action here; connect Performed values to your gameplay.
                 if (input.Phase != InputActionPhase.Performed)
-                    Console.WriteLine($"[Input] Move {input.Phase}: {input.Value.X}, {input.Value.Y}");
+                    context.Logger.Info($"Move {input.Phase}: {input.Value.X}, {input.Value.Y}");
                 return true;
             });
         _primaryInput = context.Input?.BindAction(InputRoute.Gameplay,
             "project://input/actions/gameplay.primary", 0, input =>
             {
                 if (input.Phase == InputActionPhase.Performed)
-                    Console.WriteLine("[Input] Primary");
+                    context.Logger.Info("Primary");
                 return true;
             });
     }

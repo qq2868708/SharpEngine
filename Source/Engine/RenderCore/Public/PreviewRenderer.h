@@ -1,7 +1,8 @@
 #pragma once
 #include <cstdint>
+#include "RenderCore.h"
 
-struct UiSceneVertex { float X, Y, Z, R, G, B, A; };
+using UiSceneVertex = RenderVertex;
 
 // Shared GL preview presentation used by Editor viewport and Game window.
 void RenderPreviewScene(float x, float y, float width, float height, float clientHeight,

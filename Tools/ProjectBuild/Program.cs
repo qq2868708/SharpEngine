@@ -275,6 +275,8 @@ var runtimeManifest = new
         version = plugin.Version,
         source = plugin.Source,
         manifestHash = plugin.ManifestHash,
+        assetManifest = plugin.AssetManifest,
+        assetManifestHash = plugin.AssetManifestHash,
     }).ToArray(),
     modules = selected.Select(module =>
     {
@@ -337,11 +339,38 @@ static IReadOnlyList<PluginInfo> ReadPlugins(JsonElement project, string project
             Fail("SEPLUGIN002", $"Plugin manifest schemaVersion must be 1: {source}");
         var id = RequiredString(root, "id");
         var version = RequiredString(root, "version");
+        if (id.Length == 0 || !char.IsLetterOrDigit(id[0]) ||
+            id.Any(character => !char.IsLetterOrDigit(character) &&
+                character is not ('.' or '_' or '-')))
+            Fail("SEPLUGIN015", $"Plugin '{id}' has an invalid id");
         if (!ids.Add(id)) Fail("SEPLUGIN003", $"Duplicate Plugin id '{id}'");
         if (!root.TryGetProperty("modules", out var modules) ||
             modules.ValueKind != JsonValueKind.Array)
             Fail("SEPLUGIN004", $"Plugin '{id}' must declare a modules array");
         var pluginRoot = Path.GetDirectoryName(manifestPath)!;
+        string? assetManifest = null;
+        string? assetManifestHash = null;
+        if (root.TryGetProperty("assets", out var assets))
+        {
+            if (assets.ValueKind != JsonValueKind.Object ||
+                !assets.TryGetProperty("manifest", out var manifest) ||
+                manifest.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(manifest.GetString()))
+                Fail("SEPLUGIN012", $"Plugin '{id}' assets.manifest must be a non-empty path");
+            assetManifest = manifest.GetString()!;
+            var normalizedAssetManifest = assetManifest.Replace('\\', '/');
+            if (Path.IsPathRooted(assetManifest) ||
+                !normalizedAssetManifest.StartsWith("Content/", StringComparison.OrdinalIgnoreCase) ||
+                normalizedAssetManifest.Split('/').Any(segment =>
+                    segment.Length == 0 || segment is "." or ".."))
+                Fail("SEPLUGIN013", $"Plugin '{id}' assets.manifest must remain under Content");
+            var assetManifestPath = Path.GetFullPath(Path.Combine(pluginRoot,
+                assetManifest.Replace('/', Path.DirectorySeparatorChar)));
+            if (!File.Exists(assetManifestPath))
+                Fail("SEPLUGIN014", $"Plugin asset manifest was not found: {assetManifestPath}");
+            assetManifestHash = Convert.ToHexString(
+                SHA256.HashData(File.ReadAllBytes(assetManifestPath))).ToLowerInvariant();
+        }
         var modulePaths = modules.EnumerateArray().Select(value =>
         {
             var relative = value.GetString() ?? string.Empty;
@@ -356,7 +385,7 @@ static IReadOnlyList<PluginInfo> ReadPlugins(JsonElement project, string project
         }).ToArray();
         result.Add(new PluginInfo(id, version, source,
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(manifestPath))).ToLowerInvariant(),
-            modulePaths));
+            modulePaths, assetManifest, assetManifestHash));
     }
     return result;
 }
@@ -716,7 +745,8 @@ sealed class ModuleInfo
 sealed record ModuleSource(string ProjectPath);
 
 sealed record PluginInfo(string Id, string Version, string Source,
-    string ManifestHash, IReadOnlyList<string> Modules);
+    string ManifestHash, IReadOnlyList<string> Modules,
+    string? AssetManifest, string? AssetManifestHash);
 
 sealed class PublishedFile(string name, string sourcePath, string contentHash,
     string kind)

@@ -37,6 +37,10 @@ try
         "Plugins", "ForeignPlugin")).FullName;
     var pluginModuleDirectory = Directory.CreateDirectory(Path.Combine(pluginDirectory,
         "Source", "ForeignPlugin.Runtime")).FullName;
+    var pluginAssetDirectory = Directory.CreateDirectory(Path.Combine(pluginDirectory,
+        "Content", "Assets")).FullName;
+    File.WriteAllText(Path.Combine(pluginAssetDirectory, "assets.json"),
+        "{\"schemaVersion\":1,\"assets\":[]}\n");
     var pluginModulePath = Path.Combine(pluginModuleDirectory, "ForeignPlugin.Runtime.csproj");
     File.WriteAllText(pluginModulePath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
     File.WriteAllText(Path.Combine(pluginDirectory, "ForeignPlugin.sharpplugin"),
@@ -46,6 +50,7 @@ try
             id = "foreign.plugin",
             version = "1.0.0",
             modules = new[] { "Source/ForeignPlugin.Runtime/ForeignPlugin.Runtime.csproj" },
+            assets = new { manifest = "Content/Assets/assets.json" },
         }, new JsonSerializerOptions { WriteIndented = true }));
     var manifestPath = Path.Combine(projectRoot, "ForeignGame.sharpproject");
     File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
@@ -85,6 +90,10 @@ try
           enginePlugin.Modules.Any(module => module.Contains("EngineTestPlugin.Runtime", StringComparison.Ordinal)) &&
           enginePlugin.Modules.Any(module => module.Contains("EngineTestPlugin.Editor", StringComparison.Ordinal)),
         "Engine-level test Plugin must expose Runtime and Editor Modules");
+    var foreignPlugin = PluginContracts.Read(ProjectContracts.ResolvePluginManifest(project.Root,
+        engine.Root, "project://Plugins/ForeignPlugin/ForeignPlugin.sharpplugin"));
+    Check(foreignPlugin.AssetManifest == "Content/Assets/assets.json",
+        "Plugin manifests must validate and expose an optional Content asset manifest");
     var generated = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
     var firstSolution = File.ReadAllText(generated.SolutionPath);
     var firstStamp = File.ReadAllText(generated.StampPath);
@@ -99,7 +108,7 @@ try
           firstSolution.Contains("Development Editor|Win64", StringComparison.Ordinal) &&
           firstSolution.Contains("Shipping Editor|Win64", StringComparison.Ordinal),
         "Generated Solution must expose only the approved Editor configurations");
-    Check(firstSolution.Contains("ForeignGame.Editor Target", StringComparison.Ordinal) &&
+    Check(firstSolution.Contains("Editor Target", StringComparison.Ordinal) &&
           firstSolution.Contains(Path.Combine(engineRoot, "Source", "Engine",
               "Engine.vcxproj"), StringComparison.OrdinalIgnoreCase),
         "Source Engine and generated Editor Target must coexist in the Solution");
@@ -118,19 +127,19 @@ try
         "Generated Engine Solution must include Timeline Runtime and Editor projects");
     string SolutionId(string name) => System.Text.RegularExpressions.Regex.Match(firstSolution,
         "= \"" + System.Text.RegularExpressions.Regex.Escape(name) + "\", \"[^\"]+\", \"([^\"]+)\"").Groups[1].Value;
-    var componentGeneratorGuid = SolutionId("SharpEngine.ComponentGenerator");
+    var componentGeneratorGuid = SolutionId("ComponentGenerator");
     foreach (var configuration in new[] { "Debug", "Development", "Shipping" })
     foreach (var target in new[] { "Editor", "Game" })
         Check(firstSolution.Contains(componentGeneratorGuid + "." + configuration +
                 " " + target + "|Win64.ActiveCfg = " + configuration + "|Any CPU", StringComparison.Ordinal) &&
-            firstSolution.Contains(SolutionId("ForeignGame." + target + " Target") + "." + configuration +
+            firstSolution.Contains(SolutionId(target + " Target") + "." + configuration +
                 " " + target + "|Win64.Build.0", StringComparison.Ordinal),
             "Each configuration must select its own unified Target: " + configuration + " " + target);
     var nativeEnginePath = Path.Combine(engineRoot, "Source", "Engine", "Engine.vcxproj");
     var nativeEngineDocument = XDocument.Load(nativeEnginePath);
     var nativeEngineGuid = nativeEngineDocument.Descendants().First(element =>
         element.Name.LocalName == "ProjectGuid").Value.ToUpperInvariant();
-    var targetStart = firstSolution.IndexOf("\"ForeignGame.Editor Target\"",
+    var targetStart = firstSolution.IndexOf("\"Editor Target\"",
         StringComparison.Ordinal);
     var targetEnd = firstSolution.IndexOf("EndProject", targetStart, StringComparison.Ordinal);
     var targetBlock = firstSolution[targetStart..targetEnd];
@@ -145,8 +154,29 @@ try
               StringComparison.OrdinalIgnoreCase) &&
           !firstSolution.Contains("= \"Build\", \"Build\"", StringComparison.Ordinal),
         "Generated Solution must use real Solution folders without exposing Build plumbing");
-    var runtimeGuid = SolutionId("ForeignGame");
-    Check(!firstSolution.Contains(runtimeGuid + ".Debug Editor|Win64.Build.0",
+    Check(firstSolution.Contains("= \"BuildTarget\", \"BuildTarget\"", StringComparison.Ordinal),
+        "Generated Solution must expose a dedicated BuildTarget Solution folder");
+    var buildTargetFolderGuid = SolutionId("BuildTarget");
+    var projectModuleGuid = SolutionId("ForeignGame");
+    var engineSourceFolderGuid = StableId(generated.SolutionPath + "Engine/Source");
+    var projectSourceFolderGuid = StableId(generated.SolutionPath + "Project/Source");
+    var enginePluginFolderGuid = StableId(generated.SolutionPath + "Engine/Plugins/EngineTestPlugin/Source");
+    var projectPluginFolderGuid = StableId(generated.SolutionPath + "Project/Plugins/ForeignPlugin/Source");
+    Check(firstSolution.Contains(SolutionId("Runtime") + " = " + engineSourceFolderGuid,
+            StringComparison.Ordinal) &&
+          firstSolution.Contains(projectModuleGuid + " = " + projectSourceFolderGuid,
+            StringComparison.Ordinal) &&
+          firstSolution.Contains(SolutionId("Editor Target") + " = " + buildTargetFolderGuid,
+            StringComparison.Ordinal),
+        "Engine Modules, project Modules, and build Targets must be nested in separate Solution folders");
+    Check(firstSolution.Contains(SolutionId("EngineTestPlugin.Runtime") + " = " + enginePluginFolderGuid,
+            StringComparison.Ordinal) &&
+          firstSolution.Contains(SolutionId("ForeignPlugin.Runtime") + " = " + projectPluginFolderGuid,
+            StringComparison.Ordinal) &&
+          firstSolution.Contains("EngineTestPlugin.sharpplugin", StringComparison.Ordinal) &&
+          firstSolution.Contains("ForeignPlugin.sharpplugin", StringComparison.Ordinal),
+        "Engine and project Plugin Modules must be nested under their Plugin folders");
+    Check(!firstSolution.Contains(projectModuleGuid + ".Debug Editor|Win64.Build.0",
             StringComparison.Ordinal),
         "User Module projects must not participate in Solution Build directly");
     Check(firstWrapper.Contains("-Command Build", StringComparison.Ordinal) &&
@@ -238,3 +268,6 @@ static bool SamePath(string left, string right) =>
     string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
         StringComparison.OrdinalIgnoreCase);
+
+static string StableId(string value) => "{" + new Guid(SHA256.HashData(
+    Encoding.UTF8.GetBytes(value.ToUpperInvariant())).AsSpan(0, 16)).ToString().ToUpperInvariant() + "}";

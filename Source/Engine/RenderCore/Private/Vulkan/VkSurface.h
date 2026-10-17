@@ -5,11 +5,12 @@
 class VkSurface
 {
 public:
-    // ½ÓÊÜÆ½Ì¨²ãÍ¨ÓÃµÄ NativeWindowHandle£¬±ÜÃâÒÀÀµ Win32Window*
+    // æ¥å—å¹³å°å±‚é€šç”¨çš„ NativeWindowHandleï¼Œé¿å…ä¾èµ– Win32Window*
     bool Create(VkInstance instance, const Platform::NativeWindowHandle& window);
     void Destroy(VkInstance instance);
 
     VkSurfaceKHR Get() const { return Surface; }
+    bool IsValid() const { return Surface != VK_NULL_HANDLE; }
 
 private:
     VkSurfaceKHR Surface = VK_NULL_HANDLE;

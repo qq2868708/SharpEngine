@@ -1,28 +1,55 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Engine", "Engine", "{27CF45C9-F22E-0226-5438-5166D0A353B3}"
+ProjectSection(SolutionItems) = preProject
+		engine.json = engine.json
+EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Project", "Project", "{C3014101-3199-3211-977A-FE1659187A64}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BuildTarget", "BuildTarget", "{AA809060-7D1A-604E-1780-F093898C5523}"
+ProjectSection(SolutionItems) = preProject
+		Intermediate\ProjectFiles\SharpEngine.Editor.Target.cs = Intermediate\ProjectFiles\SharpEngine.Editor.Target.cs
+		Intermediate\ProjectFiles\SharpEngine.Game.Target.cs = Intermediate\ProjectFiles\SharpEngine.Game.Target.cs
+EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Plugins", "Plugins", "{181E2BB4-85E7-2ADD-5D89-808B3A16956C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{8A2B566E-3D6E-AF1B-8D52-66595AF52469}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{72BE0ED6-A9F4-3678-9234-5313A8E05D81}"
+ProjectSection(SolutionItems) = preProject
+		Config\DefaultEditorLayout.json = Config\DefaultEditorLayout.json
+EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "EngineTestPlugin", "EngineTestPlugin", "{E461C176-00E9-E880-4DB6-45A26431D811}"
+ProjectSection(SolutionItems) = preProject
+		Plugins\EngineTestPlugin\EngineTestPlugin.sharpplugin = Plugins\EngineTestPlugin\EngineTestPlugin.sharpplugin
+EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{B610D12C-4D2B-697E-79A7-8D577907CA7B}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine", "Source\Engine\Engine.vcxproj", "{7F2E41AB-ACC9-4C33-8782-A67A6ED902E5}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.ComponentGenerator", "Source\SharpEngine.ComponentGenerator\SharpEngine.ComponentGenerator.csproj", "{5F08B846-77DA-5930-9401-233B41B97581}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ComponentGenerator", "Source\SharpEngine.ComponentGenerator\SharpEngine.ComponentGenerator.csproj", "{5F08B846-77DA-5930-9401-233B41B97581}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Editor", "Source\SharpEngine.Editor\SharpEngine.Editor.csproj", "{9CB2CDAA-3BCA-484B-32FA-D248350E5668}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Editor", "Source\SharpEngine.Editor\SharpEngine.Editor.csproj", "{9CB2CDAA-3BCA-484B-32FA-D248350E5668}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Host", "Source\SharpEngine.Host\SharpEngine.Host.csproj", "{8B4C28E2-1B19-0436-119B-84D2DEB1D2AB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Host", "Source\SharpEngine.Host\SharpEngine.Host.csproj", "{8B4C28E2-1B19-0436-119B-84D2DEB1D2AB}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.ProjectSelector", "Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj", "{C765C76E-2DA8-2803-48B7-2C7BD8AE9F75}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ProjectSelector", "Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj", "{C765C76E-2DA8-2803-48B7-2C7BD8AE9F75}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Runtime", "Source\SharpEngine.Runtime\SharpEngine.Runtime.csproj", "{0DC950DC-A1AB-0A1F-9C78-A23322F5A362}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Runtime", "Source\SharpEngine.Runtime\SharpEngine.Runtime.csproj", "{0DC950DC-A1AB-0A1F-9C78-A23322F5A362}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Timeline.Editor", "Source\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj", "{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Timeline.Editor", "Source\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj", "{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Timeline.Runtime", "Source\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj", "{94D4046B-79FF-1942-8D07-804FA1CE9AB9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Timeline.Runtime", "Source\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj", "{94D4046B-79FF-1942-8D07-804FA1CE9AB9}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Editor Target", "Intermediate\ProjectFiles\SharpEngine.Editor.Target.csproj", "{F3FF6632-D874-F2A3-4208-E7451EC06B65}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EngineTestPlugin.Runtime", "Plugins\EngineTestPlugin\Source\EngineTestPlugin.Runtime\EngineTestPlugin.Runtime.csproj", "{C6331C4A-755A-2976-2A20-F234C84A05EE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpEngine.Game Target", "Intermediate\ProjectFiles\SharpEngine.Game.Target.csproj", "{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "EngineTestPlugin.Editor", "Plugins\EngineTestPlugin\Source\EngineTestPlugin.Editor\EngineTestPlugin.Editor.csproj", "{3C3F8474-C362-CB1D-1539-B92305565698}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Editor Target", "Intermediate\ProjectFiles\SharpEngine.Editor.Target.csproj", "{F3FF6632-D874-F2A3-4208-E7451EC06B65}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Game Target", "Intermediate\ProjectFiles\SharpEngine.Game.Target.csproj", "{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -82,6 +109,18 @@ Global
 		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Development Game|Win64.ActiveCfg = Development|Any CPU
 		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Shipping Editor|Win64.ActiveCfg = Shipping|Any CPU
 		{94D4046B-79FF-1942-8D07-804FA1CE9AB9}.Shipping Game|Win64.ActiveCfg = Shipping|Any CPU
+		{C6331C4A-755A-2976-2A20-F234C84A05EE}.Debug Editor|Win64.ActiveCfg = Debug|Any CPU
+		{C6331C4A-755A-2976-2A20-F234C84A05EE}.Debug Game|Win64.ActiveCfg = Debug|Any CPU
+		{C6331C4A-755A-2976-2A20-F234C84A05EE}.Development Editor|Win64.ActiveCfg = Development|Any CPU
+		{C6331C4A-755A-2976-2A20-F234C84A05EE}.Development Game|Win64.ActiveCfg = Development|Any CPU
+		{C6331C4A-755A-2976-2A20-F234C84A05EE}.Shipping Editor|Win64.ActiveCfg = Shipping|Any CPU
+		{C6331C4A-755A-2976-2A20-F234C84A05EE}.Shipping Game|Win64.ActiveCfg = Shipping|Any CPU
+		{3C3F8474-C362-CB1D-1539-B92305565698}.Debug Editor|Win64.ActiveCfg = Debug|Any CPU
+		{3C3F8474-C362-CB1D-1539-B92305565698}.Debug Game|Win64.ActiveCfg = Debug|Any CPU
+		{3C3F8474-C362-CB1D-1539-B92305565698}.Development Editor|Win64.ActiveCfg = Development|Any CPU
+		{3C3F8474-C362-CB1D-1539-B92305565698}.Development Game|Win64.ActiveCfg = Development|Any CPU
+		{3C3F8474-C362-CB1D-1539-B92305565698}.Shipping Editor|Win64.ActiveCfg = Shipping|Any CPU
+		{3C3F8474-C362-CB1D-1539-B92305565698}.Shipping Game|Win64.ActiveCfg = Shipping|Any CPU
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65}.Debug Editor|Win64.ActiveCfg = Debug|Any CPU
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65}.Debug Editor|Win64.Build.0 = Debug|Any CPU
 		{F3FF6632-D874-F2A3-4208-E7451EC06B65}.Debug Game|Win64.ActiveCfg = Debug|Any CPU
@@ -102,15 +141,22 @@ Global
 		{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A}.Shipping Game|Win64.Build.0 = Shipping|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{7F2E41AB-ACC9-4C33-8782-A67A6ED902E5} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{5F08B846-77DA-5930-9401-233B41B97581} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{9CB2CDAA-3BCA-484B-32FA-D248350E5668} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{8B4C28E2-1B19-0436-119B-84D2DEB1D2AB} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{C765C76E-2DA8-2803-48B7-2C7BD8AE9F75} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{0DC950DC-A1AB-0A1F-9C78-A23322F5A362} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{94D4046B-79FF-1942-8D07-804FA1CE9AB9} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{F3FF6632-D874-F2A3-4208-E7451EC06B65} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
-		{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
+		{181E2BB4-85E7-2ADD-5D89-808B3A16956C} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
+		{8A2B566E-3D6E-AF1B-8D52-66595AF52469} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
+		{72BE0ED6-A9F4-3678-9234-5313A8E05D81} = {27CF45C9-F22E-0226-5438-5166D0A353B3}
+		{E461C176-00E9-E880-4DB6-45A26431D811} = {181E2BB4-85E7-2ADD-5D89-808B3A16956C}
+		{B610D12C-4D2B-697E-79A7-8D577907CA7B} = {E461C176-00E9-E880-4DB6-45A26431D811}
+		{7F2E41AB-ACC9-4C33-8782-A67A6ED902E5} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{5F08B846-77DA-5930-9401-233B41B97581} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{9CB2CDAA-3BCA-484B-32FA-D248350E5668} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{8B4C28E2-1B19-0436-119B-84D2DEB1D2AB} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{C765C76E-2DA8-2803-48B7-2C7BD8AE9F75} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{0DC950DC-A1AB-0A1F-9C78-A23322F5A362} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{91A844C8-A0DA-16A7-B36C-0C36E3FF6DD0} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{94D4046B-79FF-1942-8D07-804FA1CE9AB9} = {8A2B566E-3D6E-AF1B-8D52-66595AF52469}
+		{C6331C4A-755A-2976-2A20-F234C84A05EE} = {B610D12C-4D2B-697E-79A7-8D577907CA7B}
+		{3C3F8474-C362-CB1D-1539-B92305565698} = {B610D12C-4D2B-697E-79A7-8D577907CA7B}
+		{F3FF6632-D874-F2A3-4208-E7451EC06B65} = {AA809060-7D1A-604E-1780-F093898C5523}
+		{62E2F8BE-D6A8-4B84-BFC2-E331AEC32E5A} = {AA809060-7D1A-604E-1780-F093898C5523}
 	EndGlobalSection
 EndGlobal

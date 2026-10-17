@@ -8,14 +8,16 @@
 #include <shobjidl.h>
 #include "RmlUi_Platform_Win32.h"
 #include "RmlUi_Renderer_GL2.h"
-#include "Platform/Windows/SharpEngineBranding.h"
 #include "../Logging/EngineLog.h"
+#include "../RenderCore/Public/RenderCore.h"
+#include "Platform/Windows/SharpEngineBranding.h"
 #include <gl/GL.h>
 #include <windowsx.h>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 #include <deque>
 #include <fstream>
 #include <iomanip>
@@ -285,13 +287,100 @@ public:
     }
 };
 
+constexpr std::string_view ResourceScheme = "sharpengine-resource://";
+
+std::filesystem::path ProjectRootFromEnvironment()
+{
+    const wchar_t* manifest = _wgetenv(L"SHARPENGINE_PROJECT_MANIFEST");
+    return manifest && *manifest
+        ? std::filesystem::path(manifest).parent_path()
+        : std::filesystem::path{};
+}
+
+bool IsResourcePathAllowed(std::string_view relative)
+{
+    if (relative.empty() || relative.front() == '/' || relative.find('\\') != std::string_view::npos ||
+        relative.find(':') != std::string_view::npos || relative.find('?') != std::string_view::npos ||
+        relative.find('#') != std::string_view::npos)
+        return false;
+
+    bool hasInvalidSegment = false;
+    size_t start = 0;
+    while (start <= relative.size())
+    {
+        const size_t end = relative.find('/', start);
+        const auto segment = relative.substr(start, end == std::string_view::npos
+            ? relative.size() - start : end - start);
+        if (segment.empty() || segment == "." || segment == "..")
+        {
+            hasInvalidSegment = true;
+            break;
+        }
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+    if (hasInvalidSegment) return false;
+
+    const bool engineResources = relative == "Resources" ||
+        relative.starts_with("Resources/");
+    std::vector<std::string_view> segments;
+    size_t segmentStart = 0;
+    while (segmentStart <= relative.size())
+    {
+        const size_t segmentEnd = relative.find('/', segmentStart);
+        segments.push_back(relative.substr(segmentStart, segmentEnd == std::string_view::npos
+            ? relative.size() - segmentStart : segmentEnd - segmentStart));
+        if (segmentEnd == std::string_view::npos) break;
+        segmentStart = segmentEnd + 1;
+    }
+    const bool pluginResources = segments.size() >= 4 && segments[0] == "Plugins" &&
+        segments[2] == "Resources";
+    return engineResources || pluginResources;
+}
+
+std::filesystem::path ResolveResourcePath(const std::filesystem::path& engineRoot,
+                                          const std::filesystem::path& projectRoot,
+                                          std::string_view value)
+{
+    if (!value.starts_with(ResourceScheme))
+        return std::filesystem::path(RmlWin32::ConvertToUTF16(std::string(value)));
+
+    const auto payload = value.substr(ResourceScheme.size());
+    const size_t separator = payload.find('/');
+    if (separator == std::string_view::npos || separator == 0 || separator + 1 >= payload.size())
+        return {};
+
+    const auto owner = payload.substr(0, separator);
+    const auto relative = payload.substr(separator + 1);
+    const auto& root = owner == "engine" ? engineRoot : owner == "project" ? projectRoot : std::filesystem::path{};
+    if (root.empty() || !IsResourcePathAllowed(relative)) return {};
+
+    const auto relativePath = std::filesystem::path(
+        RmlWin32::ConvertToUTF16(std::string(relative)));
+    const auto normalizedRoot = root.lexically_normal();
+    const auto normalizedPath = (normalizedRoot / relativePath).lexically_normal();
+    const auto withinRoot = normalizedPath.lexically_relative(normalizedRoot);
+    const auto withinRootText = withinRoot.generic_string();
+    if (withinRoot.empty() || withinRootText == ".." || withinRootText.starts_with("../"))
+        return {};
+    return normalizedPath;
+}
+
 class Win32FileInterface : public Rml::FileInterface
 {
 public:
+    void ConfigureResourceRoots(const std::filesystem::path& engineRoot)
+    {
+        EngineRoot = engineRoot;
+        ProjectRoot = ProjectRootFromEnvironment();
+    }
+
     Rml::FileHandle Open(const Rml::String& path) override
     {
+        const auto resolved = ResolveResourcePath(EngineRoot, ProjectRoot, path);
+        if (resolved.empty()) return 0;
         return reinterpret_cast<Rml::FileHandle>(
-            _wfopen(RmlWin32::ConvertToUTF16(path).c_str(), L"rb"));
+            _wfopen(resolved.c_str(), L"rb"));
     }
     void Close(Rml::FileHandle file) override
     {
@@ -309,6 +398,10 @@ public:
     {
         return ftell(reinterpret_cast<FILE*>(file));
     }
+
+private:
+    std::filesystem::path EngineRoot;
+    std::filesystem::path ProjectRoot;
 };
 
 class ViewportElement : public Rml::Element
@@ -2027,7 +2120,18 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     state.Gl = wglCreateContext(main.Dc);
     if (!state.Gl || !wglMakeCurrent(main.Dc, state.Gl)) return false;
 
+    RECT renderClient{};
+    GetClientRect(window, &renderClient);
+    const RenderInitDesc renderDesc{
+        window,
+        static_cast<uint32_t>((std::max)(0L, renderClient.right)),
+        static_cast<uint32_t>((std::max)(0L, renderClient.bottom)),
+        false,
+    };
+    if (!RC_Initialize(&renderDesc)) return false;
+
     state.System.SetWindow(window);
+    state.Files.ConfigureResourceRoots(engineRoot);
     Rml::SetSystemInterface(&state.System);
     Rml::SetRenderInterface(&state.Renderer);
     Rml::SetFileInterface(&state.Files);
@@ -2232,6 +2336,7 @@ void RmlUiShell::Shutdown()
         Rml::Shutdown();
         state.Ready = false;
     }
+    RC_Shutdown();
     if (mainDc && mainWindow) ReleaseDC(mainWindow, mainDc);
     state.Hosts.clear();
     if (state.Gl)

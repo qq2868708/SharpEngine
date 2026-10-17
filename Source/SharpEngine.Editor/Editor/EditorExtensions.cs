@@ -582,8 +582,69 @@ internal static class EditorExtensionIds
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var icon = value.Trim();
+        if (icon.StartsWith(EditorResourceUris.Scheme, StringComparison.Ordinal))
+        {
+            EditorResourceUris.Validate(icon, parameterName);
+            return icon;
+        }
+
         if (icon.Any(character => !(char.IsLetterOrDigit(character) || character is '-' or '_')))
-            throw new ArgumentException("An icon must be an engine icon name without a path", parameterName);
+            throw new ArgumentException(
+                "An icon must be a built-in icon name or a sharpengine-resource URI",
+                parameterName);
         return icon;
+    }
+}
+
+/// <summary>
+/// Stable, path-safe references to editor resources. Bare names remain the
+/// built-in engine icon compatibility form; plugin code uses a URI rooted at
+/// the engine or project resource root, for example
+/// sharpengine-resource://engine/Plugins/MyPlugin/Resources/Editor/Icons/tool.tga.
+/// </summary>
+internal static class EditorResourceUris
+{
+    internal const string Scheme = "sharpengine-resource://";
+    internal const string EngineIconRoot = Scheme + "engine/Resources/Editor/Icons/";
+
+    internal static string IconSource(string icon)
+    {
+        var value = EditorExtensionIds.ValidateIcon(icon, nameof(icon)) ??
+            throw new ArgumentException("An icon is required", nameof(icon));
+        return value.StartsWith(Scheme, StringComparison.Ordinal)
+            ? value
+            : EngineIconRoot + value + ".tga";
+    }
+
+    internal static void Validate(string uri, string parameterName)
+    {
+        if (!uri.StartsWith(Scheme, StringComparison.Ordinal))
+            throw new ArgumentException("An editor resource URI must use sharpengine-resource://", parameterName);
+
+        var payload = uri[Scheme.Length..];
+        var separator = payload.IndexOf('/');
+        if (separator <= 0 || separator == payload.Length - 1)
+            throw new ArgumentException("An editor resource URI requires an owner and relative path", parameterName);
+
+        var owner = payload[..separator];
+        var relative = payload[(separator + 1)..];
+        if (owner is not ("engine" or "project") ||
+            relative.Contains('\\') || relative.Contains(':') ||
+            relative.Contains('?') || relative.Contains('#'))
+            throw new ArgumentException("An editor resource URI has an invalid owner or path", parameterName);
+
+        var pathSegments = relative.Split('/');
+        if (pathSegments.Any(segment => segment.Length == 0 || segment is "." or ".."))
+            throw new ArgumentException("An editor resource URI cannot contain empty or traversal path segments", parameterName);
+
+        var isEngineResource = relative.Equals("Resources", StringComparison.Ordinal) ||
+            relative.StartsWith("Resources/", StringComparison.Ordinal);
+        var isPluginResource = pathSegments.Length >= 4 &&
+            pathSegments[0].Equals("Plugins", StringComparison.Ordinal) &&
+            pathSegments[2].Equals("Resources", StringComparison.Ordinal);
+        if (!isEngineResource && !isPluginResource)
+            throw new ArgumentException(
+                "An editor resource URI must point under Resources or a Plugin Resources directory",
+                parameterName);
     }
 }
