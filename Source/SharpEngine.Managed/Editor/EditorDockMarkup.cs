@@ -6,32 +6,41 @@ namespace SharpEngine.Editor;
 
 internal static class EditorDockMarkup
 {
-    public static string Build(DockHostState host, string viewportTitle)
+    public static string Build(DockHostState host, string viewportTitle,
+        string activeContentManagerId = EditorPaneIds.Content,
+        IReadOnlyList<ContentManagerLayoutState>? contentManagers = null)
     {
         ArgumentNullException.ThrowIfNull(host);
         var markup = new StringBuilder("<div class=\"dock-canvas\">");
-        AppendNode(markup, host.Root, host.HostId, viewportTitle);
+        var states = (contentManagers ?? EditorLayoutDocument.CreateDefaultContentManagers())
+            .ToDictionary(state => state.PaneId, StringComparer.Ordinal);
+        AppendNode(markup, host.Root, host.HostId, viewportTitle, activeContentManagerId,
+            states);
         markup.Append("</div>");
         return markup.ToString();
     }
 
-    public static string PaneLabel(string paneId, string viewportTitle) => paneId switch
-    {
-        EditorPaneIds.Viewport => viewportTitle,
-        EditorPaneIds.UiEditor => "UI Editor",
-        EditorPaneIds.Hierarchy => "Hierarchy",
-        EditorPaneIds.Content => "Content Manager",
-        EditorPaneIds.Inspector => "Inspector",
-        EditorPaneIds.Console => "Console",
-        _ => paneId,
-    };
+    public static string PaneLabel(string paneId, string viewportTitle) =>
+        EditorPaneIds.IsContentManager(paneId)
+            ? $"Content Manager {EditorPaneIds.ContentManagerNumber(paneId)}"
+            : paneId switch
+            {
+                EditorPaneIds.Viewport => viewportTitle,
+                EditorPaneIds.UiEditor => "UI Editor",
+                EditorPaneIds.Hierarchy => "Hierarchy",
+                EditorPaneIds.Inspector => "Inspector",
+                EditorPaneIds.Console => "Console",
+                _ => paneId,
+            };
 
     private static void AppendNode(StringBuilder markup, DockNodeState node, string hostId,
-        string viewportTitle)
+        string viewportTitle, string activeContentManagerId,
+        IReadOnlyDictionary<string, ContentManagerLayoutState> contentManagers)
     {
         if (node.Kind == DockNodeKind.Tabs)
         {
-            AppendTabGroup(markup, node, hostId, viewportTitle);
+            AppendTabGroup(markup, node, hostId, viewportTitle, activeContentManagerId,
+                contentManagers);
             return;
         }
 
@@ -43,10 +52,12 @@ internal static class EditorDockMarkup
             .Append("\" data-dock-split-ratio=\"").Append(Number(ratio)).Append("\">")
             .Append("<div class=\"dock-split-first\" data-dock-split-part=\"first\" style=\"flex-grow:")
             .Append(Number(ratio)).Append(";\">");
-        AppendNode(markup, node.First!, hostId, viewportTitle);
+        AppendNode(markup, node.First!, hostId, viewportTitle, activeContentManagerId,
+            contentManagers);
         markup.Append("</div><div class=\"dock-split-second\" data-dock-split-part=\"second\" style=\"flex-grow:")
             .Append(Number(1 - ratio)).Append(";\">");
-        AppendNode(markup, node.Second!, hostId, viewportTitle);
+        AppendNode(markup, node.Second!, hostId, viewportTitle, activeContentManagerId,
+            contentManagers);
         markup.Append("</div><div class=\"dock-splitter ")
             .Append(horizontal ? "dock-splitter-horizontal" : "dock-splitter-vertical")
             .Append("\" data-dock-splitter-host=\"").Append(Escape(hostId))
@@ -62,7 +73,8 @@ internal static class EditorDockMarkup
     }
 
     private static void AppendTabGroup(StringBuilder markup, DockNodeState node, string hostId,
-        string viewportTitle)
+        string viewportTitle, string activeContentManagerId,
+        IReadOnlyDictionary<string, ContentManagerLayoutState> contentManagers)
     {
         var group = node.TabGroup!;
         markup.Append("<div class=\"dock-group")
@@ -79,7 +91,13 @@ internal static class EditorDockMarkup
             var active = string.Equals(group.ActivePaneId, pane.PaneId, StringComparison.Ordinal);
             markup.Append("<button class=\"dock-tab")
                 .Append(active ? " active" : string.Empty)
-                .Append("\" data-action=\"editor.dock-activate:")
+                .Append(EditorPaneIds.IsContentManager(pane.PaneId) ? " content-manager-tab" : string.Empty)
+                .Append(pane.PaneId == activeContentManagerId
+                    ? " active-content-manager-tab" : string.Empty)
+                .Append("\"")
+                .Append(EditorPaneIds.IsContentManager(pane.PaneId)
+                    ? $" id=\"dock-tab-{Escape(pane.PaneId)}\"" : string.Empty)
+                .Append(" data-action=\"editor.dock-activate:")
                 .Append(Escape(hostId)).Append(':').Append(Escape(group.GroupId)).Append(':')
                 .Append(Escape(pane.PaneId)).Append("\" data-dock-pane=\"")
                 .Append(Escape(pane.PaneId)).Append("\" data-dock-host=\"")
@@ -104,7 +122,7 @@ internal static class EditorDockMarkup
                 .Append(active ? " active" : string.Empty).Append("\" data-pane-id=\"")
                 .Append(Escape(pane.PaneId)).Append("\" style=\"display:")
                 .Append(active ? "flex" : "none").Append(";\">");
-            AppendPane(markup, pane.PaneId);
+            AppendPane(markup, pane.PaneId, activeContentManagerId, contentManagers);
             markup.Append("</div>");
         }
         markup.Append("</div><div class=\"dock-drop-preview\" data-dock-preview=\"result\" />")
@@ -119,15 +137,20 @@ internal static class EditorDockMarkup
             .Append("</div>");
     }
 
-    private static void AppendPane(StringBuilder markup, string paneId)
+    private static void AppendPane(StringBuilder markup, string paneId,
+        string activeContentManagerId,
+        IReadOnlyDictionary<string, ContentManagerLayoutState> contentManagers)
     {
+        if (EditorPaneIds.IsContentManager(paneId))
+        {
+            AppendContentManager(markup, paneId, paneId == activeContentManagerId,
+                contentManagers[paneId]);
+            return;
+        }
         switch (paneId)
         {
             case EditorPaneIds.Hierarchy:
                 markup.Append("<div class=\"pane-toolbar\"><div class=\"search-field\"><img class=\"icon\" src=\"Icons/search.tga\" /><input type=\"text\" id=\"hierarchySearch\" placeholder=\"Search hierarchy\" /></div><button class=\"small icon-button\" action=\"editor.project-menu\" title=\"Add entity\"><img class=\"icon\" src=\"Icons/add.tga\" /><span class=\"control-tooltip tooltip-right\">Add entity</span></button></div><div id=\"hierarchyItems\" class=\"hierarchy-items\" data-context-kind=\"scene\" data-hierarchy-root=\"true\" />");
-                break;
-            case EditorPaneIds.Content:
-                markup.Append("<div class=\"pane-toolbar\"><div class=\"search-field\"><img class=\"icon\" src=\"Icons/search.tga\" /><input type=\"text\" id=\"projectSearch\" placeholder=\"Search Content\" /></div><button class=\"small icon-button\" action=\"editor.content.clear\" title=\"Reset to Content root\"><img class=\"icon\" src=\"Icons/reset.tga\" /><span class=\"control-tooltip tooltip-right\">Reset to Content root</span></button></div><div class=\"pane-content content-pane\"><div class=\"content-navigation\"><button id=\"content-up\" class=\"icon-button\" action=\"editor.content.up\" title=\"Parent folder\"><img class=\"icon\" src=\"Icons/up.tga\" /><span class=\"control-tooltip\">Parent folder</span></button><img class=\"icon breadcrumb-icon\" src=\"Icons/folder.tga\" /><span id=\"contentBreadcrumb\">Content</span></div><div class=\"content-toolbar\"><button id=\"content-source-all\" class=\"icon-label\" action=\"editor.content.source:all\"><img class=\"icon\" src=\"Icons/all.tga\" />All</button><button id=\"content-source-project\" class=\"icon-label\" action=\"editor.content.source:project\"><img class=\"icon\" src=\"Icons/folder.tga\" />Project</button><button id=\"content-source-engine\" class=\"icon-label\" action=\"editor.content.source:engine\"><img class=\"icon\" src=\"Icons/engine.tga\" />Engine</button></div><div class=\"content-toolbar content-types\"><button id=\"content-type-all\" class=\"content-type icon-label\" action=\"editor.content.type:All\"><img class=\"icon\" src=\"Icons/filter.tga\" />All types</button><button id=\"content-type-mesh\" class=\"content-type icon-button\" action=\"editor.content.type:Mesh\" title=\"Meshes\"><img class=\"icon\" src=\"Icons/mesh.tga\" /></button><button id=\"content-type-material\" class=\"content-type icon-button\" action=\"editor.content.type:Material\" title=\"Materials\"><img class=\"icon\" src=\"Icons/material.tga\" /></button><button id=\"content-type-world\" class=\"content-type icon-button\" action=\"editor.content.type:World\" title=\"Worlds\"><img class=\"icon\" src=\"Icons/world.tga\" /></button></div><div id=\"contentSummary\" class=\"content-summary\">Content</div><div id=\"projectSection\" class=\"content-section\"><div class=\"section-label\">PROJECT CONTENT</div><div id=\"projectItems\" data-context-kind=\"folder\" data-context-source=\"project\" /></div><div id=\"engineSection\" class=\"content-section\"><div class=\"section-label\">ENGINE CONTENT</div><div id=\"engineItems\" data-context-kind=\"folder\" data-context-source=\"engine\" /></div><div id=\"projectPath\" class=\"path\">Content</div></div>");
                 break;
             case EditorPaneIds.Inspector:
                 markup.Append("<div class=\"pane-content\"><div id=\"selectedObject\">Main Scene</div><div class=\"object-kind\" id=\"selectedKind\">World</div><div class=\"component\"><div class=\"component-title\">Transform</div><div class=\"field\"><label>Parent</label><span id=\"parent\">None</span></div><div class=\"field\"><label>Position</label><span id=\"position\">0 / 0 / 0</span></div><div class=\"field\"><label>Rotation</label><span id=\"rotation\">0 / 0 / 0</span></div><div class=\"field\"><label>Scale</label><span id=\"scale\">1 / 1 / 1</span></div></div><div class=\"component\"><div class=\"component-title\">Properties</div><div class=\"field\"><label>State</label><span id=\"status\">Ready</span></div><div class=\"field\"><label>Source</label><span id=\"assetSource\">Engine</span></div></div></div>");
@@ -143,6 +166,54 @@ internal static class EditorDockMarkup
                 break;
         }
     }
+
+    private static void AppendContentManager(StringBuilder markup, string paneId, bool active,
+        ContentManagerLayoutState state)
+    {
+        string Id(string local) => $"{paneId}-{local}";
+        string Action(string operation, string? value = null) =>
+            $"editor.content.{operation}:{paneId}{(value is null ? string.Empty : $":{value}")}";
+        markup.Append("<div id=\"").Append(Id("pane")).Append("\" class=\"content-manager-pane")
+            .Append(active ? " active-content-manager" : string.Empty)
+            .Append("\" data-action=\"").Append(Action("activate")).Append("\">")
+            .Append("<div class=\"pane-toolbar content-pane-toolbar\"><div class=\"search-field\"><img class=\"icon\" src=\"Icons/search.tga\" /><input type=\"text\" id=\"")
+            .Append(Id("search")).Append("\" value=\"").Append(Escape(state.Search))
+            .Append("\" data-change-action=\"")
+            .Append(Action("search") + ":").Append("\" placeholder=\"Search Content\" /></div>")
+            .Append("<button class=\"small icon-button\" action=\"").Append(Action("clear"))
+            .Append("\" title=\"Reset to Content root\"><img class=\"icon\" src=\"Icons/reset.tga\" /><span class=\"control-tooltip tooltip-right\">Reset to Content root</span></button>")
+            .Append("<button id=\"").Append(Id("view-tile")).Append("\" class=\"small icon-button\" action=\"")
+            .Append(Action("view", "tile")).Append("\" title=\"Tile view\"><img class=\"icon\" src=\"Icons/all.tga\" /><span class=\"control-tooltip tooltip-right\">Tile view</span></button>")
+            .Append("<button id=\"").Append(Id("view-list")).Append("\" class=\"small icon-button\" action=\"")
+            .Append(Action("view", "list")).Append("\" title=\"List view\"><img class=\"icon\" src=\"Icons/list.tga\" /><span class=\"control-tooltip tooltip-right\">List view</span></button></div>")
+            .Append("<div class=\"pane-content content-pane\"><div class=\"content-controls\"><div class=\"content-navigation\"><button id=\"")
+            .Append(Id("up")).Append("\" class=\"icon-button\" action=\"").Append(Action("up"))
+            .Append("\" title=\"Parent folder\"><img class=\"icon\" src=\"Icons/up.tga\" /><span class=\"control-tooltip\">Parent folder</span></button><img class=\"icon breadcrumb-icon\" src=\"Icons/folder.tga\" /><span id=\"")
+            .Append(Id("breadcrumb")).Append("\">Content</span></div><div class=\"content-toolbar\">")
+            .Append(ContentButton(Id("source-all"), Action("source", "all"), "all", "All"))
+            .Append(ContentButton(Id("source-project"), Action("source", "project"), "folder", "Project"))
+            .Append(ContentButton(Id("source-engine"), Action("source", "engine"), "engine", "Engine"))
+            .Append("</div><div class=\"content-toolbar content-types\">")
+            .Append(ContentButton(Id("type-all"), Action("type", "All"), "filter", "All types"))
+            .Append(ContentIconButton(Id("type-mesh"), Action("type", "Mesh"), "mesh", "Meshes"))
+            .Append(ContentIconButton(Id("type-material"), Action("type", "Material"), "material", "Materials"))
+            .Append(ContentIconButton(Id("type-world"), Action("type", "World"), "world", "Worlds"))
+            .Append("</div><div id=\"").Append(Id("summary"))
+            .Append("\" class=\"content-summary\">Content</div></div><div class=\"content-results-slot\"><div id=\"").Append(Id("results")).Append("\" class=\"content-results\"><div id=\"")
+            .Append(Id("project-section")).Append("\" class=\"content-section\"><div id=\"").Append(Id("project-label")).Append("\" class=\"section-label\">PROJECT CONTENT</div><div id=\"")
+            .Append(Id("project-items")).Append("\" class=\"content-items\" data-context-kind=\"folder\" data-context-manager=\"")
+            .Append(paneId).Append("\" data-context-source=\"project\" /></div><div id=\"")
+            .Append(Id("engine-section")).Append("\" class=\"content-section\"><div id=\"").Append(Id("engine-label")).Append("\" class=\"section-label\">ENGINE CONTENT</div><div id=\"")
+            .Append(Id("engine-items")).Append("\" class=\"content-items\" data-context-kind=\"folder\" data-context-manager=\"")
+            .Append(paneId).Append("\" data-context-source=\"engine\" /></div></div></div><div id=\"")
+            .Append(Id("path")).Append("\" class=\"path content-path\">Content</div></div></div>");
+    }
+
+    private static string ContentButton(string id, string action, string icon, string label) =>
+        $"<button id=\"{Escape(id)}\" class=\"icon-label\" action=\"{Escape(action)}\"><img class=\"icon\" src=\"Icons/{Escape(icon)}.tga\" />{Escape(label)}</button>";
+
+    private static string ContentIconButton(string id, string action, string icon, string title) =>
+        $"<button id=\"{Escape(id)}\" class=\"content-type icon-button\" action=\"{Escape(action)}\" title=\"{Escape(title)}\"><img class=\"icon\" src=\"Icons/{Escape(icon)}.tga\" /></button>";
 
     private static string Escape(string value) => WebUtility.HtmlEncode(value);
     private static string Number(float value) =>

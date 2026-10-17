@@ -98,6 +98,12 @@ try
             "sharpengine://ui/frames/{frameId}/{hostId}.png"),
         "Frame resource template must be discoverable");
 
+    if (args.Contains("--content-only", StringComparer.Ordinal))
+    {
+        ContentManagerUiValidation.Run(root, Tool, Call);
+        return;
+    }
+
     var initial = Structured(Tool(7, "ui.describe", new JsonObject()));
     JsonObject? unchanged = null;
     for (var attempt = 0; attempt < 8; attempt++)

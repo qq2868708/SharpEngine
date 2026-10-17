@@ -148,6 +148,9 @@ namespace SharpEngine.Tools
                 case "close": Line(g, Ink,6,6,18,18); Line(g, Ink,6,18,18,6); break;
                 case "all":
                     Box(g, Ink,4,4,6,6); Box(g, Ink,14,4,6,6); Box(g, Ink,4,14,6,6); Box(g, Ink,14,14,6,6); break;
+                case "list":
+                    Box(g, Ink,3,4,4,4,true); Box(g, Ink,3,10,4,4,true); Box(g, Ink,3,16,4,4,true);
+                    Line(g, Ink,10,6,21,6); Line(g, Ink,10,12,21,12); Line(g, Ink,10,18,21,18); break;
                 case "engine":
                     for (int i=0; i<8; i++)
                     {
@@ -172,7 +175,7 @@ namespace SharpEngine.Tools
             Directory.CreateDirectory(directory);
             string[] names = { "folder","mesh","material","world","ui","style","texture","audio","data","file",
                 "search","filter","reset","up","lock","save","export","play","pause","stop","move","rotate","scale",
-                "add","more","minimize","maximize","close","all","engine","camera","light" };
+                "add","more","minimize","maximize","close","all","list","engine","camera","light" };
             foreach (string name in names)
             {
                 using (var bitmap = new Bitmap(48,48,PixelFormat.Format32bppArgb))
@@ -201,4 +204,4 @@ namespace SharpEngine.Tools
 '@
 }
 [SharpEngine.Tools.EditorIconBuilder]::Build([System.IO.Path]::GetFullPath($OutputDirectory))
-Write-Output "Generated 32 editor icons in $([System.IO.Path]::GetFullPath($OutputDirectory))"
+Write-Output "Generated 33 editor icons in $([System.IO.Path]::GetFullPath($OutputDirectory))"

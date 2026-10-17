@@ -1,4 +1,7 @@
 using SharpEngine.Editor.Layout;
+using SharpEngine.Assets;
+using SharpEngine.Editor;
+using System.Text.Json.Nodes;
 
 var engineRoot = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 var store = new EditorLayoutStore();
@@ -18,15 +21,50 @@ DockTabGroupState? FindGroup(DockNodeState node, string groupId)
 
 var defaults = store.LoadDefault(engineRoot);
 Require(EditorLayoutValidator.Validate(defaults, requireAllPanesInMain: true).Count == 0,
-    "The engine default must be a complete five-pane main-window layout.");
+    "The engine default must expose Content Manager 1 and hide Content Managers 2-4.");
+Require(defaults.HiddenPaneIds.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(
+        new[] { EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4 }) &&
+    defaults.ContentManagers.Count == 4 &&
+    defaults.ContentManagers.All(state => state.ViewMode == ContentViewMode.Tile),
+    "The default layout must own four tile-mode content manager states.");
 var firstJson = EditorLayoutJson.Serialize(defaults);
 var secondJson = EditorLayoutJson.Serialize(EditorLayoutJson.Parse(firstJson));
 Require(firstJson == secondJson, "Layout JSON must serialize deterministically.");
 
+var registry = AssetRegistry.Load(engineRoot, null, null);
+var coordinator = new ContentManagerCoordinator(registry, defaults.ContentManagers,
+    defaults.ActiveContentManagerId);
+var manager1 = coordinator.Get(EditorPaneIds.Content);
+manager1.SetSource(ContentSourceFilter.Engine);
+Require(manager1.Select("engine://meshes/cube"),
+    "Content Manager 1 should select a registered engine asset.");
+var manager2 = coordinator.Get(EditorPaneIds.Content2);
+manager2.SetSource(ContentSourceFilter.Engine);
+manager2.SetViewMode(ContentViewMode.List);
+coordinator.Activate(EditorPaneIds.Content2);
+Require(coordinator.Active == manager2 && manager2.SelectedId is null &&
+    manager1.SelectedId == "engine://meshes/cube" &&
+    coordinator.Capture().Single(state => state.PaneId == EditorPaneIds.Content2)
+        .ViewMode == ContentViewMode.List,
+    "Content manager routing must preserve independent selection and view state.");
+
+var legacy = JsonNode.Parse(firstJson)!.AsObject();
+legacy["schemaVersion"] = 1;
+legacy.Remove("activeContentManagerId");
+legacy.Remove("contentManagers");
+var legacyHidden = legacy["hiddenPaneIds"]!.AsArray();
+legacyHidden.Clear();
+var migrated = EditorLayoutJson.Parse(legacy.ToJsonString());
+Require(migrated.SchemaVersion == EditorLayoutDocument.CurrentSchemaVersion &&
+    migrated.HiddenPaneIds.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(
+        new[] { EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4 }) &&
+    migrated.ContentManagers.Count == 4,
+    "Schema v1 layouts must migrate with Content Managers 2-4 hidden.");
+
 try
 {
-    EditorLayoutJson.Parse(firstJson.Replace("\"schemaVersion\": 1,",
-        "\"schemaVersion\": 1,\n  \"unknown\": true,"));
+    EditorLayoutJson.Parse(firstJson.Replace("\"schemaVersion\": 2,",
+        "\"schemaVersion\": 2,\n  \"unknown\": true,"));
     throw new Exception("Unknown JSON fields must be rejected.");
 }
 catch (EditorLayoutException exception)
@@ -37,9 +75,9 @@ catch (EditorLayoutException exception)
 
 foreach (var invalidJson in new[]
 {
-    firstJson.Replace("\"schemaVersion\": 1,", string.Empty),
-    firstJson.Replace("\"schemaVersion\": 1,",
-        "\"schemaVersion\": 1,\n  \"schemaVersion\": 1,"),
+    firstJson.Replace("\"schemaVersion\": 2,", string.Empty),
+    firstJson.Replace("\"schemaVersion\": 2,",
+        "\"schemaVersion\": 2,\n  \"schemaVersion\": 2,"),
 })
 {
     try
@@ -70,7 +108,9 @@ Require(session.Apply(new(EditorLayoutCommandKind.ReopenAsFloating,
     EditorPaneIds.Inspector)).Success && session.FloatingHosts.Count == 1,
     "A hidden non-viewport pane must reopen as a session-only floating host.");
 var persistentWhileFloating = session.CreatePersistentSnapshot();
-Require(persistentWhileFloating.HiddenPaneIds.SequenceEqual([EditorPaneIds.Inspector]) &&
+Require(persistentWhileFloating.HiddenPaneIds.SequenceEqual([
+        EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4,
+        EditorPaneIds.Inspector]) &&
     !EditorLayoutJson.Serialize(persistentWhileFloating).Contains("floating", StringComparison.OrdinalIgnoreCase),
     "Floating host state must project to hidden state and never serialize.");
 
@@ -129,7 +169,8 @@ Require(!multiHost.Apply(new(EditorLayoutCommandKind.DetachToFloating,
 Require(multiHost.Apply(new(EditorLayoutCommandKind.CloseFloatingHost,
     TargetHostId: firstFloat.HostId)).Success && multiHost.FloatingHosts.Count == 0 &&
     multiHost.Document.HiddenPaneIds.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(
-        new[] { EditorPaneIds.Console, EditorPaneIds.Content, EditorPaneIds.Hierarchy,
+        new[] { EditorPaneIds.Console, EditorPaneIds.Content, EditorPaneIds.Content2,
+            EditorPaneIds.Content3, EditorPaneIds.Content4, EditorPaneIds.Hierarchy,
             EditorPaneIds.Inspector }.OrderBy(id => id, StringComparer.Ordinal)),
     "Closing a floating host must hide every pane in its complete dock tree.");
 Require(EditorLayoutValidator.ValidateSession(multiHost.Document,
@@ -179,6 +220,17 @@ var beforeHideRevision = session.Revision;
 Require(session.Apply(new(EditorLayoutCommandKind.HidePane, EditorPaneIds.Content)).Success &&
     session.Revision == beforeHideRevision + 1,
     "A layout command must commit one monotonic revision without creating history.");
+
+var contentStates = session.Document.ContentManagers;
+contentStates.Single(state => state.PaneId == EditorPaneIds.Content2).ViewMode =
+    ContentViewMode.List;
+contentStates.Single(state => state.PaneId == EditorPaneIds.Content2).CurrentFolder = "UI";
+session.UpdateContentManagers(contentStates, EditorPaneIds.Content2);
+Require(session.Document.ActiveContentManagerId == EditorPaneIds.Content2 &&
+    session.Document.ContentManagers.Single(state =>
+        state.PaneId == EditorPaneIds.Content2).ViewMode == ContentViewMode.List &&
+    session.IsDirty,
+    "Content manager state and active routing must participate in layout persistence.");
 
 var arrangement = DockLayoutCalculator.Arrange(defaults.MainHost.Root,
     new DockRect(0, 0, 500, 300));

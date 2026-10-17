@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "mainHost": {
     "hostId": "main",
     "root": {
@@ -83,5 +83,40 @@
       }
     }
   },
-  "hiddenPaneIds": []
+  "hiddenPaneIds": [
+    "content-2",
+    "content-3",
+    "content-4"
+  ],
+  "activeContentManagerId": "content",
+  "contentManagers": [
+    {
+      "paneId": "content",
+      "search": "",
+      "source": "project",
+      "currentFolder": "",
+      "viewMode": "tile"
+    },
+    {
+      "paneId": "content-2",
+      "search": "",
+      "source": "project",
+      "currentFolder": "",
+      "viewMode": "tile"
+    },
+    {
+      "paneId": "content-3",
+      "search": "",
+      "source": "project",
+      "currentFolder": "",
+      "viewMode": "tile"
+    },
+    {
+      "paneId": "content-4",
+      "search": "",
+      "source": "project",
+      "currentFolder": "",
+      "viewMode": "tile"
+    }
+  ]
 }

@@ -70,6 +70,11 @@ try
         dockMarkup.Contains("data-pane-id=\"ui-editor\"", StringComparison.Ordinal) &&
         !dockMarkup.Contains("UI Canvas", StringComparison.Ordinal),
         "Dock markup must expose recursive split containers for transient resize preview");
+    Require(dockMarkup.Contains("Content Manager 1", StringComparison.Ordinal) &&
+        dockMarkup.Contains("id=\"content-search\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("editor.content.view:content:tile", StringComparison.Ordinal) &&
+        dockMarkup.Contains("editor.content.view:content:list", StringComparison.Ordinal),
+        "Content Manager markup must expose instance-scoped search and Tile/List controls");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
     Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 3,
         "Public and project assets must both be available to a project editor");
@@ -108,11 +113,32 @@ try
         runtime.SelectedEntity is null &&
         runtime.DescribeContentJson().Contains("engine://meshes/cube", StringComparison.Ordinal),
         "Asset selection must replace the active entity selection and persist in Content Manager");
+    runtime.InvokeUiAction("editor.content.view:content-2:list");
+    runtime.InvokeUiAction("editor.content.source:content-2:project");
+    runtime.InvokeUiAction("editor.content.open:content-2:project|Worlds/Main.sworld");
+    var content2 = runtime.ContentManagers!.Get(EditorPaneIds.Content2);
+    Require(runtime.ContentManagers.ActivePaneId == EditorPaneIds.Content2 &&
+        content2.ViewMode == SharpEngine.Assets.ContentViewMode.List &&
+        content2.SelectedId == "project://worlds/main" &&
+        content.SelectedId == "engine://meshes/cube" &&
+        runtime.Selection.Id == "project://worlds/main",
+        "Content managers must keep independent view and selection state while the active instance owns editor selection");
+    runtime.InvokeUiAction("editor.content.activate:content");
+    Require(runtime.Selection.Id == "engine://meshes/cube" &&
+        runtime.ContentManagers.ActivePaneId == EditorPaneIds.Content,
+        "Activating a content manager must restore that instance's selection");
     runtime.InvokeUiAction("editor.context:10:10:folder:project:Worlds");
     Require(runtime.Selection.Kind == EditorSelectionKind.Folder &&
         runtime.SelectedFolderPath == "Worlds" && runtime.SelectedEntity is null,
         "Folder context selection must replace selection from every other editor surface");
     runtime.InvokeUiAction("editor.content.clear");
+    if (args.Contains("--content-only", StringComparer.Ordinal))
+    {
+        ContentManagerValidation.Run(runtime, temporary.FullName, Require);
+        runtime.Shutdown();
+        Console.WriteLine($"PASS: {assertions} focused Content Manager assertions");
+        return;
+    }
     Require(!runtime.Settings.InvertYAxis, "Engine Settings should default to normal Y navigation");
     var commandCalls = 0;
     using var commandRegistration = runtime.Commands.Register(new EditorCommand(
@@ -178,7 +204,13 @@ try
             StringComparison.Ordinal),
         "View menu reopen must create a transient floating Dock host");
     runtime.InvokeUiAction("editor.dock-save-layout");
-    Require(File.Exists(Path.Combine(temporary.FullName, "Saved", "Config", "EditorLayout.json")),
+    var savedLayoutPath = Path.Combine(temporary.FullName, "Saved", "Config",
+        "EditorLayout.json");
+    Require(File.Exists(savedLayoutPath) &&
+        File.ReadAllText(savedLayoutPath).Contains("\"paneId\": \"content-2\"",
+            StringComparison.Ordinal) &&
+        File.ReadAllText(savedLayoutPath).Contains("\"viewMode\": \"list\"",
+            StringComparison.Ordinal),
         "Layout persistence must occur only after the explicit Save Layout command");
     Require(runtime.DescribeEditorJson().Contains("\"mode\": \"scene3d\"",
             StringComparison.Ordinal),

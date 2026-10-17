@@ -10,6 +10,13 @@ public enum ContentSourceFilter : byte
     Project = 2,
 }
 
+/// <summary>How entries are arranged inside one content browser instance.</summary>
+public enum ContentViewMode : byte
+{
+    Tile = 0,
+    List = 1,
+}
+
 /// <summary>A file or directory shown by the content browser.</summary>
 public sealed record ContentBrowserEntry(
     string Name,
@@ -34,7 +41,9 @@ public sealed class ContentManager
     private string? _type;
     private string? _selectedId;
     private string? _selectedPath;
+    private AssetSource? _selectedSource;
     private string _currentFolder = string.Empty;
+    private ContentViewMode _viewMode;
 
     public ContentManager(AssetRegistry registry)
     {
@@ -50,6 +59,8 @@ public sealed class ContentManager
     public string? TypeFilter => _type;
     public string? SelectedId => _selectedId;
     public string? SelectedPath => _selectedPath;
+    public AssetSource? SelectedSource => _selectedSource;
+    public ContentViewMode ViewMode => _viewMode;
     /// <summary>Path relative to the active source's Content folder.</summary>
     public string CurrentFolder => _currentFolder;
     public string CurrentFolderDisplay => _currentFolder.Length == 0
@@ -92,6 +103,7 @@ public sealed class ContentManager
         _currentFolder = string.Empty;
         _selectedId = null;
         _selectedPath = null;
+        _selectedSource = null;
         if (_source == ContentSourceFilter.Project && _registry.ProjectRoot is null)
             _source = ContentSourceFilter.Engine;
     }
@@ -105,6 +117,13 @@ public sealed class ContentManager
                 string.Equals(candidate, type.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
+    public void SetViewMode(ContentViewMode mode)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode));
+        _viewMode = mode;
+    }
+
     public bool OpenFolder(string? relativePath)
     {
         var normalized = NormalizeFolder(relativePath);
@@ -114,6 +133,7 @@ public sealed class ContentManager
         _currentFolder = normalized;
         _selectedPath = null;
         _selectedId = null;
+        _selectedSource = null;
         return true;
     }
 
@@ -124,6 +144,7 @@ public sealed class ContentManager
         _currentFolder = slash < 0 ? string.Empty : _currentFolder[..slash];
         _selectedPath = null;
         _selectedId = null;
+        _selectedSource = null;
         return true;
     }
 
@@ -135,6 +156,7 @@ public sealed class ContentManager
         {
             _selectedId = null;
             _selectedPath = null;
+            _selectedSource = null;
             return true;
         }
 
@@ -142,6 +164,7 @@ public sealed class ContentManager
         if (asset is null) return false;
         _selectedId = asset.Id;
         _selectedPath = ToContentRelative(asset);
+        _selectedSource = asset.Source;
         return true;
     }
 
@@ -153,6 +176,7 @@ public sealed class ContentManager
         if (!File.Exists(fullPath)) return false;
         _selectedId = FindDescriptor(source, fullPath)?.Id;
         _selectedPath = normalized;
+        _selectedSource = source;
         return true;
     }
 
@@ -164,6 +188,7 @@ public sealed class ContentManager
         if (!Directory.Exists(fullPath)) return false;
         _selectedId = null;
         _selectedPath = normalized;
+        _selectedSource = source;
         return true;
     }
 
@@ -171,6 +196,23 @@ public sealed class ContentManager
     {
         _selectedId = null;
         _selectedPath = null;
+        _selectedSource = null;
+    }
+
+    // Restoring layout is not a navigation command: retain saved references even
+    // when files or registered types are temporarily unavailable.
+    internal void RestoreBrowserState(string search, ContentSourceFilter source, string? type,
+        string folder, string? selectedId, string? selectedPath, AssetSource? selectedSource,
+        ContentViewMode viewMode)
+    {
+        SetSource(source);
+        SetViewMode(viewMode);
+        _search = search;
+        _type = type;
+        _currentFolder = NormalizeFolder(folder);
+        _selectedId = selectedId;
+        _selectedPath = selectedPath is null ? null : NormalizeFolder(selectedPath);
+        _selectedSource = selectedSource;
     }
 
     public string ToJson(JsonSerializerOptions? options = null) =>
@@ -181,8 +223,12 @@ public sealed class ContentManager
             type = TypeFilter,
             contentRoot = ContentRoot,
             currentFolder = CurrentFolder,
+            currentFolderExists = Sources().Any(source => Directory.Exists(Path.Combine(
+                GetContentRoot(source), CurrentFolder.Replace('/', Path.DirectorySeparatorChar)))),
             selected = SelectedId,
             selectedPath = SelectedPath,
+            selectedSource = SelectedSource?.ToString(),
+            viewMode = ViewMode.ToString(),
             count = VisibleEntries.Count,
             types = Types,
             entries = VisibleEntries.Select(entry => new

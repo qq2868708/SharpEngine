@@ -34,7 +34,7 @@ public sealed partial class EditorRuntime
         new(ReferenceEqualityComparer.Instance);
     private readonly Queue<string> _messages = new();
     private AssetRegistry? _assets;
-    private ContentManager? _content;
+    private ContentManagerCoordinator? _contentManagers;
     private EngineSettings _settings = new();
     private WorldDocument? _world;
     private string _engineRoot = string.Empty;
@@ -45,7 +45,6 @@ public sealed partial class EditorRuntime
     private bool _worldIsUntitled;
     private string? _worldAssetId;
     private EditorSelection _selection = EditorSelection.None;
-    private string _search = string.Empty;
     private string _hierarchySearch = string.Empty;
     private readonly HashSet<string> _collapsedHierarchy = new(StringComparer.OrdinalIgnoreCase);
     private float _seconds;
@@ -89,6 +88,7 @@ public sealed partial class EditorRuntime
     private EditorLayoutDocument? _defaultLayout;
     private EditorLayoutSession? _layout;
     private readonly Dictionary<string, string> _dockMarkup = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _contentMarkup = new(StringComparer.Ordinal);
     private readonly HashSet<string> _liveDockHosts = new(StringComparer.Ordinal);
     private EditorMcpSessionHost? _mcpSession;
     private IInputRuntime? _inputRuntime;
@@ -109,7 +109,8 @@ public sealed partial class EditorRuntime
 
     public WorldDocument? World => _world;
     public AssetRegistry? Assets => _assets;
-    public ContentManager? Content => _content;
+    public ContentManager? Content => _contentManagers?.Active;
+    public ContentManagerCoordinator? ContentManagers => _contentManagers;
     public EditorCommandRegistry Commands => _commands;
     public EditorMenuRegistry Menus => _menus;
     public EditorToolbarRegistry Toolbar => _toolbar;
@@ -157,7 +158,7 @@ public sealed partial class EditorRuntime
     }
     public string DescribeSceneJson() => _world?.ToJson() ?? "{}";
     public string DescribeAssetsJson() => _assets?.ToJson() ?? "{}";
-    public string DescribeContentJson() => _content?.ToJson() ?? "{}";
+    public string DescribeContentJson() => _contentManagers?.ToJson() ?? "{}";
     public string DescribeInputJson() => _inputRuntime?.DescribeJson() ??
         "{\"schemaVersion\":1,\"available\":false}";
 
@@ -253,17 +254,8 @@ public sealed partial class EditorRuntime
             tags = asset.Tags,
             metadata = asset.Metadata,
         }),
-        content = _content is null ? null : new
-        {
-            search = _content.SearchText,
-            source = _content.SourceFilter.ToString(),
-            type = _content.TypeFilter,
-            selected = _content.SelectedId,
-            selectedPath = _content.SelectedPath,
-            currentFolder = _content.CurrentFolder,
-            contentRoot = _content.ContentRoot,
-            visibleCount = _content.VisibleAssets.Count,
-        },
+        content = _contentManagers is null ? null :
+            JsonNode.Parse(_contentManagers.ToJson()),
         extensions = new
         {
             selection = new
@@ -376,7 +368,6 @@ public sealed partial class EditorRuntime
         _projectRoot = _projectManifest is null ? null :
             Path.GetDirectoryName(_projectManifest)!;
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
-        _content = new ContentManager(_assets);
         _settings = EngineSettings.Load(_engineRoot, _projectRoot);
         _defaultLayout = _layoutStore.LoadDefault(_engineRoot);
         try
@@ -391,6 +382,9 @@ public sealed partial class EditorRuntime
                 Console.Error.WriteLine($"[EditorLayout] {diagnostic.Code} {diagnostic.Path}: {diagnostic.Message}");
             _layout = new EditorLayoutSession(_defaultLayout);
         }
+        var contentLayout = _layout.Document;
+        _contentManagers = new ContentManagerCoordinator(_assets,
+            contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
         var loadedWorld = WorldAssetWorkflow.LoadInitial(_engineRoot, _projectRoot,
             _projectManifest, _assets);
         _world = loadedWorld.Document;
@@ -402,6 +396,10 @@ public sealed partial class EditorRuntime
             !e.Asset.EndsWith("/plane", StringComparison.OrdinalIgnoreCase))?.Id;
         _selection = initialEntity is null ? EditorSelection.Scene :
             new EditorSelection(EditorSelectionKind.Entity, initialEntity);
+        EnsureActiveContentManagerVisible();
+        if (_contentManagers.Active.SelectedPath is not null ||
+            _contentManagers.Active.SelectedId is not null)
+            ApplyActiveContentSelection();
         RegisterBuiltInEditorUi();
         RefreshDockUi(force: true);
         RefreshWorldTitle();
@@ -706,44 +704,97 @@ public sealed partial class EditorRuntime
             SetStatus($"{result.Message} · revision {result.AfterRevision}");
             return;
         }
-        if (action.StartsWith("editor.search-assets:", StringComparison.Ordinal))
+        if (TryContentAction(action, "activate", out var contentPaneId, out _))
         {
-            _search = action["editor.search-assets:".Length..];
-            _content?.SetSearch(_search);
-            RefreshAssets();
-            SetStatus($"Content Manager · {_content?.VisibleEntries.Count ?? 0} items");
+            ActivateContentManager(contentPaneId);
+            CommitContentManagerState($"{ContentManagerLabel(contentPaneId)} active");
             return;
         }
-        if (action.StartsWith("editor.content.source:", StringComparison.Ordinal))
+        if (TryContentAction(action, "search", out contentPaneId, out var contentValue) ||
+            action.StartsWith("editor.search-assets:", StringComparison.Ordinal) &&
+            UseLegacyContentAction(action["editor.search-assets:".Length..],
+                out contentPaneId, out contentValue))
         {
-            var value = action["editor.content.source:".Length..];
-            _content?.SetSource(value.Equals("engine", StringComparison.OrdinalIgnoreCase)
+            var manager = ActivateContentManager(contentPaneId);
+            manager?.SetSearch(contentValue);
+            CommitContentManagerState(
+                $"{ContentManagerLabel(contentPaneId)} · {manager?.VisibleEntries.Count ?? 0} items");
+            return;
+        }
+        if (TryContentAction(action, "source", out contentPaneId, out contentValue) ||
+            action.StartsWith("editor.content.source:", StringComparison.Ordinal) &&
+            UseLegacyContentAction(action["editor.content.source:".Length..],
+                out contentPaneId, out contentValue))
+        {
+            var manager = ActivateContentManager(contentPaneId);
+            manager?.SetSource(contentValue.Equals("engine", StringComparison.OrdinalIgnoreCase)
                 ? ContentSourceFilter.Engine
-                : value.Equals("project", StringComparison.OrdinalIgnoreCase)
+                : contentValue.Equals("project", StringComparison.OrdinalIgnoreCase)
                     ? ContentSourceFilter.Project : ContentSourceFilter.All);
-            RefreshAssets();
-            SetStatus($"Content Manager · source {_content?.SourceFilter}");
+            ApplyActiveContentSelection();
+            CommitContentManagerState(
+                $"{ContentManagerLabel(contentPaneId)} · source {manager?.SourceFilter}");
             return;
         }
-        if (action.StartsWith("editor.content.type:", StringComparison.Ordinal))
+        if (TryContentAction(action, "type", out contentPaneId, out contentValue) ||
+            action.StartsWith("editor.content.type:", StringComparison.Ordinal) &&
+            UseLegacyContentAction(action["editor.content.type:".Length..],
+                out contentPaneId, out contentValue))
         {
-            _content?.SetType(action["editor.content.type:".Length..]);
-            RefreshAssets();
-            SetStatus($"Content Manager · type {_content?.TypeFilter ?? "All"}");
+            var manager = ActivateContentManager(contentPaneId);
+            manager?.SetType(contentValue);
+            CommitContentManagerState(
+                $"{ContentManagerLabel(contentPaneId)} · type {manager?.TypeFilter ?? "All"}");
+            return;
+        }
+        if (TryContentAction(action, "view", out contentPaneId, out contentValue))
+        {
+            var manager = ActivateContentManager(contentPaneId);
+            manager?.SetViewMode(contentValue.Equals("list", StringComparison.OrdinalIgnoreCase)
+                ? ContentViewMode.List : ContentViewMode.Tile);
+            CommitContentManagerState(
+                $"{ContentManagerLabel(contentPaneId)} · {manager?.ViewMode} view");
+            return;
+        }
+        if (TryContentAction(action, "select", out contentPaneId, out contentValue))
+        {
+            ActivateContentManager(contentPaneId);
+            SelectAsset(contentValue);
+            return;
+        }
+        if (TryContentAction(action, "open", out contentPaneId, out contentValue))
+        {
+            OpenContentEntry(contentPaneId, contentValue);
             return;
         }
         if (action.StartsWith("editor.content.open:", StringComparison.Ordinal))
         {
-            OpenContentEntry(action["editor.content.open:".Length..]);
+            OpenContentEntry(_contentManagers?.ActivePaneId ?? EditorPaneIds.Content,
+                action["editor.content.open:".Length..]);
             return;
         }
-        if (action == "editor.content.up")
+        if (TryContentAction(action, "up", out contentPaneId, out _) ||
+            action == "editor.content.up" && UseLegacyContentAction(string.Empty,
+                out contentPaneId, out _))
         {
-            if (_content?.GoUp() == true)
+            var manager = ActivateContentManager(contentPaneId);
+            if (manager?.GoUp() == true)
             {
-                RefreshAssets();
-                SetStatus($"Content Manager · {_content.CurrentFolderDisplay}");
+                ApplyActiveContentSelection();
+                CommitContentManagerState(
+                    $"{ContentManagerLabel(contentPaneId)} · {manager.CurrentFolderDisplay}");
             }
+            return;
+        }
+        if (TryContentAction(action, "clear", out contentPaneId, out _) ||
+            action == "editor.content.clear" && UseLegacyContentAction(string.Empty,
+                out contentPaneId, out _))
+        {
+            var manager = ActivateContentManager(contentPaneId);
+            ResetContentManager(manager);
+            ApplyActiveContentSelection();
+            CommitContentManagerState($"{ContentManagerLabel(contentPaneId)} · filters cleared",
+                rebuildDock: true);
             return;
         }
         if (action.StartsWith("editor.create-project:", StringComparison.Ordinal))
@@ -814,7 +865,6 @@ public sealed partial class EditorRuntime
                 break;
             case "editor.select-scene":
                 _selection = EditorSelection.Scene;
-                _content?.ClearSelection();
                 MarkExtensionUiDirty();
                 RefreshHierarchy();
                 RefreshAssets();
@@ -828,22 +878,12 @@ public sealed partial class EditorRuntime
                 SetStatus($"Selected {_world.Name}");
                 break;
             case "editor.assets-menu":
-                _content?.SetSearch(string.Empty);
-                _content?.SetSource(_projectRoot is null
-                    ? ContentSourceFilter.Engine : ContentSourceFilter.Project);
-                _content?.SetType(null);
-                _search = string.Empty;
-                RefreshAssets();
-                SetStatus($"Content Manager · {_content?.VisibleEntries.Count ?? 0} items");
-                break;
-            case "editor.content.clear":
-                _content?.SetSearch(string.Empty);
-                _content?.SetSource(_projectRoot is null
-                    ? ContentSourceFilter.Engine : ContentSourceFilter.Project);
-                _content?.SetType(null);
-                _search = string.Empty;
-                RefreshAssets();
-                SetStatus("Content Manager · filters cleared");
+                var routed = EnsureContentManagerForExternalBrowse();
+                ResetContentManager(routed);
+                ApplyActiveContentSelection();
+                CommitContentManagerState(
+                    $"{ContentManagerLabel(_contentManagers!.ActivePaneId)} · {routed?.VisibleEntries.Count ?? 0} items",
+                    rebuildDock: true);
                 break;
             case "editor.select-camera": SelectEntity(_world.ActiveCameraId); break;
             case "editor.select-light":
@@ -914,7 +954,6 @@ public sealed partial class EditorRuntime
         var entity = _world!.Entities.FirstOrDefault(e => e.Id == id);
         if (entity is null) return;
         _selection = new EditorSelection(EditorSelectionKind.Entity, entity.Id);
-        _content?.ClearSelection();
         MarkExtensionUiDirty();
         RefreshHierarchy();
         RefreshAssets();
@@ -927,12 +966,11 @@ public sealed partial class EditorRuntime
     {
         var asset = _assets!.Find(id);
         if (asset is null) return;
-        _content?.Select(asset.Id);
+        _contentManagers?.Active.Select(asset.Id);
         _selection = new EditorSelection(EditorSelectionKind.Asset, asset.Id,
             asset.RelativePath, asset.Source);
         MarkExtensionUiDirty();
         RefreshHierarchy();
-        RefreshAssets();
         RefreshViewportModeUi();
         SetText("selectedObject", asset.Name);
         SetText("selectedKind", $"{asset.Type} · {asset.Source} · {(asset.ReadOnly ? "Read only" : "Editable")}");
@@ -940,15 +978,16 @@ public sealed partial class EditorRuntime
         SetText("rotation", asset.RelativePath);
         SetText("scale", asset.Exists ? "Available" : "File missing");
         SetText("parent", "—");
-        SetStatus($"Selected {asset.Id}");
+        CommitContentManagerState($"Selected {asset.Id}");
         if (asset.Type.Equals("RmlDocument", StringComparison.OrdinalIgnoreCase))
             OpenUiAsset(asset);
     }
 
-    private void OpenContentEntry(string payload)
+    private void OpenContentEntry(string managerId, string payload)
     {
         var separator = payload.IndexOf('|');
-        if (separator <= 0 || _content is null) return;
+        var manager = ActivateContentManager(managerId);
+        if (separator <= 0 || manager is null) return;
         var source = payload[..separator].Equals("engine", StringComparison.OrdinalIgnoreCase)
             ? AssetSource.Engine : AssetSource.Project;
         var relativePath = payload[(separator + 1)..];
@@ -958,21 +997,21 @@ public sealed partial class EditorRuntime
             relativePath.Replace('/', Path.DirectorySeparatorChar));
         if (Directory.Exists(fullPath))
         {
-            if (_content.OpenFolder(relativePath))
+            if (manager.OpenFolder(relativePath))
             {
                 _selection = new EditorSelection(EditorSelectionKind.Folder, Path: relativePath,
                     Source: source);
                 MarkExtensionUiDirty();
                 RefreshHierarchy();
-                RefreshAssets();
                 RefreshViewportModeUi();
-                SetStatus($"Content Manager · {_content.CurrentFolderDisplay}");
+                CommitContentManagerState(
+                    $"{ContentManagerLabel(managerId)} · {manager.CurrentFolderDisplay}");
             }
             return;
         }
 
-        if (!_content.SelectFile(source, relativePath)) return;
-        var asset = _content.SelectedAsset;
+        if (!manager.SelectFile(source, relativePath)) return;
+        var asset = manager.SelectedAsset;
         if (asset is not null)
         {
             SelectAsset(asset.Id);
@@ -983,9 +1022,8 @@ public sealed partial class EditorRuntime
             Source: source);
         MarkExtensionUiDirty();
         RefreshHierarchy();
-        RefreshAssets();
         RefreshViewportModeUi();
-        var entry = _content.VisibleEntries.FirstOrDefault(candidate =>
+        var entry = manager.VisibleEntries.FirstOrDefault(candidate =>
             string.Equals(candidate.RelativePath, relativePath,
                 StringComparison.OrdinalIgnoreCase));
         SetText("selectedObject", Path.GetFileName(relativePath));
@@ -994,7 +1032,7 @@ public sealed partial class EditorRuntime
         SetText("position", relativePath);
         SetText("rotation", "—");
         SetText("scale", File.Exists(fullPath) ? "Available" : "Missing");
-        SetStatus($"Selected Content/{relativePath}");
+        CommitContentManagerState($"Selected Content/{relativePath}");
     }
 
     private bool TryBeginGizmoDrag(int x, int y)
@@ -1170,6 +1208,107 @@ public sealed partial class EditorRuntime
         _extensionUiDirty = true;
     }
 
+    private static bool TryContentAction(string action, string operation,
+        out string paneId, out string value)
+    {
+        var prefix = $"editor.content.{operation}:";
+        paneId = string.Empty;
+        value = string.Empty;
+        if (!action.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var payload = action[prefix.Length..];
+        var separator = payload.IndexOf(':');
+        paneId = separator < 0 ? payload : payload[..separator];
+        value = separator < 0 ? string.Empty : payload[(separator + 1)..];
+        return EditorPaneIds.IsContentManager(paneId);
+    }
+
+    private bool UseLegacyContentAction(string value, out string paneId, out string routedValue)
+    {
+        paneId = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
+        routedValue = value;
+        return true;
+    }
+
+    private ContentManager? ActivateContentManager(string paneId)
+    {
+        if (_contentManagers?.Activate(paneId) != true) return null;
+        ApplyActiveContentSelection();
+        return _contentManagers.Active;
+    }
+
+    private ContentManager? EnsureContentManagerForExternalBrowse()
+    {
+        if (_contentManagers is null) return null;
+        if (!EditorPaneIds.ContentManagers.Any(IsPaneVisible))
+        {
+            ApplyLayout(new EditorLayoutCommand(EditorLayoutCommandKind.ReopenAsFloating,
+                EditorPaneIds.Content));
+            _contentManagers.Activate(EditorPaneIds.Content);
+        }
+        else if (!IsPaneVisible(_contentManagers.ActivePaneId))
+        {
+            var fallback = _contentManagers.MostRecentlyUsed.First(IsPaneVisible);
+            _contentManagers.Activate(fallback);
+        }
+        var group = FindPaneGroup(_contentManagers.ActivePaneId);
+        if (group.GroupId is not null)
+            ApplyLayout(new EditorLayoutCommand(EditorLayoutCommandKind.ActivateTab,
+                _contentManagers.ActivePaneId, TargetGroupId: group.GroupId,
+                TargetHostId: group.HostId));
+        ApplyActiveContentSelection();
+        return _contentManagers.Active;
+    }
+
+    private void ResetContentManager(ContentManager? manager)
+    {
+        if (manager is null) return;
+        manager.SetSearch(string.Empty);
+        manager.SetSource(_projectRoot is null
+            ? ContentSourceFilter.Engine : ContentSourceFilter.Project);
+        manager.SetType(null);
+        manager.ResetFolder();
+        manager.ClearSelection();
+    }
+
+    private void ApplyActiveContentSelection()
+    {
+        if (_contentManagers is null) return;
+        var manager = _contentManagers.Active;
+        var asset = manager.SelectedAsset;
+        if (asset is not null)
+            _selection = new EditorSelection(EditorSelectionKind.Asset, asset.Id,
+                manager.SelectedPath, asset.Source);
+        else if (manager.SelectedPath is not null && manager.SelectedSource is not null)
+        {
+            var root = manager.SelectedSource == AssetSource.Engine ? _engineRoot : _projectRoot;
+            var fullPath = root is null ? string.Empty : Path.Combine(root, "Content",
+                manager.SelectedPath.Replace('/', Path.DirectorySeparatorChar));
+            _selection = new EditorSelection(Directory.Exists(fullPath)
+                    ? EditorSelectionKind.Folder : EditorSelectionKind.Asset,
+                Path: manager.SelectedPath, Source: manager.SelectedSource);
+        }
+        else
+            _selection = EditorSelection.None;
+        MarkExtensionUiDirty();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshViewportModeUi();
+    }
+
+    private void CommitContentManagerState(string status, bool rebuildDock = false)
+    {
+        if (_contentManagers is null) return;
+        _layout?.UpdateContentManagers(_contentManagers.Capture(),
+            _contentManagers.ActivePaneId);
+        MarkExtensionUiDirty();
+        if (rebuildDock) RefreshDockUiAndContents();
+        else RefreshAssets();
+        SetStatus(status);
+    }
+
+    private static string ContentManagerLabel(string paneId) =>
+        $"Content Manager {EditorPaneIds.ContentManagerNumber(paneId)}";
+
     private bool IsPaneVisible(string paneId)
     {
         if (_layout is null) return false;
@@ -1187,6 +1326,9 @@ public sealed partial class EditorRuntime
         {
             try
             {
+                if (_contentManagers is not null)
+                    _layout.UpdateContentManagers(_contentManagers.Capture(),
+                        _contentManagers.ActivePaneId);
                 _layout.Save(_layoutStore, _engineRoot, _projectRoot);
                 var omitted = _layout.FloatingHosts.SelectMany(host =>
                     EditorLayoutValidator.EnumeratePanes(host.Root)).ToArray();
@@ -1202,6 +1344,10 @@ public sealed partial class EditorRuntime
         if (action == "editor.dock-reset-layout")
         {
             _layout.ResetToEngineDefault(_defaultLayout!);
+            var contentLayout = _layout.Document;
+            _contentManagers = new ContentManagerCoordinator(_assets!,
+                contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
+            ApplyActiveContentSelection();
             RefreshDockUiAndContents();
             SetStatus("Engine default layout restored for this session");
             return;
@@ -1224,8 +1370,12 @@ public sealed partial class EditorRuntime
         {
             var parts = action["editor.dock-activate:".Length..].Split(':', 3);
             if (parts.Length == 3)
+            {
+                if (EditorPaneIds.IsContentManager(parts[2]))
+                    ActivateContentManager(parts[2]);
                 ApplyLayout(new EditorLayoutCommand(EditorLayoutCommandKind.ActivateTab,
                     parts[2], TargetGroupId: parts[1], TargetHostId: parts[0]));
+            }
             return;
         }
         if (action.StartsWith("editor.dock-resize:", StringComparison.Ordinal))
@@ -1314,8 +1464,25 @@ public sealed partial class EditorRuntime
             SetStatus($"Layout change rejected [{result.Code}]: {result.Message}");
             return;
         }
+        if (EditorPaneIds.IsContentManager(command.PaneId) &&
+            command.Kind is EditorLayoutCommandKind.ReopenAsFloating or
+                EditorLayoutCommandKind.ActivateTab)
+            ActivateContentManager(command.PaneId);
+        EnsureActiveContentManagerVisible();
+        if (_contentManagers is not null)
+            _layout.UpdateContentManagers(_contentManagers.Capture(),
+                _contentManagers.ActivePaneId);
         RefreshDockUiAndContents();
         SetStatus($"Layout updated · revision {result.AfterRevision}");
+    }
+
+    private void EnsureActiveContentManagerVisible()
+    {
+        if (_contentManagers is null || IsPaneVisible(_contentManagers.ActivePaneId)) return;
+        var fallback = _contentManagers.MostRecentlyUsed.FirstOrDefault(IsPaneVisible);
+        if (fallback is null) return;
+        _contentManagers.Activate(fallback);
+        ApplyActiveContentSelection();
     }
 
     private void RefreshDockUi(bool force = false)
@@ -1349,7 +1516,9 @@ public sealed partial class EditorRuntime
 
     private void PublishDockHost(DockHostState host, string viewportTitle, bool force)
     {
-        var markup = EditorDockMarkup.Build(host, viewportTitle);
+        var markup = EditorDockMarkup.Build(host, viewportTitle,
+            _contentManagers?.ActivePaneId ?? EditorPaneIds.Content,
+            _contentManagers?.Capture());
         if (!force && _dockMarkup.TryGetValue(host.HostId, out var previous) &&
             previous == markup) return;
         if (_nativeApi.SetHostMarkup(host.HostId, "workspace", markup))
@@ -1359,6 +1528,7 @@ public sealed partial class EditorRuntime
     private void RefreshDockUiAndContents()
     {
         RefreshDockUi();
+        _contentMarkup.Clear();
         _uiText.Clear();
         _extensionUiDirty = true;
         RefreshLists();
@@ -1411,8 +1581,12 @@ public sealed partial class EditorRuntime
                 target = saved.Path;
                 _worldAssetId = saved.AssetId;
                 _worldIsUntitled = false;
+                var contentStates = _contentManagers?.Capture() ??
+                    EditorLayoutDocument.CreateDefaultContentManagers();
+                var activeContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
                 _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
-                _content = new ContentManager(_assets);
+                _contentManagers = new ContentManagerCoordinator(_assets, contentStates,
+                    activeContent);
                 _authoring.MarkSavepoint();
             }
             else
@@ -1590,62 +1764,116 @@ public sealed partial class EditorRuntime
 
     private void RefreshAssets()
     {
-        if (_content is null) return;
+        if (_contentManagers is null) return;
+        foreach (var paneId in EditorPaneIds.ContentManagers)
+            RefreshContentManager(paneId, _contentManagers.Get(paneId));
+    }
+
+    private void RefreshContentManager(string paneId, ContentManager manager)
+    {
+        string Id(string local) => $"{paneId}-{local}";
+        var viewClass = manager.ViewMode == ContentViewMode.Tile ? "tile-view" : "list-view";
+        var itemClass = manager.ViewMode == ContentViewMode.Tile ? "tile-item" : "list-item";
         foreach (var source in new[] { AssetSource.Engine, AssetSource.Project })
         {
+            var sourceName = source.ToString().ToLowerInvariant();
+            _nativeApi.SetUiProperty(Id(sourceName + "-label"), "display",
+                manager.SourceFilter == ContentSourceFilter.All ? "block" : "none");
             var markup = new StringBuilder();
-            markup.Append("<div class=\"content-context\" data-context-kind=\"folder\" data-context-source=\"")
-                .Append(source.ToString().ToLowerInvariant()).Append("\" data-context-id=\"")
-                .Append(Escape(_content.CurrentFolder)).Append("\">");
+            markup.Append("<div class=\"content-context ").Append(viewClass)
+                .Append("\" data-context-kind=\"folder\" data-context-manager=\"")
+                .Append(paneId).Append("\" data-context-source=\"").Append(sourceName)
+                .Append("\" data-context-id=\"").Append(Escape(manager.CurrentFolder))
+                .Append("\">");
             var itemCount = 0;
-            foreach (var entry in _content.VisibleEntries.Where(entry => entry.Source == source))
+            foreach (var entry in manager.VisibleEntries.Where(entry => entry.Source == source))
             {
                 itemCount++;
-                var selected = string.Equals(_content.SelectedPath, entry.RelativePath,
-                    StringComparison.OrdinalIgnoreCase) ? " selected" : string.Empty;
+                var selected = manager.SelectedSource == source &&
+                    string.Equals(manager.SelectedPath, entry.RelativePath,
+                        StringComparison.OrdinalIgnoreCase) ? " selected" : string.Empty;
                 var icon = EditorIcon(entry.IsDirectory ? "Folder" : entry.Type);
-                var action = entry.IsDirectory
-                    ? $"editor.content.open:{source.ToString().ToLowerInvariant()}|{Escape(entry.RelativePath)}"
-                    : entry.AssetId is not null
-                        ? $"editor.select-asset:{Escape(entry.AssetId)}"
-                        : $"editor.content.open:{source.ToString().ToLowerInvariant()}|{Escape(entry.RelativePath)}";
+                var action = entry.IsDirectory || entry.AssetId is null
+                    ? $"editor.content.open:{paneId}:{sourceName}|{Escape(entry.RelativePath)}"
+                    : $"editor.content.select:{paneId}:{Escape(entry.AssetId)}";
                 var missing = entry.Exists ? string.Empty : " missing";
-                var kind = entry.IsDirectory ? string.Empty : $"<span class=\"item-kind\">{Escape(entry.Type)}</span>";
+                var kind = $"<span class=\"item-kind\">{Escape(entry.IsDirectory ? "Folder" : entry.Type)}</span>";
                 var contextKind = entry.IsDirectory ? "folder" : "asset";
                 var contextId = entry.AssetId ?? entry.RelativePath;
-                markup.Append($"<button class=\"tree-item asset-item{selected}{missing}\" data-action=\"{action}\" data-context-kind=\"{contextKind}\" data-context-id=\"{Escape(contextId)}\" data-context-source=\"{source.ToString().ToLowerInvariant()}\" title=\"{Escape(entry.RelativePath)} ({Escape(entry.Type)})\">{icon}<span class=\"asset-name\">{Escape(entry.Name)}</span>{kind}</button>");
+                var readOnly = entry.ReadOnly
+                    ? "<img class=\"readonly-icon\" src=\"Icons/lock.tga\" />"
+                    : string.Empty;
+                markup.Append("<button class=\"asset-item ").Append(itemClass)
+                    .Append(selected).Append(missing).Append("\" data-action=\"")
+                    .Append(action).Append("\" data-context-kind=\"").Append(contextKind)
+                    .Append("\" data-context-manager=\"").Append(paneId)
+                    .Append("\" data-context-id=\"").Append(Escape(contextId))
+                    .Append("\" data-context-source=\"").Append(sourceName)
+                    .Append("\" title=\"").Append(Escape(entry.RelativePath)).Append(" (")
+                    .Append(Escape(entry.Type)).Append(")\">").Append(icon)
+                    .Append("<span class=\"asset-name\">").Append(Escape(entry.Name))
+                    .Append("</span>").Append(kind).Append(readOnly).Append("</button>");
             }
             if (itemCount == 0)
                 markup.Append("<div class=\"empty-list\">Folder is empty</div>");
             markup.Append("</div>");
-            _nativeApi.SetUiMarkup(source == AssetSource.Engine ? "engineItems" : "projectItems", markup.ToString());
+            var targetId = Id(source == AssetSource.Engine ? "engine-items" : "project-items");
+            var value = markup.ToString();
+            if (!_contentMarkup.TryGetValue(targetId, out var previous) || previous != value)
+            {
+                _nativeApi.SetUiMarkup(targetId, value);
+                _contentMarkup[targetId] = value;
+            }
         }
-        var sourceLabel = _content.SourceFilter == ContentSourceFilter.All ? "All" : _content.SourceFilter.ToString();
-        SetText("contentSummary", $"{_content.VisibleEntries.Count} items · {sourceLabel} · {_content.TypeFilter ?? "All types"}");
-        SetText("contentBreadcrumb", _content.CurrentFolderDisplay);
-        SetText("projectPath", $"Content: {_content.ContentRoot}{(_content.CurrentFolder.Length == 0 ? string.Empty : Path.DirectorySeparatorChar + _content.CurrentFolder.Replace('/', Path.DirectorySeparatorChar))}");
-        _nativeApi.SetUiProperty("content-up", "display", _content.CurrentFolder.Length == 0 ? "none" : "inline-block");
-        _nativeApi.SetUiProperty("projectSection", "display",
-            _content.SourceFilter == ContentSourceFilter.Engine ? "none" : "block");
-        _nativeApi.SetUiProperty("engineSection", "display",
-            _content.SourceFilter == ContentSourceFilter.Project ? "none" : "block");
+        var sourceLabel = manager.SourceFilter == ContentSourceFilter.All
+            ? "All" : manager.SourceFilter.ToString();
+        SetText(Id("summary"),
+            $"{manager.VisibleEntries.Count} items · {sourceLabel} · {manager.TypeFilter ?? "All types"}");
+        SetText(Id("breadcrumb"), manager.CurrentFolderDisplay);
+        SetText(Id("path"),
+            $"Content: {manager.ContentRoot}{(manager.CurrentFolder.Length == 0 ? string.Empty : Path.DirectorySeparatorChar + manager.CurrentFolder.Replace('/', Path.DirectorySeparatorChar))}");
+        _nativeApi.SetUiProperty(Id("up"), "display",
+            manager.CurrentFolder.Length == 0 ? "none" : "inline-block");
+        _nativeApi.SetUiProperty(Id("project-section"), "display",
+            manager.SourceFilter == ContentSourceFilter.Engine ? "none" : "block");
+        _nativeApi.SetUiProperty(Id("engine-section"), "display",
+            manager.SourceFilter == ContentSourceFilter.Project ? "none" : "block");
         foreach (var source in new[] { "all", "project", "engine" })
         {
             var active = source switch
             {
-                "project" => _content.SourceFilter == ContentSourceFilter.Project,
-                "engine" => _content.SourceFilter == ContentSourceFilter.Engine,
-                _ => _content.SourceFilter == ContentSourceFilter.All,
+                "project" => manager.SourceFilter == ContentSourceFilter.Project,
+                "engine" => manager.SourceFilter == ContentSourceFilter.Engine,
+                _ => manager.SourceFilter == ContentSourceFilter.All,
             };
-            _nativeApi.SetUiProperty($"content-source-{source}", "background-color", active ? "#315f8b" : "#30353e");
+            _nativeApi.SetUiProperty(Id($"source-{source}"), "background-color",
+                active ? "#315f8b" : "#30353e");
         }
         foreach (var type in new[] { "all", "mesh", "material", "world" })
         {
-            var active = _content.TypeFilter is null ? type == "all" :
-                string.Equals(_content.TypeFilter, type, StringComparison.OrdinalIgnoreCase);
-            _nativeApi.SetUiProperty($"content-type-{type}", "background-color", active ? "#314d6a" : "#30353e");
-            _nativeApi.SetUiProperty($"content-type-{type}", "border-color", active ? "#619ce0" : "#424954");
+            var active = manager.TypeFilter is null ? type == "all" :
+                string.Equals(manager.TypeFilter, type, StringComparison.OrdinalIgnoreCase);
+            _nativeApi.SetUiProperty(Id($"type-{type}"), "background-color",
+                active ? "#314d6a" : "#30353e");
+            _nativeApi.SetUiProperty(Id($"type-{type}"), "border-color",
+                active ? "#619ce0" : "#424954");
         }
+        foreach (var mode in new[] { "tile", "list" })
+        {
+            var active = manager.ViewMode == (mode == "tile"
+                ? ContentViewMode.Tile : ContentViewMode.List);
+            _nativeApi.SetUiProperty(Id($"view-{mode}"), "background-color",
+                active ? "#315f8b" : "#30353e");
+            _nativeApi.SetUiProperty(Id($"view-{mode}"), "border-color",
+                active ? "#68a9f2" : "#424954");
+        }
+        var isActive = paneId == _contentManagers?.ActivePaneId;
+        _nativeApi.SetUiProperty(Id("pane"), "border-top-color",
+            isActive ? "#68a9f2" : "transparent");
+        _nativeApi.SetUiProperty($"dock-tab-{paneId}", "border-top-color",
+            isActive ? "#68a9f2" : "transparent");
+        _nativeApi.SetUiProperty($"dock-tab-{paneId}", "color",
+            isActive ? "#f2f7ff" : "#a7b3c4");
     }
 
     private static string EditorIcon(string type)
@@ -1671,14 +1899,54 @@ public sealed partial class EditorRuntime
 
     private void RefreshInspector()
     {
-        var entity = _world!.Entities.FirstOrDefault(e => e.Id == SelectedEntityId);
-        if (entity is null) return;
-        SetText("selectedObject", entity.Name);
-        SetText("selectedKind", $"{entity.Kind} · {entity.Id}");
-        SetText("position", Format(entity.Position));
-        SetText("rotation", Format(entity.Rotation));
-        SetText("scale", Format(entity.Scale));
-        SetText("parent", entity.ParentId.Length == 0 ? "None" : entity.ParentId);
+        var entity = _world?.Entities.FirstOrDefault(e => e.Id == SelectedEntityId);
+        if (entity is not null)
+        {
+            SetText("selectedObject", entity.Name);
+            SetText("selectedKind", $"{entity.Kind} · {entity.Id}");
+            SetText("position", Format(entity.Position));
+            SetText("rotation", Format(entity.Rotation));
+            SetText("scale", Format(entity.Scale));
+            SetText("parent", entity.ParentId.Length == 0 ? "None" : entity.ParentId);
+            return;
+        }
+        if (_selection.Kind == EditorSelectionKind.Scene)
+        {
+            SetText("selectedObject", _world?.Name ?? "Scene");
+            SetText("selectedKind", $"World · {_world?.Entities.Count ?? 0} entities");
+            SetInspectorDetails("-", "-", "-", "-");
+            return;
+        }
+        var asset = _selection.Id is null ? null : _assets?.Find(_selection.Id);
+        if (asset is not null)
+        {
+            SetText("selectedObject", asset.Name);
+            SetText("selectedKind",
+                $"{asset.Type} · {asset.Source} · {(asset.ReadOnly ? "Read only" : "Editable")}");
+            SetInspectorDetails("-", asset.Id, asset.RelativePath,
+                asset.Exists ? "Available" : "File missing");
+            return;
+        }
+        if (_selection.Path is not null)
+        {
+            SetText("selectedObject", Path.GetFileName(_selection.Path));
+            SetText("selectedKind", $"{_selection.Kind} · {_selection.Source}");
+            SetInspectorDetails("Content", _selection.Path, "-", "Available");
+            return;
+        }
+        SetText("selectedObject", _contentManagers is null
+            ? "No selection" : ContentManagerLabel(_contentManagers.ActivePaneId));
+        SetText("selectedKind", "No selection");
+        SetInspectorDetails("-", "-", "-", "-");
+    }
+
+    private void SetInspectorDetails(string parent, string position, string rotation,
+        string scale)
+    {
+        SetText("parent", parent);
+        SetText("position", position);
+        SetText("rotation", rotation);
+        SetText("scale", scale);
     }
 
     private void RefreshSettingsUi()

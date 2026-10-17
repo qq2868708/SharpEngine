@@ -46,7 +46,10 @@ public sealed partial class EditorRuntime
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
         RegisterPaneVisibilityCommand("view.ui-editor", "UI Editor", EditorPaneIds.UiEditor);
-        RegisterPaneVisibilityCommand("view.content", "Content Manager", EditorPaneIds.Content);
+        RegisterPaneVisibilityCommand("view.content", "Content Manager 1", EditorPaneIds.Content);
+        RegisterPaneVisibilityCommand("view.content-2", "Content Manager 2", EditorPaneIds.Content2);
+        RegisterPaneVisibilityCommand("view.content-3", "Content Manager 3", EditorPaneIds.Content3);
+        RegisterPaneVisibilityCommand("view.content-4", "Content Manager 4", EditorPaneIds.Content4);
         RegisterPaneVisibilityCommand("view.inspector", "Inspector", EditorPaneIds.Inspector);
         RegisterPaneVisibilityCommand("view.console", "Console", EditorPaneIds.Console);
         _commands.Register(new EditorCommand("view.save-layout", "Save Layout",
@@ -92,6 +95,9 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.hierarchy", 100));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.ui-editor", 200));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content", 300));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-2", 310));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-3", 320));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-4", 330));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.inspector", 400));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.console", 500));
         _menus.RegisterItem(new EditorMenuItem("view", "layout", "view.save-layout", 100));
@@ -135,28 +141,24 @@ public sealed partial class EditorRuntime
     private void BrowseCurrentLevel()
     {
         var asset = CurrentWorldAsset();
-        if (asset is null || _content is null) return;
-        _content.SetSearch(string.Empty);
-        _content.SetType(null);
-        _content.SetSource(asset.Source == AssetSource.Project
+        if (asset is null) return;
+        var manager = EnsureContentManagerForExternalBrowse();
+        if (manager is null) return;
+        manager.SetSearch(string.Empty);
+        manager.SetType(null);
+        manager.SetSource(asset.Source == AssetSource.Project
             ? ContentSourceFilter.Project : ContentSourceFilter.Engine);
         var relative = asset.RelativePath.Replace('\\', '/');
         const string contentPrefix = "Content/";
         if (relative.StartsWith(contentPrefix, StringComparison.OrdinalIgnoreCase))
             relative = relative[contentPrefix.Length..];
         var slash = relative.LastIndexOf('/');
-        _content.OpenFolder(slash < 0 ? string.Empty : relative[..slash]);
-        _content.Select(asset.Id);
-        _selection = new EditorSelection(EditorSelectionKind.Asset, asset.Id,
-            relative, asset.Source);
-        _search = string.Empty;
-        MarkExtensionUiDirty();
-        RefreshHierarchy();
-        RefreshAssets();
-        RefreshViewportModeUi();
-        SetText("selectedObject", asset.Name);
-        SetText("selectedKind", $"{asset.Type} · {asset.Source}");
-        SetStatus($"Content Manager · selected {asset.Id}");
+        manager.OpenFolder(slash < 0 ? string.Empty : relative[..slash]);
+        manager.Select(asset.Id);
+        ApplyActiveContentSelection();
+        CommitContentManagerState(
+            $"{ContentManagerLabel(_contentManagers!.ActivePaneId)} · selected {asset.Id}",
+            rebuildDock: true);
     }
 
     private void RefreshExtensionUi()
@@ -325,12 +327,18 @@ public sealed partial class EditorRuntime
 
     private void HandleContextRequest(string action)
     {
-        var payload = action["editor.context:".Length..].Split(':', 5);
-        if (payload.Length != 5 || !int.TryParse(payload[0], out var x) ||
+        var payload = action["editor.context:".Length..].Split(':', 6);
+        if (payload.Length is not (5 or 6) || !int.TryParse(payload[0], out var x) ||
             !int.TryParse(payload[1], out var y)) return;
         var source = payload[3].Equals("engine", StringComparison.OrdinalIgnoreCase)
             ? AssetSource.Engine : AssetSource.Project;
-        var id = payload[4];
+        var hasManager = payload.Length == 6 &&
+            (payload[4].Length == 0 || EditorPaneIds.IsContentManager(payload[4]));
+        var managerId = hasManager ? payload[4] :
+            _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
+        var id = hasManager ? payload[5] : string.Join(':', payload.Skip(4));
+        if (payload[2] is "asset" or "folder" &&
+            EditorPaneIds.IsContentManager(managerId)) ActivateContentManager(managerId);
         EditorContextMenuKind kind;
         switch (payload[2].ToLowerInvariant())
         {
@@ -341,11 +349,11 @@ public sealed partial class EditorRuntime
             case "asset":
                 kind = EditorContextMenuKind.Asset;
                 if (_assets?.Find(id) is not null) SelectAsset(id);
-                else SelectContentFile(source, id);
+                else SelectContentFile(managerId, source, id);
                 break;
             case "folder":
                 kind = EditorContextMenuKind.Folder;
-                SelectContentFolder(source, id);
+                SelectContentFolder(managerId, source, id);
                 break;
             default:
                 kind = EditorContextMenuKind.Scene;
@@ -355,13 +363,14 @@ public sealed partial class EditorRuntime
         ShowContextMenu(kind, x, y);
     }
 
-    private void SelectContentFolder(AssetSource source, string path)
+    private void SelectContentFolder(string managerId, AssetSource source, string path)
     {
-        _content?.SelectFolder(source, path);
+        var manager = ActivateContentManager(managerId);
+        manager?.SelectFolder(source, path);
         _selection = new EditorSelection(EditorSelectionKind.Folder, Path: path, Source: source);
         MarkExtensionUiDirty();
         RefreshHierarchy();
-        RefreshAssets();
+        CommitContentManagerState($"Selected Content/{path}");
         RefreshViewportModeUi();
         SetText("selectedObject", Path.GetFileName(path));
         SetText("selectedKind", $"Folder · {source}");
@@ -369,18 +378,17 @@ public sealed partial class EditorRuntime
         SetText("position", path);
         SetText("rotation", "-");
         SetText("scale", "Available");
-        SetStatus($"Selected Content/{path}");
     }
 
-    private void SelectContentFile(AssetSource source, string path)
+    private void SelectContentFile(string managerId, AssetSource source, string path)
     {
-        _content?.SelectFile(source, path);
+        var manager = ActivateContentManager(managerId);
+        manager?.SelectFile(source, path);
         _selection = new EditorSelection(EditorSelectionKind.Asset, Path: path, Source: source);
         MarkExtensionUiDirty();
         RefreshHierarchy();
-        RefreshAssets();
+        CommitContentManagerState($"Selected Content/{path}");
         RefreshViewportModeUi();
-        SetStatus($"Selected Content/{path}");
     }
 
     private void ShowContextMenu(EditorContextMenuKind kind, int x, int y)

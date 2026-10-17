@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using SharpEngine.Assets;
 
 namespace SharpEngine.Editor.Layout;
 
@@ -10,14 +11,32 @@ public static class EditorPaneIds
     public const string UiEditor = "ui-editor";
     public const string Hierarchy = "hierarchy";
     public const string Content = "content";
+    public const string Content2 = "content-2";
+    public const string Content3 = "content-3";
+    public const string Content4 = "content-4";
     public const string Inspector = "inspector";
     public const string Console = "console";
 
     public static IReadOnlyList<string> BuiltIn { get; } =
-        [Viewport, UiEditor, Hierarchy, Content, Inspector, Console];
+        [Viewport, UiEditor, Hierarchy, Content, Content2, Content3, Content4,
+            Inspector, Console];
+
+    public static IReadOnlyList<string> ContentManagers { get; } =
+        [Content, Content2, Content3, Content4];
 
     public static bool IsBuiltIn(string paneId) =>
         BuiltIn.Contains(paneId, StringComparer.Ordinal);
+
+    public static bool IsContentManager(string paneId) =>
+        ContentManagers.Contains(paneId, StringComparer.Ordinal);
+
+    public static int ContentManagerNumber(string paneId)
+    {
+        for (var index = 0; index < ContentManagers.Count; index++)
+            if (string.Equals(ContentManagers[index], paneId, StringComparison.Ordinal))
+                return index + 1;
+        return 0;
+    }
 }
 
 public enum DockNodeKind { Split, Tabs }
@@ -26,11 +45,40 @@ public enum DockEdge { Left, Right, Top, Bottom }
 
 public sealed class EditorLayoutDocument
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     [JsonRequired, JsonPropertyOrder(0)] public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     [JsonRequired, JsonPropertyOrder(1)] public DockHostState MainHost { get; set; } = new();
     [JsonRequired, JsonPropertyOrder(2)] public List<string> HiddenPaneIds { get; set; } = [];
+    [JsonRequired, JsonPropertyOrder(3)] public string ActiveContentManagerId { get; set; } =
+        EditorPaneIds.Content;
+    [JsonRequired, JsonPropertyOrder(4)] public List<ContentManagerLayoutState> ContentManagers
+        { get; set; } = CreateDefaultContentManagers();
+
+    public static List<ContentManagerLayoutState> CreateDefaultContentManagers() =>
+        EditorPaneIds.ContentManagers.Select(paneId => new ContentManagerLayoutState
+        {
+            PaneId = paneId,
+        }).ToList();
+}
+
+public sealed class ContentManagerLayoutState
+{
+    [JsonRequired, JsonPropertyOrder(0)] public string PaneId { get; set; } = string.Empty;
+    [JsonRequired, JsonPropertyOrder(1)] public string Search { get; set; } = string.Empty;
+    [JsonRequired, JsonPropertyOrder(2)] public ContentSourceFilter Source { get; set; } =
+        ContentSourceFilter.Project;
+    [JsonPropertyOrder(3), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Type { get; set; }
+    [JsonRequired, JsonPropertyOrder(4)] public string CurrentFolder { get; set; } = string.Empty;
+    [JsonPropertyOrder(5), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedId { get; set; }
+    [JsonPropertyOrder(6), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SelectedPath { get; set; }
+    [JsonPropertyOrder(7), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AssetSource? SelectedSource { get; set; }
+    [JsonRequired, JsonPropertyOrder(8)] public ContentViewMode ViewMode { get; set; } =
+        ContentViewMode.Tile;
 }
 
 public sealed class DockHostState
@@ -104,7 +152,10 @@ public static class EditorLayoutJson
                         [new("layout.json.duplicate-property", duplicatePath,
                             $"Property '{duplicate}' occurs more than once.")]);
             }
-            var document = JsonSerializer.Deserialize<EditorLayoutDocument>(json, Options) ??
+            var root = JsonNode.Parse(json)?.AsObject() ??
+                throw new JsonException("The root layout document is null.");
+            Migrate(root);
+            var document = root.Deserialize<EditorLayoutDocument>(Options) ??
                 throw new JsonException("The root layout document is null.");
             var diagnostics = EditorLayoutValidator.Validate(document);
             if (diagnostics.Count != 0)
@@ -115,7 +166,7 @@ public static class EditorLayoutJson
         {
             throw;
         }
-        catch (JsonException exception)
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
         {
             throw new EditorLayoutException($"Editor layout '{source}' could not be parsed.",
                 [new("layout.json.invalid", source, exception.Message)], exception);
@@ -164,7 +215,33 @@ public static class EditorLayoutJson
             JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         options.Converters.Add(new JsonStringEnumConverter<DockSplitOrientation>(
             JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        options.Converters.Add(new JsonStringEnumConverter<ContentSourceFilter>(
+            JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        options.Converters.Add(new JsonStringEnumConverter<AssetSource>(
+            JsonNamingPolicy.CamelCase, allowIntegerValues: false));
+        options.Converters.Add(new JsonStringEnumConverter<ContentViewMode>(
+            JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         return options;
+    }
+
+    private static void Migrate(JsonObject root)
+    {
+        if (root["schemaVersion"]?.GetValue<int>() != 1) return;
+        if (root.ContainsKey("activeContentManagerId") || root.ContainsKey("contentManagers"))
+            throw new JsonException("Schema v1 cannot contain schema v2 content manager fields.");
+        var hidden = root["hiddenPaneIds"]?.AsArray() ??
+            throw new JsonException("The hiddenPaneIds collection is required.");
+        if (hidden.Any(value => EditorPaneIds.ContentManagers.Skip(1).Contains(
+                value?.GetValue<string>(), StringComparer.Ordinal)))
+            throw new JsonException("Schema v1 cannot contain additional content manager panes.");
+        foreach (var paneId in EditorPaneIds.ContentManagers.Skip(1))
+            if (!hidden.Any(value => string.Equals(value?.GetValue<string>(), paneId,
+                    StringComparison.Ordinal)))
+                hidden.Add(paneId);
+        root["schemaVersion"] = EditorLayoutDocument.CurrentSchemaVersion;
+        root["activeContentManagerId"] = EditorPaneIds.Content;
+        root["contentManagers"] = JsonSerializer.SerializeToNode(
+            EditorLayoutDocument.CreateDefaultContentManagers(), Options);
     }
 
     private static string? FindDuplicateProperty(JsonElement element, string path,
@@ -244,7 +321,7 @@ public static class EditorLayoutValidator
             if (!EditorPaneIds.IsBuiltIn(paneId))
                 result.Add(new("layout.pane.unknown", path, $"Unknown pane ID '{paneId}'."));
             else Increment(paneCounts, paneId);
-            if (requireAllPanesInMain)
+            if (requireAllPanesInMain && !EditorPaneIds.IsContentManager(paneId))
                 result.Add(new("layout.default.hidden", path,
                     "The engine default must dock every built-in pane in the main host."));
         }
@@ -259,7 +336,81 @@ public static class EditorLayoutValidator
         if (hidden.Contains(EditorPaneIds.Viewport, StringComparer.Ordinal))
             result.Add(new("layout.viewport.main-only", "$.hiddenPaneIds",
                 "The viewport cannot be hidden and must remain in the main host."));
+        if (requireAllPanesInMain)
+        {
+            if (hidden.Contains(EditorPaneIds.Content, StringComparer.Ordinal))
+                result.Add(new("layout.default.content-primary", "$.hiddenPaneIds",
+                    "Content Manager 1 must be visible in the engine default."));
+            foreach (var paneId in EditorPaneIds.ContentManagers.Skip(1))
+                if (!hidden.Contains(paneId, StringComparer.Ordinal))
+                    result.Add(new("layout.default.content-optional", "$.hiddenPaneIds",
+                        $"'{paneId}' must start hidden in the engine default."));
+        }
+        ValidateContentManagers(document, result);
         return result;
+    }
+
+    private static void ValidateContentManagers(EditorLayoutDocument document,
+        List<EditorLayoutDiagnostic> result)
+    {
+        var states = document.ContentManagers ?? [];
+        if (document.ContentManagers is null)
+            result.Add(new("layout.content.required", "$.contentManagers",
+                "The content manager state collection is required."));
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var index = 0; index < states.Count; index++)
+        {
+            var state = states[index];
+            var path = $"$.contentManagers[{index}]";
+            if (state is null)
+            {
+                result.Add(new("layout.content.state", path,
+                    "A content manager state is required."));
+                continue;
+            }
+            if (!EditorPaneIds.IsContentManager(state.PaneId))
+                result.Add(new("layout.content.pane", $"{path}.paneId",
+                    $"Unknown content manager pane ID '{state.PaneId}'."));
+            else
+                Increment(counts, state.PaneId);
+            if (state.Search is null)
+                result.Add(new("layout.content.search", $"{path}.search",
+                    "The search value is required."));
+            if (!Enum.IsDefined(state.Source) || !Enum.IsDefined(state.ViewMode) ||
+                (state.SelectedSource is { } selectedSource && !Enum.IsDefined(selectedSource)))
+                result.Add(new("layout.content.enum", path,
+                    "Content source, selected source, and view mode must be known values."));
+            if (state.CurrentFolder is null || !IsSafeContentPath(state.CurrentFolder))
+                result.Add(new("layout.content.folder", $"{path}.currentFolder",
+                    "The current folder must be relative to Content."));
+            if (state.SelectedPath is not null && !IsSafeContentPath(state.SelectedPath))
+                result.Add(new("layout.content.selection", $"{path}.selectedPath",
+                    "The selected path must be relative to Content."));
+            if ((state.SelectedPath is null) != (state.SelectedSource is null) &&
+                state.SelectedId is null)
+                result.Add(new("layout.content.selection", path,
+                    "A path-only selection requires both selectedPath and selectedSource."));
+        }
+        foreach (var paneId in EditorPaneIds.ContentManagers)
+        {
+            counts.TryGetValue(paneId, out var count);
+            if (count != 1)
+                result.Add(new(count == 0 ? "layout.content.missing" : "layout.content.duplicate",
+                    "$.contentManagers",
+                    $"Content manager state '{paneId}' must occur exactly once; found {count}."));
+        }
+        if (!EditorPaneIds.IsContentManager(document.ActiveContentManagerId))
+            result.Add(new("layout.content.active", "$.activeContentManagerId",
+                $"Unknown active content manager '{document.ActiveContentManagerId}'."));
+    }
+
+    private static bool IsSafeContentPath(string path)
+    {
+        if (path.Length == 0) return true;
+        var normalized = path.Replace('\\', '/');
+        return !Path.IsPathRooted(normalized) &&
+            normalized.Split('/').All(part => part is not ("" or "." or "..") &&
+                part.IndexOfAny(Path.GetInvalidFileNameChars()) < 0);
     }
 
     public static IReadOnlyList<EditorLayoutDiagnostic> ValidateSession(
@@ -536,15 +687,15 @@ public static class DockLayoutCalculator
         ArrangeNode(node.Second, secondBounds, result);
     }
 
-    private static DockSize PaneMinimum(string paneId) => paneId switch
-    {
-        EditorPaneIds.Viewport => new(320, 240),
-        EditorPaneIds.Hierarchy => new(180, 140),
-        EditorPaneIds.Content => new(220, 180),
-        EditorPaneIds.Inspector => new(240, 180),
-        EditorPaneIds.Console => new(300, 100),
-        _ => new(160, 100),
-    };
+    private static DockSize PaneMinimum(string paneId) =>
+        EditorPaneIds.IsContentManager(paneId) ? new(220, 180) : paneId switch
+        {
+            EditorPaneIds.Viewport => new(320, 240),
+            EditorPaneIds.Hierarchy => new(180, 140),
+            EditorPaneIds.Inspector => new(240, 180),
+            EditorPaneIds.Console => new(300, 100),
+            _ => new(160, 100),
+        };
 }
 
 public enum EditorLayoutCommandKind
@@ -592,6 +743,24 @@ public sealed class EditorLayoutSession
         .Select(CloneFloatingHost).ToArray();
     public long Revision { get; private set; }
     public bool IsDirty { get; private set; }
+
+    public void UpdateContentManagers(IReadOnlyList<ContentManagerLayoutState> states,
+        string activePaneId)
+    {
+        ArgumentNullException.ThrowIfNull(states);
+        var candidate = EditorLayoutJson.Clone(_document);
+        candidate.ActiveContentManagerId = activePaneId;
+        candidate.ContentManagers = states.Select(CloneContentManager).ToList();
+        var diagnostics = EditorLayoutValidator.ValidateSession(candidate, _floatingHosts);
+        if (diagnostics.Count != 0)
+            throw new EditorLayoutException("Cannot update content manager layout state.", diagnostics);
+        if (candidate.ActiveContentManagerId == _document.ActiveContentManagerId &&
+            JsonSerializer.Serialize(candidate.ContentManagers) ==
+            JsonSerializer.Serialize(_document.ContentManagers)) return;
+        _document = candidate;
+        Revision++;
+        IsDirty = true;
+    }
 
     public EditorLayoutMutationResult Apply(EditorLayoutCommand command)
     {
@@ -999,6 +1168,20 @@ public sealed class EditorLayoutSession
 
     private static FloatingDockHostState CloneFloatingHost(FloatingDockHostState host) =>
         host with { Root = EditorLayoutJson.Clone(host.Root) };
+
+    private static ContentManagerLayoutState CloneContentManager(ContentManagerLayoutState state) =>
+        new()
+        {
+            PaneId = state.PaneId,
+            Search = state.Search,
+            Source = state.Source,
+            Type = state.Type,
+            CurrentFolder = state.CurrentFolder,
+            SelectedId = state.SelectedId,
+            SelectedPath = state.SelectedPath,
+            SelectedSource = state.SelectedSource,
+            ViewMode = state.ViewMode,
+        };
 
     private static EditorLayoutMutationResult Failure(string code, string message, long revision) =>
         new(false, code, message, null, revision, revision, []);

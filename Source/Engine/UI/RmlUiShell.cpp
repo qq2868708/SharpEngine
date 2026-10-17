@@ -102,7 +102,10 @@ namespace
     {
         if (pane == "viewport") return L"Viewport";
         if (pane == "hierarchy") return L"Hierarchy";
-        if (pane == "content") return L"Content Manager";
+        if (pane == "content") return L"Content Manager 1";
+        if (pane == "content-2") return L"Content Manager 2";
+        if (pane == "content-3") return L"Content Manager 3";
+        if (pane == "content-4") return L"Content Manager 4";
         if (pane == "inspector") return L"Inspector";
         if (pane == "console") return L"Console";
         return Utf8ToWide(std::string(pane).c_str());
@@ -1444,6 +1447,9 @@ struct RmlUiShell::Impl
 
     void BeginPointerDrag(Host& host, Rml::Element* target, POINT screen)
     {
+        // A close control is a click target, not a tab drag handle.
+        for (auto* element = target; element; element = element->GetParentNode())
+            if (element->IsClassSet("dock-tab-close")) return;
         if (auto* splitter = FindAttributeElement(
                 target, "data-dock-splitter-node"))
         {
@@ -1801,12 +1807,14 @@ struct RmlUiShell::Impl
                     "data-context-id", "");
                 const auto source = element->GetAttribute<Rml::String>(
                     "data-context-source", "");
+                const auto manager = element->GetAttribute<Rml::String>(
+                    "data-context-manager", "");
                 const auto x = event.GetParameter<int>("mouse_x", 0);
                 const auto y = event.GetParameter<int>("mouse_y", 0);
                 HidePopups(host);
                 const auto request = Rml::String("editor.context:") +
                     std::to_string(x) + ":" + std::to_string(y) + ":" +
-                    kind + ":" + source + ":" + id;
+                    kind + ":" + source + ":" + manager + ":" + id;
                 EmitAction(host, request);
                 return;
             }

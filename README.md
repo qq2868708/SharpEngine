@@ -402,6 +402,28 @@ asset types and records define their editing workflow. The browser state is also
 available through `EditorRuntime.DescribeContentJson()`, the
 `content.describe` MCP tool, and the `sharpengine://content` resource.
 
+`View` exposes Content Manager 1–4 independently. Only manager 1 is open in the
+default layout. Each instance owns its folder, search, filters, selection, and
+Tile/List mode (Tile by default, using asset-type icons). Interacting with a
+manager makes its selection the editor's current selection; other managers keep
+their own selections. External Browse Current Level commands target the last
+active manager. Closing it falls back to the most recently used open manager;
+if all are closed, external browsing reopens manager 1.
+
+Save Layout stores all four browser states and the active manager in the existing
+`Saved/Config/EditorLayout.json` (schema v2). Schema v1 layouts migrate on load,
+retaining the original `content` pane as manager 1 and adding hidden managers
+2–4. Main-window docking persists; floating window placement remains session-only.
+The content MCP snapshot is schema v2 with `activePaneId` and four `managers`.
+Instance actions use `editor.content.<operation>:<paneId>:<value>`, for example
+`editor.content.view:content-2:list` and `editor.content.select:content:engine://meshes/cube`.
+
+Focused validation:
+`dotnet run --project Tools/EditorValidation -c Debug -- D:/SharpEngine --content-only`
+and `dotnet run --project Tools/McpUiValidation -c Debug -- Debug --content-only`.
+The latter launches an isolated rendered editor and saves frame evidence under
+`Saved/Validation/ContentManager` without saving the user's layout.
+
 `Source/SharpEngine.Managed/UI/UiFramework.cs` and `EngineUi.cs` remain legacy
 compatibility/experimentation APIs; new projects no longer receive `*.ui.xml`
 assets. Runtime UI source assets use RML and RCSS, while the editor shell itself

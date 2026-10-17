@@ -70,7 +70,7 @@ internal static class McpCapabilityCatalog
         {
             Read("scene.describe", "Return the complete serialized scene, including hierarchy and resolved world matrices."),
             Read("assets.describe", "Return the engine and project asset registry with source and importer metadata."),
-            Read("content.describe", "Return the content manager query, filters, selection, and visible assets."),
+            Read("content.describe", "Return all four independent content managers, their queries, filters, selections, Tile/List modes, and active routing target (schema v2)."),
             Read("editor.describe", "Return the committed editor snapshot and links to capability and live UI resources."),
             Read("input.describe", "Return loaded InputActions, mapping contexts, live control state, and recent routed events."),
             new("scene.reparent", 1,
