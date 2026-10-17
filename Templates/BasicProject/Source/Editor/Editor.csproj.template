@@ -11,15 +11,18 @@
   <ItemGroup>
     <Reference Include="SharpEngine.Modules">
       <HintPath>$(SharpEngineModulesApi)</HintPath>
-      <Private>true</Private>
+      <Private>false</Private>
     </Reference>
     <Reference Include="SharpEngine.Managed">
       <HintPath>$(SharpEngineManagedApi)</HintPath>
-      <Private>true</Private>
+      <Private>false</Private>
     </Reference>
     <ProjectReference Include="..\__PROJECT_NAMESPACE__\__PROJECT_NAMESPACE__.csproj" />
   </ItemGroup>
-  <Target Name="ValidateSharpEngineModule" BeforeTargets="Build">
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Module builds are unsupported. Build the generated Solution or use SharpEngineProject -Command Build." />
     <Error Condition="'$(SharpEngineManagedApi)' == '' or !Exists('$(SharpEngineManagedApi)') or '$(SharpEngineModulesApi)' == '' or !Exists('$(SharpEngineModulesApi)')"
            Text="SharpEngine managed APIs are missing. Use the SharpEngine project build command." />
   </Target>

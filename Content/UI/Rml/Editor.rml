@@ -16,34 +16,7 @@
     <div class="grow" /><div id="toolbarCenter" class="toolbar-region" /><div class="grow" />
     <div id="toolbarRight" class="toolbar-region" /><span class="toolbar-note">Local workspace</span>
   </div>
-  <div id="workspace">
-    <div id="leftdock" class="dock">
-      <div id="hierarchy" class="pane">
-        <div class="pane-tabs"><span class="selected">Hierarchy</span><div class="grow" /><button class="small icon-button" action="editor.project-menu" title="Add entity"><img class="icon" src="Icons/add.tga" /><span class="control-tooltip">Add entity</span></button></div>
-        <div class="pane-content"><div class="search-field"><img class="icon" src="Icons/search.tga" /><input type="text" id="hierarchySearch" placeholder="Search hierarchy" /></div><div id="hierarchyItems" data-context-kind="scene" /></div>
-      </div>
-      <div id="project" class="pane">
-        <div class="pane-tabs"><span class="selected">Content Manager</span><div class="grow" /><button class="small icon-button" action="editor.content.clear" title="Reset to Content root"><img class="icon" src="Icons/reset.tga" /><span class="control-tooltip tooltip-right">Reset to Content root</span></button></div>
-        <div class="pane-content">
-          <div class="search-field"><img class="icon" src="Icons/search.tga" /><input type="text" id="projectSearch" placeholder="Search Content" /></div>
-          <div class="content-navigation"><button id="content-up" class="icon-button" action="editor.content.up" title="Parent folder"><img class="icon" src="Icons/up.tga" /><span class="control-tooltip">Parent folder</span></button><img class="icon breadcrumb-icon" src="Icons/folder.tga" /><span id="contentBreadcrumb">Content</span></div>
-          <div class="content-toolbar"><button id="content-source-all" class="icon-label" action="editor.content.source:all"><img class="icon" src="Icons/all.tga" />All</button><button id="content-source-project" class="icon-label" action="editor.content.source:project"><img class="icon" src="Icons/folder.tga" />Project</button><button id="content-source-engine" class="icon-label" action="editor.content.source:engine"><img class="icon" src="Icons/engine.tga" />Engine</button></div>
-          <div class="content-toolbar content-types">
-            <button id="content-type-all" class="content-type icon-label" action="editor.content.type:All"><img class="icon" src="Icons/filter.tga" />All types</button>
-            <button id="content-type-mesh" class="content-type icon-button" action="editor.content.type:Mesh" title="Meshes"><img class="icon" src="Icons/mesh.tga" /><span class="control-tooltip">Meshes</span></button>
-            <button id="content-type-material" class="content-type icon-button" action="editor.content.type:Material" title="Materials"><img class="icon" src="Icons/material.tga" /><span class="control-tooltip">Materials</span></button>
-            <button id="content-type-world" class="content-type icon-button" action="editor.content.type:World" title="Worlds"><img class="icon" src="Icons/world.tga" /><span class="control-tooltip tooltip-right">Worlds</span></button>
-          </div>
-          <div id="contentSummary" class="content-summary">Content</div>
-          <div id="projectSection" class="content-section"><div class="section-label">PROJECT CONTENT</div><div id="projectItems" data-context-kind="folder" data-context-source="project"><div class="empty-list">Folder is empty</div></div></div>
-          <div id="engineSection" class="content-section"><div class="section-label">ENGINE CONTENT <img class="icon readonly-icon" src="Icons/lock.tga" title="Read only" /></div><div id="engineItems" data-context-kind="folder" data-context-source="engine"><div class="empty-list">Folder is empty</div></div></div>
-          <div id="projectPath" class="path">Content</div>
-        </div>
-      </div>
-    </div>
-  <div id="center"><div class="pane-tabs scene-tabs"><button id="sceneModeTab" class="viewport-tab icon-label" action="editor.mode-scene"><img class="icon" src="Icons/world.tga" />3D Scene</button><button id="uiModeTab" class="viewport-tab icon-label" action="editor.mode-ui"><img class="icon" src="Icons/ui.tga" />UI Canvas</button><div class="grow" /></div><viewport id="viewportCanvas" tabindex="0" /><div id="viewportOverlay"><button id="moveTool" class="viewport-tool icon-button active" action="editor.tool-move" title="Move"><img class="icon" src="Icons/move.tga" /><span class="control-tooltip">Move</span></button><button id="rotateTool" class="viewport-tool icon-button" action="editor.tool-rotate" title="Rotate"><img class="icon" src="Icons/rotate.tga" /><span class="control-tooltip">Rotate</span></button><button id="scaleTool" class="viewport-tool icon-button" action="editor.tool-scale" title="Scale"><img class="icon" src="Icons/scale.tga" /><span class="control-tooltip">Scale</span></button><button id="viewportProjection" class="viewport-projection">Perspective</button></div><div class="viewport-footer"><span id="viewportStats">Scene ready</span><div class="grow" /><span id="viewportHelp">WASD/QE Move · RMB Orbit · MMB Pan · Wheel Zoom</span></div><div id="console" class="pane"><div class="pane-tabs"><span class="selected">Console</span><span>Output</span><div class="grow" /><span class="good">0 errors</span></div><div class="console-line"><span class="log-time">[Editor]</span> <span id="detailsText">Engine initialized. Select an object to inspect it.</span></div><div class="console-line muted"><span class="log-time">[UI]</span> RmlUi 6.1 / OpenGL renderer</div></div></div>
-    <div id="inspector" class="dock"><div class="pane-tabs"><span class="selected">Inspector</span><div class="grow" /><button class="small icon-button" action="editor.inspector-menu" title="Inspector options"><img class="icon" src="Icons/more.tga" /><span class="control-tooltip tooltip-right">Inspector options</span></button></div><div class="pane-content"><div id="selectedObject">Main Scene</div><div class="object-kind" id="selectedKind">World</div><div class="component"><div class="component-title">Transform</div><div class="field"><label>Parent</label><span id="parent">None</span></div><div class="field"><label>Position</label><span id="position">0.00 / 0.00 / 0.00</span></div><div class="field"><label>Rotation</label><span id="rotation">0.00 / 0.00 / 0.00</span></div><div class="field"><label>Scale</label><span id="scale">1.00 / 1.00 / 1.00</span></div></div><div class="component"><div class="component-title">Properties</div><div class="field"><label>State</label><span id="status">Ready</span></div><div class="field"><label>Source</label><span id="assetSource">Engine</span></div></div></div></div>
-  </div>
+  <div id="workspace" class="dock-host" data-dock-host="main" />
   <div id="statusbar"><span class="status-dot" /><span id="statusText">Ready</span><div class="grow" /><span id="fps">0 FPS</span></div>
 <div id="contextMenu" class="menu-popup context-menu dynamic-popup" />
 </div>

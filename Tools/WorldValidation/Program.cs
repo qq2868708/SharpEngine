@@ -6,7 +6,7 @@ using SharpEngine.World;
 
 var sourceRoot = Path.GetFullPath(args.Length > 0 ? args[0] :
     Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-var world = WorldDocument.Load(Path.Combine(sourceRoot, "Content", "Worlds", "Main.world.xml"));
+var world = WorldDocument.Load(Path.Combine(sourceRoot, "Content", "Worlds", "Main.sworld"));
 var assertions = 0;
 void Check(bool condition, string message)
 {
@@ -34,7 +34,7 @@ Check(roundTrip.ActiveCameraId == world.ActiveCameraId &&
 Check(roundTrip.Entities[1].Asset == world.Entities[1].Asset,
     "Asset reference round trip");
 var hierarchy = WorldDocument.Parse("""
-  <world name="Hierarchy" activeCamera="cam">
+  <world version="2" name="Hierarchy" activeCamera="cam">
     <entity id="root" type="empty" position="10,0,0" />
     <entity id="child" type="mesh" parent="root" asset="engine://meshes/cube" position="1,2,3" />
     <entity id="cam" type="camera" position="0,0,8" />
@@ -47,8 +47,8 @@ Check(Math.Abs(hierarchy.WorldMatrix(hierarchy.Entities.First(e => e.Id == "chil
 var hierarchyRoundTrip = WorldDocument.Parse(hierarchy.ToXml().ToString());
 Check(hierarchyRoundTrip.ToJson().Contains("worldMatrix", StringComparison.Ordinal),
     "AI scene description must include resolved world matrices");
-Reject("<world><entity id='root'/><entity id='child' parent='missing'/></world>", "missing parent");
-Reject("<world><entity id='a' parent='b'/><entity id='b' parent='a'/></world>", "parent cycle");
+Reject("<world version='2'><entity id='root'/><entity id='child' parent='missing'/></world>", "missing parent");
+Reject("<world version='2'><entity id='a' parent='b'/><entity id='b' parent='a'/></world>", "parent cycle");
 
 var objPath = Path.Combine(Path.GetTempPath(), $"SharpEngine-{Guid.NewGuid():N}.obj");
 var importRoot = Directory.CreateTempSubdirectory("SharpEngine-MeshValidation-");
@@ -65,12 +65,12 @@ try
       """);
     var importedManifest = Path.Combine(importRoot.FullName, "Imported.sharpproject");
     File.WriteAllText(importedManifest, """
-      {"schemaVersion":2,"projectId":"imported","modules":[],"assets":{"manifest":"Content/Assets/assets.json"}}
+      {"schemaVersion":3,"projectId":"imported","engine":{"id":"SharpEngine","version":"0.2.0-dev","association":"validation","manifest":"engine.json"},"modules":[],"assets":{"manifest":"Content/Assets/assets.json"}}
       """);
     var importedRegistry = AssetRegistry.LoadFromManifests(
-        Path.Combine(sourceRoot, "Engine", "engine.json"), importedManifest);
+        Path.Combine(sourceRoot, "engine.json"), importedManifest);
     var importedWorld = WorldDocument.Parse("""
-      <world activeCamera="cam">
+      <world version="2" activeCamera="cam">
         <entity id="quad" type="mesh" asset="project://meshes/quad" position="0,0,-2" />
         <entity id="cam" type="camera" position="0,0,0" />
       </world>
@@ -82,14 +82,17 @@ try
 }
 finally { File.Delete(objPath); importRoot.Delete(true); }
 
-Reject("<world><entity id='same'/><entity id='same'/></world>", "duplicate ID");
-Reject("<world><entity id='a' position='NaN,0,0'/></world>", "NaN transform");
-Reject("<world><entity id='a' rotation='Infinity,0,0'/></world>", "infinite transform");
-Reject("<world><entity id='a' scale='1,,2,3'/></world>", "malformed vector");
-Reject("<world><entity id='a' scale='1,0,1'/></world>", "zero scale");
-Reject("<world><entity id='a' type='camera' fieldOfView='180'/></world>", "invalid FOV");
-Reject("<world><entity id='a' type='camera' nearPlane='5' farPlane='1'/></world>", "invalid clip range");
-Reject("<world activeCamera='missing'/>", "missing active camera");
+Reject("<world><entity id='a'/></world>", "missing schema version");
+Reject("<world version='1'><entity id='a'/></world>", "legacy schema version");
+Reject("<world version='2'><entity id='same'/><entity id='same'/></world>", "duplicate ID");
+Reject("<world version='2'><entity id='a' position='NaN,0,0'/></world>", "NaN transform");
+Reject("<world version='2'><entity id='a' rotation='Infinity,0,0'/></world>", "infinite transform");
+Reject("<world version='2'><entity id='a' scale='1,,2,3'/></world>", "malformed vector");
+Reject("<world version='2'><entity id='a' scale='1,0,1'/></world>", "zero scale");
+Reject("<world version='2'><entity id='a' type='camera' fieldOfView='180'/></world>", "invalid FOV");
+Reject("<world version='2'><entity id='a' type='camera' nearPlane='5' farPlane='1'/></world>", "invalid clip range");
+Reject("<world version='2'><entity id='a' type='light'/></world>", "light without color");
+Reject("<world version='2' activeCamera='missing'/>", "missing active camera");
 var rejectedRuntimeTransform = false;
 try { world.Entities[0].Rotation = new WorldVector3(float.NaN, 0, 0); }
 catch (ArgumentOutOfRangeException) { rejectedRuntimeTransform = true; }
@@ -97,6 +100,7 @@ Check(rejectedRuntimeTransform, "Runtime transform mutation must reject NaN");
 
 var bounds = new UiRect(300, 100, 800, 500);
 var registry = AssetRegistry.Load(sourceRoot);
+Check(registry.DefaultWorldId == "engine://worlds/main", "Engine default World must resolve by stable asset id");
 var frame = WorldViewportRenderer.BuildFrame(world, bounds, "player", registry);
 Check(frame.TriangleCount >= 24 && frame.LineCount > 0,
     "3D scene should produce cube/plane triangles and grid lines");
@@ -157,7 +161,7 @@ var movedCamera = WorldViewportRenderer.BuildFrame(world, bounds, assets: regist
 Check(!movedCamera.Triangles.SequenceEqual(frame.Triangles), "Scene camera must drive projection");
 
 var intersecting = WorldDocument.Parse("""
-  <world activeCamera="cam">
+  <world version="2" activeCamera="cam">
     <entity id="cube" type="mesh" asset="engine://meshes/cube" position="0,0,-0.15" scale="0.3,0.3,0.3" />
     <entity id="cam" type="camera" fieldOfView="60" nearPlane="0.1" farPlane="100" />
   </world>
@@ -175,7 +179,7 @@ Check(WorldViewportRenderer.TryPick(intersecting, bounds, bounds.X + bounds.Widt
 Check(!WorldViewportRenderer.TryPick(intersecting, bounds, 0, 0, out _, registry),
     "Pointer outside viewport must not pick");
 var missing = WorldDocument.Parse("""
-  <world activeCamera="cam">
+  <world version="2" activeCamera="cam">
     <entity id="missing" type="mesh" asset="engine://meshes/missing" position="0,0,-2" />
     <entity id="cam" type="camera" />
   </world>
@@ -183,6 +187,64 @@ var missing = WorldDocument.Parse("""
 var missingFrame = WorldViewportRenderer.BuildFrame(missing, bounds, assets: registry);
 Check(missingFrame.TriangleCount == 0 && missingFrame.Diagnostics.Count == 1,
     "Missing assets must be reported and skipped, without a silent cube fallback");
+
+var lightingBounds = new UiRect(0, 0, 640, 480);
+WorldDocument LightingWorld(string lights, string camera =
+    "<entity id='cam' type='camera' position='0,0,3' />", string extra = "") =>
+    WorldDocument.Parse($"""
+      <world version="2" activeCamera="cam">
+        {extra}
+        <entity id="cube" type="mesh" asset="engine://meshes/cube" color="#FFFFFF" />
+        {camera}
+        {lights}
+      </world>
+      """);
+static bool IsBlack(WorldViewportFrame value) => value.Triangles.All(vertex =>
+    Math.Abs(vertex.R) < 0.0001f && Math.Abs(vertex.G) < 0.0001f &&
+    Math.Abs(vertex.B) < 0.0001f);
+
+var noLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld(string.Empty), lightingBounds);
+Check(noLightFrame.TriangleCount == 12 && IsBlack(noLightFrame),
+    "A World without lights must render mesh RGB as black");
+var zeroLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld(
+    "<entity id='light' type='light' color='#FFFFFF' intensity='0' />"), lightingBounds);
+Check(IsBlack(zeroLightFrame), "Zero-intensity lights must not inject illumination");
+var coloredLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld("""
+    <entity id='red' type='light' color='#FF0000' intensity='0.5' />
+    <entity id='green' type='light' color='#00FF00' intensity='0.25' />
+    """), lightingBounds);
+Check(Math.Abs(coloredLightFrame.Triangles.Max(vertex => vertex.R) - 0.5f) < 0.0001f &&
+    Math.Abs(coloredLightFrame.Triangles.Max(vertex => vertex.G) - 0.25f) < 0.0001f &&
+    coloredLightFrame.Triangles.All(vertex => Math.Abs(vertex.B) < 0.0001f),
+    "Directional lights must accumulate linear RGB color and intensity");
+var clampedLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld("""
+    <entity id='a' type='light' color='#FFFFFF' intensity='2' />
+    <entity id='b' type='light' color='#FFFFFF' intensity='3' />
+    """), lightingBounds);
+Check(Math.Abs(clampedLightFrame.Triangles.Max(vertex => vertex.R) - 1) < 0.0001f &&
+    Math.Abs(clampedLightFrame.Triangles.Max(vertex => vertex.G) - 1) < 0.0001f &&
+    Math.Abs(clampedLightFrame.Triangles.Max(vertex => vertex.B) - 1) < 0.0001f,
+    "The current LDR viewport must clamp accumulated light to one");
+var parentLight = WorldViewportRenderer.BuildFrame(LightingWorld(
+    "<entity id='light' parent='lightParent' type='light' color='#FFFFFF' />",
+    extra: "<entity id='lightParent' rotation='0,180,0' />"), lightingBounds);
+Check(!parentLight.Triangles.SequenceEqual(WorldViewportRenderer.BuildFrame(LightingWorld(
+        "<entity id='light' type='light' color='#FFFFFF' />"), lightingBounds).Triangles),
+    "Directional light direction must inherit parent rotation");
+var scaledParentLight = WorldViewportRenderer.BuildFrame(LightingWorld(
+    "<entity id='light' parent='lightParent' type='light' color='#FFFFFF' />",
+    extra: "<entity id='lightParent' scale='7,2,0.5' />"), lightingBounds);
+var rootLight = WorldViewportRenderer.BuildFrame(LightingWorld(
+    "<entity id='light' type='light' color='#FFFFFF' />"), lightingBounds);
+Check(scaledParentLight.Triangles.SequenceEqual(rootLight.Triangles),
+    "Parent scale must not alter directional light orientation");
+var parentCamera = WorldViewportRenderer.BuildFrame(LightingWorld(string.Empty,
+    "<entity id='cam' parent='cameraParent' type='camera' position='1,0,0' />",
+    "<entity id='cameraParent' scale='2,3,4' />"), lightingBounds);
+var rootCamera = WorldViewportRenderer.BuildFrame(LightingWorld(string.Empty,
+    "<entity id='cam' type='camera' position='2,0,0' />"), lightingBounds);
+Check(parentCamera.Triangles.SequenceEqual(rootCamera.Triangles),
+    "Parent scale may move a camera offset but must not alter camera orientation");
 
 Console.WriteLine($"[WorldValidation] PASS: {assertions} assertions; " +
     $"sample={frame.TriangleCount} triangles/{frame.LineCount} lines, " +

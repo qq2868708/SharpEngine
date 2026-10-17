@@ -11,10 +11,13 @@
   <ItemGroup>
     <Reference Include="SharpEngine.Modules">
       <HintPath>$(SharpEngineModulesApi)</HintPath>
-      <Private>true</Private>
+      <Private>false</Private>
     </Reference>
   </ItemGroup>
-  <Target Name="ValidateSharpEngineModule" BeforeTargets="Build">
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Module builds are unsupported. Build the generated Solution or use SharpEngineProject -Command Build." />
     <Error Condition="'$(SharpEngineModulesApi)' == '' or !Exists('$(SharpEngineModulesApi)')"
            Text="SharpEngineModulesApi must point to a built SharpEngine.Modules.dll. Use the SharpEngine project build command." />
   </Target>

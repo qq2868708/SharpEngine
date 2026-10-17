@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" InitialTargets="CheckSharpEngineLayout"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Development|x64">
+      <Configuration>Development</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Shipping|x64">
+      <Configuration>Shipping</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{7f2e41ab-acc9-4c33-8782-a67a6ed902e5}</ProjectGuid>
+    <RootNamespace>Engine</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Shipping|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <SharpEnginePlatform>Win64</SharpEnginePlatform>
+    <SharpEngineTarget>Editor</SharpEngineTarget>
+  </PropertyGroup>
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props"
+            Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')"
+            Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <TargetName>Engine</TargetName>
+    <SharpUiBuildDir>$(SharpEngineIntermediateDir)External\UI</SharpUiBuildDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <SharpUiConfiguration>Debug</SharpUiConfiguration>
+    <SharpFreeTypeLibrary>freetyped.lib</SharpFreeTypeLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Development'">
+    <SharpUiConfiguration>RelWithDebInfo</SharpUiConfiguration>
+    <SharpFreeTypeLibrary>freetype.lib</SharpFreeTypeLibrary>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Shipping'">
+    <SharpUiConfiguration>Release</SharpUiConfiguration>
+    <SharpFreeTypeLibrary>freetype.lib</SharpFreeTypeLibrary>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SharpEngineRoot)\External\RmlUi\Include;$(SharpEngineRoot)\External\RmlUi\Backends;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EntryPointSymbol>wmainCRTStartup</EntryPointSymbol>
+      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
+      <AdditionalLibraryDirectories>$(SharpUiBuildDir)\$(SharpUiConfiguration);$(SharpUiBuildDir)\FreeType\$(SharpUiConfiguration);$(VULKAN_SDK)\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>rmlui.lib;opengl32.lib;ole32.lib;uuid.lib;$(SharpFreeTypeLibrary);vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>RMLUI_STATIC_LIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>RMLUI_STATIC_LIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>MaxSpeed</Optimization>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Shipping|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>RMLUI_STATIC_LIB;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>MaxSpeed</Optimization>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="ManagedHost.h" />
+    <ClInclude Include="Platform\Platform.h" />
+    <ClInclude Include="Platform\PlatformTypes.h" />
+    <ClInclude Include="Platform\Windows\WindowsPlatform.h" />
+    <ClInclude Include="Platform\Windows\Window\Win32Window.h" />
+    <ClInclude Include="RenderCore\Private\Common\VkUtils.h" />
+    <ClInclude Include="RenderCore\Private\RenderBackend.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\VkContext.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\VkFrame.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\VkPipeline.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\VkSurface.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\VkSwapchain.h" />
+    <ClInclude Include="RenderCore\Public\RenderCore.h" />
+    <ClInclude Include="UI\RmlUiShell.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Editor\EditorMain.cpp" />
+    <ClCompile Include="ManagedHost.cpp" />
+    <ClCompile Include="Platform\Windows\WindowsPlatform.cpp" />
+    <ClCompile Include="Platform\Windows\Window\Win32Window.cpp" />
+    <ClCompile Include="RenderCore\Private\Common\VkUtils.cpp" />
+    <ClCompile Include="RenderCore\Private\RenderCore.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\VkContext.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\VkFrame.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\VkPipeline.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\VkSurface.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\VkSwapchain.cpp" />
+    <ClCompile Include="UI\RmlUiShell.cpp" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpEngine.Game\SharpEngine.Game.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+  <Target Name="RestoreManagedProjects" BeforeTargets="ResolveProjectReferences"
+          Condition="!Exists('$(SharpEngineIntermediateDir)SharpEngine.Game\project.assets.json') or
+                     !Exists('$(SharpEngineIntermediateDir)SharpEngine.Managed\project.assets.json') or
+                     !Exists('$(SharpEngineIntermediateDir)SharpEngine.Modules\project.assets.json')">
+    <MSBuild Projects="..\SharpEngine.Game\SharpEngine.Game.csproj"
+             Targets="Restore"
+             Properties="Configuration=$(Configuration);SharpEnginePlatform=$(SharpEnginePlatform);SharpEngineTarget=$(SharpEngineTarget)" />
+  </Target>
+  <Target Name="CheckSharpEngineLayout">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)Tools\SharpEngineLayout.ps1&quot; -EngineRoot &quot;$(SharpEngineRoot)Build\..&quot; -Mode Check -Platform $(SharpEnginePlatform) -Configuration $(Configuration) -Target $(SharpEngineTarget)" />
+  </Target>
+  <Target Name="BuildUiDependencies" BeforeTargets="PrepareForBuild">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)\Tools\BuildUiDependencies.ps1&quot; -Configuration $(Configuration)" />
+  </Target>
+</Project>

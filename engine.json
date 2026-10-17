@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "engineId": "SharpEngine",
+  "version": "0.2.0-dev",
+  "runtime": "CoreCLR",
+  "managedTargetFramework": "net8.0",
+  "paths": {
+    "source": "Source",
+    "binaries": "Binaries/{platform}/{configuration}/{target}",
+    "intermediate": "Intermediate/{platform}/{configuration}/{target}",
+    "content": "Content",
+    "tools": "Tools"
+  },
+  "assets": {
+    "manifest": "Content/Assets/assets.json",
+    "root": "Content/Assets"
+  },
+  "worldPresets": {
+    "default": "engine://worlds/main"
+  },
+  "projectContract": {
+    "schemaVersion": 3,
+    "manifestPattern": "*.sharpproject",
+    "associationRegistry": "HKCU\\Software\\SharpEngine\\Builds",
+    "engineRootOverrideEnvironmentVariable": "SHARPENGINE_ROOT"
+  }
+}

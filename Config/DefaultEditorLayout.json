@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "mainHost": {
+    "hostId": "main",
+    "root": {
+      "nodeId": "main.root",
+      "kind": "split",
+      "orientation": "horizontal",
+      "ratio": 0.17,
+      "first": {
+        "nodeId": "main.left",
+        "kind": "split",
+        "orientation": "vertical",
+        "ratio": 0.38,
+        "first": {
+          "nodeId": "main.hierarchy",
+          "kind": "tabs",
+          "tabGroup": {
+            "groupId": "main.hierarchy.tabs",
+            "activePaneId": "hierarchy",
+            "panes": [
+              { "paneId": "hierarchy" }
+            ]
+          }
+        },
+        "second": {
+          "nodeId": "main.content",
+          "kind": "tabs",
+          "tabGroup": {
+            "groupId": "main.content.tabs",
+            "activePaneId": "content",
+            "panes": [
+              { "paneId": "content" }
+            ]
+          }
+        }
+      },
+      "second": {
+        "nodeId": "main.body",
+        "kind": "split",
+        "orientation": "horizontal",
+        "ratio": 0.76,
+        "first": {
+          "nodeId": "main.center",
+          "kind": "split",
+          "orientation": "vertical",
+          "ratio": 0.8,
+          "first": {
+            "nodeId": "main.viewport",
+            "kind": "tabs",
+            "tabGroup": {
+              "groupId": "main.viewport.tabs",
+              "activePaneId": "viewport",
+              "panes": [
+                { "paneId": "viewport" }
+              ]
+            }
+          },
+          "second": {
+            "nodeId": "main.console",
+            "kind": "tabs",
+            "tabGroup": {
+              "groupId": "main.console.tabs",
+              "activePaneId": "console",
+              "panes": [
+                { "paneId": "console" }
+              ]
+            }
+          }
+        },
+        "second": {
+          "nodeId": "main.inspector",
+          "kind": "tabs",
+          "tabGroup": {
+            "groupId": "main.inspector.tabs",
+            "activePaneId": "inspector",
+            "panes": [
+              { "paneId": "inspector" }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "hiddenPaneIds": []
+}

@@ -1,0 +1,158 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Win32;
+using SharpEngine.ProjectSelector;
+
+var assertions = 0;
+var engineRoot = FindEngineRoot();
+var registryPath = @"Software\SharpEngine\Tests\" + Guid.NewGuid().ToString("N");
+var temporary = Directory.CreateTempSubdirectory("SharpEngine-ProjectSelectorValidation-");
+try
+{
+    var store = new EngineAssociationStore(registryPath);
+    const string association = "{11111111-2222-3333-4444-555555555555}";
+    var registration = store.Register(engineRoot, association, installed: false);
+    Check(registration.Association == association && SamePath(registration.Root, engineRoot),
+        "Source Engine registration must preserve an explicit association");
+    Check(SamePath(store.Resolve(association)!, engineRoot),
+        "Association lookup must return the registered source Engine root");
+    Check(store.List().Count == 1 && store.List()[0].Association == association,
+        "Association listing must include the registered source Engine");
+    Check(store.Register(engineRoot, null, installed: false).Association == association,
+        "Registering the same source root must reuse its existing association");
+
+    var projectRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "ForeignProject")).FullName;
+    var runtimeDirectory = Directory.CreateDirectory(Path.Combine(projectRoot,
+        "Source", "ForeignGame")).FullName;
+    var editorDirectory = Directory.CreateDirectory(Path.Combine(projectRoot,
+        "Source", "ForeignGame.Editor")).FullName;
+    File.WriteAllText(Path.Combine(runtimeDirectory, "ForeignGame.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+    File.WriteAllText(Path.Combine(editorDirectory, "ForeignGame.Editor.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+    var manifestPath = Path.Combine(projectRoot, "ForeignGame.sharpproject");
+    File.WriteAllText(manifestPath, JsonSerializer.Serialize(new
+    {
+        schemaVersion = 3,
+        projectId = "foreign-game",
+        displayName = "ForeignGame",
+        engine = new
+        {
+            id = "SharpEngine",
+            version = "0.2.0-dev",
+            association,
+            manifest = "engine.json",
+        },
+        modules = new[]
+        {
+            "Source/ForeignGame/ForeignGame.csproj",
+            "Source/ForeignGame.Editor/ForeignGame.Editor.csproj",
+        },
+    }, new JsonSerializerOptions { WriteIndented = true }));
+
+    var project = ProjectContracts.ReadProject(manifestPath);
+    var engine = ProjectContracts.ReadEngine(engineRoot, project.EngineManifest);
+    ProjectContracts.ValidateBinding(project, engine);
+    var generated = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
+    var firstSolution = File.ReadAllText(generated.SolutionPath);
+    var firstStamp = File.ReadAllText(generated.StampPath);
+    var firstWrapper = File.ReadAllText(generated.WrapperProjectPath);
+    var launchSettings = File.ReadAllText(generated.LaunchSettingsPath);
+    Check(File.Exists(generated.SolutionPath) && File.Exists(generated.GeneratedPropsPath) &&
+          File.Exists(generated.WrapperProjectPath) && File.Exists(generated.TargetSourcePath) &&
+          File.Exists(generated.LaunchSettingsPath) && File.Exists(generated.TargetPropsPath) &&
+          File.Exists(generated.StampPath),
+        "Solution generation must atomically create every derived project file");
+    Check(firstSolution.Contains("Debug Editor|Win64", StringComparison.Ordinal) &&
+          firstSolution.Contains("Development Editor|Win64", StringComparison.Ordinal) &&
+          firstSolution.Contains("Shipping Editor|Win64", StringComparison.Ordinal),
+        "Generated Solution must expose only the approved Editor configurations");
+    Check(firstSolution.Contains("ForeignGame.Editor Target", StringComparison.Ordinal) &&
+          firstSolution.Contains(Path.Combine(engineRoot, "Source", "Engine",
+              "Engine.vcxproj"), StringComparison.OrdinalIgnoreCase),
+        "Source Engine and generated Editor Target must coexist in the Solution");
+    Check(firstSolution.Contains("{2150E333-8FDC-42A3-9474-1A3956D46DE8}",
+              StringComparison.OrdinalIgnoreCase) &&
+          !firstSolution.Contains("= \"Build\", \"Build\"", StringComparison.Ordinal),
+        "Generated Solution must use real Solution folders without exposing Build plumbing");
+    var runtimeGuid = StableGuid("project:" + Path.Combine(runtimeDirectory,
+        "ForeignGame.csproj"));
+    Check(!firstSolution.Contains(runtimeGuid + ".Debug Editor|Win64.Build.0",
+            StringComparison.Ordinal),
+        "User Module projects must not participate in Solution Build directly");
+    Check(firstWrapper.Contains("-Command Build", StringComparison.Ordinal) &&
+          firstWrapper.Contains("-Command Clean", StringComparison.Ordinal) &&
+          firstWrapper.Contains("BuildSharpEngineProject", StringComparison.Ordinal) &&
+          !firstWrapper.Contains("MakeFileProj", StringComparison.Ordinal),
+        "SDK Editor Target must own unified Build/Clean without NMake");
+    Check(launchSettings.Contains("Debug Editor", StringComparison.Ordinal) &&
+          launchSettings.Contains("Development Editor", StringComparison.Ordinal) &&
+          launchSettings.Contains("Shipping Editor", StringComparison.Ordinal),
+        "Editor Target must publish launch profiles for every approved configuration");
+    var props = File.ReadAllText(generated.GeneratedPropsPath);
+    Check(props.Contains("SharpEngineManagedApi", StringComparison.Ordinal) &&
+          props.Contains("SharpEngineModulesApi", StringComparison.Ordinal) &&
+          !props.Contains("SharpEngineUnifiedBuild>true", StringComparison.Ordinal),
+        "Generated design-time props must resolve APIs without authorizing direct builds");
+
+    var sentinelTime = new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+    File.SetLastWriteTimeUtc(generated.SolutionPath, sentinelTime);
+    _ = SolutionGenerator.EnsureCurrent(new ResolvedSharpProject(project, engine));
+    Check(File.GetLastWriteTimeUtc(generated.SolutionPath) == sentinelTime,
+        "Fresh project-file stamps must avoid rewriting the generated Solution");
+    _ = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
+    Check(firstSolution == File.ReadAllText(generated.SolutionPath) &&
+          firstStamp == File.ReadAllText(generated.StampPath),
+        "Repeated Solution generation must be deterministic");
+    Check(store.Unregister(association) && store.Resolve(association) is null,
+        "Unregister must remove only the selected Engine association");
+    var installed = store.Register(engineRoot, null, installed: true);
+    Check(installed.Association == "0.2" && store.Unregister(installed.Association),
+        "Installed Engine registration must use a stable major.minor association");
+    Console.WriteLine($"PASS: {assertions} Project Selector assertions");
+    return 0;
+}
+finally
+{
+    temporary.Delete(recursive: true);
+    try { Registry.CurrentUser.DeleteSubKeyTree(registryPath, throwOnMissingSubKey: false); }
+    catch (ArgumentException) { }
+    using var testsKey = Registry.CurrentUser.OpenSubKey(
+        @"Software\SharpEngine\Tests", writable: false);
+    if (testsKey is not null && testsKey.GetSubKeyNames().Length == 0 &&
+        testsKey.GetValueNames().Length == 0)
+    {
+        testsKey.Dispose();
+        Registry.CurrentUser.DeleteSubKey(@"Software\SharpEngine\Tests",
+            throwOnMissingSubKey: false);
+    }
+}
+
+void Check(bool condition, string message)
+{
+    if (!condition) throw new InvalidOperationException(message);
+    assertions++;
+}
+
+static string FindEngineRoot()
+{
+    for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
+         directory is not null; directory = directory.Parent)
+        if (File.Exists(Path.Combine(directory.FullName, "engine.json")))
+            return directory.FullName;
+    throw new DirectoryNotFoundException("Could not locate the SharpEngine root");
+}
+
+static bool SamePath(string left, string right) =>
+    string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+        StringComparison.OrdinalIgnoreCase);
+
+static string StableGuid(string value)
+{
+    var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(
+        value.Replace('\\', '/').ToLowerInvariant()));
+    return "{" + new Guid(bytes.AsSpan(0, 16)).ToString().ToUpperInvariant() + "}";
+}

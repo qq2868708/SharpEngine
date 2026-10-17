@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="RenderCore">
+      <UniqueIdentifier>{6901537e-67c3-4206-8e91-e934c9c3a855}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderCore\Public">
+      <UniqueIdentifier>{b0b142ef-e293-44c9-a83e-92fb03c50faa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderCore\Private">
+      <UniqueIdentifier>{58cf9068-7512-4d2a-9853-e5bc1b6eb93b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderCore\Private\Vulkan">
+      <UniqueIdentifier>{4e218feb-8a09-4b2c-b3af-546e52de593d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RenderCore\Private\Common">
+      <UniqueIdentifier>{991729b2-d458-4ca0-9a56-4a938271b0f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform">
+      <UniqueIdentifier>{5cf71074-62bd-44be-a448-c126d6c32385}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform\Windows">
+      <UniqueIdentifier>{e1cac69a-2d77-439d-a368-0639144cfd4d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Platform\Windows\Window">
+      <UniqueIdentifier>{231b60bd-8aeb-42de-bb3d-c5005285ed70}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Editor">
+      <UniqueIdentifier>{713169ef-dd79-4d80-a32c-8beaf4670bbe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UI">
+      <UniqueIdentifier>{7ea719b5-10c6-46a2-9dfb-ad31017a0182}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ManagedHost.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Public\RenderCore.h">
+      <Filter>RenderCore\Public</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\RenderBackend.h">
+      <Filter>RenderCore\Private</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.h">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Vulkan\VkContext.h">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Vulkan\VkFrame.h">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Vulkan\VkPipeline.h">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Vulkan\VkSurface.h">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Vulkan\VkSwapchain.h">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\Common\VkUtils.h">
+      <Filter>RenderCore\Private\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Platform.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\PlatformTypes.h">
+      <Filter>Platform</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Windows\WindowsPlatform.h">
+      <Filter>Platform\Windows</Filter>
+    </ClInclude>
+    <ClInclude Include="Platform\Windows\Window\Win32Window.h">
+      <Filter>Platform\Windows\Window</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\RmlUiShell.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RenderCore\Private\RenderCore.cpp">
+      <Filter>RenderCore\Private</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.cpp">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Vulkan\VkContext.cpp">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Vulkan\VkFrame.cpp">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Vulkan\VkPipeline.cpp">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Vulkan\VkSurface.cpp">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Vulkan\VkSwapchain.cpp">
+      <Filter>RenderCore\Private\Vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\Common\VkUtils.cpp">
+      <Filter>RenderCore\Private\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Platform\Windows\WindowsPlatform.cpp">
+      <Filter>Platform\Windows</Filter>
+    </ClCompile>
+    <ClCompile Include="Platform\Windows\Window\Win32Window.cpp">
+      <Filter>Platform\Windows\Window</Filter>
+    </ClCompile>
+    <ClCompile Include="Editor\EditorMain.cpp">
+      <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="ManagedHost.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\RmlUiShell.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

@@ -4,7 +4,10 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 if (args.Length < 1)
 {
@@ -26,37 +29,61 @@ if (!File.Exists(projectManifest)) Fail("SEBUILD004", $"Project manifest not fou
 
 using var projectDocument = JsonDocument.Parse(File.ReadAllText(projectManifest));
 var projectJson = projectDocument.RootElement;
-if (projectJson.GetProperty("schemaVersion").GetInt32() != 2)
-    Fail("SEBUILD005", "Project manifest schemaVersion must be 2");
+if (projectJson.GetProperty("schemaVersion").GetInt32() != 3)
+    Fail("SEBUILD005", "Project manifest schemaVersion must be 3");
 var projectRoot = Path.GetDirectoryName(projectManifest)!;
 var projectId = RequiredString(projectJson, "projectId");
 var engine = projectJson.GetProperty("engine");
-var engineRoot = ResolveEngineRoot(projectRoot, engine);
+var engineRoot = ResolveEngineRoot(engine, Option("--engine-root", string.Empty));
 var engineManifestPath = Path.Combine(engineRoot,
     engine.TryGetProperty("manifest", out var engineManifestValue)
-        ? engineManifestValue.GetString() ?? "Engine/engine.json"
-        : "Engine/engine.json");
+        ? engineManifestValue.GetString() ?? "engine.json"
+        : "engine.json");
 if (!File.Exists(engineManifestPath))
     Fail("SEBUILD009", $"Engine manifest not found: {engineManifestPath}");
+
 string resolvedEngineId;
 string resolvedEngineVersion;
+string binariesTemplate;
+string intermediateTemplate;
 using (var engineDocument = JsonDocument.Parse(File.ReadAllText(engineManifestPath)))
 {
+    var manifest = engineDocument.RootElement;
+    if (!manifest.TryGetProperty("schemaVersion", out var version) || version.GetInt32() != 2)
+        Fail("SEBUILD012", "Engine manifest schemaVersion must be 2");
     var requestedId = RequiredString(engine, "id");
     var requestedVersion = RequiredString(engine, "version");
-    resolvedEngineId = RequiredString(engineDocument.RootElement, "engineId");
-    resolvedEngineVersion = RequiredString(engineDocument.RootElement, "version");
+    resolvedEngineId = RequiredString(manifest, "engineId");
+    resolvedEngineVersion = RequiredString(manifest, "version");
+    var paths = manifest.GetProperty("paths");
+    binariesTemplate = RequiredString(paths, "binaries");
+    intermediateTemplate = RequiredString(paths, "intermediate");
     if (!string.Equals(requestedId, resolvedEngineId, StringComparison.Ordinal))
         Fail("SEBUILD010", $"Engine id mismatch: requested '{requestedId}', resolved '{resolvedEngineId}'");
     if (!string.Equals(requestedVersion, resolvedEngineVersion, StringComparison.Ordinal))
         Fail("SEBUILD011", $"Engine version mismatch: requested '{requestedVersion}', resolved '{resolvedEngineVersion}'");
 }
-var managedApi = Path.Combine(engineRoot, "x64", configuration, "Managed",
-    "SharpEngine.Managed.dll");
-var modulesApi = Path.Combine(engineRoot, "x64", configuration, "Managed",
-    "SharpEngine.Modules.dll");
+
+var engineOutputDirectory = ResolveLayoutPath(engineRoot, binariesTemplate,
+    platform, configuration, "Editor");
+var managedApi = Path.Combine(engineOutputDirectory, "SharpEngine.Managed.dll");
+var modulesApi = Path.Combine(engineOutputDirectory, "SharpEngine.Modules.dll");
 if (!File.Exists(managedApi) || !File.Exists(modulesApi))
     Fail("SEBUILD006", $"SharpEngine managed APIs are not built: {managedApi}, {modulesApi}");
+
+var outputDirectory = ResolveLayoutPath(projectRoot, binariesTemplate,
+    platform, configuration, target);
+var intermediateDirectory = ResolveLayoutPath(projectRoot, intermediateTemplate,
+    platform, configuration, target);
+var projectBuildDirectory = Path.Combine(intermediateDirectory, "ProjectBuild");
+var validationOutput = Path.Combine(projectBuildDirectory, "Validation");
+var publishInputs = Path.Combine(projectBuildDirectory, "PublishInputs");
+var packageDirectory = Path.Combine(projectBuildDirectory, "Package");
+var moduleIntermediate = Path.Combine(intermediateDirectory, "Modules");
+PrepareDirectory(validationOutput);
+PrepareDirectory(publishInputs);
+PrepareDirectory(packageDirectory);
+Directory.CreateDirectory(moduleIntermediate);
 
 var projectPaths = projectJson.GetProperty("modules").EnumerateArray()
     .Select(value => Path.GetFullPath(Path.Combine(projectRoot,
@@ -71,12 +98,18 @@ if (projectPaths.Length == 0) Fail("SEMOD001", "A project requires at least one 
 if (projectPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != projectPaths.Length)
     Fail("SEMOD002", "The project contains a duplicate Module project path");
 
-var modules = projectPaths.Select(path => EvaluateModule(path, configuration)).ToArray();
-var outputDirectory = Path.GetFullPath(Path.Combine(projectRoot, "Binaries", "Managed"));
+var modules = projectPaths.Select(path => EvaluateModule(path, configuration,
+    platform, target, validationOutput, moduleIntermediate, managedApi, modulesApi)).ToArray();
 foreach (var module in modules)
-    if (!string.Equals(Path.GetDirectoryName(module.TargetPath), outputDirectory,
+    if (!string.Equals(Path.GetDirectoryName(module.TargetPath), validationOutput,
             StringComparison.OrdinalIgnoreCase))
-        Fail("SEMOD015", $"Module '{module.Id}' output must be under {outputDirectory}: {module.TargetPath}");
+        Fail("SEMOD015", $"Module '{module.Id}' ignored the unified output directory: {module.TargetPath}");
+var duplicateAssembly = modules.GroupBy(module => module.AssemblyName,
+        StringComparer.OrdinalIgnoreCase)
+    .FirstOrDefault(group => group.Count() > 1);
+if (duplicateAssembly is not null)
+    Fail("SEMOD019", $"Modules must not share assembly name '{duplicateAssembly.Key}'");
+
 var byPath = modules.ToDictionary(module => module.ProjectPath,
     StringComparer.OrdinalIgnoreCase);
 var byId = new Dictionary<string, ModuleInfo>(StringComparer.OrdinalIgnoreCase);
@@ -122,10 +155,9 @@ var ordered = TopologicalOrder(modules);
 var selected = ordered.Where(module => target == "Editor" || module.Type == "Runtime").ToArray();
 foreach (var module in ordered)
 {
-    Console.WriteLine($"[Build] {module.Id} ({module.Type})");
-    Run("dotnet", ["build", module.ProjectPath, "--nologo", "-c", configuration,
-        $"-p:SharpEngineManagedApi={managedApi}",
-        $"-p:SharpEngineModulesApi={modulesApi}"], projectRoot, capture: false);
+    Console.WriteLine($"[Validate] {module.Id} ({module.Type})");
+    BuildModule(module.ProjectPath, configuration, platform, target,
+        validationOutput, moduleIntermediate, managedApi, modulesApi, projectRoot);
 }
 
 var typeOwners = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -145,10 +177,61 @@ foreach (var module in ordered)
     module.EntryType = metadata.ModuleEntries[0];
 }
 
-Directory.CreateDirectory(outputDirectory);
+var inputDirectories = new Dictionary<ModuleInfo, string>();
+for (var index = 0; index < selected.Length; index++)
+{
+    var module = selected[index];
+    var inputDirectory = Path.Combine(publishInputs,
+        $"{index:D3}-{SafeSegment(module.AssemblyName)}");
+    Directory.CreateDirectory(inputDirectory);
+    Console.WriteLine($"[Stage] {module.Id} ({module.Type})");
+    BuildModule(module.ProjectPath, configuration, platform, target,
+        inputDirectory, moduleIntermediate, managedApi, modulesApi, projectRoot);
+    inputDirectories.Add(module, inputDirectory);
+}
+
+var knownModules = modules.ToDictionary(module => module.AssemblyName + ".dll",
+    StringComparer.OrdinalIgnoreCase);
+var selectedModules = selected.ToDictionary(module => module.AssemblyName + ".dll",
+    StringComparer.OrdinalIgnoreCase);
+var engineAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    "SharpEngine.Managed.dll",
+    "SharpEngine.Modules.dll",
+};
+var published = new Dictionary<string, PublishedFile>(StringComparer.OrdinalIgnoreCase);
+foreach (var (owner, directory) in inputDirectories)
+{
+    foreach (var path in Directory.EnumerateFiles(directory, "*.dll",
+                 SearchOption.TopDirectoryOnly))
+    {
+        var name = Path.GetFileName(path);
+        if (engineAssemblies.Contains(name)) continue;
+        if (knownModules.TryGetValue(name, out var module) &&
+            !selectedModules.ContainsKey(name))
+            Fail("SEMOD020", $"Selected Module '{owner.Id}' unexpectedly publishes excluded Module '{module.Id}'");
+        MergePublishedFile(published, path,
+            selectedModules.ContainsKey(name) ? "module" : "dependency");
+    }
+}
+
+foreach (var file in published.Values.OrderBy(file => file.Name,
+             StringComparer.OrdinalIgnoreCase))
+    File.Copy(file.SourcePath, Path.Combine(packageDirectory, file.Name), true);
+if (configuration != "Shipping")
+{
+    foreach (var module in selected)
+    {
+        var pdbName = module.AssemblyName + ".pdb";
+        var pdbPath = Path.Combine(inputDirectories[module], pdbName);
+        if (File.Exists(pdbPath))
+            File.Copy(pdbPath, Path.Combine(packageDirectory, pdbName), true);
+    }
+}
+
 var runtimeManifest = new
 {
-    schemaVersion = 1,
+    schemaVersion = 2,
     projectId,
     projectManifestHash = FileHash(projectManifest),
     engineId = resolvedEngineId,
@@ -156,23 +239,37 @@ var runtimeManifest = new
     target,
     configuration,
     platform,
-    modules = selected.Select(module => new
+    files = published.Values.OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+        .Select(file => new
+        {
+            name = file.Name,
+            kind = file.Kind,
+            contentHash = file.ContentHash,
+        }).ToArray(),
+    modules = selected.Select(module =>
     {
-        id = module.Id,
-        type = module.Type,
-        assembly = Path.GetFileName(module.TargetPath),
-        contentHash = FileHash(module.TargetPath),
-        entryType = module.EntryType,
-        dependencies = module.Dependencies
-            .Where(selected.Contains).Select(value => value.Id).ToArray(),
+        var assembly = module.AssemblyName + ".dll";
+        if (!published.TryGetValue(assembly, out var file))
+            Fail("SEMOD008", $"Published Module output is missing: {assembly}");
+        return new
+        {
+            id = module.Id,
+            type = module.Type,
+            assembly,
+            contentHash = file.ContentHash,
+            entryType = module.EntryType,
+            dependencies = module.Dependencies
+                .Where(selected.Contains).Select(value => value.Id).ToArray(),
+        };
     }).ToArray(),
 };
-var runtimeManifestPath = Path.Combine(outputDirectory, "modules.runtime.json");
-var temporaryPath = runtimeManifestPath + ".tmp";
-File.WriteAllText(temporaryPath, JsonSerializer.Serialize(runtimeManifest,
-    new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine);
-File.Move(temporaryPath, runtimeManifestPath, true);
-Console.WriteLine($"[Build] PASS: {selected.Length} Modules -> {runtimeManifestPath}");
+var runtimeManifestPath = Path.Combine(packageDirectory, "modules.runtime.json");
+File.WriteAllText(runtimeManifestPath, JsonSerializer.Serialize(runtimeManifest,
+    new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine,
+    new UTF8Encoding(false));
+PublishDirectory(packageDirectory, outputDirectory, projectBuildDirectory);
+Console.WriteLine($"[Build] PASS: {selected.Length} Modules -> " +
+                  Path.Combine(outputDirectory, "modules.runtime.json"));
 return 0;
 
 string Option(string name, string fallback)
@@ -186,28 +283,63 @@ string Option(string name, string fallback)
 static string RequiredString(JsonElement value, string property)
 {
     if (!value.TryGetProperty(property, out var element) ||
+        element.ValueKind != JsonValueKind.String ||
         string.IsNullOrWhiteSpace(element.GetString()))
-        Fail("SEBUILD007", $"Required project property is missing: {property}");
+        Fail("SEBUILD007", $"Required string property is missing: {property}");
     return element.GetString()!;
 }
 
-static string ResolveEngineRoot(string projectRoot, JsonElement engine)
+static string ResolveEngineRoot(JsonElement engine, string explicitEngineRoot)
 {
-    var environmentName = engine.TryGetProperty("pathEnvironment", out var environment)
-        ? environment.GetString() : null;
-    var environmentPath = string.IsNullOrWhiteSpace(environmentName)
-        ? null : Environment.GetEnvironmentVariable(environmentName);
-    var path = !string.IsNullOrWhiteSpace(environmentPath)
-        ? environmentPath! : RequiredString(engine, "path");
-    return Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(projectRoot, path));
+    if (!string.IsNullOrWhiteSpace(explicitEngineRoot))
+        return Path.GetFullPath(explicitEngineRoot);
+    var environmentPath = Environment.GetEnvironmentVariable("SHARPENGINE_ROOT");
+    if (!string.IsNullOrWhiteSpace(environmentPath))
+        return Path.GetFullPath(environmentPath);
+    var association = RequiredString(engine, "association");
+    if (association.Length > 128 ||
+        (!Guid.TryParse(association, out _) &&
+         !Regex.IsMatch(association, "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+             RegexOptions.CultureInvariant)))
+        Fail("SEBUILD015", $"Engine association '{association}' is invalid");
+    using var key = Registry.CurrentUser.OpenSubKey(
+        @"Software\SharpEngine\Builds", writable: false);
+    if (key?.GetValue(association) is not string registeredRoot ||
+        string.IsNullOrWhiteSpace(registeredRoot))
+        Fail("SEBUILD014", $"Engine association '{association}' is not registered");
+    return Path.GetFullPath(registeredRoot);
 }
 
-static ModuleInfo EvaluateModule(string projectPath, string configuration)
+static string ResolveLayoutPath(string root, string template, string platform,
+    string configuration, string target)
+{
+    var relative = template.Replace("{platform}", platform, StringComparison.Ordinal)
+        .Replace("{configuration}", configuration, StringComparison.Ordinal)
+        .Replace("{target}", target, StringComparison.Ordinal);
+    if (relative.Contains('{') || relative.Contains('}') || Path.IsPathRooted(relative))
+        Fail("SEBUILD013", $"Invalid layout path template '{template}'");
+    var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar,
+        Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    var result = Path.GetFullPath(Path.Combine(fullRoot, relative));
+    if (!result.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        Fail("SEBUILD013", $"Layout path escapes its root: '{template}'");
+    return result;
+}
+
+static ModuleInfo EvaluateModule(string projectPath, string configuration,
+    string platform, string target, string outputRoot, string intermediateRoot,
+    string managedApi, string modulesApi)
 {
     if (!File.Exists(projectPath)) Fail("SEMOD011", $"Module project not found: {projectPath}");
-    var output = Run("dotnet", ["msbuild", projectPath,
+    var arguments = new List<string>
+    {
+        "msbuild", projectPath,
         "-getProperty:SharpEngineModuleId,SharpEngineModuleType,AssemblyName,TargetPath",
-        "-getItem:ProjectReference,Reference", $"-p:Configuration={configuration}", "-nologo"],
+        "-getItem:ProjectReference,Reference", "-nologo",
+    };
+    arguments.AddRange(BuildProperties(configuration, platform, target,
+        outputRoot, intermediateRoot, managedApi, modulesApi));
+    var output = Run("dotnet", arguments,
         Path.GetDirectoryName(projectPath)!, capture: true);
     using var document = JsonDocument.Parse(output);
     var properties = document.RootElement.GetProperty("Properties");
@@ -229,11 +361,39 @@ static ModuleInfo EvaluateModule(string projectPath, string configuration)
     };
 }
 
+static void BuildModule(string projectPath, string configuration, string platform,
+    string target, string outputRoot, string intermediateRoot, string managedApi,
+    string modulesApi, string workingDirectory)
+{
+    var arguments = new List<string> { "build", projectPath, "--nologo" };
+    arguments.AddRange(BuildProperties(configuration, platform, target,
+        outputRoot, intermediateRoot, managedApi, modulesApi));
+    Run("dotnet", arguments, workingDirectory, capture: false);
+}
+
+static IReadOnlyList<string> BuildProperties(string configuration, string platform,
+    string target, string outputRoot, string intermediateRoot, string managedApi,
+    string modulesApi) =>
+[
+    $"-p:Configuration={configuration}",
+    $"-p:SharpEnginePlatform={platform}",
+    $"-p:SharpEngineTarget={target}",
+    $"-p:SharpEngineOutputRoot={EnsureTrailingSeparator(outputRoot)}",
+    $"-p:SharpEngineIntermediateRoot={EnsureTrailingSeparator(intermediateRoot)}",
+    $"-p:SharpEngineManagedApi={managedApi}",
+    $"-p:SharpEngineModulesApi={modulesApi}",
+    "-p:SharpEngineUnifiedBuild=true",
+];
+
+static string EnsureTrailingSeparator(string path) =>
+    Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;
+
 static string QueryProperty(string projectPath, string configuration, string property)
 {
     var output = Run("dotnet", ["msbuild", projectPath, $"-getProperty:{property}",
         $"-p:Configuration={configuration}", "-nologo"],
         Path.GetDirectoryName(projectPath)!, capture: true);
+    if (string.IsNullOrWhiteSpace(output)) return string.Empty;
     using var document = JsonDocument.Parse(output);
     return document.RootElement.GetProperty("Properties").GetProperty(property)
         .GetString() ?? string.Empty;
@@ -257,6 +417,60 @@ static IReadOnlyList<ModuleInfo> TopologicalOrder(IReadOnlyList<ModuleInfo> modu
     }
     foreach (var module in modules) Visit(module);
     return result;
+}
+
+static void PrepareDirectory(string path)
+{
+    if (Directory.Exists(path)) Directory.Delete(path, true);
+    Directory.CreateDirectory(path);
+}
+
+static string SafeSegment(string value)
+{
+    var invalid = Path.GetInvalidFileNameChars();
+    return new string(value.Select(character => invalid.Contains(character) ? '_' : character)
+        .ToArray());
+}
+
+static void MergePublishedFile(Dictionary<string, PublishedFile> published,
+    string path, string kind)
+{
+    var name = Path.GetFileName(path);
+    var hash = FileHash(path);
+    if (published.TryGetValue(name, out var existing))
+    {
+        if (!string.Equals(existing.ContentHash, hash, StringComparison.OrdinalIgnoreCase))
+            Fail("SEMOD021", $"Published dependency collision for '{name}': " +
+                $"{existing.SourcePath} differs from {path}");
+        if (kind == "module") existing.Kind = kind;
+        return;
+    }
+    published.Add(name, new PublishedFile(name, path, hash, kind));
+}
+
+static void PublishDirectory(string packageDirectory, string outputDirectory,
+    string workingDirectory)
+{
+    var backup = Path.Combine(workingDirectory, "Previous");
+    if (Directory.Exists(backup)) Directory.Delete(backup, true);
+    Directory.CreateDirectory(Path.GetDirectoryName(outputDirectory)!);
+    var movedPrevious = false;
+    try
+    {
+        if (Directory.Exists(outputDirectory))
+        {
+            Directory.Move(outputDirectory, backup);
+            movedPrevious = true;
+        }
+        Directory.Move(packageDirectory, outputDirectory);
+    }
+    catch
+    {
+        if (movedPrevious && !Directory.Exists(outputDirectory) && Directory.Exists(backup))
+            Directory.Move(backup, outputDirectory);
+        throw;
+    }
+    if (Directory.Exists(backup)) Directory.Delete(backup, true);
 }
 
 static AssemblyMetadata InspectAssembly(string path)
@@ -361,6 +575,15 @@ sealed class ModuleInfo
     public required string[] AssemblyReferences { get; init; }
     public List<ModuleInfo> Dependencies { get; } = new();
     public string EntryType { get; set; } = string.Empty;
+}
+
+sealed class PublishedFile(string name, string sourcePath, string contentHash,
+    string kind)
+{
+    public string Name { get; } = name;
+    public string SourcePath { get; } = sourcePath;
+    public string ContentHash { get; } = contentHash;
+    public string Kind { get; set; } = kind;
 }
 
 sealed record AssemblyMetadata(IReadOnlyList<string> UserTypes,

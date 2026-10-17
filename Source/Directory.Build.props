@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <SharpEngineTarget Condition="'$(MSBuildProjectName)' == 'SharpEngine.ProjectSelector'">Tools</SharpEngineTarget>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)..\Build\SharpEngine.Build.props" />
+</Project>

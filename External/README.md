@@ -39,9 +39,10 @@ source checkout, use the source/tag/commit values in the table above.
 
 - `Content/UI/Rml/Editor.rml`: editor document, stable semantic element IDs.
 - `Content/UI/Rml/Editor.rcss`: layout, controls, dock theme, hover/focus states.
-- `Engine/UI/RmlUiShell.*`: WGL host, Win32 input, Unicode resource IO, scene element.
+- `Source/Engine/UI/RmlUiShell.*`: multi-window WGL/RmlUi hosts, Win32 input, Dock drag,
+  Unicode resource IO, and the scene element.
 
-    x64/Debug/Engine.exe --smoke-test --screenshot D:/SharpEngine/x64/Debug/ui-smoke.bmp
+    Binaries/Win64/Debug/Editor/Engine.exe --smoke-test --screenshot D:/SharpEngine/Binaries/Win64/Debug/Editor/ui-smoke.bmp
 
 `--smoke-test` renders 10 frames and exits. `--frames N` provides a configurable
 bounded run. Omitting these flags leaves the editor running normally.
@@ -54,7 +55,8 @@ sends `editor.create-project:<path>`; it does not create a placeholder file.
 Open Project selects `project.json` and sends `editor.open-project:<path>`.
 The C# editor owns project creation/opening, state changes, and validation.
 
-This is a minimum usable editor shell. Dock dragging, full editor menus,
-undo/redo, and property editing are still separate features. Native Win32 IME
+The editor shell supports built-in Dock dragging, owned floating windows, and
+Authoring Undo/Redo for hierarchy and gizmo edits. Generic property editing and
+project-defined Dock panes remain separate features. Native Win32 IME
 is integrated through RmlUi's backend, but full IME and DPI acceptance testing
 across systems has not yet been completed.

@@ -1,0 +1,16 @@
+<rml>
+<head>
+<title>SharpEngine Dock</title>
+<link type="text/rcss" href="Editor.rcss" />
+</head>
+<body>
+<div id="dockWindow">
+  <div id="menubar" class="dock-window-titlebar">
+    <span class="brand-mark">S</span><span id="dockWindowTitle">SharpEngine</span>
+    <div class="grow" />
+    <div id="windowControls"><button class="window-control" action="window.minimize" title="Minimize"><img class="icon" src="Icons/minimize.tga" /></button><button class="window-control" action="window.maximize" title="Maximize / Restore"><img class="icon" src="Icons/maximize.tga" /></button><button class="window-control close" action="window.close" title="Close"><img class="icon" src="Icons/close.tga" /></button></div>
+  </div>
+  <div id="workspace" class="dock-host floating-dock-host" />
+</div>
+</body>
+</rml>

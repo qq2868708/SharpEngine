@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<world version="1" name="__DISPLAY_NAME__" activeCamera="mainCamera">
-  <entity id="ground" name="Ground" type="mesh" asset="engine://meshes/plane" position="0,0,0" scale="10,1,10" color="#46556A" />
-  <entity id="cube" name="Cube" type="mesh" asset="engine://meshes/cube" position="0,0.75,0" scale="1.5,1.5,1.5" color="#6EA4DD" />
-  <entity id="mainCamera" name="Main Camera" type="camera" position="8,7,11" rotation="-28,36,0" fieldOfView="55" nearPlane="0.1" farPlane="100" />
-  <entity id="sun" name="Directional Light" type="light" rotation="-50,-30,0" intensity="1.2" />
-</world>

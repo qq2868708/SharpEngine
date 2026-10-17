@@ -1,21 +1,28 @@
-# World description v1
+# World description v2
 
-`Main.world.xml` is a data-only scene. It is consumed by `SharpEngine.World.WorldDocument`.
+`Main.sworld` is a data-only World asset. It is consumed by
+`SharpEngine.World.WorldDocument` and is the engine's default World source.
 Each entity has a stable `id`, display `name`, type (`mesh`, `camera`, `light`, or `empty`),
 and a position, Euler rotation, and positive scale. Values are comma-separated numbers
 using the invariant culture. Units are meters; the system is right-handed with Y up.
 Rotation is degrees: pitch X, yaw Y, roll Z. A camera looks along its local -Z axis.
 
+The `version="2"` attribute is required; legacy or missing versions are rejected.
 The world's `activeCamera` chooses the camera used by the viewport. Cameras expose
 `fieldOfView` (vertical degrees), `nearPlane`, and `farPlane`. Lights are directional;
-their rotation controls local -Z light direction and `intensity` controls diffuse light.
+their rotation controls local -Z light direction, `intensity` controls diffuse light,
+and every light must declare `color`. Scene lights are the only source of mesh RGB:
+there is no hidden preview or ambient light. Multiple lights accumulate linear RGB
+before the current LDR viewport clamps the result.
 Mesh assets use registered URIs such as `engine://meshes/cube` and
-`engine://meshes/plane`. Version 1 supports the built-in cube and plane primitives.
+`engine://meshes/plane`.
 
 Entities may set `parent="anotherEntityId"`. Position, rotation, and scale are
 then local to that parent. The loader rejects missing parents, self-parenting, and
 cycles. `WorldDocument.WorldMatrix(entity)` resolves the complete local-to-world
 transform for rendering, picking, and AI inspection.
+Camera and light direction inherit the full parent rotation chain while ignoring
+parent scale; parent scale still affects their local position offset.
 
 `WorldViewportRenderer.BuildFrame(world, bounds, selectedEntityId, assets)` produces triangle
 and line lists. Every vertex is seven sequential floats: viewport-relative X/Y pixels,
@@ -38,6 +45,8 @@ and are persisted by Save. The 3D world axes are X right/red, Y up/green, and Z 
 the UI coordinate overlay uses X right and Y down. `WorldDocument.Describe()`
 and `WorldDocument.ToJson()` expose the complete scene, including local transforms,
 parent IDs, resolved world matrices, camera parameters, and mesh/material references.
+Hierarchy reparent and ordering use `WorldAuthoringSession`, preserve world transform,
+validate expected document revision, and participate in the shared Undo/Redo history.
 
 Wavefront OBJ meshes can be imported into a project with:
 

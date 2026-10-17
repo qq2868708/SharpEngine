@@ -6,7 +6,7 @@
       "id": "worlds/main",
       "type": "World",
       "name": "Editor Sample World",
-      "path": "Content/Worlds/Main.world.xml",
+      "path": "Content/Worlds/Main.sworld",
       "importer": "SharpEngine.WorldXml",
       "tags": ["builtin", "scene", "sample"]
     },

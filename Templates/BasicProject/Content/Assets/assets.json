@@ -3,14 +3,6 @@
   "schemaVersion": 1,
   "assets": [
     {
-      "id": "worlds/main",
-      "type": "World",
-      "name": "Main Scene",
-      "path": "Content/Worlds/Main.world.xml",
-      "importer": "SharpEngine.WorldXml",
-      "tags": ["scene", "startup"]
-    },
-    {
       "id": "ui/main",
       "type": "UiDocument",
       "name": "Main UI",

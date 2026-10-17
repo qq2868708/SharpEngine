@@ -6,11 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\Managed\UiFramework.cs" Link="UiFramework.cs" />
-    <Compile Include="..\..\Managed\AssetRegistry.cs" Link="AssetRegistry.cs" />
-    <Compile Include="..\..\Managed\BuiltinAssetDescriptions.cs" Link="BuiltinAssetDescriptions.cs" />
-    <Compile Include="..\..\Managed\MeshImport.cs" Link="MeshImport.cs" />
-    <Compile Include="..\..\Managed\WorldDescription.cs" Link="WorldDescription.cs" />
-    <Compile Include="..\..\Managed\WorldViewportRenderer.cs" Link="WorldViewportRenderer.cs" />
+    <ProjectReference Include="..\..\Source\SharpEngine.Managed\SharpEngine.Managed.csproj" />
   </ItemGroup>
 </Project>

@@ -1,10 +1,12 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('New', 'Resolve', 'Doctor', 'Build')]
+    [ValidateSet('New', 'Resolve', 'Doctor', 'Build', 'Clean', 'Rebuild',
+        'GenerateProjectFiles', 'OpenSolution', 'OpenEditor')]
     [string]$Command = 'New',
     [string]$Name,
     [string]$Directory = (Get-Location).Path,
     [string]$EngineRoot,
+    [string]$EngineAssociation,
     [string]$ProjectFile,
     [ValidateSet('Editor', 'Game')][string]$Target = 'Editor',
     [ValidateSet('Debug', 'Development', 'Shipping')][string]$Configuration = 'Debug',
@@ -43,37 +45,74 @@ function Find-ProjectFile {
     return $matches[0].FullName
 }
 
+function Get-RegisteredEngineRoot([string]$Association) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
+        'Software\SharpEngine\Builds', $false)
+    if ($null -eq $key) { return $null }
+    try { return [string]$key.GetValue($Association, $null) }
+    finally { $key.Dispose() }
+}
+
+function Find-EngineAssociation([string]$Root) {
+    $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey(
+        'Software\SharpEngine\Builds', $false)
+    if ($null -eq $key) { return $null }
+    try {
+        foreach ($name in $key.GetValueNames()) {
+            $candidate = [string]$key.GetValue($name, '')
+            if (!$candidate) { continue }
+            if ([System.IO.Path]::GetFullPath($candidate).TrimEnd('\', '/').Equals(
+                    $rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $name
+            }
+        }
+        return $null
+    } finally { $key.Dispose() }
+}
+
+function Assert-EngineAssociation([string]$Association) {
+    $associationGuid = [guid]::Empty
+    if ($Association.Length -gt 128 -or
+        (!([guid]::TryParse($Association, [ref]$associationGuid)) -and
+         $Association -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$')) {
+        throw "Invalid Engine association '$Association'."
+    }
+}
+
 function Resolve-ProjectManifest([string]$Path) {
     $full = Get-FullPath $Path
     if (!(Test-Path -LiteralPath $full -PathType Leaf)) {
         throw "Project manifest not found: $full"
     }
     $manifest = Get-Content -Raw -LiteralPath $full | ConvertFrom-Json
-    if ($manifest.schemaVersion -ne 2) {
+    if ($manifest.schemaVersion -ne 3) {
         throw "Unsupported project manifest schema: $($manifest.schemaVersion)"
     }
-    if (!$manifest.projectId -or !$manifest.engine.path -or !$manifest.modules) {
-        throw "Project manifest is missing projectId, engine.path, or modules: $full"
+    if (!$manifest.projectId -or !$manifest.engine.association -or !$manifest.modules) {
+        throw "Project manifest is missing projectId, engine.association, or modules: $full"
     }
+    Assert-EngineAssociation ([string]$manifest.engine.association)
     $projectRoot = Split-Path -Parent $full
-    $environmentName = [string]$manifest.engine.pathEnvironment
-    $environmentPath = if ($environmentName) {
-        [Environment]::GetEnvironmentVariable($environmentName)
-    } else { $null }
-    $engineFull = if ($environmentPath) {
-        Get-FullPath $environmentPath
-    } elseif ([System.IO.Path]::IsPathRooted([string]$manifest.engine.path)) {
-        Get-FullPath ([string]$manifest.engine.path)
-    } else {
-        Get-FullPath (Join-Path $projectRoot ([string]$manifest.engine.path))
-    }
+    $environmentPath = [Environment]::GetEnvironmentVariable('SHARPENGINE_ROOT')
+    $registeredPath = Get-RegisteredEngineRoot ([string]$manifest.engine.association)
+    $engineFull = if ($EngineRoot) { Get-FullPath $EngineRoot }
+        elseif ($environmentPath) { Get-FullPath $environmentPath }
+        elseif ($registeredPath) { Get-FullPath $registeredPath }
+        else { throw "Engine association '$($manifest.engine.association)' is not registered." }
     $engineManifestPath = Join-Path $engineFull ([string]$manifest.engine.manifest)
     if (!(Test-Path -LiteralPath $engineManifestPath -PathType Leaf)) {
         throw "Engine manifest not found: $engineManifestPath"
     }
     $engineManifest = Get-Content -Raw -LiteralPath $engineManifestPath | ConvertFrom-Json
+    if ($engineManifest.schemaVersion -ne 2) {
+        throw "Unsupported engine manifest schema: $($engineManifest.schemaVersion)"
+    }
     if ($engineManifest.engineId -ne [string]$manifest.engine.id) {
         throw "Engine id mismatch. Project requests '$($manifest.engine.id)', resolved '$($engineManifest.engineId)'."
+    }
+    if ($engineManifest.version -ne [string]$manifest.engine.version) {
+        throw "Engine version mismatch. Project requests '$($manifest.engine.version)', resolved '$($engineManifest.version)'."
     }
     [pscustomobject]@{
         ProjectManifest = $full
@@ -83,6 +122,7 @@ function Resolve-ProjectManifest([string]$Path) {
         EngineManifest = $engineManifestPath
         EngineId = [string]$engineManifest.engineId
         EngineVersion = [string]$engineManifest.version
+        EngineAssociation = [string]$manifest.engine.association
         Modules = @($manifest.modules | ForEach-Object {
             [System.IO.Path]::GetFullPath((Join-Path $projectRoot ([string]$_)))
         })
@@ -102,12 +142,20 @@ function Invoke-NewProject {
     $toolRoot = Split-Path -Parent $PSScriptRoot
     $templateRoot = Join-Path $toolRoot 'Templates\BasicProject'
     $engineFull = if ($EngineRoot) { Get-FullPath $EngineRoot } else { $toolRoot }
-    $engineManifestPath = Join-Path $engineFull 'Engine\engine.json'
+    $engineManifestPath = Join-Path $engineFull 'engine.json'
     if (!(Test-Path -LiteralPath $engineManifestPath -PathType Leaf)) {
         throw "Engine distribution manifest not found: $engineManifestPath"
     }
     $engineManifest = Get-Content -Raw -LiteralPath $engineManifestPath | ConvertFrom-Json
-    $engineRelative = Get-RelativePath $projectRoot $engineFull
+    if ($engineManifest.schemaVersion -ne 2) {
+        throw "Unsupported engine manifest schema: $($engineManifest.schemaVersion)"
+    }
+    $association = if ($EngineAssociation) { $EngineAssociation }
+        else { Find-EngineAssociation $engineFull }
+    if (!$association) {
+        throw "Engine root '$engineFull' is not registered. Run SharpEngine.ProjectSelector register first, or specify -EngineAssociation."
+    }
+    Assert-EngineAssociation $association
     $projectId = $Name.ToLowerInvariant() -replace '[^a-z0-9]', ''
     if (!$projectId) { $projectId = 'game' }
     $namespace = $Name -replace '[^A-Za-z0-9_]', '_'
@@ -123,8 +171,8 @@ function Invoke-NewProject {
         @{ Source = 'Source\Editor\ProjectEditorExtension.cs'; Target = "Source\$namespace.Editor\ProjectEditorExtension.cs" },
         @{ Source = 'Content\UI\Main.ui.xml'; Target = 'Content\UI\Main.ui.xml' },
         @{ Source = 'Content\Assets\assets.json'; Target = 'Content\Assets\assets.json' },
-        @{ Source = 'Content\Worlds\Main.world.xml'; Target = 'Content\Worlds\Main.world.xml' },
         @{ Source = 'README.md'; Target = 'README.md' }
+        @{ Source = '.gitignore'; Target = '.gitignore' }
     )
     foreach ($file in $files) {
         $source = Join-Path $templateRoot $file.Source
@@ -135,17 +183,22 @@ function Invoke-NewProject {
         $text = $text.Replace('__PROJECT_ID__', $projectId)
         $text = $text.Replace('__PROJECT_NAMESPACE__', $namespace)
         $text = $text.Replace('__DISPLAY_NAME__', $Name)
-        $text = $text.Replace('__ENGINE_PATH__', $engineRelative.Replace('\', '\\'))
+        $text = $text.Replace('__ENGINE_ASSOCIATION__', $association)
         Write-Utf8NoBom (Join-Path $projectRoot $file.Target) $text
     }
+    $manifestPath = Join-Path $projectRoot "$Name.sharpproject"
+    Invoke-GenerateProjectFiles $manifestPath $engineFull
     $result = [pscustomobject]@{
         ProjectRoot = $projectRoot
-        ProjectManifest = Join-Path $projectRoot "$Name.sharpproject"
+        ProjectManifest = $manifestPath
         EngineRoot = $engineFull
         EngineVersion = [string]$engineManifest.version
+        EngineAssociation = $association
+        Solution = Join-Path $projectRoot "$Name.sln"
     }
     if ($Json) { $result | ConvertTo-Json -Depth 5 } else {
         Write-Output "Created SharpEngine project: $projectRoot"
+        Write-Output "Solution: $($result.Solution)"
         Write-Output "Next: & '$toolRoot\Tools\SharpEngineProject.ps1' -Command Build -ProjectFile '$($result.ProjectManifest)'"
     }
 }
@@ -184,13 +237,79 @@ function Invoke-Doctor([string]$Path) {
 
 function Invoke-Build([string]$Path) {
     $resolved = Resolve-ProjectManifest $Path
+    $layout = Join-Path $resolved.EngineRoot 'Tools\SharpEngineLayout.ps1'
+    if (!(Test-Path -LiteralPath $layout -PathType Leaf)) {
+        throw "SharpEngine layout checker not found: $layout"
+    }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $layout `
+        -EngineRoot $resolved.EngineRoot -Mode Check -Platform $Platform `
+        -Configuration $Configuration -Target Editor
+    if ($LASTEXITCODE -ne 0) { throw "SharpEngine layout check failed with exit code $LASTEXITCODE" }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $layout `
+        -ProjectFile $resolved.ProjectManifest -Mode Check -Platform $Platform `
+        -Configuration $Configuration -Target $Target
+    if ($LASTEXITCODE -ne 0) { throw "Project layout check failed with exit code $LASTEXITCODE" }
     $builder = Join-Path $resolved.EngineRoot 'Tools\ProjectBuild\SharpEngine.ProjectBuild.csproj'
     if (!(Test-Path -LiteralPath $builder -PathType Leaf)) {
         throw "SharpEngine project builder not found: $builder"
     }
     & dotnet run --project $builder -- build $resolved.ProjectManifest `
-        --target $Target --configuration $Configuration --platform $Platform
+        --target $Target --configuration $Configuration --platform $Platform `
+        --engine-root $resolved.EngineRoot
     if ($LASTEXITCODE -ne 0) { throw "SharpEngine project build failed with exit code $LASTEXITCODE" }
+}
+
+function Invoke-Clean([string]$Path) {
+    $resolved = Resolve-ProjectManifest $Path
+    $layout = Join-Path $resolved.EngineRoot 'Tools\SharpEngineLayout.ps1'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $layout `
+        -ProjectFile $resolved.ProjectManifest -Mode Clean -Platform $Platform `
+        -Configuration $Configuration -Target $Target
+    if ($LASTEXITCODE -ne 0) {
+        throw "SharpEngine project clean failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Invoke-Rebuild([string]$Path) {
+    Invoke-Clean $Path
+    Invoke-Build $Path
+}
+
+function Invoke-Selector([string]$SelectorCommand, [string]$Path, [bool]$NoUi,
+    [string]$EngineRootOverride = '') {
+    $bootstrapEngineRoot = Split-Path -Parent $PSScriptRoot
+    $selectorDirectory = Join-Path $bootstrapEngineRoot `
+        "Binaries\$Platform\$Configuration\Tools"
+    $selectorDll = Join-Path $selectorDirectory 'SharpEngine.ProjectSelector.dll'
+    $selectorProject = Join-Path $bootstrapEngineRoot `
+        'Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj'
+    $selectorArguments = @($SelectorCommand, '--project', (Get-FullPath $Path),
+        '--configuration', $Configuration)
+    $explicitRoot = if ($EngineRootOverride) { Get-FullPath $EngineRootOverride }
+        elseif ($EngineRoot) { Get-FullPath $EngineRoot }
+        else { [Environment]::GetEnvironmentVariable('SHARPENGINE_ROOT') }
+    if ($explicitRoot) { $selectorArguments += @('--engine-root', $explicitRoot) }
+    if ($NoUi) { $selectorArguments += '--no-ui' }
+    if (Test-Path -LiteralPath $selectorDll -PathType Leaf) {
+        & dotnet $selectorDll @selectorArguments
+    } else {
+        & dotnet run --project $selectorProject -c $Configuration -- @selectorArguments
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "SharpEngine Project Selector '$SelectorCommand' failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Invoke-GenerateProjectFiles([string]$Path, [string]$EngineRootOverride = '') {
+    Invoke-Selector 'generate' $Path $true $EngineRootOverride
+}
+
+function Invoke-OpenSolution([string]$Path) {
+    Invoke-Selector 'open-solution' $Path $false
+}
+
+function Invoke-OpenEditor([string]$Path) {
+    Invoke-Selector 'open-editor' $Path $false
 }
 
 switch ($Command) {
@@ -198,4 +317,9 @@ switch ($Command) {
     'Resolve' { Invoke-Resolve (Find-ProjectFile) }
     'Doctor' { Invoke-Doctor (Find-ProjectFile) }
     'Build' { Invoke-Build (Find-ProjectFile) }
+    'Clean' { Invoke-Clean (Find-ProjectFile) }
+    'Rebuild' { Invoke-Rebuild (Find-ProjectFile) }
+    'GenerateProjectFiles' { Invoke-GenerateProjectFiles (Find-ProjectFile) }
+    'OpenSolution' { Invoke-OpenSolution (Find-ProjectFile) }
+    'OpenEditor' { Invoke-OpenEditor (Find-ProjectFile) }
 }

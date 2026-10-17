@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <SharpEngineRoot Condition="'$(SharpEngineRoot)' == ''">$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))))</SharpEngineRoot>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <SharpEnginePlatform Condition="'$(SharpEnginePlatform)' == ''">Win64</SharpEnginePlatform>
+    <SharpEngineTarget Condition="'$(SharpEngineTarget)' == ''">Editor</SharpEngineTarget>
+
+    <SharpEngineBinariesTemplate>Binaries/{platform}/{configuration}/{target}</SharpEngineBinariesTemplate>
+    <SharpEngineIntermediateTemplate>Intermediate/{platform}/{configuration}/{target}</SharpEngineIntermediateTemplate>
+    <SharpEngineBinariesDir>$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\</SharpEngineBinariesDir>
+    <SharpEngineIntermediateDir>$(SharpEngineRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\</SharpEngineIntermediateDir>
+
+    <OutDir>$(SharpEngineBinariesDir)</OutDir>
+    <IntDir>$(SharpEngineIntermediateDir)$(MSBuildProjectName)\</IntDir>
+    <OutputPath>$(SharpEngineBinariesDir)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateDir)$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <Optimize Condition="'$(Configuration)' == 'Debug'">false</Optimize>
+    <Optimize Condition="'$(Configuration)' != 'Debug'">true</Optimize>
+    <DebugSymbols Condition="'$(Configuration)' == 'Shipping'">false</DebugSymbols>
+    <DebugSymbols Condition="'$(Configuration)' != 'Shipping'">true</DebugSymbols>
+    <DebugType Condition="'$(Configuration)' == 'Shipping'">none</DebugType>
+    <DebugType Condition="'$(Configuration)' != 'Shipping'">portable</DebugType>
+  </PropertyGroup>
+</Project>

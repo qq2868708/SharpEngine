@@ -1,8 +1,8 @@
 # __DISPLAY_NAME__
 
-This project references a public SharpEngine distribution from the root
-`__DISPLAY_NAME__.sharpproject` file. `SHARPENGINE_ROOT` may override the
-manifest-relative engine path.
+This project references a registered SharpEngine distribution from the root
+schema 3 `__DISPLAY_NAME__.sharpproject` file. `SHARPENGINE_ROOT` may explicitly
+override its Engine association for CI and automation.
 
 The project contains two C# Modules:
 
@@ -11,21 +11,28 @@ The project contains two C# Modules:
 - `Source/__PROJECT_NAMESPACE__.Editor`: Editor Module, depending on the Runtime
   Module and registering project menus and context commands.
 
-Build and run through the engine-owned project builder:
+`__DISPLAY_NAME__.sln` is generated when the project is created. It shows the
+associated source Engine and the project Modules even when they are in unrelated
+directories. Build from the generated `__DISPLAY_NAME__.Editor Target`, or use
+the engine-owned project builder:
 
 ```powershell
 & "$env:SHARPENGINE_ROOT\Tools\SharpEngineProject.ps1" -Command Build `
   -ProjectFile .\__DISPLAY_NAME__.sharpproject `
   -Target Editor -Configuration Debug -Platform Win64
 
-& "$env:SHARPENGINE_ROOT\x64\Debug\Engine.exe" `
-  --project .\__DISPLAY_NAME__.sharpproject
+& "$env:SHARPENGINE_ROOT\Tools\SharpEngineProject.ps1" -Command OpenEditor `
+  -ProjectFile .\__DISPLAY_NAME__.sharpproject
 ```
 
-Direct per-Module compilation is not a supported project workflow in this
-version. The unified build validates the complete graph and emits
-`Binaries/Managed/modules.runtime.json`. Code changes require rebuilding the
-project and restarting the editor; managed hot reload is not implemented.
+Direct per-Module compilation is rejected. Visual Studio design-time builds are
+allowed only for IntelliSense. The unified build validates the complete graph and emits
+the schema 2 `Binaries/Win64/<Configuration>/<Target>/modules.runtime.json`
+beside the flat Module assemblies. Intermediates use the matching
+`Intermediate/Win64/<Configuration>/<Target>/<BuildModule>` hierarchy. Code
+changes require rebuilding the project and restarting the editor; managed hot
+reload is not implemented.
 
-`Content/Worlds/Main.world.xml` is the startup scene. Project assets are
-registered in `Content/Assets/assets.json` under `project://` IDs.
+The first editor session creates an unsaved World instance from the engine's
+default World. Saving it creates a project-owned `.sworld`, registers it in
+`Content/Assets/assets.json`, and selects it as the project's startup World.

@@ -157,12 +157,12 @@ internal static unsafe class EditorExtensionValidation
             require(module.Calls == 1, "CanExecute must be enforced while the editor is playing");
             runtime.InvokeUiAction("editor.stop");
             var restored = runtime.SelectedEntity!;
-            require(!ReferenceEquals(original, restored) && runtime.IsDirty,
-                "Stop must preserve edit dirty state while replacing the simulated world");
+            require(ReferenceEquals(original, restored) && runtime.IsDirty,
+                "Stop must restore simulation transforms without replacing the Authoring document");
             restored.Position = new WorldVector3(7, 8, 9);
             runtime.InvokeUiAction("editor.command:validation.reset");
             require(module.Calls == 2 && restored.Position == WorldVector3.Zero,
-                "Command context must resolve the replacement world after Stop");
+                "Command context must keep resolving the Authoring world after Stop");
 
             var duplicateRejected = false;
             try { runtime.Commands.Register(new EditorCommand("validation.reset", "Duplicate", _ => { })); }

@@ -1,4 +1,5 @@
 using SharpEngine.Editor;
+using SharpEngine.Editor.Layout;
 using SharpEngine.UI;
 using SharpEngine.World;
 
@@ -12,26 +13,46 @@ void Require(bool condition, string message)
     if (!condition) throw new Exception(message);
     assertions++;
 }
+static bool MatrixNear(System.Numerics.Matrix4x4 left, System.Numerics.Matrix4x4 right)
+{
+    var a = new[] { left.M11, left.M12, left.M13, left.M14, left.M21, left.M22,
+        left.M23, left.M24, left.M31, left.M32, left.M33, left.M34, left.M41,
+        left.M42, left.M43, left.M44 };
+    var b = new[] { right.M11, right.M12, right.M13, right.M14, right.M21, right.M22,
+        right.M23, right.M24, right.M31, right.M32, right.M33, right.M34, right.M41,
+        right.M42, right.M43, right.M44 };
+    return a.Zip(b).All(pair => Math.Abs(pair.First - pair.Second) < 0.001f);
+}
 try
 {
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
-    var worldPath = Path.Combine(worlds.FullName, "Main.world.xml");
-    File.Copy(Path.Combine(root, "Content", "Worlds", "Main.world.xml"), worldPath);
+    var worldPath = Path.Combine(worlds.FullName, "Main.sworld");
+    File.Copy(Path.Combine(root, "Content", "Worlds", "Main.sworld"), worldPath);
     File.WriteAllText(Path.Combine(assets.FullName, "assets.json"), """
-        {"schemaVersion":1,"assets":[{"id":"worlds/main","type":"World","path":"Content/Worlds/Main.world.xml"}]}
+        {"schemaVersion":1,"assets":[{"id":"worlds/main","type":"World","path":"Content/Worlds/Main.sworld"}]}
         """);
     var manifest = Path.Combine(temporary.FullName, "Validation.sharpproject");
     File.WriteAllText(manifest, """
-        {"schemaVersion":2,"projectId":"validation","modules":[],"assets":{"manifest":"Content/Assets/assets.json"},"world":{"startup":"Content/Worlds/Main.world.xml"}}
+        {"schemaVersion":3,"projectId":"validation","engine":{"id":"SharpEngine","version":"0.2.0-dev","association":"validation","manifest":"engine.json"},"modules":[],"assets":{"manifest":"Content/Assets/assets.json"},"world":{"startup":"Content/Worlds/Main.sworld"}}
         """);
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", root);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    var defaultLayout = new EditorLayoutStore().LoadDefault(root);
+    var dockMarkup = EditorDockMarkup.Build(defaultLayout.MainHost, "Main Scene");
+    Require(dockMarkup.Contains("data-dock-split-node=\"main.root\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("data-dock-split-part=\"first\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("data-dock-split-part=\"second\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("data-dock-split-ratio=\"0.17\"", StringComparison.Ordinal),
+        "Dock markup must expose recursive split containers for transient resize preview");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
     Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 1,
         "Public and project assets must both be available to a project editor");
+    Require(runtime.Assets.Find("engine://worlds/main")?.ReadOnly == false &&
+        runtime.Assets.Find("engine://meshes/cube")?.ReadOnly == true,
+        "Engine Worlds must remain ordinary editable assets without changing other asset policies");
     Require(runtime.Assets.Diagnostics.Count == 0, "Project and engine asset manifests must resolve cleanly");
     Require(runtime.Content is not null && runtime.Content.SourceFilter == SharpEngine.Assets.ContentSourceFilter.Project &&
         runtime.Content.ContentRoot == Path.Combine(temporary.FullName, "Content") &&
@@ -40,14 +61,14 @@ try
     var content = runtime.Content!;
     runtime.InvokeUiAction("editor.content.open:project|Worlds");
     Require(content.CurrentFolder == "Worlds" &&
-        content.VisibleEntries.Any(entry => entry.Name == "Main.world.xml"),
+        content.VisibleEntries.Any(entry => entry.Name == "Main.sworld"),
         "Content manager should enter a Content subfolder and browse files");
     runtime.InvokeUiAction("editor.content.type:World");
     Require(content.VisibleAssets.Count == 1 && content.VisibleAssets[0].Type == "World",
         "Content manager type filter should narrow the visible assets");
-    runtime.InvokeUiAction("editor.content.open:project|Worlds/Main.world.xml");
+    runtime.InvokeUiAction("editor.content.open:project|Worlds/Main.sworld");
     Require(content.SelectedId == "project://worlds/main" &&
-        content.SelectedPath == "Worlds/Main.world.xml",
+        content.SelectedPath == "Worlds/Main.sworld",
         "Content manager should select a browsed manifest asset");
     runtime.InvokeUiAction("editor.content.up");
     runtime.InvokeUiAction("editor.content.clear");
@@ -97,6 +118,45 @@ try
         "Toolbar command action must execute its managed callback and mark the editor dirty");
     runtime.InvokeUiAction("editor.save");
     Require(!runtime.IsDirty, "Editor save should clear managed extension dirty state");
+    var player = runtime.World!.Entities.First(entity => entity.Id == "player");
+    var playerWorld = runtime.World.WorldMatrix(player);
+    var hierarchyRevision = runtime.DocumentRevision;
+    runtime.InvokeUiAction("editor.hierarchy-drop:player:crate:inside");
+    Require(player.ParentId == "crate" && runtime.DocumentRevision == hierarchyRevision + 1 &&
+        MatrixNear(runtime.World.WorldMatrix(player), playerWorld) && runtime.IsDirty,
+        "Hierarchy center drop must reparent atomically, preserve world transform, and dirty the World");
+    runtime.InvokeUiAction("editor.hierarchy-toggle:crate");
+    var collapsedHierarchy = runtime.BuildHierarchyMarkup();
+    Require(!collapsedHierarchy.Contains("Hierarchy contains unreachable entities",
+            StringComparison.Ordinal) &&
+        !collapsedHierarchy.Contains("data-action=\"editor.select-entity:player\"",
+            StringComparison.Ordinal),
+        "Collapsed descendants must stay structurally reachable without being rendered");
+    runtime.InvokeUiAction("editor.hierarchy-toggle:crate");
+    runtime.InvokeUiAction("editor.undo");
+    Require(player.ParentId.Length == 0 && MatrixNear(runtime.World.WorldMatrix(player), playerWorld) &&
+        !runtime.IsDirty,
+        "Hierarchy reparent must undo back to the saved Authoring state");
+    runtime.InvokeUiAction("editor.search-hierarchy:player");
+    Require(!runtime.BuildHierarchyMarkup().Contains("Hierarchy contains unreachable entities",
+            StringComparison.Ordinal),
+        "Hierarchy filtering must not report hidden non-matching entities as unreachable");
+    runtime.InvokeUiAction("editor.hierarchy-drop:player:crate:inside");
+    Require(player.ParentId.Length == 0,
+        "Hierarchy drag must be disabled while its search filter is active");
+    runtime.InvokeUiAction("editor.search-hierarchy:");
+    runtime.InvokeUiAction("editor.dock-close:console");
+    using var hiddenSnapshot = System.Text.Json.JsonDocument.Parse(runtime.DescribeEditorJson());
+    Require(hiddenSnapshot.RootElement.GetProperty("layout").GetProperty("hiddenPaneIds")
+            .EnumerateArray().Any(value => value.GetString() == "console"),
+        "Closing Console must hide the real Dock pane");
+    runtime.InvokeUiAction("editor.dock-toggle:console");
+    Require(runtime.DescribeEditorJson().Contains("\"hostId\": \"float.console",
+            StringComparison.Ordinal),
+        "View menu reopen must create a transient floating Dock host");
+    runtime.InvokeUiAction("editor.dock-save-layout");
+    Require(File.Exists(Path.Combine(temporary.FullName, "Saved", "Config", "EditorLayout.json")),
+        "Layout persistence must occur only after the explicit Save Layout command");
     Require(runtime.ViewportMode == EditorViewportMode.Scene3D &&
         runtime.DescribeEditorJson().Contains("\"mode\": \"scene3d\"", StringComparison.Ordinal),
         "Editor should start in serialized 3D scene mode");
@@ -159,6 +219,51 @@ try
         "Scene export must contain the AI-facing resolved transform description");
     EditorExtensionValidation.Run(Require);
     runtime.Shutdown();
+
+    var untitledRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "UntitledProject"));
+    Directory.CreateDirectory(Path.Combine(untitledRoot.FullName, "Content", "Assets"));
+    File.WriteAllText(Path.Combine(untitledRoot.FullName, "Content", "Assets", "assets.json"),
+        "{\"schemaVersion\":1,\"assets\":[]}");
+    var untitledManifest = Path.Combine(untitledRoot.FullName, "Untitled.sharpproject");
+    File.WriteAllText(untitledManifest,
+        "{\"schemaVersion\":3,\"projectId\":\"untitled\"," +
+        "\"engine\":{\"id\":\"SharpEngine\",\"version\":\"0.2.0-dev\",\"association\":\"validation\",\"manifest\":\"engine.json\"},\"modules\":[]," +
+        "\"assets\":{\"manifest\":\"Content/Assets/assets.json\"}}");
+    var untitledAssets = SharpEngine.Assets.AssetRegistry.Load(root,
+        untitledRoot.FullName, untitledManifest);
+    var untitled = WorldAssetWorkflow.LoadInitial(root, untitledRoot.FullName,
+        untitledManifest, untitledAssets);
+    Require(untitled.IsUntitled && untitled.AssetId is null &&
+        untitled.Document.Entities.Count == runtime.World.Entities.Count,
+        "A project without startup World must deep-copy the engine default as Untitled");
+    var savedUntitled = WorldAssetWorkflow.SaveUntitled(untitled.Document,
+        untitledRoot.FullName, untitledManifest,
+        Path.Combine(untitledRoot.FullName, "Content", "Worlds", "First.sworld"));
+    Require(File.Exists(savedUntitled.Path) && savedUntitled.AssetId == "project://worlds/first" &&
+        File.ReadAllText(untitledManifest).Contains("Content/Worlds/First.sworld",
+            StringComparison.Ordinal) &&
+        File.ReadAllText(Path.Combine(untitledRoot.FullName, "Content", "Assets", "assets.json"))
+            .Contains("worlds/first", StringComparison.Ordinal),
+        "First save must commit .sworld, asset registration, and project startup together");
+    var brokenRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "BrokenProject"));
+    Directory.CreateDirectory(Path.Combine(brokenRoot.FullName, "Content", "Assets"));
+    File.WriteAllText(Path.Combine(brokenRoot.FullName, "Content", "Assets", "assets.json"),
+        "{\"schemaVersion\":1,\"assets\":[]}");
+    var brokenManifest = Path.Combine(brokenRoot.FullName, "Broken.sharpproject");
+    File.WriteAllText(brokenManifest,
+        "{\"schemaVersion\":3,\"projectId\":\"broken\"," +
+        "\"engine\":{\"id\":\"SharpEngine\",\"version\":\"0.2.0-dev\",\"association\":\"validation\",\"manifest\":\"engine.json\"},\"modules\":[]," +
+        "\"assets\":{\"manifest\":\"Content/Assets/assets.json\"}," +
+        "\"world\":{\"startup\":\"Content/Worlds/Missing.sworld\"}}");
+    var missingStartupRejected = false;
+    try
+    {
+        _ = WorldAssetWorkflow.LoadInitial(root, brokenRoot.FullName, brokenManifest,
+            SharpEngine.Assets.AssetRegistry.Load(root, brokenRoot.FullName, brokenManifest));
+    }
+    catch (FileNotFoundException) { missingStartupRejected = true; }
+    Require(missingStartupRejected,
+        "An explicit missing startup World must fail instead of falling back to a preset");
     Console.WriteLine($"PASS: {assertions} editor integration assertions");
 }
 finally

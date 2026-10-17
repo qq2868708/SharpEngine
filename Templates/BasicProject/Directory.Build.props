@@ -1,8 +1,22 @@
 <Project>
   <PropertyGroup>
     <SharpEngineProjectRoot>$(MSBuildThisFileDirectory)</SharpEngineProjectRoot>
-    <OutputPath>$(SharpEngineProjectRoot)Binaries\Managed\</OutputPath>
-    <BaseIntermediateOutputPath>$(SharpEngineProjectRoot)Intermediate\Managed\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <SharpEnginePlatform Condition="'$(SharpEnginePlatform)' == ''">Win64</SharpEnginePlatform>
+    <SharpEngineTarget Condition="'$(SharpEngineTarget)' == ''">Editor</SharpEngineTarget>
+    <SharpEngineOutputRoot Condition="'$(SharpEngineOutputRoot)' == ''">$(SharpEngineProjectRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\</SharpEngineOutputRoot>
+    <SharpEngineIntermediateRoot Condition="'$(SharpEngineIntermediateRoot)' == ''">$(SharpEngineProjectRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\Modules\</SharpEngineIntermediateRoot>
+    <OutputPath>$(SharpEngineOutputRoot)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateRoot)$(MSBuildProjectName)\</BaseIntermediateOutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Optimize Condition="'$(Configuration)' == 'Debug'">false</Optimize>
+    <Optimize Condition="'$(Configuration)' != 'Debug'">true</Optimize>
+    <DebugSymbols Condition="'$(Configuration)' == 'Shipping'">false</DebugSymbols>
+    <DebugSymbols Condition="'$(Configuration)' != 'Shipping'">true</DebugSymbols>
+    <DebugType Condition="'$(Configuration)' == 'Shipping'">none</DebugType>
+    <DebugType Condition="'$(Configuration)' != 'Shipping'">portable</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
+  <Import Project="$(SharpEngineProjectRoot)Intermediate\ProjectFiles\SharpEngine.Generated.props"
+          Condition="Exists('$(SharpEngineProjectRoot)Intermediate\ProjectFiles\SharpEngine.Generated.props')" />
 </Project>

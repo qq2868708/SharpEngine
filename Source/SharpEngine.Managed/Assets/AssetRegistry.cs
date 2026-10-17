@@ -1,0 +1,430 @@
+using System.Collections.ObjectModel;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace SharpEngine.Assets;
+
+/// <summary>Where an asset is owned. Ownership is distinct from editability.</summary>
+public enum AssetSource : byte
+{
+    Engine = 0,
+    Project = 1,
+}
+
+/// <summary>A renderer-neutral asset record exposed to editor panels and the viewport.</summary>
+public sealed class AssetDescriptor
+{
+    public string Id { get; init; } = string.Empty;
+    public string Type { get; init; } = "Unknown";
+    public string Name { get; init; } = string.Empty;
+    /// <summary>Path relative to the owning source root, using '/' separators.</summary>
+    public string RelativePath { get; init; } = string.Empty;
+    public AssetSource Source { get; init; }
+    public bool ReadOnly { get; init; }
+    public bool Exists { get; internal set; }
+    public string? Importer { get; init; }
+    public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } =
+        new ReadOnlyDictionary<string, string>(
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>Absolute file path when this descriptor points at a file.</summary>
+    public string? ResolvePath(string sourceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(RelativePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (Path.IsPathRooted(RelativePath) || RelativePath.StartsWith('/') ||
+                RelativePath.StartsWith('\\') || RelativePath.Any(character =>
+                    char.IsControl(character) || "<>:\"|?*".Contains(character)))
+            {
+                throw new InvalidDataException(
+                    $"Asset path must be a relative file path: '{RelativePath}'");
+            }
+
+            var fullRoot = Path.GetFullPath(sourceRoot);
+            var fullPath = Path.GetFullPath(Path.Combine(fullRoot,
+                RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            var relative = Path.GetRelativePath(fullRoot, fullPath);
+            if (relative == "." || relative == ".." ||
+                relative.StartsWith(".." + Path.DirectorySeparatorChar,
+                    StringComparison.Ordinal) || Path.IsPathRooted(relative))
+            {
+                throw new InvalidDataException(
+                    $"Asset path escapes source root or names a directory: '{RelativePath}'");
+            }
+            if (RelativePath.EndsWith('/') || RelativePath.EndsWith('\\') ||
+                Directory.Exists(fullPath))
+                throw new InvalidDataException(
+                    $"Asset path names a directory: '{RelativePath}'");
+
+            return fullPath;
+        }
+        catch (Exception exception) when (exception is ArgumentException or
+            NotSupportedException or PathTooLongException)
+        {
+            throw new InvalidDataException($"Invalid asset path: '{RelativePath}'",
+                exception);
+        }
+    }
+
+    public override string ToString() =>
+        $"{Id} ({Type}, {Source}, {RelativePath})";
+}
+
+/// <summary>Diagnostics emitted while loading one or more asset manifests.</summary>
+public sealed record AssetRegistryDiagnostic(
+    string Message,
+    string? ManifestPath = null,
+    bool IsError = false);
+
+/// <summary>
+/// A small manifest-backed registry. The engine owns the public manifest and a
+/// project contributes a second manifest. IDs are namespaced as engine:// and
+/// project:// so the two stores can safely be displayed together. Individual
+/// asset types or records declare editability; source ownership alone is not a
+/// file-system permission boundary.
+/// </summary>
+public sealed class AssetRegistry
+{
+    private readonly List<AssetDescriptor> _assets = new();
+    private readonly Dictionary<string, AssetDescriptor> _byId =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<AssetRegistryDiagnostic> _diagnostics = new();
+
+    private AssetRegistry(string engineRoot, string? projectRoot)
+    {
+        EngineRoot = Path.GetFullPath(engineRoot);
+        ProjectRoot = string.IsNullOrWhiteSpace(projectRoot)
+            ? null
+            : Path.GetFullPath(projectRoot);
+    }
+
+    public string EngineRoot { get; }
+    public string? ProjectRoot { get; }
+    public string? DefaultWorldId { get; private set; }
+    public IReadOnlyList<AssetDescriptor> Assets => _assets;
+    public IReadOnlyList<AssetRegistryDiagnostic> Diagnostics => _diagnostics;
+
+    public IEnumerable<AssetDescriptor> EngineAssets =>
+        _assets.Where(asset => asset.Source == AssetSource.Engine);
+
+    public IEnumerable<AssetDescriptor> ProjectAssets =>
+        _assets.Where(asset => asset.Source == AssetSource.Project);
+
+    public AssetDescriptor? Find(string? id) =>
+        id is not null && _byId.TryGetValue(id, out var asset) ? asset : null;
+
+    public string? ResolvePath(AssetDescriptor asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        var root = asset.Source == AssetSource.Engine ? EngineRoot : ProjectRoot;
+        return root is null ? null : asset.ResolvePath(root);
+    }
+
+    public IEnumerable<AssetDescriptor> Search(string? query,
+        AssetSource? source = null, string? type = null)
+    {
+        var normalized = query?.Trim();
+        return _assets.Where(asset =>
+            (!source.HasValue || asset.Source == source.Value) &&
+            (string.IsNullOrWhiteSpace(type) ||
+                string.Equals(asset.Type, type, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(normalized) ||
+                asset.Id.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                asset.Name.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                asset.RelativePath.Contains(normalized, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>Stable AI-facing snapshot of both public and project asset stores.</summary>
+    public string ToJson(JsonSerializerOptions? options = null) =>
+        JsonSerializer.Serialize(new
+        {
+            engineRoot = EngineRoot,
+            projectRoot = ProjectRoot,
+            assets = Assets.Select(asset => new
+            {
+                id = asset.Id,
+                type = asset.Type,
+                name = asset.Name,
+                source = asset.Source.ToString(),
+                readOnly = asset.ReadOnly,
+                exists = asset.Exists,
+                path = asset.RelativePath,
+                importer = asset.Importer,
+                tags = asset.Tags,
+                metadata = asset.Metadata,
+            }),
+            diagnostics = Diagnostics,
+        }, options ?? new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        });
+
+    /// <summary>
+    /// Load the public engine manifest and the optional project manifest. Missing
+    /// project manifests are valid for the editor's empty-project state.
+    /// </summary>
+    public static AssetRegistry Load(string engineRoot, string? projectRoot = null,
+        string? projectManifestPath = null)
+    {
+        var registry = new AssetRegistry(engineRoot, projectRoot);
+        var engineManifest = Path.Combine(registry.EngineRoot, "engine.json");
+
+        registry.LoadOwnerManifest(engineManifest, AssetSource.Engine,
+            registry.EngineRoot);
+
+        if (!string.IsNullOrWhiteSpace(registry.ProjectRoot))
+        {
+            var projectManifest = string.IsNullOrWhiteSpace(projectManifestPath)
+                ? Directory.GetFiles(registry.ProjectRoot!, "*.sharpproject",
+                    SearchOption.TopDirectoryOnly).SingleOrDefault()
+                : Path.GetFullPath(projectManifestPath);
+
+            if (projectManifest is not null && File.Exists(projectManifest))
+            {
+                registry.LoadOwnerManifest(projectManifest,
+                    AssetSource.Project, registry.ProjectRoot!);
+            }
+        }
+
+        return registry;
+    }
+
+    /// <summary>Load resolved engine and optional root project manifest paths.</summary>
+    public static AssetRegistry LoadFromManifests(string engineManifestPath,
+        string? projectManifestPath = null)
+    {
+        var engineRoot = GetManifestRoot(engineManifestPath);
+        var projectRoot = projectManifestPath is null
+            ? null
+            : GetManifestRoot(projectManifestPath);
+        var registry = new AssetRegistry(engineRoot, projectRoot);
+        registry.LoadOwnerManifest(engineManifestPath, AssetSource.Engine, engineRoot);
+        if (projectManifestPath is not null)
+        {
+            registry.LoadOwnerManifest(projectManifestPath,
+                AssetSource.Project, projectRoot!);
+        }
+
+        return registry;
+    }
+
+    private void LoadOwnerManifest(string manifestPath, AssetSource source,
+        string sourceRoot)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Source manifest not found: {manifestPath}", manifestPath, true));
+            return;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(manifestPath);
+            using var document = JsonDocument.Parse(stream);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("Source manifest root must be an object");
+            var relativePath = "Content/Assets/assets.json";
+            if (document.RootElement.TryGetProperty("assets", out var assets))
+            {
+                if (assets.ValueKind != JsonValueKind.Object ||
+                    !assets.TryGetProperty("manifest", out var manifest) ||
+                    manifest.ValueKind != JsonValueKind.String ||
+                    string.IsNullOrWhiteSpace(manifest.GetString()))
+                {
+                    throw new InvalidDataException(
+                        "Source assets.manifest must be a non-empty relative path");
+                }
+
+                relativePath = manifest.GetString()!;
+            }
+
+            var descriptor = new AssetDescriptor { RelativePath = relativePath };
+            LoadManifest(descriptor.ResolvePath(sourceRoot)!, source, sourceRoot);
+            if (source == AssetSource.Engine &&
+                document.RootElement.TryGetProperty("worldPresets", out var presets) &&
+                presets.ValueKind == JsonValueKind.Object &&
+                presets.TryGetProperty("default", out var defaultWorld) &&
+                defaultWorld.ValueKind == JsonValueKind.String)
+            {
+                var rawId = defaultWorld.GetString();
+                if (rawId is null || !TryNormalizeId(rawId, AssetSource.Engine, out var id))
+                    throw new InvalidDataException("worldPresets.default must be a valid engine asset id");
+                var asset = Find(id);
+                if (asset is null || !string.Equals(asset.Type, "World",
+                        StringComparison.OrdinalIgnoreCase) || !asset.Exists)
+                    throw new InvalidDataException(
+                        $"worldPresets.default must reference an existing World asset: '{id}'");
+                DefaultWorldId = id;
+            }
+        }
+        catch (Exception exception) when (exception is JsonException or
+            InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Invalid source manifest: {exception.Message}", manifestPath, true));
+        }
+    }
+
+    private static string GetManifestRoot(string manifestPath)
+    {
+        return Path.GetDirectoryName(Path.GetFullPath(manifestPath))!;
+    }
+
+    private void LoadManifest(string manifestPath, AssetSource source,
+        string sourceRoot)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Asset manifest not found: {manifestPath}", manifestPath));
+            return;
+        }
+
+        try
+        {
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                ReadCommentHandling = JsonCommentHandling.Skip,
+            };
+            var manifest = JsonSerializer.Deserialize<AssetManifestFile>(
+                File.ReadAllText(manifestPath), options);
+            if (manifest is null || manifest.SchemaVersion != 1 || manifest.Assets is null)
+            {
+                _diagnostics.Add(new AssetRegistryDiagnostic(
+                    $"Asset manifest requires schemaVersion=1 and an assets array: {manifestPath}",
+                    manifestPath, true));
+                return;
+            }
+
+            foreach (var item in manifest.Assets ?? new List<AssetManifestItem?>())
+            {
+                AddAsset(item, source, sourceRoot, manifestPath);
+            }
+        }
+        catch (Exception exception) when (exception is JsonException or
+            IOException or UnauthorizedAccessException)
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Invalid asset manifest: {exception.Message}", manifestPath, true));
+        }
+    }
+
+    private void AddAsset(AssetManifestItem? item, AssetSource source,
+        string sourceRoot, string manifestPath)
+    {
+        if (item is null || string.IsNullOrWhiteSpace(item.Id) ||
+            string.IsNullOrWhiteSpace(item.Path))
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                "Asset entries require both id and path", manifestPath, true));
+            return;
+        }
+
+        if (!TryNormalizeId(item.Id, source, out var id))
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Invalid asset id or source namespace: '{item.Id}' (source={source})",
+                manifestPath, true));
+            return;
+        }
+        if (_byId.ContainsKey(id))
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                $"Duplicate asset id ignored: {id}", manifestPath, true));
+            return;
+        }
+
+        var relativePath = item.Path.Replace('\\', '/');
+        var descriptor = new AssetDescriptor
+        {
+            Id = id,
+            Type = string.IsNullOrWhiteSpace(item.Type) ? "Unknown" : item.Type,
+            Name = string.IsNullOrWhiteSpace(item.Name)
+                ? Path.GetFileNameWithoutExtension(relativePath)
+                : item.Name,
+            RelativePath = relativePath,
+            Source = source,
+            ReadOnly = item.ReadOnly || (source == AssetSource.Engine &&
+                !string.Equals(item.Type, "World", StringComparison.OrdinalIgnoreCase)),
+            Importer = item.Importer,
+            Tags = (item.Tags ?? new List<string>()).Where(
+                tag => !string.IsNullOrWhiteSpace(tag)).ToArray(),
+            Metadata = new ReadOnlyDictionary<string, string>(
+                item.Metadata ?? new Dictionary<string, string>(
+                    StringComparer.OrdinalIgnoreCase)),
+        };
+
+        try
+        {
+            descriptor.Exists = descriptor.ResolvePath(sourceRoot) is { } path &&
+                File.Exists(path);
+            if (!descriptor.Exists)
+            {
+                _diagnostics.Add(new AssetRegistryDiagnostic(
+                    $"Asset file not found: {id} ({relativePath})", manifestPath));
+            }
+        }
+        catch (InvalidDataException exception)
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(
+                exception.Message, manifestPath, true));
+            return;
+        }
+
+        _assets.Add(descriptor);
+        _byId.Add(descriptor.Id, descriptor);
+    }
+
+    private static bool TryNormalizeId(string id, AssetSource source, out string normalized)
+    {
+        var value = id.Trim().Replace('\\', '/');
+        var prefix = source == AssetSource.Engine ? "engine://" : "project://";
+        normalized = string.Empty;
+        if (value.Contains("://", StringComparison.Ordinal))
+        {
+            if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+            value = value[prefix.Length..];
+        }
+
+        if (value.Length == 0 || value.Split('/').Any(segment =>
+            segment.Length == 0 || segment is "." or "..") ||
+            value.Any(character => !char.IsLetterOrDigit(character) &&
+                character is not '/' and not '_' and not '-' and not '.'))
+        {
+            return false;
+        }
+
+        normalized = prefix + value;
+        return true;
+    }
+
+    private sealed class AssetManifestFile
+    {
+        [JsonPropertyName("schemaVersion")]
+        public int SchemaVersion { get; set; }
+        [JsonPropertyName("assets")]
+        public List<AssetManifestItem?>? Assets { get; set; }
+    }
+
+    private sealed class AssetManifestItem
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Type { get; set; } = "Unknown";
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public bool ReadOnly { get; set; }
+        public string? Importer { get; set; }
+        public List<string>? Tags { get; set; }
+        public Dictionary<string, string>? Metadata { get; set; }
+    }
+}
