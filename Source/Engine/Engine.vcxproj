@@ -162,22 +162,8 @@
     <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" />
     <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\SharpEngine.Game\SharpEngine.Game.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
-  <Target Name="RestoreManagedProjects" BeforeTargets="ResolveProjectReferences"
-          Condition="!Exists('$(SharpEngineIntermediateDir)SharpEngine.Game\project.assets.json') or
-                     !Exists('$(SharpEngineIntermediateDir)SharpEngine.Managed\project.assets.json') or
-                     !Exists('$(SharpEngineIntermediateDir)SharpEngine.Modules\project.assets.json')">
-    <MSBuild Projects="..\SharpEngine.Game\SharpEngine.Game.csproj"
-             Targets="Restore"
-             Properties="Configuration=$(Configuration);SharpEnginePlatform=$(SharpEnginePlatform);SharpEngineTarget=$(SharpEngineTarget)" />
-  </Target>
   <Target Name="CheckSharpEngineLayout">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)Tools\SharpEngineLayout.ps1&quot; -EngineRoot &quot;$(SharpEngineRoot)Build\..&quot; -Mode Check -Platform $(SharpEnginePlatform) -Configuration $(Configuration) -Target $(SharpEngineTarget)" />
   </Target>

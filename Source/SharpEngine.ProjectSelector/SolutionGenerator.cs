@@ -16,7 +16,7 @@ internal sealed record GeneratedSolution(
 
 internal static class SolutionGenerator
 {
-    private const int GeneratorVersion = 2;
+    private const int GeneratorVersion = 4;
     private const string CppProjectType = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     private const string CSharpProjectType = "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}";
     private const string FolderProjectType = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -258,6 +258,7 @@ internal static class SolutionGenerator
                 StableGuid("project:" + engineProject), CSharpProjectType, engineFolderGuid,
                 ProjectConfigurationKind.CSharp, Build: true));
         }
+        var managedBootstrap = entries.FirstOrDefault(entry => entry.Name == "SharpEngine.Game");
         foreach (var module in project.Modules)
         {
             var modulePath = Path.GetFullPath(Path.Combine(project.Root, module));
@@ -266,9 +267,11 @@ internal static class SolutionGenerator
                 gameFolderGuid, ProjectConfigurationKind.CSharp, Build: false));
         }
         var nativeEngine = entries.FirstOrDefault(entry => entry.Name == "Engine");
+        var targetDependencies = new[] { nativeEngine?.Guid, managedBootstrap?.Guid }
+            .OfType<string>().ToArray();
         entries.Add(new SolutionProject(project.DisplayName + ".Editor Target", wrapperPath,
             wrapperGuid, CSharpProjectType, gameFolderGuid, ProjectConfigurationKind.CSharp,
-            Build: true, DependencyGuid: nativeEngine?.Guid));
+            Build: true, DependencyGuids: targetDependencies));
 
         var builder = new StringBuilder();
         builder.AppendLine("Microsoft Visual Studio Solution File, Format Version 12.00");
@@ -283,11 +286,12 @@ internal static class SolutionGenerator
                 .Append(entry.Name).Append("\", \"")
                 .Append(SolutionPath(path, entry.Path)).Append("\", \"")
                 .Append(entry.Guid).AppendLine("\"");
-            if (entry.DependencyGuid is not null)
+            if (entry.DependencyGuids is { Count: > 0 })
             {
                 builder.AppendLine("\tProjectSection(ProjectDependencies) = postProject");
-                builder.Append('\t').Append('\t').Append(entry.DependencyGuid).Append(" = ")
-                    .AppendLine(entry.DependencyGuid);
+                foreach (var dependencyGuid in entry.DependencyGuids)
+                    builder.Append('\t').Append('\t').Append(dependencyGuid).Append(" = ")
+                        .AppendLine(dependencyGuid);
                 builder.AppendLine("\tEndProjectSection");
             }
             builder.AppendLine("EndProject");
@@ -435,5 +439,5 @@ internal static class SolutionGenerator
         string FolderGuid,
         ProjectConfigurationKind Kind,
         bool Build,
-        string? DependencyGuid = null);
+        IReadOnlyList<string>? DependencyGuids = null);
 }

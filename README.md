@@ -12,7 +12,7 @@ The native solution builds the RmlUi/FreeType dependencies and the managed
 projects as part of the Win64 build. It requires Visual Studio C++, CMake, and
 .NET 8. Dependency source versions and licenses are preserved under External.
 
-    & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe' SharpEngine.sln /m /p:Configuration=Debug /p:Platform=x64
+    & 'C:\Program Files\Microsoft Visual Studio\18\Insiders\MSBuild\Current\Bin\MSBuild.exe' SharpEngine.sln /m /restore /p:Configuration=Debug /p:Platform=x64
 
 Engine, `SharpEngine.Game`, `SharpEngine.Managed`, `SharpEngine.Modules`, and
 `SharpEngine.ProjectSelector`

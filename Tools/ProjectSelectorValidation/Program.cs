@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using Microsoft.Win32;
 using SharpEngine.ProjectSelector;
 
@@ -73,6 +74,23 @@ try
           firstSolution.Contains(Path.Combine(engineRoot, "Source", "Engine",
               "Engine.vcxproj"), StringComparison.OrdinalIgnoreCase),
         "Source Engine and generated Editor Target must coexist in the Solution");
+    var engineBootstrapGuid = StableGuid("project:" + Path.Combine(engineRoot, "Source",
+        "SharpEngine.Game", "SharpEngine.Game.csproj"));
+    var nativeEnginePath = Path.Combine(engineRoot, "Source", "Engine", "Engine.vcxproj");
+    var nativeEngineDocument = XDocument.Load(nativeEnginePath);
+    var nativeEngineGuid = nativeEngineDocument.Descendants().First(element =>
+        element.Name.LocalName == "ProjectGuid").Value.ToUpperInvariant();
+    var targetStart = firstSolution.IndexOf("\"ForeignGame.Editor Target\"",
+        StringComparison.Ordinal);
+    var targetEnd = firstSolution.IndexOf("EndProject", targetStart, StringComparison.Ordinal);
+    var targetBlock = firstSolution[targetStart..targetEnd];
+    Check(targetBlock.Contains(engineBootstrapGuid, StringComparison.OrdinalIgnoreCase) &&
+          targetBlock.Contains(nativeEngineGuid, StringComparison.OrdinalIgnoreCase),
+        "Editor Target must depend on both native Engine and managed bootstrap projects");
+    var nativeEngineProject = File.ReadAllText(nativeEnginePath);
+    Check(!nativeEngineProject.Contains("<ProjectReference", StringComparison.Ordinal) &&
+          !nativeEngineProject.Contains("..\\SharpEngine.Game", StringComparison.Ordinal),
+        "Native Engine must not expose or invoke managed projects outside the Solution graph");
     Check(firstSolution.Contains("{2150E333-8FDC-42A3-9474-1A3956D46DE8}",
               StringComparison.OrdinalIgnoreCase) &&
           !firstSolution.Contains("= \"Build\", \"Build\"", StringComparison.Ordinal),
