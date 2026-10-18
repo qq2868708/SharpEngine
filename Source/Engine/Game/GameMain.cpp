@@ -16,13 +16,25 @@
 namespace {
     ManagedHost* Managed{};
     HWND Window{};
+    uint32_t RenderWidth = 1280;
+    uint32_t RenderHeight = 720;
     POINT LastPointer{};
     bool PointerKnown{};
     std::vector<UiSceneVertex> Triangles, Lines;
     uint8_t __cdecl Viewport(float* x,float* y,float* w,float* h) {
-        RECT r{}; GetClientRect(Window,&r);
-        *x=0; *y=0; *w=static_cast<float>(r.right); *h=static_cast<float>(r.bottom);
-        return r.right>0 && r.bottom>0;
+        uint32_t width = RenderWidth;
+        uint32_t height = RenderHeight;
+        if (Window)
+        {
+            RECT r{};
+            if (GetClientRect(Window, &r) && r.right > 0 && r.bottom > 0)
+            {
+                width = static_cast<uint32_t>(r.right);
+                height = static_cast<uint32_t>(r.bottom);
+            }
+        }
+        *x=0; *y=0; *w=static_cast<float>(width); *h=static_cast<float>(height);
+        return width > 0 && height > 0;
     }
     void __cdecl Submit(const float* t,uint32_t nt,const float* l,uint32_t nl) {
         Triangles.clear(); Lines.clear();
@@ -72,6 +84,8 @@ namespace {
 
 int wmain(int argc,wchar_t** argv) {
     std::filesystem::path project,screenshot; uint32_t limit=0; bool hidden=false;
+    bool renderOffscreen = false;
+    bool nullRhi = false;
     for(int i=1;i<argc;++i) {
         const std::wstring arg=argv[i];
         if(arg==L"--project"&&i+1<argc) project=argv[++i];
@@ -79,8 +93,14 @@ int wmain(int argc,wchar_t** argv) {
         else if(arg==L"--smoke-test") limit=30;
         else if(arg==L"--screenshot"&&i+1<argc) screenshot=argv[++i];
         else if(arg==L"--hidden") hidden=true;
+        else if(arg==L"--render-offscreen" || arg==L"-RenderOffscreen") renderOffscreen=true;
+        else if(arg==L"--null-rhi" || arg==L"-NullRHI") nullRhi=true;
     }
     if(project.empty()) { EngineLog::Error("Game", "GAME_PROJECT_REQUIRED: use --project <file.sharpproject>"); return 2; }
+    if(renderOffscreen && nullRhi) {
+        EngineLog::Error("Game", "RENDER_BACKEND_CONFLICT: RenderOffscreen and NullRHI cannot be selected together");
+        return 2;
+    }
     std::wstring exe(32768,L'\0');exe.resize(GetModuleFileNameW(nullptr,exe.data(),static_cast<DWORD>(exe.size())));
     const auto directory=std::filesystem::path(exe).parent_path();
     auto root=directory;
@@ -91,36 +111,69 @@ int wmain(int argc,wchar_t** argv) {
     SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST",selection.ProjectManifest.c_str());
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT",selection.EngineRoot.c_str());
     EngineLog::Configure(selection.ProjectRoot, "Game");
-    SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Game");
-    WNDCLASSW wc{};wc.lpfnWndProc=Procedure;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"SharpEngineGameWindow";wc.style=CS_OWNDC;wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
-    wc.hIcon=SharpEngine::Windows::LoadBrandIcon(wc.hInstance,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON));
-    RegisterClassW(&wc);
-    Window=CreateWindowW(wc.lpszClassName,L"SharpEngine Game",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,1280,720,nullptr,nullptr,wc.hInstance,nullptr);
-    if(!Window) return 3;
-    SharpEngine::Windows::ApplyBrandIcon(Window, wc.hInstance);
-    const RenderInitDesc renderDesc{Window,1280,720,false,RenderBackendType::Vulkan};
+    const bool headless = renderOffscreen || nullRhi;
+    if (headless && limit == 0) limit = 1;
+    if (renderOffscreen && screenshot.empty())
+        screenshot = selection.ProjectRoot / L"Saved/Validation/RenderOffscreen/frame.bmp";
+
+    RenderBackendType backendType = RenderBackendType::Vulkan;
+    if (renderOffscreen) backendType = RenderBackendType::Offscreen;
+    if (nullRhi) backendType = RenderBackendType::NullRHI;
+
+    if (!headless)
+    {
+        SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Game");
+        WNDCLASSW wc{};wc.lpfnWndProc=Procedure;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"SharpEngineGameWindow";wc.style=CS_OWNDC;wc.hCursor=LoadCursor(nullptr,IDC_ARROW);
+        wc.hIcon=SharpEngine::Windows::LoadBrandIcon(wc.hInstance,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON));
+        RegisterClassW(&wc);
+        Window=CreateWindowW(wc.lpszClassName,L"SharpEngine Game",WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,static_cast<int>(RenderWidth),static_cast<int>(RenderHeight),nullptr,nullptr,wc.hInstance,nullptr);
+        if(!Window) return 3;
+        SharpEngine::Windows::ApplyBrandIcon(Window, wc.hInstance);
+    }
+    const RenderInitDesc renderDesc{Window,RenderWidth,RenderHeight,false,backendType};
     if(!RC_Initialize(&renderDesc)) {
-        DestroyWindow(Window);return 3;
+        if (Window) DestroyWindow(Window);
+        return 3;
     }
     ManagedHost managed;
     ManagedHostApi api{};api.GetViewportRect=Viewport;api.SubmitViewportFrame=Submit;
     if(!managed.Initialize((directory/L"SharpEngine.Host.runtimeconfig.json").wstring(),(directory/L"SharpEngine.Host.dll").wstring())||
-        !managed.Start(Window,1280,720,&api)) { managed.Shutdown();RC_Shutdown();DestroyWindow(Window);return 4; }
+        !managed.Start(Window,RenderWidth,RenderHeight,&api)) { managed.Shutdown();RC_Shutdown();if(Window) DestroyWindow(Window);return 4; }
     Managed=&managed;
-    if(!hidden)ShowWindow(Window,SW_SHOW);
+    if(Window && !hidden)ShowWindow(Window,SW_SHOW);
     auto last=std::chrono::steady_clock::now();uint32_t frames=0;bool running=true;
     while(running) {
-        MSG message{};while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) { if(message.message==WM_QUIT){running=false;break;}TranslateMessage(&message);DispatchMessageW(&message); }
+        if (Window)
+        {
+            MSG message{};while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) { if(message.message==WM_QUIT){running=false;break;}TranslateMessage(&message);DispatchMessageW(&message); }
+        }
         if(!running)break;
         auto now=std::chrono::steady_clock::now();float delta=std::chrono::duration<float>(now-last).count();last=now;
         managed.Update(limit?1.0f/60.0f:(delta>0.1f?0.1f:delta));
-        RECT bounds{};GetClientRect(Window,&bounds);
-        RenderPreviewScene(0,0,static_cast<float>(bounds.right),static_cast<float>(bounds.bottom),static_cast<float>(bounds.bottom),Triangles.data(),static_cast<uint32_t>(Triangles.size()),Lines.data(),static_cast<uint32_t>(Lines.size()));
+        uint32_t frameWidth = RenderWidth;
+        uint32_t frameHeight = RenderHeight;
+        if (Window)
+        {
+            RECT bounds{};
+            if (GetClientRect(Window, &bounds) && bounds.right > 0 && bounds.bottom > 0)
+            {
+                frameWidth = static_cast<uint32_t>(bounds.right);
+                frameHeight = static_cast<uint32_t>(bounds.bottom);
+            }
+        }
+        RenderPreviewScene(0,0,static_cast<float>(frameWidth),static_cast<float>(frameHeight),static_cast<float>(frameHeight),Triangles.data(),static_cast<uint32_t>(Triangles.size()),Lines.data(),static_cast<uint32_t>(Lines.size()));
         if(limit&&frames+1>=limit&&!screenshot.empty()) RC_RequestScreenshot(screenshot.c_str());
         ++frames;
         if(limit&&frames>=limit)break;
         Sleep(1);
     }
-    Managed=nullptr;managed.Shutdown();RC_Shutdown();DestroyWindow(Window);
+    RenderStats stats{};
+    RC_GetStats(&stats);
+    EngineLog::Info("Game", "Render backend completed frames=" + std::to_string(stats.FramesBegun) +
+        " submitted=" + std::to_string(stats.FramesSubmitted) +
+        " triangles=" + std::to_string(stats.TriangleVertices) +
+        " lines=" + std::to_string(stats.LineVertices) +
+        " framebuffer=" + std::to_string(stats.HasFramebuffer));
+    Managed=nullptr;managed.Shutdown();RC_Shutdown();if(Window) DestroyWindow(Window);
     return 0;
 }

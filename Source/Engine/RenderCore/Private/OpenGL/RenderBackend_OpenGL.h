@@ -5,6 +5,7 @@
 class RenderBackend_OpenGL final : public RenderBackend
 {
 public:
+    ~RenderBackend_OpenGL() override { Shutdown(); }
     bool Initialize(const RenderInitDesc* desc) override;
     void Shutdown() override;
 

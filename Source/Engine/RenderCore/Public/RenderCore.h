@@ -13,12 +13,17 @@ extern "C"
     {
         OpenGL = 0,
         Vulkan = 1,
+        // CPU-backed framebuffer used by bounded RenderOffscreen validation.
+        // It does not require a native window or a graphics device.
+        Offscreen = 2,
+        // Headless no-op backend analogous to UE's NullRHI.
+        NullRHI = 3,
     };
 
     struct RenderInitDesc
     {
-        // The active native window. On Win32 this is an HWND. The backend
-        // uses the current graphics context and does not retain this pointer.
+        // The active native window. On Win32 this is an HWND. Offscreen and
+        // NullRHI intentionally accept nullptr and never retain this pointer.
         void* WindowHandle;
         uint32_t Width;
         uint32_t Height;
@@ -56,6 +61,17 @@ extern "C"
         RenderDrawList Lines;
     };
 
+    struct RenderStats
+    {
+        uint64_t FramesBegun = 0;
+        uint64_t FramesSubmitted = 0;
+        uint64_t TriangleVertices = 0;
+        uint64_t LineVertices = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+        uint8_t HasFramebuffer = 0;
+    };
+
     RC_API bool RC_Initialize(const RenderInitDesc* desc);
     RC_API void RC_Shutdown();
 
@@ -65,6 +81,9 @@ extern "C"
 
     RC_API void RC_Resize(uint32_t width, uint32_t height);
     RC_API void RC_RequestScreenshot(const wchar_t* path);
+    // Returns transient renderer evidence for bounded validation. The result
+    // is never serialized into authored content.
+    RC_API void RC_GetStats(RenderStats* stats);
     // Routes a native window message through the active backend UI first.
     // Returns true when the UI consumed the message.
     RC_API bool RC_HandleWindowMessage(void* window, uint32_t message,

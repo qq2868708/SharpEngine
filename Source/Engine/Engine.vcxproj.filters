@@ -87,6 +87,15 @@
     <ClInclude Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.h">
       <Filter>RenderCore\Private\OpenGL</Filter>
     </ClInclude>
+    <ClInclude Include="RenderCore\Private\RenderBackend_Offscreen.h">
+      <Filter>RenderCore</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\RenderBackend_NullRHI.h">
+      <Filter>RenderCore</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderCore\Private\RenderBackend_Stats.h">
+      <Filter>RenderCore</Filter>
+    </ClInclude>
     <ClInclude Include="RenderCore\Private\Common\VkUtils.h">
       <Filter>RenderCore\Private\Common</Filter>
     </ClInclude>
@@ -138,6 +147,12 @@
     </ClCompile>
     <ClCompile Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.cpp">
       <Filter>RenderCore\Private\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\RenderBackend_Offscreen.cpp">
+      <Filter>RenderCore</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderCore\Private\RenderBackend_NullRHI.cpp">
+      <Filter>RenderCore</Filter>
     </ClCompile>
     <ClCompile Include="RenderCore\Private\Common\VkUtils.cpp">
       <Filter>RenderCore\Private\Common</Filter>

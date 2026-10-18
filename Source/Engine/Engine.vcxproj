@@ -142,6 +142,9 @@
     <ClInclude Include="RenderCore\Private\Common\VkUtils.h" />
     <ClInclude Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend.h" />
+    <ClInclude Include="RenderCore\Private\RenderBackend_Offscreen.h" />
+    <ClInclude Include="RenderCore\Private\RenderBackend_NullRHI.h" />
+    <ClInclude Include="RenderCore\Private\RenderBackend_Stats.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkContext.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkFrame.h" />
@@ -160,6 +163,8 @@
     <ClCompile Include="Game\GameMain.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\PreviewRenderer.cpp" />
     <ClCompile Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.cpp" />
+    <ClCompile Include="RenderCore\Private\RenderBackend_Offscreen.cpp" />
+    <ClCompile Include="RenderCore\Private\RenderBackend_NullRHI.cpp" />
     <ClCompile Include="ManagedHost.cpp" />
     <ClCompile Include="Logging\EngineLog.cpp" />
     <ClCompile Include="Platform\Windows\WindowsPlatform.cpp" />

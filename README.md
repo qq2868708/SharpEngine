@@ -69,6 +69,22 @@ For bounded runs and actual framebuffer captures from both schemes:
 The Editor capture verifies the OpenGL scene and RmlUi editor shell. The Game
 capture verifies Vulkan scene geometry and the visible RmlUi game UI together.
 
+For headless rendering validation, Game also accepts UE-like backend switches:
+
+```powershell
+.\Binaries\Win64\Debug\Game\Engine.exe --project D:\Games\MyGame\MyGame.sharpproject -RenderOffscreen --frames 1 --screenshot D:\Temp\scene.bmp
+.\Binaries\Win64\Debug\Game\Engine.exe --project D:\Games\MyGame\MyGame.sharpproject -NullRHI --frames 2
+```
+
+`RenderOffscreen` uses a deterministic CPU framebuffer. It accepts the same
+renderer-neutral scene vertices as the Vulkan path, writes a 32-bit BMP, and
+does not create an HWND, Vulkan instance, swapchain, or graphics context. If
+no frame count is supplied it advances one frame, making the command suitable
+for bounded CI checks. `NullRHI` creates no framebuffer at all; it still runs
+the managed Game lifecycle and scene generation, then reports frame and draw
+counts in the Game log. `RC_GetStats` exposes the same transient evidence to
+native validation callers without adding it to authored or Cooked state.
+
 ## Managed lifecycle
 
 The native host calls:
