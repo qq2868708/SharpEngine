@@ -5,11 +5,36 @@ SharpEngine ships formal, engine-readable JSON assets in `Content`. `StaticMeshA
 bone data, and the material references consumed by the runtime. `SkeletalAnimationAsset`
 contains animation tracks and is referenced by `SkeletalMeshComponent` at runtime.
 
+New source asset types use a lowercase `s` prefix in their resource suffix: the
+semantic type is lowercased and prefixed with `s`, for example `.sskeleton`,
+`.sskeletalmesh`, `.sskeletalanimation`, `.sprefab`, and `.sworld`. Existing bare
+or `.sharp...` files remain legacy compatibility inputs and are not renamed
+without an explicit migration that preserves asset IDs and old references. This
+file-suffix rule does not rename manifest type values, importer names, or C# asset
+types.
+
 Blender files and FBX files are authoring inputs, not delivery assets. They must stay
 outside `Content` (the validation scripts use `Saved/Validation/.../Sources`), and the
-asset manifest registers only the imported JSON assets. `sourcePath` and
-`sourceSha256` remain optional compatibility fields for private import workflows;
-the checked-in engine assets omit them and load without a source file.
+asset manifest registers the imported SharpEngine assets. `sourcePath` and
+`sourceSha256` are optional provenance fields. When present, the loader verifies
+that the source file still exists and has the recorded SHA-256; these fields do
+not require an FBX export to preserve the source file's bytes.
+
+FBX import and export use semantic equivalence. A static mesh preserves its
+triangle geometry, coordinate system, and units. A skeletal mesh additionally
+preserves the skeleton hierarchy, bind pose, vertex influences, and skinning
+weights. A skeletal animation preserves its duration, sample rate, bone order,
+and transform tracks. Exporters may rewrite FBX records, ordering, compression,
+and metadata. Metadata that is not represented by a SharpEngine asset is not a
+round-trip guarantee. `AssetContent.ExportFbx`, `StaticMeshAsset.ExportFbx`,
+`SkeletonAsset.ExportFbx`, `SkeletalMeshAsset.ExportFbx`, and
+`SkeletalAnimationAsset.ExportFbx` are the public semantic export names;
+`ExportOriginalFbx` remains only as an obsolete source-copy entry.
+The built-in runtime path copies a verified raw FBX source only. For
+canonical engine assets, `ExportFbx` currently reports that FBX reconstruction
+is unsupported and leaves the destination unchanged. After an FBX writer is
+installed, it must reconstruct a new file from the current canonical asset data.
+完整的字段范围、组合选择和回读容差见 [FBX 导入导出规范](FbxInterchange.md)。
 
 The built-in components are:
 
@@ -47,6 +72,7 @@ or copied into `Content`.
 To import another static FBX, keep the input outside `Content` and run Blender
 with `Tools/Assets/ImportStaticFbx.py -- --input <fbx> --source-root <root>
 --output <mesh.json> --asset-id <stable-id> --name <name>`. The importer emits a
-self-contained formal JSON asset by default. Use `--include-source-contract` only
-for a private authoring check; do not commit that source or register it in the
-shipping manifest.
+self-contained formal JSON asset by default. Add `--include-source-provenance`
+when a private authoring check needs source hash validation;
+`--include-source-contract` remains a compatibility spelling. Do not commit the
+authoring source or register it as a delivery asset.

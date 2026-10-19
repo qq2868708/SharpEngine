@@ -31,11 +31,14 @@
                         <li><a href="index.html" aria-current="page">概览</a></li>
                         <li><a href="#getting-started">开始使用</a></li>
                         <li><a href="#editor">编辑器工作流</a></li>
+                        <li><a href="#animation-editor">动画时间轴与 Notify</a></li>
                         <li><a href="#world-assets">世界与资源</a></li>
+                        <li><a href="#fbx-assets">FBX 导入与导出</a></li>
                         <li><a href="#control-movement">控制与移动</a></li>
                         <li><a href="#input-ui">输入与 UI</a></li>
                         <li><a href="#settings-modules">设置与模块</a></li>
                         <li><a href="#validation">验证边界</a></li>
+                        <li><a href="#data-assets">数据资产</a></li>
                         <li><a href="#updates">本版更新</a></li>
                       </ul>
                     </details>
@@ -59,21 +62,34 @@
       <p>层级、变换、资源选择和设置编辑都支持撤销、重做和恢复。编辑器会在内容变化后重新载入可用结果；如果载入失败，会保留当前编辑状态并显示诊断信息。</p>
       <p>资源浏览器支持按文件夹、名称、来源和类型查找内容，多个浏览器可以分别保留自己的位置、筛选条件和选择。</p>
     </section>
+    <section class="section-card" id="animation-editor">
+      <h2>动画时间轴与 Notify</h2>
+      <p>编辑器的 Animation Timeline 面板提供骨骼采样预览、时间尺、轨道、播放头和预览控制。打开 View 菜单中的 Animation Timeline 后，可以使用 Play、Pause、Stop 和时间尺按钮检查动画片段。</p>
+      <p>Notify 轨道显示 Footstep、Attack Window 等事件。点击 Clip 可以查看当前 Notify，使用 Add Notify 会在预览时间线上创建新的事件并立即刷新视图。项目 Timeline 资产支持 Undo、Redo 和 Save；引擎来源资产保持只读。</p>
+      <p>Viewport 的 Transform 按钮和项目 Project Preview 按钮都通过引擎命令执行。项目可以扩展固定的 File 菜单、主 Toolbar 和 <code>viewport</code> CustomBar Surface，但不能创建新的顶层 Surface。</p>
+    </section>
     <section class="section-card" id="world-assets">
       <h2>世界与资源</h2>
       <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
       <p>源资源是可编辑内容的唯一依据；运行和发布过程中产生的构建结果可以重新生成。无法识别的内容会被保留并提示问题，不会悄悄变成可运行对象。</p>
     </section>
+    <section class="section-card" id="fbx-assets">
+      <h2>FBX 导入与导出</h2>
+      <p>FBX 是导入来源格式。导入后，项目使用 SharpEngine 的骨骼、蒙皮网格和动画资产；FBX 文件应保留在 Content 之外的来源目录。需要来源校验时，在资产中记录 <code>sourcePath</code> 和 <code>sourceSha256</code>，引擎会验证来源文件是否仍然匹配。验证来源不代表当前资产编辑仍能由该来源还原。</p>
+      <p>导出使用语义等价规则。网格几何、坐标系和单位，骨骼层级与绑定姿态，蒙皮权重，以及动画的骨骼轨道必须保持等价。导出器可以重新组织 FBX 记录、压缩方式和未建模的元数据，因此导出文件的字节内容不需要与导入文件相同。</p>
+      <p>通过资产的 <code>ExportFbx</code> 或 <code>AssetContent.ExportFbx</code> 入口导出。当前内置路径只复制显式注册的原始 FBX 来源；对规范化 SharpEngine 资产会报告尚未接入 FBX writer 且不改写目标文件。接入 writer 后从当前 SharpEngine 数据重建文件。完成后重新导入导出文件并检查上述语义数据；重新导入检查通过才算完成格式验证。</p>
+    </section>
     <section class="section-card" id="control-movement">
       <h2>控制与移动</h2>
       <p>让角色或其他对象接受玩家或 AI 的控制，并按照移动意图在场景中移动。控制来源和移动能力彼此独立，因此同一套移动行为可以服务不同的控制方式。</p>
       <p>当多个控制来源指向同一个对象时，引擎会按照优先级选择一个来源，保证结果稳定。对象不可用、控制冲突或控制暂时失效时，运行状态会显示相应诊断。</p>
+      <p>示例内容包含 <code>prefabs/capsule-character</code> 胶囊体角色 Prefab，并已实例化到 <code>Content/Worlds/Main.sworld</code>。在编辑器按 Play 后点击 Viewport 使其获得焦点，使用 WASD 移动胶囊体；Stop 会丢弃运行时位置变化。</p>
       <p>功能边界、可观察状态和使用限制见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
     </section>
     <section class="section-card" id="input-ui">
       <h2>输入与 UI</h2>
-      <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。</p>
-      <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。</p>
+      <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做，F5 播放或暂停，F8 停止。文本输入框获得焦点时优先处理自身的编辑操作。</p>
+      <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。Play 或 Pause 时，Viewport 的相机导航、选择和 Gizmo 不再接收游戏输入；输入只作用于运行时逻辑，Stop 后恢复编辑操作。</p>
     </section>
     <section class="section-card" id="settings-modules">
       <h2>设置与模块</h2>
@@ -85,13 +101,23 @@
       <p>功能验证分为内容检查、编辑器检查、运行检查、构建检查和发布包检查。某一层通过，只能说明该层的行为符合预期，不能替代其他层的验证。</p>
       <p>每个功能页面都会说明适用的验证范围和已观察到的结果；遇到问题时，优先查看对应功能的诊断信息和验证记录。</p>
     </section>
+    <section class="section-card" id="data-assets">
+      <h2>数据资产</h2>
+      <p>项目可以用 C# 数据类型定义独立的配置资产，将同一种配置类型保存为多个 <code>.sdataasset</code> 文本资源，并通过稳定资产 ID 加载。字段约束和直接资源引用会在加载时校验。</p>
+      <p>当前提供类型、Schema、强类型加载和显式文件保存基础；通用创建菜单、Inspector 文档、撤销事务和热重载仍待接入。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
+    </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>增加由 C# 类型声明的版本化数据资产基础，支持字段约束、直接资产引用校验和强类型加载。</li>
         <li>建立版本化 HTML 手册入口，拆分为用户手册和 API 索引。</li>
         <li>定义功能修改必须同步更新手册并运行手册链接校验的维护约束。</li>
         <li>补充控制器、可控制目标和移动组件的用户工作流与运行时边界。</li>
+        <li>新增胶囊体角色 Prefab、主场景实例和 WASD Play 移动验收流程。</li>
         <li>用户手册改为只描述功能用途、操作结果和使用限制；实现接口集中在 API 索引。</li>
+        <li>增加 Animation Timeline 骨骼预览、Notify 编辑的 revision/Undo/Redo/Save 流程，并记录固定菜单、Toolbar 与 CustomBar Surface 的扩展路径。</li>
+        <li>统一 FBX 导入来源校验和语义等价导出规则；导出不再要求保留原始 FBX 字节。</li>
+        <li>修正编辑器修饰键位映射，并在 Play/运行时隔离 Viewport 编辑输入，避免游戏移动同时驱动编辑器相机。</li>
       </ul>
     </section>
       </div>

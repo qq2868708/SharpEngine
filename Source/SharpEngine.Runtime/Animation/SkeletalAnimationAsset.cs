@@ -64,8 +64,10 @@ public sealed class SkeletalPose
 }
 
 /// <summary>
-/// Versioned, readable skeletal animation source asset. The bone order and
-/// key order are authoritative and are preserved during serialization.
+/// Versioned, readable skeletal animation asset. The bone order and key order
+/// are authoritative and are preserved during serialization. Optional FBX
+/// source fields record provenance for import/export validation; they do not
+/// require an export to preserve the source file's bytes.
 /// </summary>
 public sealed class SkeletalAnimationAsset
 {
@@ -74,16 +76,32 @@ public sealed class SkeletalAnimationAsset
     public SkeletalAnimationAsset(string assetId, string name, double duration,
         float sampleRate, IReadOnlyList<SkeletonBone> bones,
         IReadOnlyList<BoneTrack> tracks, string? skeletonId = null)
+        : this(assetId, name, duration, sampleRate, bones, tracks, skeletonId, null, null)
     {
-        AssetId = RequireId(assetId, nameof(assetId));
-        Name = string.IsNullOrWhiteSpace(name) ? throw new ArgumentException("Animation name is required", nameof(name)) : name.Trim();
-        if (!double.IsFinite(duration) || duration <= 0) throw new ArgumentOutOfRangeException(nameof(duration));
-        if (!float.IsFinite(sampleRate) || sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
-        Duration = duration;
-        SampleRate = sampleRate;
-        SkeletonId = string.IsNullOrWhiteSpace(skeletonId) ? null : skeletonId.Trim();
-        Bones = bones?.ToArray() ?? throw new ArgumentNullException(nameof(bones));
-        Tracks = tracks?.ToArray() ?? throw new ArgumentNullException(nameof(tracks));
+    }
+
+    public SkeletalAnimationAsset(string AssetId, string Name, double Duration,
+        float SampleRate, IReadOnlyList<SkeletonBone> Bones,
+        IReadOnlyList<BoneTrack> Tracks, string? SkeletonId,
+        string? SourcePath, string? SourceSha256)
+    {
+        this.AssetId = RequireId(AssetId, nameof(AssetId));
+        this.Name = string.IsNullOrWhiteSpace(Name) ? throw new ArgumentException("Animation name is required", nameof(Name)) : Name.Trim();
+        if (!double.IsFinite(Duration) || Duration <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(Duration));
+        }
+        if (!float.IsFinite(SampleRate) || SampleRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(SampleRate));
+        }
+        this.Duration = Duration;
+        this.SampleRate = SampleRate;
+        this.SkeletonId = string.IsNullOrWhiteSpace(SkeletonId) ? null : SkeletonId.Trim();
+        this.Bones = Bones?.ToArray() ?? throw new ArgumentNullException(nameof(Bones));
+        this.Tracks = Tracks?.ToArray() ?? throw new ArgumentNullException(nameof(Tracks));
+        this.SourcePath = string.IsNullOrWhiteSpace(SourcePath) ? null : SourcePath.Trim();
+        this.SourceSha256 = string.IsNullOrWhiteSpace(SourceSha256) ? null : SourceSha256.Trim();
         Validate();
     }
 
@@ -94,6 +112,25 @@ public sealed class SkeletalAnimationAsset
     public string? SkeletonId { get; }
     public IReadOnlyList<SkeletonBone> Bones { get; }
     public IReadOnlyList<BoneTrack> Tracks { get; }
+    /// <summary>Optional provenance path relative to the owning engine/project root.</summary>
+    public string? SourcePath
+    {
+        get;
+    }
+    /// <summary>SHA-256 of the imported source bytes, independent of export bytes.</summary>
+    public string? SourceSha256
+    {
+        get;
+    }
+
+    /// <summary>Export an FBX that is semantically equivalent to this animation.</summary>
+    public string ExportFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportFbx(Registry, AssetId, Destination);
+
+    /// <summary>Compatibility source copy; does not include current authored asset changes.</summary>
+    [Obsolete("Source copy only; use ExportFbx for semantic export. Canonical asset reconstruction requires an FBX writer.")]
+    public string ExportOriginalFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportOriginalFbx(Registry, AssetId, Destination);
 
     public SkeletalPose Sample(double time)
     {
@@ -158,7 +195,7 @@ public sealed class SkeletalAnimationAsset
             });
         }
 
-        return new JsonObject
+        var Result = new JsonObject
         {
             ["schemaVersion"] = CurrentSchemaVersion,
             ["kind"] = "skeletal-animation",
@@ -170,6 +207,15 @@ public sealed class SkeletalAnimationAsset
             ["bones"] = bones,
             ["tracks"] = tracks,
         };
+        if (SourcePath is not null)
+        {
+            Result["sourcePath"] = SourcePath;
+        }
+        if (SourceSha256 is not null)
+        {
+            Result["sourceSha256"] = SourceSha256;
+        }
+        return Result;
     }
 
     public static SkeletalAnimationAsset Parse(string json, string source = "<memory>")
@@ -179,7 +225,9 @@ public sealed class SkeletalAnimationAsset
             using var document = JsonDocument.Parse(json);
             EnsureNoDuplicateProperties(document.RootElement);
             var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidDataException("Animation root must be an object");
-            PlayableJson.Exact(root, "schemaVersion", "kind", "assetId", "name", "duration", "sampleRate", "skeletonId", "bones", "tracks");
+            ExactWithOptional(root,
+                ["schemaVersion", "kind", "assetId", "name", "duration", "sampleRate", "skeletonId", "bones", "tracks"],
+                ["sourcePath", "sourceSha256"]);
             if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion ||
                 root["kind"]!.GetValue<string>() != "skeletal-animation")
                 throw new InvalidDataException("Unsupported skeletal animation schema");
@@ -189,7 +237,8 @@ public sealed class SkeletalAnimationAsset
             return new SkeletalAnimationAsset(root["assetId"]!.GetValue<string>(),
                 root["name"]!.GetValue<string>(), root["duration"]!.GetValue<double>(),
                 root["sampleRate"]!.GetValue<float>(), bones, tracks,
-                root["skeletonId"]?.GetValue<string>());
+                root["skeletonId"]?.GetValue<string>(), OptionalString(root, "sourcePath"),
+                OptionalString(root, "sourceSha256"));
         }
         catch (InvalidDataException) { throw; }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or ArgumentException or OverflowException)
@@ -218,6 +267,7 @@ public sealed class SkeletalAnimationAsset
                 previous = key.Time;
             }
         }
+        SourceAssetContract.ValidateMetadata(SourcePath, SourceSha256, AssetId);
     }
 
     private static BoneTransform SampleTrack(BoneTrack track, double time)
@@ -269,6 +319,22 @@ public sealed class SkeletalAnimationAsset
         var value = node?.AsObject() ?? throw new InvalidDataException("Keyframe must be an object");
         PlayableJson.Exact(value, "time", "position", "rotation", "scale");
         return new BoneKeyframe(value["time"]!.GetValue<double>(), new BoneTransform(ParseVector3(value["position"], "position"), ParseQuaternion(value["rotation"], "rotation"), ParseVector3(value["scale"], "scale")));
+    }
+
+    private static string? OptionalString(JsonObject Root, string Name) =>
+        Root[Name] is null || Root[Name]!.GetValueKind() == JsonValueKind.Null
+            ? null : Root[Name]!.GetValue<string>();
+
+    private static void ExactWithOptional(JsonObject Value, IReadOnlyList<string> Required,
+        IReadOnlyList<string> Optional)
+    {
+        if (Required.Any(Field => !Value.ContainsKey(Field)) ||
+            Value.Select(Property => Property.Key).Any(Field =>
+                !Required.Contains(Field, StringComparer.Ordinal) &&
+                !Optional.Contains(Field, StringComparer.Ordinal)))
+        {
+            throw new InvalidDataException("Unexpected or missing fields in skeletal animation asset");
+        }
     }
 
     private static Vector3 ParseVector3(JsonNode? node, string path)
@@ -344,6 +410,11 @@ public static class SkeletalAnimationContent
         if (!string.Equals(Animation.AssetId, Id, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException($"Animation asset ID '{Animation.AssetId}' does not match '{Id}'.");
+        }
+        if (Animation.SourcePath is not null)
+        {
+            SourceAssetContract.ResolveAndValidate(Registry, Descriptor, Animation.SourcePath,
+                Animation.SourceSha256!);
         }
         return Animation;
     }

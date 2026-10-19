@@ -29,9 +29,14 @@ public sealed class SkeletonAsset
     public string? SourcePath { get; }
     public string? SourceSha256 { get; }
 
-    /// <summary>Copy the authoritative imported FBX after source hash verification.</summary>
-    public string ExportOriginalFbx(AssetRegistry registry, string destination) =>
-        FbxSourceContract.ExportOriginalFbx(registry, AssetId, destination);
+    /// <summary>Export an FBX that is semantically equivalent to this skeleton.</summary>
+    public string ExportFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportFbx(Registry, AssetId, Destination);
+
+    /// <summary>Compatibility source copy; does not include current authored asset changes.</summary>
+    [Obsolete("Source copy only; use ExportFbx for semantic export. Canonical asset reconstruction requires an FBX writer.")]
+    public string ExportOriginalFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportOriginalFbx(Registry, AssetId, Destination);
 
     public string Serialize(bool indented = true) => ToJson().ToJsonString(
         new JsonSerializerOptions { WriteIndented = indented });
@@ -249,9 +254,14 @@ public sealed class SkeletalMeshAsset
     public string? SourcePath { get; }
     public string? SourceSha256 { get; }
 
-    /// <summary>Copy the authoritative imported FBX after source hash verification.</summary>
-    public string ExportOriginalFbx(AssetRegistry registry, string destination) =>
-        FbxSourceContract.ExportOriginalFbx(registry, AssetId, destination);
+    /// <summary>Export an FBX that is semantically equivalent to this skeletal mesh.</summary>
+    public string ExportFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportFbx(Registry, AssetId, Destination);
+
+    /// <summary>Compatibility source copy; does not include current authored asset changes.</summary>
+    [Obsolete("Source copy only; use ExportFbx for semantic export. Canonical asset reconstruction requires an FBX writer.")]
+    public string ExportOriginalFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportOriginalFbx(Registry, AssetId, Destination);
 
     public string Serialize(bool indented = true) => ToJson().ToJsonString(
         new JsonSerializerOptions { WriteIndented = indented });

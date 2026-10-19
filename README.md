@@ -426,7 +426,12 @@ Built-in meshes are real indexed triangle data:
 `engine://meshes/sphere` is a radius-0.5 sphere. Blender and FBX authoring
 inputs stay outside `Content`; the manifest exposes only these imported assets.
 `engine://materials/default` supplies the standard shader, base color,
-metallic, and roughness parameters. Load them through
+metallic, and roughness parameters. FBX import records optional
+`sourcePath`/`sourceSha256` provenance. The `ExportFbx` contract requires a
+semantically equivalent FBX; exporter record ordering, compression, metadata,
+and file bytes may differ from the source. The current runtime copies a
+verified source as a fallback; edited canonical assets require an FBX writer to
+reconstruct current data. Load them through
 `AssetContent.LoadMesh(registry, id)` and
 `AssetContent.LoadMaterial(registry, id)`; the formats are UTF-8 JSON files in
 `Content/Assets/Meshes` and `Content/Assets/Materials`.
@@ -494,7 +499,8 @@ Use `project` instead of `engine` in the URI for a project plugin. Resource URIs
 resolved by the native RmlUi file interface and cannot escape the selected root.
 
 These types live in `SharpEngine.Editor` in the public `SharpEngine.Editor.dll`.
-The BasicProject template includes a working top-level `Project` menu and Scene,
+The BasicProject template extends the engine-created `File` menu and main
+Toolbar, and adds a project-owned `viewport` CustomBar. It also includes Scene,
 Object, Asset, and Folder context menus. `EditorContext` and command callbacks
 expose the current world, assets, unified `EditorSelection`, play state, dirty
 state, status, save, and UI refresh operations. Right-clicking first replaces the
@@ -509,7 +515,12 @@ automatically converted into transactions.
 `GetChecked` always reads the owning business state; UI code never caches or
 optimistically flips it. Keep both callbacks fast and side-effect free.
 
-`EditorMenuRegistry` registers top-level menus, categories, and command items.
+`IMenuExtension` and `IToolBarExtension` can only extend engine-created menu and
+Toolbar surfaces. `ICustomBarExtension` targets a fixed CustomBar surface and may
+append or replace its display; it cannot create or delete a surface. The engine
+creates `viewport` and `timeline` CustomBar surfaces; the Timeline Editor Module
+uses the latter for its preview controls. The legacy registries remain the storage
+layer for categories and command items.
 `EditorToolbarRegistry` requires explicit categories; categories are separated by
 vertical rules and may align Left, Center, or Right. A tool with one command runs
 directly, while a tool with multiple commands renders a dropdown. The built-in
@@ -522,13 +533,17 @@ includes commands, current checked/enabled state, menu placements, Toolbar
 categories/tools, context placements, and unified selection. Registration IDs
 are case-insensitive and must be unique in their owning registry. The former
 `EditorToolbarButton` and `Section` API was removed without a compatibility shim.
-Separate extension DLL discovery and custom Dock/Inspector registration remain
-later work.
+The built-in Animation Timeline pane exposes a sampled skeletal preview, time
+ruler, playback, Notify clips, Undo/Redo and explicit Save through the `timeline.*`
+commands. Engine-owned Timeline assets are read-only; a project-owned Timeline
+asset can be edited and saved. Separate extension DLL discovery and custom
+Dock/Inspector registration remain later work.
 
 ### Dock layout
 
-The built-in Viewport, UI Editor, Hierarchy, Content Manager, Inspector, and
-Console are real Dock panes. UI Editor contains its own asset-document tabs; it
+The built-in Viewport, Animation Timeline, UI Editor, Hierarchy, Content Manager,
+Inspector, and Console are real Dock panes. UI Editor contains its own
+asset-document tabs; it
 is not a viewport mode. A drag always keeps a floating pane ghost visible. Dropping on
 the nearest content edge splits left, right, top, or bottom and previews the
 exact result; dropping on a Tab bar merges at the shown insertion line. Dropping

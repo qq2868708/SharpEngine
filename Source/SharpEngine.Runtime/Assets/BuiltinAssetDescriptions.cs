@@ -61,8 +61,14 @@ public static class AssetContent
     public static SkeletalMeshAsset LoadSkeletalMesh(AssetRegistry registry, string id) =>
         SkeletalMeshContent.Load(registry, id);
 
-    public static string ExportOriginalFbx(AssetRegistry registry, string id,
-        string destination) => FbxSourceContract.ExportOriginalFbx(registry, id, destination);
+    /// <summary>Export an FBX semantically equivalent to a registered asset.</summary>
+    public static string ExportFbx(AssetRegistry Registry, string Id,
+        string Destination) => FbxSourceContract.ExportFbx(Registry, Id, Destination);
+
+    /// <summary>Compatibility source copy; does not include current authored asset changes.</summary>
+    [Obsolete("Source copy only; use ExportFbx for semantic export. Canonical asset reconstruction requires an FBX writer.")]
+    public static string ExportOriginalFbx(AssetRegistry Registry, string Id,
+        string Destination) => FbxSourceContract.ExportOriginalFbx(Registry, Id, Destination);
 
     public static MeshAssetDescription LoadMesh(AssetRegistry registry, string id)
     {

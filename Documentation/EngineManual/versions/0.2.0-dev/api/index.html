@@ -32,6 +32,7 @@
                         <li><a href="index.html" aria-current="page">概览</a></li>
                         <li><a href="#overview">入口总览</a></li>
                         <li><a href="#entries">API 条目</a></li>
+                        <li><a href="#data-assets">数据资产 API</a></li>
                         <li><a href="#updates">本版更新</a></li>
                       </ul>
                     </details>
@@ -50,11 +51,14 @@
         <tbody>
           <tr><td>引擎分发</td><td><code>engine.json</code></td><td>manifest schema 2；engine version 0.2.0-dev</td><td><a href="../../../../../README.md">README</a></td></tr>
           <tr><td>项目</td><td><code>*.sharpproject</code></td><td>project schema 3</td><td><a href="../../../../ProjectOrganization.md">Project Organization</a></td></tr>
+          <tr><td>资源文件</td><td>新增资源类型的源文件扩展名</td><td>语义类型小写化后加 <code>s</code> 前缀；旧裸后缀和 <code>.sharp...</code> 后缀仅作兼容</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
           <tr><td>世界</td><td><code>World</code> / <code>RuntimeWorld</code></td><td>World JSON v3；组件独立 schema</td><td><a href="../../../../InspectorComponentDesign.md">Component Design</a></td></tr>
           <tr><td>控制与移动</td><td><code>engine.controllable</code> / <code>engine.player-controller</code> / <code>engine.ai-controller</code> / <code>engine.movement</code></td><td>组件 schema v1；frame state schema v1</td><td><a href="../../../../ControlAndMovement.md">Control and Movement</a></td></tr>
+          <tr><td>角色 Prefab</td><td><code>prefabs/capsule-character</code></td><td>Prefab/World JSON v3；稳定内部实体引用</td><td><a href="../../../../ControlAndMovement.md">Control and Movement</a></td></tr>
           <tr><td>输入</td><td><code>InputAction</code> / <code>InputMappingContext</code></td><td>JSON schema v1</td><td><a href="../../../../../README.md#unified-input-routing">README 输入路由</a></td></tr>
           <tr><td>编辑器</td><td><code>EditorRuntime</code> / <code>editor.describe</code></td><td>snapshot schema 按能力声明</td><td><a href="../../../../EditorMcpUiObservability.md">Editor MCP UI</a></td></tr>
           <tr><td>时间线</td><td><code>PlayableGraph</code> / <code>TimelineAsset</code></td><td>Timeline schema v1</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
+          <tr><td>FBX 资产</td><td><code>FbxSourceContract.ExportFbx</code> / <code>AssetContent.ExportFbx</code></td><td>来源 provenance + 语义等价导出</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
           <tr><td>设置</td><td><code>DevelopmentSettings</code></td><td>设置 ID + schema version</td><td><a href="../../../../../README.md#viewport-navigation-and-project-settings">README 设置</a></td></tr>
           <tr><td>日志</td><td><code>SharpLog</code></td><td>log envelope schema v1</td><td><a href="../../../../Logging.md">Logging</a></td></tr>
         </tbody>
@@ -69,11 +73,12 @@
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
-        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用。</p>
+        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；<code>EditorPaneIds.Timeline</code> 是引擎创建的 Animation Timeline 面板。</p>
+        <p><code>IMenuExtension</code>、<code>IToolBarExtension</code> 和 <code>ICustomBarExtension</code> 分别扩展固定 File 菜单、主 Toolbar 和引擎创建的 <code>viewport</code>/<code>timeline</code> CustomBar。CustomBar 的 <code>Append</code>/<code>Replace</code> 只影响显示，命令注册仍然保留；扩展不能创建或删除顶层 Surface。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Runtime.Input</code></h3>
-        <p>InputAction、InputMappingContext 和统一输入路由。动作回调返回 <code>true</code> 时消费动作；事件顺序和 route 名称属于可观察契约。</p>
+        <p>InputAction、InputMappingContext 和统一输入路由。动作回调返回 <code>true</code> 时消费动作；事件顺序和 route 名称属于可观察契约。Win32/RmlUi 修饰键位遵循 <code>Ctrl=1</code>、<code>Shift=2</code>、<code>Alt=4</code>；编辑器 Play 状态下，Host 不再把事件转发到 <code>EditorRuntime</code> 的 Viewport 导航、选择或 Gizmo 入口。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Components</code> 控制与移动</h3>
@@ -81,20 +86,40 @@
         <p>绑定仲裁、运行时字段和示例见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
       </article>
       <article class="api-entry">
+        <h3><code>prefabs/capsule-character</code></h3>
+        <p>资源类型为 <code>Prefab</code>，源文件为 <code>Content/Prefabs/CapsuleCharacter.sprefab</code>，使用 World/Prefab JSON schema v3。根实体包含 <code>engine.static-mesh</code>（<code>engine://meshes/capsule</code>）、<code>engine.capsule-collider</code>、控制与移动组件；<code>engine.player-controller.ControlledEntity</code> 指向根实体稳定 ID，实例化时必须重映射为新实体 ID。</p>
+      </article>
+      <article class="api-entry">
         <h3><code>SharpEngine.Timeline</code></h3>
-        <p><code>IPlayable</code>、<code>PlayableGraph</code>、Timeline 文档和 MarkerPlayable。时间线可以承载非动画事件，资源 schema 和播放语义见专题文档。</p>
+        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code> 和 MarkerPlayable。编辑器扩展通过 <code>timeline.play</code>、<code>timeline.pause</code>、<code>timeline.stop</code>、<code>timeline.add-notify</code>、<code>timeline.undo</code>、<code>timeline.redo</code>、<code>timeline.save</code> 和 <code>timeline.seek-start</code> 命令驱动预览与编辑。</p>
       </article>
       <article class="api-entry">
         <h3>版本化 JSON 与 MCP</h3>
         <p>AI-facing snapshot、组件、资产、设置和输入契约包含 schemaVersion。未知未来版本、未知必需类型和迁移失败必须返回结构化诊断；不能静默丢弃字段。</p>
       </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Assets.FbxSourceContract</code></h3>
+        <p><code>ExportFbx(AssetRegistry, Id, Destination)</code> 定义 <code>Mesh</code>、<code>StaticMesh</code>、<code>Skeleton</code>、<code>SkeletalMesh</code> 和 <code>SkeletalAnimation</code> 的语义导出入口。当前内置实现只复制显式注册的原始 <code>FBXSource</code>；规范化资产返回 <code>NotSupportedException</code> 且不修改目标。<code>sourcePath</code>/<code>sourceSha256</code> 只能校验来源未变，不能证明已经编辑的当前资产与来源仍然语义一致。接入 FBX writer 后，编辑后的规范化资产必须从当前数据重建。</p>
+        <p><code>StaticMeshAsset</code>、<code>SkeletonAsset</code>、<code>SkeletalMeshAsset</code>、<code>SkeletalAnimationAsset</code> 和 <code>AssetContent</code> 都提供同名 <code>ExportFbx</code> 包装入口。旧的 <code>ExportOriginalFbx</code> 只作为标记为 obsolete 的来源复制入口。</p>
+      </article>
+    </section>
+    <section class="section-card" id="data-assets">
+      <h2>数据资产 API</h2>
+      <p><code>SharpEngine.Assets.DataAsset&lt;T&gt;</code>、<code>DataAssetTypeAttribute</code>、<code>DataPropertyAttribute</code>、<code>DataAssetTypeRegistry</code> 和 <code>DataAssetSerializer</code> 定义第一阶段数据资产契约。<code>.sdataasset</code> 使用类型声明的 schemaVersion，封套包含 <code>schemaVersion</code>、<code>kind</code>、<code>assetId</code> 和 <code>name</code>；manifest type 等于稳定类型 ID。</p>
+      <p>支持显式注册与程序集发现、属性描述和 JSON Schema、确定顺序序列化、强类型加载、范围与直接引用校验、只读保护和临时文件替换。该 API 不提供编辑器事务或完整 Cook。详见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>增加数据资产类型声明与 .sdataasset 封套契约，类型 schema 从 v1 起显式声明；未引入已有资产格式迁移。</li>
         <li>建立首版 API 索引，收录引擎 manifest、项目、World、输入、编辑器、Timeline、设置和日志契约。</li>
+        <li>增加固定 Editor Surface 扩展接口、Timeline 骨骼采样预览、Notify authoring session、面板命令和 CustomBar 描述字段；Timeline 资产 schema 仍为 v1。</li>
         <li>规定新增或修改公共类型、稳定 ID、命令、MCP 能力和 schema 时必须同步更新本页。</li>
         <li>收录控制与移动组件的 typeId、schema 和 frame state 入口。</li>
+        <li>登记胶囊体角色 Prefab 资产 ID、组件组成和内部引用重映射契约。</li>
+        <li>增加 FBX provenance 字段和语义等价导出契约；明确导出文件不保证与来源字节一致。</li>
+        <li>规定新增资源文件扩展名由语义类型小写化后加 <code>s</code> 前缀，并保留旧裸后缀和 <code>.sharp...</code> 后缀的兼容边界。</li>
+        <li>修正输入修饰键位契约，并明确 Play 状态下 Runtime 输入与编辑器 Viewport 操作的隔离边界。</li>
       </ul>
     </section>
       </div>

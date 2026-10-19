@@ -8,7 +8,8 @@ namespace SharpEngine.Assets;
 /// Canonical runtime representation of a static mesh asset.  The existing
 /// <see cref="MeshAssetDescription"/> remains the renderer-facing legacy
 /// description; this type adds a stable asset id, coordinate-system metadata,
-/// and an optional source-file round-trip contract.
+/// and an optional source-file provenance contract. FBX export is defined by
+/// semantic equivalence; source bytes are used only to validate provenance.
 /// </summary>
 public sealed class StaticMeshAsset
 {
@@ -43,9 +44,14 @@ public sealed class StaticMeshAsset
     /// <summary>Lower- or upper-case SHA-256 of the source file bytes.</summary>
     public string? SourceSha256 { get; }
 
-    /// <summary>Copy the authoritative imported FBX after source hash verification.</summary>
-    public string ExportOriginalFbx(AssetRegistry registry, string destination) =>
-        FbxSourceContract.ExportOriginalFbx(registry, AssetId, destination);
+    /// <summary>Export an FBX that is semantically equivalent to this mesh.</summary>
+    public string ExportFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportFbx(Registry, AssetId, Destination);
+
+    /// <summary>Compatibility source copy; does not include current authored asset changes.</summary>
+    [Obsolete("Source copy only; use ExportFbx for semantic export. Canonical asset reconstruction requires an FBX writer.")]
+    public string ExportOriginalFbx(AssetRegistry Registry, string Destination) =>
+        FbxSourceContract.ExportOriginalFbx(Registry, AssetId, Destination);
 
     public MeshAssetDescription ToMeshDescription() => new(Name, Primitive,
         Positions, Indices, DefaultMaterial);
@@ -213,7 +219,10 @@ public sealed class StaticMeshAsset
     }
 }
 
-/// <summary>Source file metadata shared by imported runtime assets.</summary>
+/// <summary>
+/// Validates optional imported-file provenance. This contract never requires
+/// an exported FBX to retain the source file's byte layout or metadata.
+/// </summary>
 internal static class SourceAssetContract
 {
     public static void ValidateMetadata(string? path, string? sha256, string assetId)

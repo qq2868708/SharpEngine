@@ -2,8 +2,9 @@
 
 Read an authoring FBX, then emit SharpEngine's canonical static-mesh JSON.
 Source files belong in a local authoring or validation directory; they are not
-written to Content and the generated formal asset has no source dependency by
-default.
+written to Content. The optional sourcePath/sourceSha256 fields record import
+provenance for validation. They do not promise byte-for-byte FBX export:
+exported FBX only needs to be semantically equivalent to the canonical asset.
 """
 import argparse
 import hashlib
@@ -16,7 +17,12 @@ import bpy
 
 
 def import_static_fbx(source, root, destination, asset_id, name, material,
-                      include_source_contract=False, primitive='Imported FBX'):
+                      include_source_provenance=False, primitive='Imported FBX',
+                      include_source_contract=None):
+    # Keep the old Python keyword as a compatibility alias while exposing the
+    # semantic provenance name in new import scripts.
+    if include_source_contract is not None:
+        include_source_provenance = include_source_contract
     source, root, destination = Path(source).resolve(), Path(root).resolve(), Path(destination).resolve()
     relative = source.relative_to(root).as_posix()
     if source.suffix.lower() != '.fbx':
@@ -53,7 +59,7 @@ def import_static_fbx(source, root, destination, asset_id, name, material,
     payload = dict(schemaVersion=1, kind='static-mesh', assetId=asset_id, name=name,
                    primitive=primitive, coordinateSystem='Y-up', defaultMaterial=material,
                    positions=positions, indices=indices)
-    if include_source_contract:
+    if include_source_provenance:
         payload['sourcePath'] = relative
         payload['sourceSha256'] = original_hash
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -72,9 +78,11 @@ if __name__ == '__main__':
     parser.add_argument('--asset-id', required=True)
     parser.add_argument('--name', required=True)
     parser.add_argument('--material', default='engine://materials/default')
-    parser.add_argument('--include-source-contract', action='store_true')
+    parser.add_argument('--include-source-provenance', '--include-source-contract',
+                        dest='include_source_provenance', action='store_true',
+                        help='Record sourcePath/sourceSha256 provenance fields')
     parser.add_argument('--primitive', default='Imported FBX')
     options = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
     import_static_fbx(options.input, options.source_root, options.output, options.asset_id,
-                      options.name, options.material, options.include_source_contract,
+                      options.name, options.material, options.include_source_provenance,
                       options.primitive)
