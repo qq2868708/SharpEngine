@@ -226,7 +226,7 @@ int wmain(int argc,wchar_t** argv)
     else SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST", nullptr);
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT", engineRoot.c_str());
     EngineLog::Configure(selection.ProjectRoot.empty() ? engineRoot : selection.ProjectRoot,
-                         "Editor");
+                         "Editor", mcpStdio);
 
     if (mcpStdio)
     {

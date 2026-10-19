@@ -15,7 +15,8 @@ namespace EngineLog
         Critical,
     };
 
-    void Configure(const std::filesystem::path& root, std::string_view source);
+    void Configure(const std::filesystem::path& root, std::string_view source,
+                   bool standardOutputReserved = false);
     void Write(Level level, std::string_view category, std::string_view message);
 
     inline void Trace(std::string_view category, std::string_view message)

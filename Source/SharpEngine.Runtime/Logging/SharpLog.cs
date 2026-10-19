@@ -52,13 +52,15 @@ public interface ISharpLogger
 
 /// <summary>
 /// Process-wide engine logger. The JSON-lines file is the authoritative diagnostic
-/// stream; stderr remains available for native hosts and command-line runs.
+/// stream; console output is routed by severity, reserving stdout in MCP mode.
 /// </summary>
 public static class SharpLog
 {
     private const int SchemaVersion = 1;
     private const string MutexName = "Local\\SharpEngine.EngineLog";
     private static readonly object Gate = new();
+    private static readonly bool StandardOutputReserved = Environment.GetCommandLineArgs()
+        .Contains("--mcp-stdio", StringComparer.Ordinal);
     private static readonly AsyncLocal<IReadOnlyDictionary<string, string>?> Scope = new();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -169,38 +171,69 @@ public static class SharpLog
         }
     }
 
-    internal static void Write(SharpLogLevel level, string category, string message,
-        Exception? exception, IReadOnlyDictionary<string, string>? properties)
+    internal static void Write(SharpLogLevel Level, string Category, string Message,
+        Exception? Exception, IReadOnlyDictionary<string, string>? Properties)
     {
-        if (string.IsNullOrWhiteSpace(message)) message = exception?.Message ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(category)) category = "General";
-        SharpLogEvent entry;
+        if (string.IsNullOrWhiteSpace(Message))
+        {
+            Message = Exception?.Message ?? string.Empty;
+        }
+        if (string.IsNullOrWhiteSpace(Category))
+        {
+            Category = "General";
+        }
+        SharpLogEvent Entry;
         lock (Gate)
         {
-            if (level < _minimumLevel) return;
-            var merged = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (Level < _minimumLevel)
+            {
+                return;
+            }
+            var Merged = new Dictionary<string, string>(StringComparer.Ordinal);
             if (Scope.Value is not null)
-                foreach (var pair in Scope.Value) merged[pair.Key] = pair.Value;
-            if (properties is not null)
-                foreach (var pair in properties)
-                    if (!string.IsNullOrWhiteSpace(pair.Key)) merged[pair.Key] = pair.Value ?? string.Empty;
-            entry = new SharpLogEvent(DateTimeOffset.UtcNow, level, _source, category.Trim(),
-                message, Environment.ProcessId, Environment.CurrentManagedThreadId,
-                exception?.ToString(), merged);
-            WriteFileLocked(entry);
+            {
+                foreach (var Pair in Scope.Value)
+                {
+                    Merged[Pair.Key] = Pair.Value;
+                }
+            }
+            if (Properties is not null)
+            {
+                foreach (var Pair in Properties)
+                {
+                    if (!string.IsNullOrWhiteSpace(Pair.Key))
+                    {
+                        Merged[Pair.Key] = Pair.Value ?? string.Empty;
+                    }
+                }
+            }
+            Entry = new SharpLogEvent(DateTimeOffset.UtcNow, Level, _source, Category.Trim(),
+                Message, Environment.ProcessId, Environment.CurrentManagedThreadId,
+                Exception?.ToString(), Merged);
+            WriteFileLocked(Entry);
             if (_consoleEnabled)
             {
-                var suffix = exception is null ? string.Empty : $" {exception}";
-                Console.Error.WriteLine($"[{entry.LevelName}][{entry.Category}] {entry.Message}{suffix}");
+                var Suffix = Exception is null ? string.Empty : $" {Exception}";
+                var ConsoleWriter = StandardOutputReserved || Level >= SharpLogLevel.Warning
+                    ? Console.Error : Console.Out;
+                ConsoleWriter.WriteLine($"[{Entry.LevelName}][{Entry.Category}] {Entry.Message}{Suffix}");
             }
         }
-        try { Emitted?.Invoke(entry); }
-        catch (Exception callbackError)
+        try
+        {
+            Emitted?.Invoke(Entry);
+        }
+        catch (Exception CallbackError)
         {
             // A log observer must never break engine work. The fallback goes only
             // to stderr so a broken UI observer cannot recurse into this logger.
-            try { Console.Error.WriteLine($"[error][Logging] observer failed: {callbackError}"); }
-            catch { }
+            try
+            {
+                Console.Error.WriteLine($"[error][Logging] observer failed: {CallbackError}");
+            }
+            catch
+            {
+            }
         }
     }
 

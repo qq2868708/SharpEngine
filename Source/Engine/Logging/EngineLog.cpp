@@ -13,6 +13,8 @@ namespace
     std::filesystem::path GFile;
     std::string GSource = "Native";
     HANDLE GNamedMutex{};
+    // Bootstrap diagnostics stay on stderr until the host selects its mode.
+    bool GStandardOutputReserved = true;
 
     const char* LevelName(EngineLog::Level level)
     {
@@ -81,10 +83,12 @@ namespace
 
 namespace EngineLog
 {
-    void Configure(const std::filesystem::path& root, std::string_view source)
+    void Configure(const std::filesystem::path& root, std::string_view source,
+                   bool standardOutputReserved)
     {
         std::scoped_lock lock(GMutex);
         GSource = source.empty() ? "Native" : std::string(source);
+        GStandardOutputReserved = standardOutputReserved;
         try
         {
             const auto directory = root / "Saved" / "Logs";
@@ -104,8 +108,10 @@ namespace EngineLog
         std::scoped_lock lock(GMutex);
         const std::string safeCategory = category.empty()
             ? std::string("General") : std::string(category);
-        std::cerr << '[' << LevelName(level) << "][" << safeCategory << "] "
-                  << message << std::endl;
+        auto& console = GStandardOutputReserved || level >= Level::Warning
+            ? std::cerr : std::cout;
+        console << '[' << LevelName(level) << "][" << safeCategory << "] "
+                << message << std::endl;
         if (GFile.empty()) return;
         const auto mutex = LogMutex();
         bool acquired = false;
