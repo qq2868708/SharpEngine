@@ -140,7 +140,7 @@ namespace
                                     uint64_t documentRevision,
                                     char* result, uint32_t capacity)
     {
-        return GUi ? CopyUtf8Result(GUi->DescribeUi(layoutRevision,documentRevision),
+        return GUi ? CopyUtf8Result(GUi->DescribeUi(layoutRevision,documentRevision, result == nullptr),
                                      result,capacity) : 0;
     }
     uint32_t __cdecl UiPointer(const char* hostId, uint32_t event,
@@ -316,7 +316,8 @@ int wmain(int argc,wchar_t** argv)
         managed.Update(std::chrono::duration<float>(now-previous).count()); previous=now;
         if (!ui.Render()) { EngineLog::Error("RmlUi", "Present failed"); renderFailed=true; break; }
         ++frames; if (frameLimit && frames>=frameLimit) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(8));
+        // Rendering and presentation count toward the minimum frame interval.
+        std::this_thread::sleep_until(now + std::chrono::milliseconds(8));
     }
     EngineLog::Info("Editor", "Frames rendered=" + std::to_string(frames));
     if (!screenshot.empty() && !ui.CaptureScreenshot(screenshot))

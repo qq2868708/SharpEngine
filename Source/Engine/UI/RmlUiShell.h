@@ -18,14 +18,15 @@ public:
     ~RmlUiShell();
     bool Initialize(HWND window, const std::filesystem::path& engineRoot);
     void Shutdown();
-    bool Render();
+    bool Render(bool ObserveUi = false);
     HWND CreateDockWindow(std::string_view hostId, const char* titleUtf8);
     bool DestroyDockWindow(std::string_view hostId);
     bool SetHostMarkup(std::string_view hostId, const char* elementId,
                        const char* markup);
     HWND GetHostWindow(std::string_view hostId) const;
     bool CaptureScreenshot(const std::filesystem::path& path);
-    std::string DescribeUi(uint64_t layoutRevision, uint64_t documentRevision);
+    std::string DescribeUi(uint64_t layoutRevision, uint64_t documentRevision,
+                           bool Refresh = true);
     std::string PointerInput(std::string_view hostId, uint32_t event,
                              int32_t x, int32_t y, uint32_t button,
                              uint32_t buttons, uint32_t modifiers,

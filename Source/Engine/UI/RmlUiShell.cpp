@@ -2617,7 +2617,7 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     return callOriginal();
 }
 
-bool RmlUiShell::Render()
+bool RmlUiShell::Render(bool ObserveUi)
 {
     auto& state = *State;
     if (!state.Ready) return false;
@@ -2687,7 +2687,14 @@ bool RmlUiShell::Render()
     {
         state.FrameId = frame.FrameId;
         state.CurrentFrame = std::move(frame);
-        state.RefreshSemanticUi();
+        state.LastSnapshot.clear();
+        // Full semantic traversal and hit testing belong to an observation,
+        // not the display loop. Observe only after layout and presentation so
+        // the snapshot and pinned pixels still describe the same frame.
+        if (ObserveUi)
+        {
+            state.RefreshSemanticUi();
+        }
         state.CurrentFrame.StateRevision = state.StateRevision;
     }
     return presented;
@@ -2816,26 +2823,36 @@ void RmlUiShell::SetInputEventHandler(
 bool RmlUiShell::IsInitialized() const { return State->Ready; }
 
 std::string RmlUiShell::DescribeUi(uint64_t layoutRevision,
-                                   uint64_t documentRevision)
+                                   uint64_t documentRevision, bool Refresh)
 {
     auto& state = *State;
-    if (!state.Ready || state.FrameId == 0 || state.LastSemanticUi.empty())
+    // The native ABI first queries the buffer size, then copies the result.
+    // Keep both phases on one observation, even though observing presents a
+    // fresh frame to include changes committed earlier in the managed update.
+    if (!Refresh && !state.LastSnapshot.empty())
     {
-        return "{\"schemaVersion\":1,\"stateRevision\":" +
+        return state.LastSnapshot;
+    }
+    const bool Presented = Render(true);
+    if (!Presented || state.FrameId == 0 || state.LastSemanticUi.empty())
+    {
+        state.LastSnapshot = "{\"schemaVersion\":1,\"stateRevision\":" +
             std::to_string(state.StateRevision) +
             ",\"layoutRevision\":" + std::to_string(layoutRevision) +
             ",\"documentRevision\":" + std::to_string(documentRevision) +
             ",\"frameId\":0,\"hosts\":[],\"diagnostics\":[{\"code\":\"UI_SNAPSHOT_UNAVAILABLE\",\"severity\":\"error\",\"objectId\":null,\"fieldPath\":null,\"expected\":\"one completed presentation\",\"actual\":\"none\",\"stateRevision\":" +
             std::to_string(state.StateRevision) +
             ",\"retryable\":true,\"message\":\"No completed RmlUi frame is available\"}]}";
+        return state.LastSnapshot;
     }
     state.PinCurrentFrame();
-    return "{\"schemaVersion\":1,\"stateRevision\":" +
+    state.LastSnapshot = "{\"schemaVersion\":1,\"stateRevision\":" +
         std::to_string(state.StateRevision) +
         ",\"layoutRevision\":" + std::to_string(layoutRevision) +
         ",\"documentRevision\":" + std::to_string(documentRevision) +
         ",\"frameId\":" + std::to_string(state.FrameId) + ',' +
         state.LastSemanticUi.substr(1);
+    return state.LastSnapshot;
 }
 
 std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
@@ -2865,6 +2882,11 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     if (pointerId != 0)
         return failure("UI_POINTER_SEQUENCE_INVALID", "pointerId", "0",
                        std::to_string(pointerId), false);
+    if (!Render(true))
+    {
+        return failure("UI_RENDER_UNAVAILABLE", "frameId", "a completed presentation",
+                       std::to_string(state.FrameId), true);
+    }
     auto* host = state.FindHost(hostId);
     if (!host || !host->Context || !host->Window)
         return failure("UI_HOST_NOT_FOUND", "hostId", "a live host",
@@ -2993,7 +3015,7 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     state.InjectedModifiers = -1;
     state.InjectedWheelX = 0;
     state.InjectedWheelY = 0;
-    if (!Render())
+    if (!Render(true))
         return failure("UI_RENDER_UNAVAILABLE", "frameId", "a completed presentation",
                        std::to_string(state.FrameId), true);
     state.PinCurrentFrame();
@@ -3054,6 +3076,10 @@ std::string RmlUiShell::KeyInput(std::string_view hostId, uint32_t event,
             (retryable ? "true" : "false") + ",\"message\":" +
             JsonString(message) + "}]}";
     };
+    if (!Render(true))
+    {
+        return failure("UI_RENDER_UNAVAILABLE", "No completed presentation is available", true);
+    }
     const auto* expectedFrame = state.FindFrameSet(expectedFrameId);
     if (!expectedFrame || expectedFrame->StateRevision != state.StateRevision)
         return failure("UI_FRAME_STALE", "The observed frame is no longer current", true);
@@ -3076,7 +3102,7 @@ std::string RmlUiShell::KeyInput(std::string_view hostId, uint32_t event,
         state.InjectedModifiers = -1;
     }
     else host->Context->ProcessTextInput(Rml::String(text));
-    if (!Render())
+    if (!Render(true))
         return failure("UI_RENDER_UNAVAILABLE", "The input was accepted but no frame was presented", true);
     state.PinCurrentFrame();
     auto* focusAfterElement = host->Context->GetFocusElement();
