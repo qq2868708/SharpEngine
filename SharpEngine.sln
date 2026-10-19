@@ -6,10 +6,6 @@ ProjectSection(SolutionItems) = preProject
 EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BuildTarget", "BuildTarget", "{AA809060-7D1A-604E-1780-F093898C5523}"
-ProjectSection(SolutionItems) = preProject
-		Intermediate\ProjectFiles\SharpEngine.Editor.Target.cs = Intermediate\ProjectFiles\SharpEngine.Editor.Target.cs
-		Intermediate\ProjectFiles\SharpEngine.Game.Target.cs = Intermediate\ProjectFiles\SharpEngine.Game.Target.cs
-EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Plugins", "Plugins", "{181E2BB4-85E7-2ADD-5D89-808B3A16956C}"
 EndProject

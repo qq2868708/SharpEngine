@@ -224,6 +224,23 @@ try
     Check(File.ReadAllText(generated.GeneratedPropsPath) == props &&
         File.ReadAllText(generated.StampPath) == firstStamp,
         "Version 4 project files must regenerate the component-generator path and imports");
+    // Version 9 launchers referenced SharpLog without an engine assembly reference.
+    // Exercise migration of both cached launchers before compiling the generated code.
+    var LegacyLoggingStamp = System.Text.Json.Nodes.JsonNode.Parse(firstStamp)!.AsObject();
+    LegacyLoggingStamp["generatorVersion"] = 9;
+    File.WriteAllText(generated.StampPath, LegacyLoggingStamp.ToJsonString());
+    foreach (var Target in new[]
+    {
+        "Editor",
+        "Game",
+    })
+    {
+        var LegacySource = generated.TargetSourcePath.Replace(".Editor.Target.cs",
+            $".{Target}.Target.cs", StringComparison.Ordinal);
+        File.WriteAllText(LegacySource, "SharpLog.Error(\"ProjectSelector\", \"Build this Target first\");");
+    }
+    _ = SolutionGenerator.EnsureCurrent(new ResolvedSharpProject(project, engine));
+    TargetWrapperCompileValidation.Run(generated.WrapperProjectPath, Check);
     _ = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
     Check(firstSolution == File.ReadAllText(generated.SolutionPath) &&
           firstStamp == File.ReadAllText(generated.StampPath),
@@ -242,7 +259,7 @@ try
 }
 finally
 {
-    temporary.Delete(recursive: true);
+    DeleteTemporaryDirectory(temporary);
     try { Registry.CurrentUser.DeleteSubKeyTree(registryPath, throwOnMissingSubKey: false); }
     catch (ArgumentException) { }
     using var testsKey = Registry.CurrentUser.OpenSubKey(
@@ -260,6 +277,23 @@ void Check(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
     assertions++;
+}
+
+static void DeleteTemporaryDirectory(DirectoryInfo Temporary)
+{
+    // Child-process outputs can briefly remain locked on Windows after exit.
+    for (var Attempt = 0; ; Attempt++)
+    {
+        try
+        {
+            Temporary.Delete(recursive: true);
+            return;
+        }
+        catch (IOException) when (Attempt < 20)
+        {
+            Thread.Sleep(100);
+        }
+    }
 }
 
 static string FindEngineRoot()

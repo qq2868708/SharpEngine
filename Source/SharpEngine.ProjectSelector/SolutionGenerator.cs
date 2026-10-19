@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using SharpEngine.Logging;
 using System.Xml.Linq;
 
 namespace SharpEngine.ProjectSelector;
@@ -12,7 +11,7 @@ internal sealed record GeneratedSolution(string SolutionPath, string WrapperProj
 
 internal static class SolutionGenerator
 {
-    private const int GeneratorVersion = 9;
+    private const int GeneratorVersion = 11;
     private const string CsType = "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}";
     private const string CppType = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     private const string FolderType = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -116,16 +115,28 @@ internal static class SolutionGenerator
                         $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File {Quote(script)} -Command Clean {common}")))));
             WriteText(source, $$"""
                 using System.Diagnostics;
-                var configuration = new DirectoryInfo(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Name;
-                var executable = Path.Combine({{JsonSerializer.Serialize(engine.Root)}}, "Binaries", "Win64", configuration, "{{target}}", "Engine.exe");
-                if (!File.Exists(executable)) { SharpLog.Error("ProjectSelector", $"Build this Target first: {executable}"); return 1; }
-                var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = {{JsonSerializer.Serialize(manifest is null ? engine.Root : Path.GetDirectoryName(manifest))}} };
-                {{(manifest is null ? "" : "start.ArgumentList.Add(\"--project\"); start.ArgumentList.Add(" + JsonSerializer.Serialize(manifest) + ");")}}
-                foreach (var argument in args) start.ArgumentList.Add(argument);
-                start.Environment["SHARPENGINE_ROOT"] = {{JsonSerializer.Serialize(engine.Root)}};
-                using var process = Process.Start(start) ?? throw new IOException("Could not start engine Target");
-                process.WaitForExit();
-                return process.ExitCode;
+                var Configuration = new DirectoryInfo(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Name;
+                var Executable = Path.Combine({{JsonSerializer.Serialize(engine.Root)}}, "Binaries", "Win64", Configuration, "{{target}}", "Engine.exe");
+                // This bootstrapper builds before the engine and must not depend on its assemblies.
+                if (!File.Exists(Executable))
+                {
+                    Console.Error.WriteLine($"Build this Target first: {Executable}");
+                    return 1;
+                }
+                var Start = new ProcessStartInfo(Executable)
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = {{JsonSerializer.Serialize(manifest is null ? engine.Root : Path.GetDirectoryName(manifest))}},
+                };
+                {{(manifest is null ? "" : "Start.ArgumentList.Add(\"--project\");" + Environment.NewLine + "Start.ArgumentList.Add(" + JsonSerializer.Serialize(manifest) + ");")}}
+                foreach (var Argument in args)
+                {
+                    Start.ArgumentList.Add(Argument);
+                }
+                Start.Environment["SHARPENGINE_ROOT"] = {{JsonSerializer.Serialize(engine.Root)}};
+                using var ProcessInstance = Process.Start(Start) ?? throw new IOException("Could not start engine Target");
+                ProcessInstance.WaitForExit();
+                return ProcessInstance.ExitCode;
                 """ + Environment.NewLine);
             // Target wrappers are build entry points generated for the solution. Keep them
             // separate from the source projects they build so editing a Module project does
@@ -238,10 +249,9 @@ internal static class SolutionGenerator
             }
         }
 
-        foreach (var wrapper in wrappers)
+        foreach (var Wrapper in wrappers)
         {
-            AddEntry(wrapper);
-            AddSolutionItem("BuildTarget", Path.ChangeExtension(wrapper.Path, ".cs"));
+            AddEntry(Wrapper);
         }
 
         var folderIds = folders.ToDictionary(folder => folder, folder => Id(path + folder),

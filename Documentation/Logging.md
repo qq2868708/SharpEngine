@@ -27,6 +27,9 @@ structured events for machine-readable diagnostics.
 log records its path and build result so the session stream remains searchable
 without duplicating potentially large compiler output.
 
+Generated Target launchers use stderr for bootstrap failures, such as a missing
+`Engine.exe`. They compile before the engine and require no engine assemblies.
+
 Focused validation:
 
 ```powershell
