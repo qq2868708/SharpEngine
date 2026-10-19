@@ -87,6 +87,15 @@
       "metadata": {"bones": "3"}
     },
     {
+      "id": "skeletons/uefn-mannequin",
+      "type": "Skeleton",
+      "name": "UEFN Mannequin Skeleton",
+      "path": "Content/Assets/Skeletons/UEFNMannequin.sharpskeleton",
+      "importer": "SharpEngine.SkeletonJson",
+      "tags": ["imported", "skeleton", "uefn", "mannequin"],
+      "metadata": {"bones": "88", "sourceFormat": "FBX", "sourceFile": "skm_uefn_mannequin.FBX", "sourceSha256": "0E5769FDF6E0B703785E6C849669EF5D0F04614440BDAB492C79D989C9D45E95"}
+    },
+    {
       "id": "meshes/robot-static",
       "type": "StaticMesh",
       "name": "Robot Static Mesh",
@@ -103,6 +112,51 @@
       "importer": "SharpEngine.SkeletalMeshJson",
       "tags": ["builtin", "mesh", "skeletal", "robot"],
       "metadata": {"skeleton": "skeletons/robot", "vertices": "8", "triangles": "12"}
+    },
+    {
+      "id": "meshes/uefn-mannequin",
+      "type": "SkeletalMesh",
+      "name": "UEFN Mannequin Skeletal Mesh",
+      "path": "Content/Assets/Meshes/UEFNMannequin.sharpskeletalmesh",
+      "importer": "SharpEngine.SkeletalMeshJson",
+      "tags": ["imported", "mesh", "skeletal", "uefn", "mannequin"],
+      "metadata": {"skeleton": "skeletons/uefn-mannequin", "vertices": "6009", "triangles": "9324", "influences": "4", "coordinateSystem": "Y-up", "sourceFormat": "FBX", "sourceFile": "skm_uefn_mannequin.FBX", "sourceSha256": "0E5769FDF6E0B703785E6C849669EF5D0F04614440BDAB492C79D989C9D45E95"}
+    },
+    {
+      "id": "animations/uefn-mannequin-idle",
+      "type": "SkeletalAnimation",
+      "name": "UEFN Mannequin Idle",
+      "path": "Content/Assets/Animations/UEFNMannequinIdle.sharpskeletalanimation",
+      "importer": "SharpEngine.SkeletalAnimationJson",
+      "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "idle"],
+      "metadata": {"duration": "2.0", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+    },
+    {
+      "id": "animations/uefn-mannequin-walk",
+      "type": "SkeletalAnimation",
+      "name": "UEFN Mannequin Walk",
+      "path": "Content/Assets/Animations/UEFNMannequinWalk.sharpskeletalanimation",
+      "importer": "SharpEngine.SkeletalAnimationJson",
+      "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "walk"],
+      "metadata": {"duration": "1.2", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+    },
+    {
+      "id": "animations/uefn-mannequin-run",
+      "type": "SkeletalAnimation",
+      "name": "UEFN Mannequin Run",
+      "path": "Content/Assets/Animations/UEFNMannequinRun.sharpskeletalanimation",
+      "importer": "SharpEngine.SkeletalAnimationJson",
+      "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "run"],
+      "metadata": {"duration": "0.72", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+    },
+    {
+      "id": "animations/uefn-mannequin-jump",
+      "type": "SkeletalAnimation",
+      "name": "UEFN Mannequin Jump",
+      "path": "Content/Assets/Animations/UEFNMannequinJump.sharpskeletalanimation",
+      "importer": "SharpEngine.SkeletalAnimationJson",
+      "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "jump"],
+      "metadata": {"duration": "1.0", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
     },
     {
       "id": "materials/default",

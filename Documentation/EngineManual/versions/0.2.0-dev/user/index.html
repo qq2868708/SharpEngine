@@ -65,7 +65,7 @@
     <section class="section-card" id="animation-editor">
       <h2>动画时间轴与 Notify</h2>
       <p>编辑器的 Animation Timeline 面板提供骨骼采样预览、时间尺、轨道、播放头和预览控制。打开 View 菜单中的 Animation Timeline 后，可以使用 Play、Pause、Stop 和时间尺按钮检查动画片段。</p>
-      <p>Notify 轨道显示 Footstep、Attack Window 等事件。点击 Clip 可以查看当前 Notify，使用 Add Notify 会在预览时间线上创建新的事件并立即刷新视图。项目 Timeline 资产支持 Undo、Redo 和 Save；引擎来源资产保持只读。</p>
+      <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation 资源会打开对应的 Animation Timeline 文档。Notify 轨道显示 Footstep、Attack Window 等事件。点击 Clip 可以查看当前 Notify，使用 Add Notify 会在预览时间线上创建新的事件并立即刷新视图。每个打开的资源保留自己的播放头、Undo、Redo 和 dirty 状态；项目资产支持 Save，引擎来源资产保持只读。</p>
       <p>Viewport 的 Transform 按钮和项目 Project Preview 按钮都通过引擎命令执行。项目可以扩展固定的 File 菜单、主 Toolbar 和 <code>viewport</code> CustomBar Surface，但不能创建新的顶层 Surface。</p>
     </section>
     <section class="section-card" id="world-assets">
@@ -78,12 +78,14 @@
       <p>FBX 是导入来源格式。导入后，项目使用 SharpEngine 的骨骼、蒙皮网格和动画资产；FBX 文件应保留在 Content 之外的来源目录。需要来源校验时，在资产中记录 <code>sourcePath</code> 和 <code>sourceSha256</code>，引擎会验证来源文件是否仍然匹配。验证来源不代表当前资产编辑仍能由该来源还原。</p>
       <p>导出使用语义等价规则。网格几何、坐标系和单位，骨骼层级与绑定姿态，蒙皮权重，以及动画的骨骼轨道必须保持等价。导出器可以重新组织 FBX 记录、压缩方式和未建模的元数据，因此导出文件的字节内容不需要与导入文件相同。</p>
       <p>通过资产的 <code>ExportFbx</code> 或 <code>AssetContent.ExportFbx</code> 入口导出。当前内置路径只复制显式注册的原始 FBX 来源；对规范化 SharpEngine 资产会报告尚未接入 FBX writer 且不改写目标文件。接入 writer 后从当前 SharpEngine 数据重建文件。完成后重新导入导出文件并检查上述语义数据；重新导入检查通过才算完成格式验证。</p>
+      <p>跨骨骼组复用动画时，先用 <code>SkeletalAnimationCompatibility.Validate</code> 检查动画和蒙皮网格。A 动画直接绑定 C 网格会被拒绝；使用 <code>SkeletalAnimationRetargeter.Retarget</code> 明确提供源/目标骨骼映射后，会生成指向 C 骨骼的新动画资产，再按普通兼容性规则与 C 蒙皮网格组合。当前 Retarget 不自动猜测骨骼、不做 IK 或比例补偿，FBX writer 仍未接入。</p>
     </section>
     <section class="section-card" id="control-movement">
       <h2>控制与移动</h2>
       <p>让角色或其他对象接受玩家或 AI 的控制，并按照移动意图在场景中移动。控制来源和移动能力彼此独立，因此同一套移动行为可以服务不同的控制方式。</p>
       <p>当多个控制来源指向同一个对象时，引擎会按照优先级选择一个来源，保证结果稳定。对象不可用、控制冲突或控制暂时失效时，运行状态会显示相应诊断。</p>
-      <p>示例内容包含 <code>prefabs/capsule-character</code> 胶囊体角色 Prefab，并已实例化到 <code>Content/Worlds/Main.sworld</code>。在编辑器按 Play 后点击 Viewport 使其获得焦点，使用 WASD 移动胶囊体；Stop 会丢弃运行时位置变化。</p>
+      <p>引擎默认示例包含 <code>prefabs/capsule-character</code> 胶囊体角色 Prefab，并已实例化到引擎的 <code>Content/Worlds/Main.sworld</code>。在编辑器按 Play 后点击 Viewport 使其获得焦点，使用 WASD 移动角色；Stop 会丢弃运行时位置变化。</p>
+      <p>示例 Prefab 和主场景使用 UEFN mannequin 骨骼角色，状态机会根据移动速度在 Idle、Walk、Run 之间切换，并保留 Jump 状态入口；胶囊只作为不可见的 Trace 碰撞体，随角色移动。状态机和动画依赖加载失败时会保留诊断，不会静默回退到错误 Clip。Content Manager 双击引擎提供的 AnimationStateMachine 预设会沿用统一资源打开流程，在 Animation Timeline 面板显示状态与过渡图；该引擎预设保持只读。验证入口与范围见下方专题文档。</p>
       <p>功能边界、可观察状态和使用限制见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
     </section>
     <section class="section-card" id="input-ui">
@@ -109,14 +111,19 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>新增可序列化的最小动画状态机，示例 mannequin 会根据移动速度在 Idle、Walk、Run 和 Jump 状态间切换。</li>
+        <li>登记只读 builtin/preset locomotion 状态机，并通过统一资源打开器在 Animation Timeline 面板提供状态图编辑器视图。</li>
         <li>增加由 C# 类型声明的版本化数据资产基础，支持字段约束、直接资产引用校验和强类型加载。</li>
         <li>建立版本化 HTML 手册入口，拆分为用户手册和 API 索引。</li>
         <li>定义功能修改必须同步更新手册并运行手册链接校验的维护约束。</li>
         <li>补充控制器、可控制目标和移动组件的用户工作流与运行时边界。</li>
         <li>新增胶囊体角色 Prefab、主场景实例和 WASD Play 移动验收流程。</li>
+        <li>Sandbox 角色改用 UEFN mannequin 骨骼网格和循环 Walk 采样；胶囊体保留为不渲染的 Trace 碰撞组件。</li>
         <li>用户手册改为只描述功能用途、操作结果和使用限制；实现接口集中在 API 索引。</li>
         <li>增加 Animation Timeline 骨骼预览、Notify 编辑的 revision/Undo/Redo/Save 流程，并记录固定菜单、Toolbar 与 CustomBar Surface 的扩展路径。</li>
+        <li>增加按资产双击打开 Timeline 工具的路由；项目或插件可以按 AssetId、资产类型和优先级覆写默认打开器。</li>
         <li>统一 FBX 导入来源校验和语义等价导出规则；导出不再要求保留原始 FBX 字节。</li>
+        <li>增加显式骨骼动画 Retarget 验证：跨组动画必须生成目标 SkeletonId 的新资产，并通过目标蒙皮绑定检查后才能组合。</li>
         <li>修正编辑器修饰键位映射，并在 Play/运行时隔离 Viewport 编辑输入，避免游戏移动同时驱动编辑器相机。</li>
       </ul>
     </section>

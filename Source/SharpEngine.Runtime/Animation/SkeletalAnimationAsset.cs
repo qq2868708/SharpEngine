@@ -27,6 +27,9 @@ public sealed record BoneTrack(
     string BoneId,
     IReadOnlyList<BoneKeyframe> Keyframes);
 
+/// <summary>Authoritative editor event range. This contract does not execute gameplay callbacks.</summary>
+public sealed record AnimationNotify(string NotifyId, string Name, double Time, double Duration);
+
 /// <summary>A derived pose sampled from a skeletal animation asset.</summary>
 public sealed class SkeletalPose
 {
@@ -83,7 +86,7 @@ public sealed class SkeletalAnimationAsset
     public SkeletalAnimationAsset(string AssetId, string Name, double Duration,
         float SampleRate, IReadOnlyList<SkeletonBone> Bones,
         IReadOnlyList<BoneTrack> Tracks, string? SkeletonId,
-        string? SourcePath, string? SourceSha256)
+        string? SourcePath, string? SourceSha256, IReadOnlyList<AnimationNotify>? Notifies = null)
     {
         this.AssetId = RequireId(AssetId, nameof(AssetId));
         this.Name = string.IsNullOrWhiteSpace(Name) ? throw new ArgumentException("Animation name is required", nameof(Name)) : Name.Trim();
@@ -102,6 +105,18 @@ public sealed class SkeletalAnimationAsset
         this.Tracks = Tracks?.ToArray() ?? throw new ArgumentNullException(nameof(Tracks));
         this.SourcePath = string.IsNullOrWhiteSpace(SourcePath) ? null : SourcePath.Trim();
         this.SourceSha256 = string.IsNullOrWhiteSpace(SourceSha256) ? null : SourceSha256.Trim();
+        this.Notifies = Array.AsReadOnly((Notifies ?? Array.Empty<AnimationNotify>()).ToArray());
+        var NotifyIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var Notify in this.Notifies)
+        {
+            if (Notify is null || string.IsNullOrWhiteSpace(Notify.NotifyId) ||
+                string.IsNullOrWhiteSpace(Notify.Name) || !NotifyIds.Add(Notify.NotifyId) ||
+                !double.IsFinite(Notify.Time) || !double.IsFinite(Notify.Duration) ||
+                Notify.Time < 0 || Notify.Duration <= 0 || Notify.Time + Notify.Duration > Duration + 1e-9)
+            {
+                throw new InvalidDataException("Animation Notify IDs must be unique and ranges must fit the animation duration");
+            }
+        }
         Validate();
     }
 
@@ -112,6 +127,16 @@ public sealed class SkeletalAnimationAsset
     public string? SkeletonId { get; }
     public IReadOnlyList<SkeletonBone> Bones { get; }
     public IReadOnlyList<BoneTrack> Tracks { get; }
+    public IReadOnlyList<AnimationNotify> Notifies
+    {
+        get;
+    }
+
+    public SkeletalAnimationAsset WithNotifies(IReadOnlyList<AnimationNotify> Notifies)
+    {
+        return new SkeletalAnimationAsset(AssetId, Name, Duration, SampleRate, Bones,
+            Tracks, SkeletonId, SourcePath, SourceSha256, Notifies);
+    }
     /// <summary>Optional provenance path relative to the owning engine/project root.</summary>
     public string? SourcePath
     {
@@ -206,6 +231,13 @@ public sealed class SkeletalAnimationAsset
             ["skeletonId"] = SkeletonId,
             ["bones"] = bones,
             ["tracks"] = tracks,
+            ["notifies"] = new JsonArray(Notifies.Select(Notify => (JsonNode)new JsonObject
+            {
+                ["notifyId"] = Notify.NotifyId,
+                ["name"] = Notify.Name,
+                ["time"] = Notify.Time,
+                ["duration"] = Notify.Duration,
+            }).ToArray()),
         };
         if (SourcePath is not null)
         {
@@ -227,7 +259,7 @@ public sealed class SkeletalAnimationAsset
             var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidDataException("Animation root must be an object");
             ExactWithOptional(root,
                 ["schemaVersion", "kind", "assetId", "name", "duration", "sampleRate", "skeletonId", "bones", "tracks"],
-                ["sourcePath", "sourceSha256"]);
+                ["sourcePath", "sourceSha256", "notifies"]);
             if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion ||
                 root["kind"]!.GetValue<string>() != "skeletal-animation")
                 throw new InvalidDataException("Unsupported skeletal animation schema");
@@ -238,13 +270,22 @@ public sealed class SkeletalAnimationAsset
                 root["name"]!.GetValue<string>(), root["duration"]!.GetValue<double>(),
                 root["sampleRate"]!.GetValue<float>(), bones, tracks,
                 root["skeletonId"]?.GetValue<string>(), OptionalString(root, "sourcePath"),
-                OptionalString(root, "sourceSha256"));
+                OptionalString(root, "sourceSha256"), root.ContainsKey("notifies")
+                    ? root["notifies"]!.AsArray().Select(Value => ParseNotify(Value!.AsObject())).ToArray()
+                    : Array.Empty<AnimationNotify>());
         }
         catch (InvalidDataException) { throw; }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or ArgumentException or OverflowException)
         {
             throw new InvalidDataException($"Invalid skeletal animation '{source}': {exception.Message}", exception);
         }
+    }
+
+    private static AnimationNotify ParseNotify(JsonObject Value)
+    {
+        ExactWithOptional(Value, ["notifyId", "name", "time", "duration"], []);
+        return new AnimationNotify(Value["notifyId"]!.GetValue<string>(), Value["name"]!.GetValue<string>(),
+            Value["time"]!.GetValue<double>(), Value["duration"]!.GetValue<double>());
     }
 
     private void Validate()

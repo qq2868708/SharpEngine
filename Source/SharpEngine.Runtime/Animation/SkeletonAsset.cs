@@ -444,20 +444,25 @@ public static class SkeletalMeshContent
     public static SkeletalMeshAsset Load(AssetRegistry registry, string id)
     {
         ArgumentNullException.ThrowIfNull(registry);
-        var descriptor = registry.Find(id) ?? throw new KeyNotFoundException($"Asset was not registered: '{id}'");
-        if (!string.Equals(descriptor.Type, "SkeletalMesh", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"Asset '{id}' is {descriptor.Type}, expected SkeletalMesh");
-        var path = registry.ResolvePath(descriptor) ?? throw new InvalidDataException($"Asset '{id}' has no resolved path");
-        var parsed = SkeletalMeshAsset.Parse(File.ReadAllText(path), path);
-        if (!string.Equals(parsed.AssetId, id, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"Skeletal mesh '{id}' does not match its serialized assetId '{parsed.AssetId}'");
-        var skeleton = registry.Find(parsed.SkeletonId) ?? throw new KeyNotFoundException(
-            $"Skeleton asset was not registered: '{parsed.SkeletonId}'");
-        if (!string.Equals(skeleton.Type, "Skeleton", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"Skeletal mesh '{id}' references '{parsed.SkeletonId}', which is {skeleton.Type}, expected Skeleton");
-        if (parsed.SourcePath is not null)
-            SourceAssetContract.ResolveAndValidate(registry, descriptor, parsed.SourcePath,
-                parsed.SourceSha256!);
-        return parsed;
+        var Registry = registry;
+        var Id = id;
+        var Descriptor = Registry.Find(Id) ?? throw new KeyNotFoundException($"Asset was not registered: '{Id}'");
+        if (!string.Equals(Descriptor.Type, "SkeletalMesh", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"Asset '{Id}' is {Descriptor.Type}, expected SkeletalMesh");
+        }
+        var Path = Registry.ResolvePath(Descriptor) ?? throw new InvalidDataException($"Asset '{Id}' has no resolved path");
+        var Parsed = SkeletalMeshAsset.Parse(File.ReadAllText(Path), Path);
+        if (!string.Equals(Parsed.AssetId, Id, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"Skeletal mesh '{Id}' does not match its serialized assetId '{Parsed.AssetId}'");
+        }
+        var Skeleton = SkeletonContent.Load(Registry, Parsed.SkeletonId);
+        SkeletonBinding.Validate(Skeleton.Bones, Parsed.Bones, $"Skeletal mesh '{Id}' and skeleton '{Skeleton.AssetId}'");
+        if (Parsed.SourcePath is not null)
+        {
+            SourceAssetContract.ResolveAndValidate(Registry, Descriptor, Parsed.SourcePath, Parsed.SourceSha256!);
+        }
+        return Parsed;
     }
 }

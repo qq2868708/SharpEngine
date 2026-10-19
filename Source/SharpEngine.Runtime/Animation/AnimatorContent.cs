@@ -25,20 +25,7 @@ internal static class AnimatorContent
         {
             var Animation = SkeletalAnimationContent.Load(Assets, Key.Clip);
             var Geometry = AnimatorContent.Mesh(Assets, Key.Mesh);
-            if (Animation.SkeletonId is not null && !string.Equals(Animation.SkeletonId, Geometry.SkeletonId, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException("Animator clip and mesh must reference the same skeleton.");
-            }
-            var Bones = Geometry.Bones.ToDictionary(Bone => Bone.BoneId, StringComparer.Ordinal);
-            // Partial clips are supported; every animated bone must belong to the same hierarchy.
-            foreach (var Bone in Animation.Bones)
-            {
-                var Found = Bones.TryGetValue(Bone.BoneId, out var Target);
-                if (!Found || Target!.ParentBoneId != Bone.ParentBoneId)
-                {
-                    throw new InvalidDataException($"Animator bone '{Bone.BoneId}' is incompatible with the mesh hierarchy.");
-                }
-            }
+            SkeletalAnimationCompatibility.Validate(Animation, Geometry);
             return Animation;
         });
     }

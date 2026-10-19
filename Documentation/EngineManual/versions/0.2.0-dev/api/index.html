@@ -54,7 +54,8 @@
           <tr><td>资源文件</td><td>新增资源类型的源文件扩展名</td><td>语义类型小写化后加 <code>s</code> 前缀；旧裸后缀和 <code>.sharp...</code> 后缀仅作兼容</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
           <tr><td>世界</td><td><code>World</code> / <code>RuntimeWorld</code></td><td>World JSON v3；组件独立 schema</td><td><a href="../../../../InspectorComponentDesign.md">Component Design</a></td></tr>
           <tr><td>控制与移动</td><td><code>engine.controllable</code> / <code>engine.player-controller</code> / <code>engine.ai-controller</code> / <code>engine.movement</code></td><td>组件 schema v1；frame state schema v1</td><td><a href="../../../../ControlAndMovement.md">Control and Movement</a></td></tr>
-          <tr><td>角色 Prefab</td><td><code>prefabs/capsule-character</code></td><td>Prefab/World JSON v3；稳定内部实体引用</td><td><a href="../../../../ControlAndMovement.md">Control and Movement</a></td></tr>
+          <tr><td>角色 Prefab</td><td><code>prefabs/capsule-character</code></td><td>Prefab/World JSON v3；skeletal mesh v1 + Animator v3 + animation state machine v1 + capsule collider v1</td><td><a href="../../../../ControlAndMovement.md">Control and Movement</a></td></tr>
+          <tr><td>动画状态机</td><td><code>AnimationStateMachine</code> / <code>AnimationStateMachineContent.Load</code></td><td>schema v1；<code>engine://animation-state-machines/uefn-mannequin-locomotion</code> 为只读 builtin/preset</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
           <tr><td>输入</td><td><code>InputAction</code> / <code>InputMappingContext</code></td><td>JSON schema v1</td><td><a href="../../../../../README.md#unified-input-routing">README 输入路由</a></td></tr>
           <tr><td>编辑器</td><td><code>EditorRuntime</code> / <code>editor.describe</code></td><td>snapshot schema 按能力声明</td><td><a href="../../../../EditorMcpUiObservability.md">Editor MCP UI</a></td></tr>
           <tr><td>时间线</td><td><code>PlayableGraph</code> / <code>TimelineAsset</code></td><td>Timeline schema v1</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
@@ -81,17 +82,28 @@
         <p>InputAction、InputMappingContext 和统一输入路由。动作回调返回 <code>true</code> 时消费动作；事件顺序和 route 名称属于可观察契约。Win32/RmlUi 修饰键位遵循 <code>Ctrl=1</code>、<code>Shift=2</code>、<code>Alt=4</code>；编辑器 Play 状态下，Host 不再把事件转发到 <code>EditorRuntime</code> 的 Viewport 导航、选择或 Gizmo 入口。</p>
       </article>
       <article class="api-entry">
+        <h3><code>SharpEngine.Animation.AnimationStateMachineAsset</code></h3>
+        <p>状态机资源使用 <code>.sanimationstatemachine</code> 和 schema v1，保存稳定的参数、状态、Clip 依赖和有序过渡。<code>AnimationStateMachineContent.Load</code> 先解析完整图并绑定所有骨骼动画；<code>AnimationStateMachineAsset.SelectTransition</code> 按资源顺序检查 exitTime 和数值条件。<code>engine://animation-state-machines/uefn-mannequin-locomotion</code> 在 engine manifest 中以 <code>readOnly=true</code>、<code>builtin</code> 和 <code>preset</code> 标签登记，并声明 mannequin skeleton 与四个 Clip 依赖。</p>
+        <p>Content Manager 的双击和语义打开都调用 <code>EditorRuntime.OpenAsset</code>；统一的 <code>EditorAssetOpenerRegistry</code> 通过 <code>engine.animation-state-machine-editor</code> 将该类型路由到 Animation Timeline 面板中的状态图视图。</p>
+        <p><code>AnimatorComponent</code> schema v3 的 <code>Controller</code>、<code>StateId</code>、<code>Parameters</code>、<code>MovementSource</code> 和 <code>MovementSpeedParameter</code> 是权威字段；运行帧 schema v2 公开当前状态、过渡、参数和采样结果。旧 Animator v1/v2 只补齐控制器字段，不改变既有单 Clip 语义。</p>
+      </article>
+      <article class="api-entry">
         <h3><code>SharpEngine.Components</code> 控制与移动</h3>
         <p><code>ControllableComponent</code>、<code>ControllerComponent</code>、<code>PlayerControllerComponent</code>、<code>AiControllerComponent</code> 和 <code>MovementComponent</code> 使用组件 typeId schema v1。控制器通过 <code>SetMoveInput</code> 提交当前帧意图；移动组件依赖 Transform 和 Controllable，并发布稳定的诊断 code 与速度 frame state。</p>
         <p>绑定仲裁、运行时字段和示例见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
       </article>
       <article class="api-entry">
         <h3><code>prefabs/capsule-character</code></h3>
-        <p>资源类型为 <code>Prefab</code>，源文件为 <code>Content/Prefabs/CapsuleCharacter.sprefab</code>，使用 World/Prefab JSON schema v3。根实体包含 <code>engine.static-mesh</code>（<code>engine://meshes/capsule</code>）、<code>engine.capsule-collider</code>、控制与移动组件；<code>engine.player-controller.ControlledEntity</code> 指向根实体稳定 ID，实例化时必须重映射为新实体 ID。</p>
+        <p>资源类型为 <code>Prefab</code>，源文件为 <code>Content/Prefabs/CapsuleCharacter.sprefab</code>，使用 World/Prefab JSON schema v3。根实体包含 <code>engine.skeletal-mesh</code>（<code>engine://meshes/uefn-mannequin</code>）、<code>engine.animator</code>、<code>engine.capsule-collider</code>、控制与移动组件；<code>engine.player-controller.ControlledEntity</code> 指向根实体稳定 ID，实例化时必须重映射实体和组件引用。</p>
+        <p>示例 Prefab 使用 <code>engine.skeletal-mesh</code> schema v1（<code>engine://meshes/uefn-mannequin</code>）和 <code>engine.animator</code> schema v3，绑定 <code>engine://animation-state-machines/uefn-mannequin-locomotion</code>。实例化同时重映射 <code>Target</code> 和 <code>MovementSource</code>；胶囊 collider schema v1 提供 <code>RuntimeWorld.Collision.Raycast</code> 查询且不生成渲染几何。动画复用 Playable 采样，<code>SkeletonFrameState</code> 的骨骼矩阵和蒙皮顶点属于派生帧数据，不保存进 Prefab/World。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Timeline</code></h3>
-        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code> 和 MarkerPlayable。编辑器扩展通过 <code>timeline.play</code>、<code>timeline.pause</code>、<code>timeline.stop</code>、<code>timeline.add-notify</code>、<code>timeline.undo</code>、<code>timeline.redo</code>、<code>timeline.save</code> 和 <code>timeline.seek-start</code> 命令驱动预览与编辑。</p>
+        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code>、<code>AnimationNotify</code> 和 MarkerPlayable。编辑器扩展通过 <code>timeline.play</code>、<code>timeline.pause</code>、<code>timeline.stop</code>、<code>timeline.add-notify</code>、<code>timeline.undo</code>、<code>timeline.redo</code>、<code>timeline.save</code> 和 <code>timeline.seek-start</code> 命令驱动预览与编辑。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>EditorAssetOpenerRegistry</code></h3>
+        <p><code>Register(EditorAssetOpener)</code> 注册按 <code>AssetType</code> 或具体 <code>AssetId</code> 匹配的打开器，并返回可释放句柄；具体资源优先于类型匹配，同级按 <code>Priority</code> 选择。<code>EditorRuntime.OpenAsset</code> 是 UI 双击和 MCP/语义调用共用的打开入口，<code>DescribeEditorJson().assetTools</code> 暴露注册器与工具状态。</p>
       </article>
       <article class="api-entry">
         <h3>版本化 JSON 与 MCP</h3>
@@ -102,6 +114,11 @@
         <p><code>ExportFbx(AssetRegistry, Id, Destination)</code> 定义 <code>Mesh</code>、<code>StaticMesh</code>、<code>Skeleton</code>、<code>SkeletalMesh</code> 和 <code>SkeletalAnimation</code> 的语义导出入口。当前内置实现只复制显式注册的原始 <code>FBXSource</code>；规范化资产返回 <code>NotSupportedException</code> 且不修改目标。<code>sourcePath</code>/<code>sourceSha256</code> 只能校验来源未变，不能证明已经编辑的当前资产与来源仍然语义一致。接入 FBX writer 后，编辑后的规范化资产必须从当前数据重建。</p>
         <p><code>StaticMeshAsset</code>、<code>SkeletonAsset</code>、<code>SkeletalMeshAsset</code>、<code>SkeletalAnimationAsset</code> 和 <code>AssetContent</code> 都提供同名 <code>ExportFbx</code> 包装入口。旧的 <code>ExportOriginalFbx</code> 只作为标记为 obsolete 的来源复制入口。</p>
       </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Animation.SkeletalAnimationCompatibility</code> 与 <code>SkeletalAnimationRetargeter</code></h3>
+        <p><code>SkeletalAnimationCompatibility.Validate(Animation, Mesh)</code> 是普通组合的显式检查：比较 <code>SkeletonId</code>、骨骼身份、父子关系和绑定局部 TRS；失败时抛出输入错误，绝不隐式重定向。</p>
+        <p><code>SkeletalAnimationRetargeter.Retarget</code> 接收源动画、源/目标 Skeleton 和完整 <code>BoneMap</code>，创建新的 <code>SkeletalAnimationAsset</code> 并把 <code>SkeletonId</code> 指向目标 Skeleton。输出保留时长、采样率、Notify 和关键时刻，并通过绑定姿态 Delta 计算目标局部 TRS。当前没有 IK、比例补偿、自动命名匹配或独立 RetargetMap 资产；调用方应在输出后再次调用兼容性检查。</p>
+      </article>
     </section>
     <section class="section-card" id="data-assets">
       <h2>数据资产 API</h2>
@@ -111,13 +128,18 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>新增 <code>AnimationStateMachineAsset</code> 与 <code>engine.animator</code> schema v3；状态、参数、过渡和全部 Clip 依赖可从快照重建。</li>
+        <li>登记 engine-owned、只读、builtin/preset 的 mannequin locomotion 状态机，并复用 <code>EditorAssetOpenerRegistry</code> 的统一打开流程。</li>
         <li>增加数据资产类型声明与 .sdataasset 封套契约，类型 schema 从 v1 起显式声明；未引入已有资产格式迁移。</li>
         <li>建立首版 API 索引，收录引擎 manifest、项目、World、输入、编辑器、Timeline、设置和日志契约。</li>
         <li>增加固定 Editor Surface 扩展接口、Timeline 骨骼采样预览、Notify authoring session、面板命令和 CustomBar 描述字段；Timeline 资产 schema 仍为 v1。</li>
+        <li>增加 <code>SkeletalAnimation</code> 双击打开路由、独立 Timeline 文档状态以及 <code>EditorAssetOpenerRegistry</code> 的项目覆写契约。</li>
         <li>规定新增或修改公共类型、稳定 ID、命令、MCP 能力和 schema 时必须同步更新本页。</li>
         <li>收录控制与移动组件的 typeId、schema 和 frame state 入口。</li>
         <li>登记胶囊体角色 Prefab 资产 ID、组件组成和内部引用重映射契约。</li>
+        <li>更新角色 Prefab 为 mannequin skeletal mesh + Animator schema v3 与 locomotion state machine；胶囊 collider 仅提供 Trace，不生成渲染几何。</li>
         <li>增加 FBX provenance 字段和语义等价导出契约；明确导出文件不保证与来源字节一致。</li>
+        <li>增加 <code>SkeletalAnimationCompatibility</code> 的显式绑定检查与 <code>SkeletalAnimationRetargeter</code> 的目标 Skeleton 资产契约；Retarget 不隐式发生。</li>
         <li>规定新增资源文件扩展名由语义类型小写化后加 <code>s</code> 前缀，并保留旧裸后缀和 <code>.sharp...</code> 后缀的兼容边界。</li>
         <li>修正输入修饰键位契约，并明确 Play 状态下 Runtime 输入与编辑器 Viewport 操作的隔离边界。</li>
       </ul>

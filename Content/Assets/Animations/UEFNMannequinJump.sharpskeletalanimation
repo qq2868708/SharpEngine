@@ -1,0 +1,3541 @@
+{
+  "schemaVersion": 1,
+  "kind": "skeletal-animation",
+  "assetId": "engine://animations/uefn-mannequin-jump",
+  "name": "UEFN Mannequin Jump",
+  "duration": 1.0,
+  "sampleRate": 30.0,
+  "skeletonId": "engine://skeletons/uefn-mannequin",
+  "bones": [
+    {
+      "boneId": "root",
+      "name": "root",
+      "parentBoneId": null,
+      "bindPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "attach",
+      "name": "attach",
+      "parentBoneId": "root",
+      "bindPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_foot_root",
+      "name": "ik_foot_root",
+      "parentBoneId": "root",
+      "bindPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_foot_l",
+      "name": "ik_foot_l",
+      "parentBoneId": "ik_foot_root",
+      "bindPosition": [
+        0.1526085,
+        0.0944325,
+        -0.0441758
+      ],
+      "bindRotation": [
+        -0.631045,
+        0.631417,
+        0.3145376,
+        0.3227396
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_foot_r",
+      "name": "ik_foot_r",
+      "parentBoneId": "ik_foot_root",
+      "bindPosition": [
+        -0.1526086,
+        0.0944309,
+        -0.044176
+      ],
+      "bindRotation": [
+        -0.3145376,
+        -0.3227396,
+        -0.631045,
+        0.631417
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_hand_root",
+      "name": "ik_hand_root",
+      "parentBoneId": "root",
+      "bindPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_hand_gun",
+      "name": "ik_hand_gun",
+      "parentBoneId": "ik_hand_root",
+      "bindPosition": [
+        -0.5197286,
+        1.026935,
+        0.0408836
+      ],
+      "bindRotation": [
+        -0.0250578,
+        0.3974657,
+        0.4942606,
+        0.7727222
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_hand_l",
+      "name": "ik_hand_l",
+      "parentBoneId": "ik_hand_gun",
+      "bindPosition": [
+        0.5302862,
+        0.352051,
+        0.8217818
+      ],
+      "bindRotation": [
+        -0.1730553,
+        -0.4189258,
+        0.8424913,
+        0.2911382
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ik_hand_r",
+      "name": "ik_hand_r",
+      "parentBoneId": "ik_hand_gun",
+      "bindPosition": [
+        -0.0,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pelvis",
+      "name": "pelvis",
+      "parentBoneId": "root",
+      "bindPosition": [
+        0.0,
+        0.9311913,
+        -0.0070713
+      ],
+      "bindRotation": [
+        -0.7069933,
+        0.7069933,
+        -0.0126671,
+        0.0126671
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "spine_01",
+      "name": "spine_01",
+      "parentBoneId": "pelvis",
+      "bindPosition": [
+        0.0674937,
+        -0.0,
+        -0.0063877
+      ],
+      "bindRotation": [
+        0.034035,
+        -0.0,
+        0.0,
+        0.9994206
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "spine_02",
+      "name": "spine_02",
+      "parentBoneId": "spine_01",
+      "bindPosition": [
+        0.0725176,
+        -0.0,
+        -0.0003498
+      ],
+      "bindRotation": [
+        0.0237575,
+        0.0,
+        0.0,
+        0.9997178
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "spine_03",
+      "name": "spine_03",
+      "parentBoneId": "spine_02",
+      "bindPosition": [
+        0.0601043,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0148758,
+        -0.0,
+        -0.0,
+        0.9998893
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "spine_04",
+      "name": "spine_04",
+      "parentBoneId": "spine_03",
+      "bindPosition": [
+        0.0810236,
+        -0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        -0.0131575,
+        0.0,
+        0.0,
+        0.9999134
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "spine_05",
+      "name": "spine_05",
+      "parentBoneId": "spine_04",
+      "bindPosition": [
+        0.1001462,
+        0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        -0.0014941,
+        -0.0,
+        -0.0,
+        0.9999989
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "clavicle_l",
+      "name": "clavicle_l",
+      "parentBoneId": "spine_05",
+      "bindPosition": [
+        0.0435746,
+        -0.0232232,
+        -0.0014657
+      ],
+      "bindRotation": [
+        0.4452378,
+        0.4475666,
+        0.5772213,
+        -0.5179412
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "upperarm_l",
+      "name": "upperarm_l",
+      "parentBoneId": "clavicle_l",
+      "bindPosition": [
+        0.1551109,
+        0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        0.0063426,
+        0.0217636,
+        -0.3235057,
+        0.9459547
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "lowerarm_l",
+      "name": "lowerarm_l",
+      "parentBoneId": "upperarm_l",
+      "bindPosition": [
+        0.2665136,
+        0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        -0.2439446,
+        0.0296825,
+        -0.0272461,
+        0.9689518
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "hand_l",
+      "name": "hand_l",
+      "parentBoneId": "lowerarm_l",
+      "bindPosition": [
+        0.2234915,
+        -0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        0.0514717,
+        0.7032393,
+        0.0971194,
+        -0.7024051
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_metacarpal_l",
+      "name": "index_metacarpal_l",
+      "parentBoneId": "hand_l",
+      "bindPosition": [
+        0.016535,
+        -0.0296002,
+        0.0001828
+      ],
+      "bindRotation": [
+        -0.0169388,
+        0.015328,
+        -0.012899,
+        0.9996558
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_01_l",
+      "name": "index_01_l",
+      "parentBoneId": "index_metacarpal_l",
+      "bindPosition": [
+        0.0830082,
+        -0.0005242,
+        0.0003574
+      ],
+      "bindRotation": [
+        0.0932655,
+        -0.0132659,
+        0.0468098,
+        0.9944518
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_02_l",
+      "name": "index_02_l",
+      "parentBoneId": "index_01_l",
+      "bindPosition": [
+        0.0335874,
+        0.000452,
+        -0.0030036
+      ],
+      "bindRotation": [
+        0.3225353,
+        -0.0032896,
+        0.0009181,
+        0.9465513
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_03_l",
+      "name": "index_03_l",
+      "parentBoneId": "index_02_l",
+      "bindPosition": [
+        0.0255777,
+        -0.0002522,
+        -0.0012303
+      ],
+      "bindRotation": [
+        0.2558743,
+        -0.0050489,
+        0.0048362,
+        0.9666848
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_metacarpal_l",
+      "name": "middle_metacarpal_l",
+      "parentBoneId": "hand_l",
+      "bindPosition": [
+        0.0218562,
+        -0.0059838,
+        -0.0017253
+      ],
+      "bindRotation": [
+        -0.0330722,
+        0.0070731,
+        0.0163685,
+        0.9992939
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_01_l",
+      "name": "middle_01_l",
+      "parentBoneId": "middle_metacarpal_l",
+      "bindPosition": [
+        0.0732751,
+        0.0001293,
+        -0.0024474
+      ],
+      "bindRotation": [
+        0.0858918,
+        -0.0212432,
+        0.0005694,
+        0.9960778
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_02_l",
+      "name": "middle_02_l",
+      "parentBoneId": "middle_01_l",
+      "bindPosition": [
+        0.0401231,
+        0.0011752,
+        0.0014014
+      ],
+      "bindRotation": [
+        0.3521459,
+        -0.0333942,
+        0.0050508,
+        0.9353355
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_03_l",
+      "name": "middle_03_l",
+      "parentBoneId": "middle_02_l",
+      "bindPosition": [
+        0.0260771,
+        0.0013731,
+        0.0005339
+      ],
+      "bindRotation": [
+        0.1706181,
+        0.0014061,
+        0.0204708,
+        0.9851236
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_metacarpal_l",
+      "name": "pinky_metacarpal_l",
+      "parentBoneId": "hand_l",
+      "bindPosition": [
+        0.0176159,
+        0.033814,
+        -0.009753
+      ],
+      "bindRotation": [
+        -0.063214,
+        -0.0285623,
+        0.0858935,
+        0.9938866
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_01_l",
+      "name": "pinky_01_l",
+      "parentBoneId": "pinky_metacarpal_l",
+      "bindPosition": [
+        0.0717094,
+        -0.0010936,
+        -0.0048308
+      ],
+      "bindRotation": [
+        0.2220041,
+        -0.0573534,
+        -0.0316606,
+        0.9728424
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_02_l",
+      "name": "pinky_02_l",
+      "parentBoneId": "pinky_01_l",
+      "bindPosition": [
+        0.0282744,
+        -0.0010433,
+        0.0008925
+      ],
+      "bindRotation": [
+        0.2854017,
+        0.0025041,
+        0.0029581,
+        0.9584002
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_03_l",
+      "name": "pinky_03_l",
+      "parentBoneId": "pinky_02_l",
+      "bindPosition": [
+        0.0220463,
+        -7.79e-05,
+        0.0003075
+      ],
+      "bindRotation": [
+        0.1445135,
+        -0.0029993,
+        0.00936,
+        0.989454
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_metacarpal_l",
+      "name": "ring_metacarpal_l",
+      "parentBoneId": "hand_l",
+      "bindPosition": [
+        0.0220737,
+        0.0136382,
+        -0.003625
+      ],
+      "bindRotation": [
+        -0.0421183,
+        -0.0219319,
+        0.0744008,
+        0.9960972
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_01_l",
+      "name": "ring_01_l",
+      "parentBoneId": "ring_metacarpal_l",
+      "bindPosition": [
+        0.0702949,
+        -0.001446,
+        -0.0061969
+      ],
+      "bindRotation": [
+        0.1863404,
+        -0.0361418,
+        -0.0414702,
+        0.9809441
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_02_l",
+      "name": "ring_02_l",
+      "parentBoneId": "ring_01_l",
+      "bindPosition": [
+        0.0361739,
+        -0.0010267,
+        0.0046466
+      ],
+      "bindRotation": [
+        0.2806307,
+        0.0,
+        -0.0,
+        0.9598158
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_03_l",
+      "name": "ring_03_l",
+      "parentBoneId": "ring_02_l",
+      "bindPosition": [
+        0.0241521,
+        0.0001989,
+        0.0011405
+      ],
+      "bindRotation": [
+        0.1189114,
+        -0.0,
+        -0.0,
+        0.9929049
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thumb_01_l",
+      "name": "thumb_01_l",
+      "parentBoneId": "hand_l",
+      "bindPosition": [
+        0.0131181,
+        -0.0245901,
+        -0.0031911
+      ],
+      "bindRotation": [
+        0.3822943,
+        0.7551233,
+        0.1470789,
+        0.5118668
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thumb_02_l",
+      "name": "thumb_02_l",
+      "parentBoneId": "thumb_01_l",
+      "bindPosition": [
+        0.0593364,
+        0.0004011,
+        -0.0004484
+      ],
+      "bindRotation": [
+        0.2983871,
+        -0.0151851,
+        0.0154096,
+        0.9541997
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thumb_03_l",
+      "name": "thumb_03_l",
+      "parentBoneId": "thumb_02_l",
+      "bindPosition": [
+        0.0222231,
+        -0.000907,
+        0.0036822
+      ],
+      "bindRotation": [
+        0.0068589,
+        0.0119829,
+        -0.0128009,
+        0.9998227
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "weapon_l",
+      "name": "weapon_l",
+      "parentBoneId": "hand_l",
+      "bindPosition": [
+        -0.0019741,
+        0.0038108,
+        -0.0341105
+      ],
+      "bindRotation": [
+        -0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "lowerarm_twist_01_l",
+      "name": "lowerarm_twist_01_l",
+      "parentBoneId": "lowerarm_l",
+      "bindPosition": [
+        0.1785487,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "lowerarm_twist_02_l",
+      "name": "lowerarm_twist_02_l",
+      "parentBoneId": "lowerarm_l",
+      "bindPosition": [
+        0.0961988,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "upperarm_twist_01_l",
+      "name": "upperarm_twist_01_l",
+      "parentBoneId": "upperarm_l",
+      "bindPosition": [
+        4.1e-05,
+        -0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "upperarm_twist_02_l",
+      "name": "upperarm_twist_02_l",
+      "parentBoneId": "upperarm_l",
+      "bindPosition": [
+        0.1379411,
+        -0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "clavicle_r",
+      "name": "clavicle_r",
+      "parentBoneId": "spine_05",
+      "bindPosition": [
+        0.0435755,
+        0.0232233,
+        -0.0014656
+      ],
+      "bindRotation": [
+        0.5179412,
+        0.5772213,
+        -0.4475666,
+        0.4452378
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "upperarm_r",
+      "name": "upperarm_r",
+      "parentBoneId": "clavicle_r",
+      "bindPosition": [
+        -0.1551108,
+        -1e-07,
+        -1e-07
+      ],
+      "bindRotation": [
+        0.0063426,
+        0.0217636,
+        -0.3235057,
+        0.9459547
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "lowerarm_r",
+      "name": "lowerarm_r",
+      "parentBoneId": "upperarm_r",
+      "bindPosition": [
+        -0.2665145,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        -0.2439446,
+        0.0296825,
+        -0.0272461,
+        0.9689518
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "hand_r",
+      "name": "hand_r",
+      "parentBoneId": "lowerarm_r",
+      "bindPosition": [
+        -0.2234924,
+        1e-07,
+        1e-07
+      ],
+      "bindRotation": [
+        0.0514717,
+        0.7032393,
+        0.0971194,
+        -0.7024051
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_metacarpal_r",
+      "name": "index_metacarpal_r",
+      "parentBoneId": "hand_r",
+      "bindPosition": [
+        -0.0165338,
+        0.0296006,
+        -0.0001807
+      ],
+      "bindRotation": [
+        -0.0169388,
+        0.015328,
+        -0.012899,
+        0.9996558
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_01_r",
+      "name": "index_01_r",
+      "parentBoneId": "index_metacarpal_r",
+      "bindPosition": [
+        -0.083008,
+        0.0005243,
+        -0.0003573
+      ],
+      "bindRotation": [
+        0.0932655,
+        -0.0132659,
+        0.0468098,
+        0.9944518
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_02_r",
+      "name": "index_02_r",
+      "parentBoneId": "index_01_r",
+      "bindPosition": [
+        -0.0335887,
+        -0.0004526,
+        0.0030032
+      ],
+      "bindRotation": [
+        0.3225353,
+        -0.0032896,
+        0.0009181,
+        0.9465513
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "index_03_r",
+      "name": "index_03_r",
+      "parentBoneId": "index_02_r",
+      "bindPosition": [
+        -0.0255779,
+        0.0002514,
+        0.001231
+      ],
+      "bindRotation": [
+        0.2558743,
+        -0.0050491,
+        0.0048364,
+        0.9666848
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_metacarpal_r",
+      "name": "middle_metacarpal_r",
+      "parentBoneId": "hand_r",
+      "bindPosition": [
+        -0.0218565,
+        0.0059838,
+        0.0017264
+      ],
+      "bindRotation": [
+        -0.0330722,
+        0.0070731,
+        0.0163685,
+        0.9992939
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_01_r",
+      "name": "middle_01_r",
+      "parentBoneId": "middle_metacarpal_r",
+      "bindPosition": [
+        -0.0732733,
+        -0.0001292,
+        0.002447
+      ],
+      "bindRotation": [
+        0.0858918,
+        -0.0212432,
+        0.0005694,
+        0.9960778
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_02_r",
+      "name": "middle_02_r",
+      "parentBoneId": "middle_01_r",
+      "bindPosition": [
+        -0.0401419,
+        -0.0006996,
+        -0.0014108
+      ],
+      "bindRotation": [
+        0.3521498,
+        -0.0333762,
+        0.0051679,
+        0.9353341
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "middle_03_r",
+      "name": "middle_03_r",
+      "parentBoneId": "middle_02_r",
+      "bindPosition": [
+        -0.0260742,
+        -0.001312,
+        -0.0005339
+      ],
+      "bindRotation": [
+        0.1706147,
+        0.0015025,
+        0.0204639,
+        0.9851242
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_metacarpal_r",
+      "name": "pinky_metacarpal_r",
+      "parentBoneId": "hand_r",
+      "bindPosition": [
+        -0.0176172,
+        -0.0338141,
+        0.009753
+      ],
+      "bindRotation": [
+        -0.063214,
+        -0.0285623,
+        0.0858935,
+        0.9938866
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_01_r",
+      "name": "pinky_01_r",
+      "parentBoneId": "pinky_metacarpal_r",
+      "bindPosition": [
+        -0.0717072,
+        0.0010938,
+        0.0048322
+      ],
+      "bindRotation": [
+        0.2220041,
+        -0.0573534,
+        -0.0316606,
+        0.9728424
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_02_r",
+      "name": "pinky_02_r",
+      "parentBoneId": "pinky_01_r",
+      "bindPosition": [
+        -0.0282744,
+        0.0010433,
+        -0.0008917
+      ],
+      "bindRotation": [
+        0.2854017,
+        0.0025041,
+        0.0029581,
+        0.9584002
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "pinky_03_r",
+      "name": "pinky_03_r",
+      "parentBoneId": "pinky_02_r",
+      "bindPosition": [
+        -0.0220449,
+        7.77e-05,
+        -0.0003102
+      ],
+      "bindRotation": [
+        0.1445135,
+        -0.0029993,
+        0.00936,
+        0.989454
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_metacarpal_r",
+      "name": "ring_metacarpal_r",
+      "parentBoneId": "hand_r",
+      "bindPosition": [
+        -0.0220726,
+        -0.013638,
+        0.0036266
+      ],
+      "bindRotation": [
+        -0.0421183,
+        -0.0219319,
+        0.0744008,
+        0.9960972
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_01_r",
+      "name": "ring_01_r",
+      "parentBoneId": "ring_metacarpal_r",
+      "bindPosition": [
+        -0.0702968,
+        0.0014463,
+        0.0061973
+      ],
+      "bindRotation": [
+        0.1863404,
+        -0.0361418,
+        -0.0414702,
+        0.9809441
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_02_r",
+      "name": "ring_02_r",
+      "parentBoneId": "ring_01_r",
+      "bindPosition": [
+        -0.0361715,
+        0.0010265,
+        -0.0046476
+      ],
+      "bindRotation": [
+        0.2806307,
+        -0.0,
+        0.0,
+        0.9598158
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ring_03_r",
+      "name": "ring_03_r",
+      "parentBoneId": "ring_02_r",
+      "bindPosition": [
+        -0.0241526,
+        -0.0001988,
+        -0.0011414
+      ],
+      "bindRotation": [
+        0.1189114,
+        -0.0,
+        -0.0,
+        0.9929049
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thumb_01_r",
+      "name": "thumb_01_r",
+      "parentBoneId": "hand_r",
+      "bindPosition": [
+        -0.0131187,
+        0.0245898,
+        0.0031925
+      ],
+      "bindRotation": [
+        0.3822943,
+        0.7551233,
+        0.1470789,
+        0.5118668
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thumb_02_r",
+      "name": "thumb_02_r",
+      "parentBoneId": "thumb_01_r",
+      "bindPosition": [
+        -0.0593355,
+        -0.0004007,
+        0.0004474
+      ],
+      "bindRotation": [
+        0.2983871,
+        -0.015185,
+        0.0154096,
+        0.9541997
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thumb_03_r",
+      "name": "thumb_03_r",
+      "parentBoneId": "thumb_02_r",
+      "bindPosition": [
+        -0.0222231,
+        0.000907,
+        -0.0036822
+      ],
+      "bindRotation": [
+        0.0068589,
+        0.0119829,
+        -0.0128009,
+        0.9998227
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "weapon_r",
+      "name": "weapon_r",
+      "parentBoneId": "hand_r",
+      "bindPosition": [
+        0.0019749,
+        -0.0038107,
+        0.0341115
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "lowerarm_twist_01_r",
+      "name": "lowerarm_twist_01_r",
+      "parentBoneId": "lowerarm_r",
+      "bindPosition": [
+        -0.1785496,
+        -0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "lowerarm_twist_02_r",
+      "name": "lowerarm_twist_02_r",
+      "parentBoneId": "lowerarm_r",
+      "bindPosition": [
+        -0.0961992,
+        -0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "upperarm_twist_01_r",
+      "name": "upperarm_twist_01_r",
+      "parentBoneId": "upperarm_r",
+      "bindPosition": [
+        -4.1e-05,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        -0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "upperarm_twist_02_r",
+      "name": "upperarm_twist_02_r",
+      "parentBoneId": "upperarm_r",
+      "bindPosition": [
+        -0.1379416,
+        0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        -0.0,
+        -0.0,
+        1.0
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "neck_01",
+      "name": "neck_01",
+      "parentBoneId": "spine_05",
+      "bindPosition": [
+        0.1131382,
+        -0.0,
+        0.0015286
+      ],
+      "bindRotation": [
+        -0.2002766,
+        0.0,
+        0.0,
+        0.9797394
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "neck_02",
+      "name": "neck_02",
+      "parentBoneId": "neck_01",
+      "bindPosition": [
+        0.0456268,
+        -0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0504303,
+        -0.0,
+        -0.0,
+        0.9987276
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "head",
+      "name": "head",
+      "parentBoneId": "neck_02",
+      "bindPosition": [
+        0.0539138,
+        -0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        0.114956,
+        -0.0,
+        -0.0,
+        0.9933706
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thigh_l",
+      "name": "thigh_l",
+      "parentBoneId": "pelvis",
+      "bindPosition": [
+        -0.0256933,
+        -0.0775007,
+        -0.0001087
+      ],
+      "bindRotation": [
+        0.0154221,
+        -0.0005316,
+        0.0571722,
+        0.9982451
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "calf_l",
+      "name": "calf_l",
+      "parentBoneId": "thigh_l",
+      "bindPosition": [
+        -0.3904844,
+        -0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        -0.0390519,
+        -0.0006155,
+        -0.0160656,
+        0.9991078
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "calf_twist_01_l",
+      "name": "calf_twist_01_l",
+      "parentBoneId": "calf_l",
+      "bindPosition": [
+        -0.3581305,
+        0.0003971,
+        -0.0009671
+      ],
+      "bindRotation": [
+        -0.0039768,
+        0.0237954,
+        0.0093583,
+        0.9996651
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "calf_twist_02_l",
+      "name": "calf_twist_02_l",
+      "parentBoneId": "calf_l",
+      "bindPosition": [
+        -0.1880637,
+        0.0003971,
+        -0.0009671
+      ],
+      "bindRotation": [
+        -0.0039768,
+        0.0237954,
+        0.0093583,
+        0.9996651
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "foot_l",
+      "name": "foot_l",
+      "parentBoneId": "calf_l",
+      "bindPosition": [
+        -0.4256103,
+        0.0042919,
+        0.0010774
+      ],
+      "bindRotation": [
+        0.0381036,
+        0.0449731,
+        -0.0423569,
+        0.9973622
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ball_l",
+      "name": "ball_l",
+      "parentBoneId": "foot_l",
+      "bindPosition": [
+        -0.0615985,
+        0.006806,
+        0.1382641
+      ],
+      "bindRotation": [
+        -0.7062807,
+        -6.03e-05,
+        -6.04e-05,
+        0.7079319
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thigh_twist_01_l",
+      "name": "thigh_twist_01_l",
+      "parentBoneId": "thigh_l",
+      "bindPosition": [
+        -0.2163029,
+        -0.0,
+        0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0012678,
+        0.0,
+        0.9999992
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thigh_r",
+      "name": "thigh_r",
+      "parentBoneId": "pelvis",
+      "bindPosition": [
+        -0.0256914,
+        0.0775006,
+        -0.0001087
+      ],
+      "bindRotation": [
+        0.9982451,
+        -0.0571722,
+        -0.0005316,
+        -0.0154221
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "calf_r",
+      "name": "calf_r",
+      "parentBoneId": "thigh_r",
+      "bindPosition": [
+        0.3904866,
+        0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        -0.0390519,
+        -0.0006155,
+        -0.0160656,
+        0.9991078
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "calf_twist_01_r",
+      "name": "calf_twist_01_r",
+      "parentBoneId": "calf_r",
+      "bindPosition": [
+        0.3581318,
+        -0.0003971,
+        0.0009671
+      ],
+      "bindRotation": [
+        -0.0039768,
+        0.0237954,
+        0.0093583,
+        0.9996651
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "calf_twist_02_r",
+      "name": "calf_twist_02_r",
+      "parentBoneId": "calf_r",
+      "bindPosition": [
+        0.1880644,
+        -0.0003971,
+        0.0009671
+      ],
+      "bindRotation": [
+        -0.0039768,
+        0.0237954,
+        0.0093583,
+        0.9996651
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "foot_r",
+      "name": "foot_r",
+      "parentBoneId": "calf_r",
+      "bindPosition": [
+        0.4256116,
+        -0.0042921,
+        -0.0010773
+      ],
+      "bindRotation": [
+        0.0381036,
+        0.0449731,
+        -0.0423569,
+        0.9973622
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "ball_r",
+      "name": "ball_r",
+      "parentBoneId": "foot_r",
+      "bindPosition": [
+        0.0615984,
+        -0.0068061,
+        -0.1382642
+      ],
+      "bindRotation": [
+        -0.7062807,
+        -6.03e-05,
+        -6.04e-05,
+        0.7079319
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "boneId": "thigh_twist_01_r",
+      "name": "thigh_twist_01_r",
+      "parentBoneId": "thigh_r",
+      "bindPosition": [
+        0.2163029,
+        0.0,
+        -0.0
+      ],
+      "bindRotation": [
+        0.0,
+        0.0012678,
+        0.0,
+        0.9999992
+      ],
+      "bindScale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "tracks": [
+    {
+      "trackId": "root-track",
+      "boneId": "root",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.0,
+            -0.025,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.0,
+            0.42,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.0,
+            0.54,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.0,
+            0.18,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "pelvis-track",
+      "boneId": "pelvis",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.0,
+            0.9311913,
+            -0.0070713
+          ],
+          "rotation": [
+            -0.7069933,
+            0.7069933,
+            -0.0126671,
+            0.0126671
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.0,
+            0.8761913,
+            -0.0070713
+          ],
+          "rotation": [
+            -0.73123634,
+            0.68188892,
+            -0.01310146,
+            0.01221731
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.0,
+            0.9561913,
+            -0.0070713
+          ],
+          "rotation": [
+            -0.6945469,
+            0.71922437,
+            -0.0124441,
+            0.01288624
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.0,
+            0.9661913,
+            -0.0070713
+          ],
+          "rotation": [
+            -0.6945469,
+            0.71922437,
+            -0.0124441,
+            0.01288624
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.0,
+            0.9061913,
+            -0.0070713
+          ],
+          "rotation": [
+            -0.72525797,
+            0.68824412,
+            -0.01299435,
+            0.01233117
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.0,
+            0.9311913,
+            -0.0070713
+          ],
+          "rotation": [
+            -0.7069933,
+            0.7069933,
+            -0.0126671,
+            0.0126671
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "thigh_l-track",
+      "boneId": "thigh_l",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            -0.0256933,
+            -0.0775007,
+            -0.0001087
+          ],
+          "rotation": [
+            0.0154221,
+            -0.0005316,
+            0.0571722,
+            0.9982451
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            -0.0256933,
+            -0.0775007,
+            -0.0001087
+          ],
+          "rotation": [
+            0.02697186,
+            -0.2080668,
+            0.05271641,
+            0.97632049
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            -0.0256933,
+            -0.0775007,
+            -0.0001087
+          ],
+          "rotation": [
+            0.00628853,
+            0.15563488,
+            0.05888086,
+            0.98603818
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            -0.0256933,
+            -0.0775007,
+            -0.0001087
+          ],
+          "rotation": [
+            0.00936149,
+            0.10381634,
+            0.05847105,
+            0.99283214
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            -0.0256933,
+            -0.0775007,
+            -0.0001087
+          ],
+          "rotation": [
+            0.02322884,
+            -0.13945529,
+            0.05446946,
+            0.98845623
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            -0.0256933,
+            -0.0775007,
+            -0.0001087
+          ],
+          "rotation": [
+            0.0154221,
+            -0.0005316,
+            0.0571722,
+            0.9982451
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "thigh_r-track",
+      "boneId": "thigh_r",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            -0.0256914,
+            0.0775006,
+            -0.0001087
+          ],
+          "rotation": [
+            0.9982451,
+            -0.0571722,
+            -0.0005316,
+            -0.0154221
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            -0.0256914,
+            0.0775006,
+            -0.0001087
+          ],
+          "rotation": [
+            0.97632049,
+            -0.05271641,
+            -0.2080668,
+            -0.02697186
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            -0.0256914,
+            0.0775006,
+            -0.0001087
+          ],
+          "rotation": [
+            0.98603818,
+            -0.05888086,
+            0.15563488,
+            -0.00628853
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            -0.0256914,
+            0.0775006,
+            -0.0001087
+          ],
+          "rotation": [
+            0.99283214,
+            -0.05847105,
+            0.10381634,
+            -0.00936149
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            -0.0256914,
+            0.0775006,
+            -0.0001087
+          ],
+          "rotation": [
+            0.98845623,
+            -0.05446946,
+            -0.13945529,
+            -0.02322884
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            -0.0256914,
+            0.0775006,
+            -0.0001087
+          ],
+          "rotation": [
+            0.9982451,
+            -0.0571722,
+            -0.0005316,
+            -0.0154221
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "calf_l-track",
+      "boneId": "calf_l",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            -0.3904844,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.0390519,
+            -0.0006155,
+            -0.0160656,
+            0.9991078
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            -0.3904844,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03070069,
+            0.35747361,
+            -0.02899348,
+            0.93296809
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            -0.3904844,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03605789,
+            0.15568698,
+            -0.02197687,
+            0.98690345
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            -0.3904844,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03783609,
+            0.06908024,
+            -0.01875059,
+            0.99671699
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            -0.3904844,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03217602,
+            0.30815593,
+            -0.027347,
+            0.95039822
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            -0.3904844,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.0390519,
+            -0.0006155,
+            -0.0160656,
+            0.9991078
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "calf_r-track",
+      "boneId": "calf_r",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.3904866,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.0390519,
+            -0.0006155,
+            -0.0160656,
+            0.9991078
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.3904866,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03070069,
+            0.35747361,
+            -0.02899348,
+            0.93296809
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.3904866,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03605789,
+            0.15568698,
+            -0.02197687,
+            0.98690345
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.3904866,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03783609,
+            0.06908024,
+            -0.01875059,
+            0.99671699
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.3904866,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.03217602,
+            0.30815593,
+            -0.027347,
+            0.95039822
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.3904866,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.0390519,
+            -0.0006155,
+            -0.0160656,
+            0.9991078
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "foot_l-track",
+      "boneId": "foot_l",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            -0.4256103,
+            0.0042919,
+            0.0010774
+          ],
+          "rotation": [
+            0.0381036,
+            0.0449731,
+            -0.0423569,
+            0.9973622
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            -0.4256103,
+            0.0042919,
+            0.0010774
+          ],
+          "rotation": [
+            -0.15290216,
+            0.0522289,
+            -0.03299741,
+            0.98630839
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            -0.4256103,
+            0.0042919,
+            0.0010774
+          ],
+          "rotation": [
+            0.10758326,
+            0.04190888,
+            -0.04539089,
+            0.99227474
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            -0.4256103,
+            0.0042919,
+            0.0010774
+          ],
+          "rotation": [
+            0.12488445,
+            0.04111032,
+            -0.04611538,
+            0.99024602
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            -0.4256103,
+            0.0042919,
+            0.0010774
+          ],
+          "rotation": [
+            -0.11838734,
+            0.05104549,
+            -0.03480007,
+            0.99104377
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            -0.4256103,
+            0.0042919,
+            0.0010774
+          ],
+          "rotation": [
+            0.0381036,
+            0.0449731,
+            -0.0423569,
+            0.9973622
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "foot_r-track",
+      "boneId": "foot_r",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.4256116,
+            -0.0042921,
+            -0.0010773
+          ],
+          "rotation": [
+            0.0381036,
+            0.0449731,
+            -0.0423569,
+            0.9973622
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.4256116,
+            -0.0042921,
+            -0.0010773
+          ],
+          "rotation": [
+            -0.15290216,
+            0.0522289,
+            -0.03299741,
+            0.98630839
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.4256116,
+            -0.0042921,
+            -0.0010773
+          ],
+          "rotation": [
+            0.10758326,
+            0.04190888,
+            -0.04539089,
+            0.99227474
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.4256116,
+            -0.0042921,
+            -0.0010773
+          ],
+          "rotation": [
+            0.12488445,
+            0.04111032,
+            -0.04611538,
+            0.99024602
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.4256116,
+            -0.0042921,
+            -0.0010773
+          ],
+          "rotation": [
+            -0.11838734,
+            0.05104549,
+            -0.03480007,
+            0.99104377
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.4256116,
+            -0.0042921,
+            -0.0010773
+          ],
+          "rotation": [
+            0.0381036,
+            0.0449731,
+            -0.0423569,
+            0.9973622
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "upperarm_l-track",
+      "boneId": "upperarm_l",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.1551109,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0063426,
+            0.0217636,
+            -0.3235057,
+            0.9459547
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.1551109,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0844173,
+            0.24996427,
+            -0.31236177,
+            0.91259066
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.1551109,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.04434293,
+            -0.12648426,
+            -0.32051499,
+            0.93771295
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.1551109,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.06105661,
+            -0.17538702,
+            -0.31775501,
+            0.92980817
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.1551109,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.05687195,
+            0.16947556,
+            -0.31853059,
+            0.9309038
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.1551109,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0063426,
+            0.0217636,
+            -0.3235057,
+            0.9459547
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "upperarm_r-track",
+      "boneId": "upperarm_r",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            -0.1551108,
+            -1e-07,
+            -1e-07
+          ],
+          "rotation": [
+            0.0063426,
+            0.0217636,
+            -0.3235057,
+            0.9459547
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            -0.1551108,
+            -1e-07,
+            -1e-07
+          ],
+          "rotation": [
+            0.0844173,
+            0.24996427,
+            -0.31236177,
+            0.91259066
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            -0.1551108,
+            -1e-07,
+            -1e-07
+          ],
+          "rotation": [
+            -0.04434293,
+            -0.12648426,
+            -0.32051499,
+            0.93771295
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            -0.1551108,
+            -1e-07,
+            -1e-07
+          ],
+          "rotation": [
+            -0.06105661,
+            -0.17538702,
+            -0.31775501,
+            0.92980817
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            -0.1551108,
+            -1e-07,
+            -1e-07
+          ],
+          "rotation": [
+            0.05687195,
+            0.16947556,
+            -0.31853059,
+            0.9309038
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            -0.1551108,
+            -1e-07,
+            -1e-07
+          ],
+          "rotation": [
+            0.0063426,
+            0.0217636,
+            -0.3235057,
+            0.9459547
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "lowerarm_l-track",
+      "boneId": "lowerarm_l",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.2665136,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.2439446,
+            0.0296825,
+            -0.0272461,
+            0.9689518
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.2665136,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.23426385,
+            0.21402187,
+            -0.07329234,
+            0.94548576
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.2665136,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.2426842,
+            -0.22211209,
+            0.0368198,
+            0.94361798
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.2665136,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.24125137,
+            -0.25490858,
+            0.04526692,
+            0.93529156
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.2665136,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.23294905,
+            0.23049028,
+            -0.07736964,
+            0.94160656
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.2665136,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.2439446,
+            0.0296825,
+            -0.0272461,
+            0.9689518
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "lowerarm_r-track",
+      "boneId": "lowerarm_r",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            -0.2665145,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.2439446,
+            0.0296825,
+            -0.0272461,
+            0.9689518
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            -0.2665145,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.23426385,
+            0.21402187,
+            -0.07329234,
+            0.94548576
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            -0.2665145,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.2426842,
+            -0.22211209,
+            0.0368198,
+            0.94361798
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            -0.2665145,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.24125137,
+            -0.25490858,
+            0.04526692,
+            0.93529156
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            -0.2665145,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.23294905,
+            0.23049028,
+            -0.07736964,
+            0.94160656
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            -0.2665145,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -0.2439446,
+            0.0296825,
+            -0.0272461,
+            0.9689518
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "spine_01-track",
+      "boneId": "spine_01",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.0674937,
+            0.0,
+            -0.0063877
+          ],
+          "rotation": [
+            0.034035,
+            -0.0,
+            0.0,
+            0.9994206
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.0674937,
+            0.0,
+            -0.0063877
+          ],
+          "rotation": [
+            0.03395209,
+            -0.00237416,
+            0.06971606,
+            0.9969861
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.0674937,
+            0.0,
+            -0.0063877
+          ],
+          "rotation": [
+            0.03400261,
+            0.00148459,
+            -0.04359412,
+            0.99846941
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.0674937,
+            0.0,
+            -0.0063877
+          ],
+          "rotation": [
+            0.03398836,
+            0.00178125,
+            -0.05230563,
+            0.99805097
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.0674937,
+            0.0,
+            -0.0063877
+          ],
+          "rotation": [
+            0.03400261,
+            -0.00148459,
+            0.04359412,
+            0.99846941
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.0674937,
+            0.0,
+            -0.0063877
+          ],
+          "rotation": [
+            0.034035,
+            -0.0,
+            0.0,
+            0.9994206
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "trackId": "head-track",
+      "boneId": "head",
+      "keyframes": [
+        {
+          "time": 0.0,
+          "position": [
+            0.0539138,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.114956,
+            -0.0,
+            -0.0,
+            0.9933706
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.16,
+          "position": [
+            0.0539138,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.11488597,
+            0.00401191,
+            -0.03466813,
+            0.99276545
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.38,
+          "position": [
+            0.0539138,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.11493849,
+            -0.00200626,
+            0.01733671,
+            0.99321929
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.62,
+          "position": [
+            0.0539138,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.11493849,
+            -0.00200626,
+            0.01733671,
+            0.99321929
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 0.82,
+          "position": [
+            0.0539138,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.11493849,
+            0.00200626,
+            -0.01733671,
+            0.99321929
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "time": 1.0,
+          "position": [
+            0.0539138,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.114956,
+            -0.0,
+            -0.0,
+            0.9933706
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    }
+  ]
+}
