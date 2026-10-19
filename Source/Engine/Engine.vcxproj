@@ -182,7 +182,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
   <Target Name="CheckSharpEngineLayout">
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)Tools\SharpEngineLayout.ps1&quot; -EngineRoot &quot;$(SharpEngineRoot)Build\..&quot; -Mode Check -Platform $(SharpEnginePlatform) -Configuration $(Configuration) -Target $(SharpEngineTarget)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)Tools\SharpEngineLayout.ps1&quot; -EngineRoot &quot;$(SharpEngineRoot)Build\..&quot; -Mode Check -Scope Target -Platform $(SharpEnginePlatform) -Configuration $(Configuration) -Target $(SharpEngineTarget)" />
   </Target>
   <Target Name="BuildUiDependencies" BeforeTargets="PrepareForBuild">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)\Tools\BuildUiDependencies.ps1&quot; -Configuration $(Configuration) -Target $(SharpEngineTarget)" />

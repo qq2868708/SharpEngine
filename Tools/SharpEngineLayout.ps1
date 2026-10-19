@@ -9,6 +9,9 @@ param(
     [ValidateSet('Check', 'Apply', 'Clean')]
     [string]$Mode = 'Check',
 
+    [ValidateSet('All', 'Target')]
+    [string]$Scope = 'All',
+
     [ValidateSet('Win64')]
     [string]$Platform = 'Win64',
 
@@ -316,9 +319,40 @@ function Resolve-ProjectContract([string]$ManifestPath) {
     return [pscustomobject]@{ Root = $root; Manifest = $manifest; ManifestPath = $manifestFull }
 }
 
-function Invoke-Check([string]$Root, [bool]$IsEngine) {
-    if ($IsEngine) {
+function Assert-TargetOutputHierarchy([string]$Root, [string]$DirectoryName)
+{
+    $CurrentPath = $Root
+    foreach ($Segment in @($DirectoryName, $Platform, $Configuration, $Target))
+    {
+        $CurrentPath = Join-Path $CurrentPath $Segment
+        if (!(Test-Path -LiteralPath $CurrentPath))
+        {
+            return
+        }
+        if (!(Test-Path -LiteralPath $CurrentPath -PathType Container))
+        {
+            throw "Output path must be a directory: $CurrentPath"
+        }
+        Assert-NoReparsePoint $Root $CurrentPath
+    }
+}
+
+function Invoke-Check([string]$Root, [bool]$IsEngine)
+{
+    if ($IsEngine)
+    {
         Assert-EngineContract $Root
+    }
+    if ($Scope -eq 'Target')
+    {
+        Assert-TargetOutputHierarchy $Root 'Binaries'
+        Assert-TargetOutputHierarchy $Root 'Intermediate'
+        Write-Output "Target layout check passed: $Root ($Platform/$Configuration/$Target)"
+        return
+    }
+
+    if ($IsEngine)
+    {
         Assert-NoLegacyDirectories $Root @('x64', 'Engine\x64', 'Build\Verify',
             'Build\Validation', 'Build\McpValidation',
             'Build\EditorValidationIsolated', 'Build\McpNative',
@@ -328,7 +362,9 @@ function Invoke-Check([string]$Root, [bool]$IsEngine) {
             'Templates\BasicProject\Project',
             'Templates\BasicProject\Content\Worlds', 'Project')
         $allowedTargets = $EngineTargets
-    } else {
+    }
+    else
+    {
         Assert-NoLegacyDirectories $Root @('x64', 'Binaries\Managed',
             'Intermediate\Managed', 'Intermediate\ProjectFiles\x64')
         $allowedTargets = $ProjectTargets

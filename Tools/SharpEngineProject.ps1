@@ -274,11 +274,11 @@ function Invoke-Build([string]$Path) {
         throw "SharpEngine layout checker not found: $layout"
     }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $layout `
-        -EngineRoot $resolved.EngineRoot -Mode Check -Platform $Platform `
-        -Configuration $Configuration -Target Editor
+        -EngineRoot $resolved.EngineRoot -Mode Check -Scope Target -Platform $Platform `
+        -Configuration $Configuration -Target $Target
     if ($LASTEXITCODE -ne 0) { throw "SharpEngine layout check failed with exit code $LASTEXITCODE" }
     & powershell -NoProfile -ExecutionPolicy Bypass -File $layout `
-        -ProjectFile $resolved.ProjectManifest -Mode Check -Platform $Platform `
+        -ProjectFile $resolved.ProjectManifest -Mode Check -Scope Target -Platform $Platform `
         -Configuration $Configuration -Target $Target
     if ($LASTEXITCODE -ne 0) { throw "Project layout check failed with exit code $LASTEXITCODE" }
     $builder = Join-Path $resolved.EngineRoot 'Tools\ProjectBuild\SharpEngine.ProjectBuild.csproj'

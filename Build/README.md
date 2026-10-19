@@ -22,9 +22,13 @@ discovers engine projects and invokes their real project-reference graph.
 Use `Tools/SharpEngineLayout.ps1` to inspect or maintain this structure:
 
 ```powershell
-# Read-only; this is the default mode.
+# Read-only full-workspace audit; this is the default mode and scope.
 ./Tools/SharpEngineLayout.ps1 -EngineRoot . -Mode Check
 ./Tools/SharpEngineLayout.ps1 -ProjectFile D:/Games/MyGame/MyGame.sharpproject -Mode Check
+
+# Read-only build preflight for one output combination.
+./Tools/SharpEngineLayout.ps1 -EngineRoot . -Mode Check -Scope Target `
+  -Platform Win64 -Configuration Debug -Target Editor
 
 # Create one selected output combination and remove only documented legacy roots.
 ./Tools/SharpEngineLayout.ps1 -EngineRoot . -Mode Apply -Configuration Development
@@ -33,6 +37,15 @@ Use `Tools/SharpEngineLayout.ps1` to inspect or maintain this structure:
 ./Tools/SharpEngineLayout.ps1 -ProjectFile D:/Games/MyGame/MyGame.sharpproject `
   -Mode Clean -Target Game -Configuration Shipping
 ```
+
+Native and project builds use `-Scope Target`: they validate the source contract
+and the selected output paths, including their ancestors and reparse-point checks.
+Unrelated validation artifacts and other output combinations do not block these
+builds. The default `-Scope All` still rejects unknown output entries and legacy
+directories across the workspace. Store temporary validation artifacts under
+`Saved/Validation` so they also remain outside the full layout audit.
+
+Run `./Tools/LayoutValidation.ps1` for the layout-check regression suite.
 
 `Apply` does not migrate existing files. `Clean` does not remove other valid
 platform, configuration, or target combinations. Both mutation modes reject
