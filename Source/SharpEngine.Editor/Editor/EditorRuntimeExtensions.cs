@@ -7,8 +7,30 @@ namespace SharpEngine.Editor;
 
 public sealed partial class EditorRuntime
 {
+    internal string ResolveCommandLabel(EditorCommand Command, string? Fallback)
+    {
+        if (Command.GetLabel is null)
+        {
+            return Command.Label;
+        }
+
+        try
+        {
+            return EditorExtensionIds.RequireLabel(Command.GetLabel(_commandContext), "getLabel");
+        }
+        catch (Exception Exception)
+        {
+            SharpLog.Error("EditorExtension", $"Command {Command.Id} GetLabel failed", Exception);
+            return Fallback ?? Command.Label;
+        }
+    }
+
     private void RegisterBuiltInEditorUi()
     {
+        AssetOpeners.Register(new EditorAssetOpener("engine.ui-editor", "RmlDocument",
+            Context => OpenUiAsset(Context.Asset), Priority: -100));
+        AssetOpeners.Register(new EditorAssetOpener("engine.prefab-editor", "Prefab",
+            Context => OpenPrefab(Context.Path), Priority: -100));
         _commands.Register(new EditorCommand("core.new-csharp", "New C# Class...",
             _ => OpenSourceWizard(), _ => _projectManifest is not null));
         _commands.Register(new EditorCommand("core.build-project-code", "Build Project Code",
@@ -62,6 +84,7 @@ public sealed partial class EditorRuntime
         _commands.Register(new EditorCommand("core.show-project-content", "Show Project Content",
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
+        RegisterPaneVisibilityCommand("view.timeline", "Animation Timeline", EditorPaneIds.Timeline);
         RegisterPaneVisibilityCommand("view.ui-editor", "UI Editor", EditorPaneIds.UiEditor);
         RegisterPaneVisibilityCommand("view.content", "Content Manager 1", EditorPaneIds.Content);
         RegisterPaneVisibilityCommand("view.content-2", "Content Manager 2", EditorPaneIds.Content2);
@@ -83,6 +106,15 @@ public sealed partial class EditorRuntime
             _ => InvokeUiAction("editor.stop"),
             _ => PlayState != EditorPlayState.Stopped,
             "Stop simulation and restore edit state"));
+        _commands.Register(new EditorCommand("core.viewport-move", "Move",
+            _ => InvokeUiAction("editor.tool-move"),
+            getChecked: _ => _viewportTool == "move"));
+        _commands.Register(new EditorCommand("core.viewport-rotate", "Rotate",
+            _ => InvokeUiAction("editor.tool-rotate"),
+            getChecked: _ => _viewportTool == "rotate"));
+        _commands.Register(new EditorCommand("core.viewport-scale", "Scale",
+            _ => InvokeUiAction("editor.tool-scale"),
+            getChecked: _ => _viewportTool == "scale"));
 
         foreach (var menu in new[]
         {
@@ -92,7 +124,7 @@ public sealed partial class EditorRuntime
             new EditorMenu("view", "View", 400),
             new EditorMenu("window", "Window", 500),
             new EditorMenu("help", "Help", 600),
-        }) _menus.RegisterMenu(menu);
+        }) _menus.RegisterBuiltInMenu(menu);
 
         _menus.RegisterCategory(new EditorMenuCategory("file", "project", 100));
         _menus.RegisterCategory(new EditorMenuCategory("file", "level", 200));
@@ -117,6 +149,7 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.new-entity", 300));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.step", 400));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.hierarchy", 100));
+        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.timeline", 150));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.ui-editor", 200));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content", 300));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-2", 310));
@@ -148,6 +181,7 @@ public sealed partial class EditorRuntime
         _toolbar.RegisterTool(new EditorToolbarTool("mcp", "mcp", "MCP",
             ["core.mcp-settings"], 100, "Configure the MCP port and restart the server",
             getLabel: _ => McpToolbarLabel()));
+        CustomBarRegistry.Register(new ViewportTransformCustomBar());
     }
 
     private void RegisterPaneVisibilityCommand(string commandId, string label, string paneId)
@@ -199,11 +233,17 @@ public sealed partial class EditorRuntime
         var left = BuildToolbarMarkup(EditorToolbarAlignment.Left);
         var center = BuildToolbarMarkup(EditorToolbarAlignment.Center);
         var right = BuildToolbarMarkup(EditorToolbarAlignment.Right);
+        var viewportCustomBar = CustomBarRegistry.BuildMarkup(
+            EditorCustomBarRegistry.ViewportSurfaceId);
+        var timelineCustomBar = CustomBarRegistry.BuildMarkup(
+            EditorCustomBarRegistry.TimelineSurfaceId);
 
         PublishMarkup("topMenus", menus, ref _menuMarkup);
         PublishMarkup("toolbarLeft", left, ref _toolbarLeftMarkup);
         PublishMarkup("toolbarCenter", center, ref _toolbarCenterMarkup);
         PublishMarkup("toolbarRight", right, ref _toolbarRightMarkup);
+        PublishMarkup("viewportCustomBar", viewportCustomBar, ref ViewportCustomBarMarkup);
+        PublishMarkup("timelineCustomBar", timelineCustomBar, ref TimelineCustomBarMarkup);
         _extensionUiDirty = false;
     }
 

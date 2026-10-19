@@ -75,7 +75,7 @@ Test-Layout $Valid '' $true
 Test-Layout $Valid 'Target' $true
 foreach ($DirectoryName in @('Binaries', 'Intermediate'))
 {
-    foreach ($TargetName in @('Editor', 'Game', 'Tools'))
+    foreach ($TargetName in @('Editor', 'Game', 'Server', 'Tools'))
     {
         New-Directory (Join-Path $Valid "$DirectoryName/Win64/Debug/$TargetName")
     }
@@ -83,6 +83,7 @@ foreach ($DirectoryName in @('Binaries', 'Intermediate'))
 Test-Layout $Valid '' $true
 Test-Layout $Valid 'Target' $true
 Test-Layout $Valid 'Target' $true -Target Game
+Test-Layout $Valid 'Target' $true -Target Server
 
 $UnrelatedPaths = @(
     'Binaries/Win64/Debug/OtherValidation',

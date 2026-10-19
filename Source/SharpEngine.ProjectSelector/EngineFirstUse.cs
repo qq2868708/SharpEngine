@@ -19,7 +19,7 @@ internal sealed class EngineFirstUse
         // Reuse an installer's version association, or allocate a per-root GUID
         // for an unregistered source/portable distribution. Never steal another root's ID.
         var Registration = Engines.Register(EngineRoot, null, installed: false);
-        Files.Register(Executable);
+        Files.Register(Executable, EngineRoot);
         return Registration;
     }
 

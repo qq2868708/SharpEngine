@@ -23,6 +23,7 @@ Check(engineRuntime.MappingContexts.Single(value => value.Id == "engine://input/
     "Engine InputMappingContext must load its validated bindings");
 var undoEvents = new List<InputActionEvent>();
 var redoEvents = new List<InputActionEvent>();
+var PlayEvents = new List<InputActionEvent>();
 using var undoHandler = engineRuntime.BindAction(InputRoute.Editor,
     "engine://input/actions/editor.undo", 0, value =>
     {
@@ -33,6 +34,12 @@ using var redoHandler = engineRuntime.BindAction(InputRoute.Editor,
     "engine://input/actions/editor.redo", 0, value =>
     {
         redoEvents.Add(value);
+        return true;
+    });
+using var PlayHandler = engineRuntime.BindAction(InputRoute.Editor,
+    "engine://input/actions/editor.play-pause", 0, Value =>
+    {
+        PlayEvents.Add(Value);
         return true;
     });
 engineRuntime.ProcessNative("main", NativeInputEventKind.KeyDown, 0x11,
@@ -50,6 +57,27 @@ engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 0x10,
     0, 0, 0, 0, 0, false, false);
 engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 0x11,
     0, 0, 0, 0, 0, false, false);
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyDown, 0x74,
+    0, 0, 0, 0, 0, false, true);
+Check(PlayEvents.Any(Value => Value.Phase == InputActionPhase.Performed),
+    "F5 must route to the editor Play/Pause action while the viewport is focused");
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 0x74,
+    0, 0, 0, 0, 0, false, true);
+var UndoCount = undoEvents.Count;
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyDown, 'Z',
+    0, 0, 0, 0, 1, false, false);
+Check(undoEvents.Count > UndoCount &&
+    undoEvents[^1].Phase == InputActionPhase.Performed,
+    "RmlUi Ctrl modifier bit must route Ctrl+Z to the editor Undo action");
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 'Z',
+    0, 0, 0, 0, 1, false, false);
+var UndoAfterCtrlRelease = undoEvents.Count;
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyDown, 'Z',
+    0, 0, 0, 0, 2, false, false);
+Check(undoEvents.Count == UndoAfterCtrlRelease,
+    "Shift+Z must not satisfy the editor Ctrl+Z binding");
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 'Z',
+    0, 0, 0, 0, 2, false, false);
 
 var actions = new[]
 {

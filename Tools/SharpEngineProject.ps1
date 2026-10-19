@@ -1,14 +1,15 @@
 [CmdletBinding()]
 param(
     [ValidateSet('New', 'Resolve', 'Doctor', 'Build', 'Clean', 'Rebuild',
-        'GenerateProjectFiles', 'OpenSolution', 'OpenEditor', 'RunGame', 'Migrate')]
+        'GenerateProjectFiles', 'AddTarget', 'RemoveTarget', 'OpenSolution',
+        'OpenEditor', 'RunGame', 'Migrate')]
     [string]$Command = 'New',
     [string]$Name,
     [string]$Directory = (Get-Location).Path,
     [string]$EngineRoot,
     [string]$EngineAssociation,
     [string]$ProjectFile,
-    [ValidateSet('Editor', 'Game')][string]$Target = 'Editor',
+    [ValidateSet('Editor', 'Game', 'Server')][string]$Target = 'Editor',
     [ValidateSet('Debug', 'Development', 'Shipping')][string]$Configuration = 'Debug',
     [ValidateSet('Win64')][string]$Platform = 'Win64',
     [ValidateSet('opengl', 'vulkan')][string]$RenderBackend,
@@ -318,6 +319,9 @@ function Invoke-Selector([string]$SelectorCommand, [string]$Path, [bool]$NoUi,
     if ($RenderBackend -and $SelectorCommand -in @('open-editor', 'run-game')) {
         $selectorArguments += @('--render-backend', $RenderBackend)
     }
+    if ($SelectorCommand -in @('add-target', 'remove-target')) {
+        $selectorArguments += @('--target', $Target)
+    }
     if ($NoUi) { $selectorArguments += '--no-ui' }
     $selectorRoot = if ($explicitRoot)
     {
@@ -333,6 +337,11 @@ function Invoke-Selector([string]$SelectorCommand, [string]$Path, [bool]$NoUi,
 
 function Invoke-GenerateProjectFiles([string]$Path, [string]$EngineRootOverride = '') {
     Invoke-Selector 'GenerateProjectFiles' $Path $true $EngineRootOverride
+}
+
+function Invoke-UpdateTarget([string]$Path, [bool]$Add) {
+    $command = if ($Add) { 'add-target' } else { 'remove-target' }
+    Invoke-Selector $command $Path $true
 }
 
 function Invoke-OpenSolution([string]$Path) {
@@ -351,6 +360,8 @@ switch ($Command) {
     'Clean' { Invoke-Clean (Find-ProjectFile) }
     'Rebuild' { Invoke-Rebuild (Find-ProjectFile) }
     'GenerateProjectFiles' { Invoke-GenerateProjectFiles (Find-ProjectFile) }
+    'AddTarget' { Invoke-UpdateTarget (Find-ProjectFile) $true }
+    'RemoveTarget' { Invoke-UpdateTarget (Find-ProjectFile) $false }
     'OpenSolution' { Invoke-OpenSolution (Find-ProjectFile) }
     'OpenEditor' { Invoke-OpenEditor (Find-ProjectFile) }
     'RunGame' { Invoke-Selector 'run-game' (Find-ProjectFile) $true }

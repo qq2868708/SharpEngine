@@ -11,7 +11,7 @@ using Microsoft.Win32;
 
 if (args.Length < 1)
 {
-    Console.Error.WriteLine("Usage: SharpEngine.ProjectBuild [build] <project.sharpproject> [--target Editor|Game] [--configuration Debug|Development|Shipping] [--platform Win64]");
+    Console.Error.WriteLine("Usage: SharpEngine.ProjectBuild [build] <project.sharpproject> [--target Editor|Game|Server] [--configuration Debug|Development|Shipping] [--platform Win64]");
     return 2;
 }
 
@@ -21,7 +21,7 @@ var projectManifest = Path.GetFullPath(args[offset]);
 var target = Option("--target", "Editor");
 var configuration = Option("--configuration", "Debug");
 var platform = Option("--platform", "Win64");
-if (target is not ("Editor" or "Game")) Fail("SEBUILD001", $"Unknown target '{target}'");
+if (target is not ("Editor" or "Game" or "Server")) Fail("SEBUILD001", $"Unknown target '{target}'");
 if (configuration is not ("Debug" or "Development" or "Shipping"))
     Fail("SEBUILD002", $"Unknown configuration '{configuration}'");
 if (platform != "Win64") Fail("SEBUILD003", $"Unsupported platform '{platform}'");
@@ -31,6 +31,9 @@ using var projectDocument = JsonDocument.Parse(File.ReadAllText(projectManifest)
 var projectJson = projectDocument.RootElement;
 if (projectJson.GetProperty("schemaVersion").GetInt32() != 3)
     Fail("SEBUILD005", "Project manifest schemaVersion must be 3");
+var projectTargets = ReadProjectTargets(projectJson);
+if (!projectTargets.Contains(target, StringComparer.OrdinalIgnoreCase))
+    Fail("SEBUILD007", $"Project target '{target}' is not enabled. Add it to the project before building.");
 var projectRoot = Path.GetDirectoryName(projectManifest)!;
 var projectId = RequiredString(projectJson, "projectId");
 var engine = projectJson.GetProperty("engine");
@@ -221,6 +224,7 @@ var engineAssemblies = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
     "SharpEngine.Editor.dll",
     "SharpEngine.Runtime.dll",
+    "SharpEngine.Networking.dll",
 };
 var published = new Dictionary<string, PublishedFile>(StringComparer.OrdinalIgnoreCase);
 foreach (var (owner, directory) in inputDirectories)
@@ -438,6 +442,23 @@ static string ResolveEngineRoot(JsonElement engine, string explicitEngineRoot)
     return Path.GetFullPath(registeredRoot);
 }
 
+static IReadOnlyList<string> ReadProjectTargets(JsonElement root)
+{
+    if (!root.TryGetProperty("targets", out var element))
+        return ["Editor", "Game"];
+    if (element.ValueKind != JsonValueKind.Array)
+        Fail("SEBUILD007", "Project property 'targets' must be an array");
+    var targets = element.EnumerateArray().Select(value => value.ValueKind == JsonValueKind.String
+        ? value.GetString() ?? string.Empty
+        : string.Empty).ToArray();
+    if (targets.Length == 0 || !targets.Contains("Editor", StringComparer.OrdinalIgnoreCase))
+        Fail("SEBUILD007", "Project property 'targets' must contain Editor");
+    if (targets.Distinct(StringComparer.OrdinalIgnoreCase).Count() != targets.Length ||
+        targets.Any(value => value is not ("Editor" or "Game" or "Server")))
+        Fail("SEBUILD007", "Project property 'targets' contains an unsupported or duplicate target");
+    return targets;
+}
+
 static string ResolveLayoutPath(string root, string template, string platform,
     string configuration, string target)
 {
@@ -510,6 +531,7 @@ static IReadOnlyList<string> BuildProperties(string configuration, string platfo
     $"-p:SharpEngineIntermediateRoot={EnsureTrailingSeparator(intermediateRoot)}",
     $"-p:SharpEngineEditorApi={managedApi}",
     $"-p:SharpEngineRuntimeApi={modulesApi}",
+    $"-p:SharpEngineNetworkingApi={Path.Combine(Path.GetDirectoryName(modulesApi)!, "SharpEngine.Networking.dll")}",
     $"-p:SharpEngineComponentGenerator={Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(modulesApi))!, "Tools", "SharpEngine.ComponentGenerator.dll")}",
     $"-p:CustomAfterMicrosoftCommonTargets={Path.GetFullPath(Path.Combine(Path.GetDirectoryName(modulesApi)!, "..", "..", "..", "..", "Build", "SharpEngine.Components.targets"))}",
     "-p:SharpEngineUnifiedBuild=true",

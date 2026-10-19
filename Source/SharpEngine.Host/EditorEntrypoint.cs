@@ -209,6 +209,7 @@ public static class HostEntrypoint
                 return;
             }
             if (hostId != "main") return;
+            var EditorViewportInputEnabled = runtime.PlayState == EditorPlayState.Stopped;
             if (viewportFocused == 0 && kind is NativeInputEventKind.KeyDown or NativeInputEventKind.PointerDown)
                 runtime.ViewportKey(0, false, false);
             if (kind == NativeInputEventKind.CaptureLost)
@@ -218,10 +219,10 @@ public static class HostEntrypoint
             }
             if (kind is NativeInputEventKind.KeyUp)
                 runtime.ViewportKey(code, false, viewportFocused != 0);
-            else if (!handled && kind is NativeInputEventKind.KeyDown &&
+            else if (EditorViewportInputEnabled && !handled && kind is NativeInputEventKind.KeyDown &&
                      viewportFocused != 0)
                 runtime.ViewportKey(code, true, true);
-            if (viewportFocused == 0) return;
+            if (!EditorViewportInputEnabled || viewportFocused == 0) return;
             var viewportEvent = kind switch
             {
                 NativeInputEventKind.PointerDown => 1u,

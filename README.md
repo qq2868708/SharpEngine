@@ -536,7 +536,11 @@ are case-insensitive and must be unique in their owning registry. The former
 The built-in Animation Timeline pane exposes a sampled skeletal preview, time
 ruler, playback, Notify clips, Undo/Redo and explicit Save through the `timeline.*`
 commands. Engine-owned Timeline assets are read-only; a project-owned Timeline
-asset can be edited and saved. Separate extension DLL discovery and custom
+asset can be edited and saved. Single-clicking a Content Manager asset only
+selects it; double-clicking a `SkeletalAnimation` asset opens its own Timeline
+document. `EditorAssetOpenerRegistry` lets project or plugin code override the
+default tool by asset type or stable asset ID, with priority and disposable
+registrations. Separate extension DLL discovery and custom
 Dock/Inspector registration remain later work.
 
 ### Dock layout

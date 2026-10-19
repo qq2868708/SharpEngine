@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "mainHost": {
     "hostId": "main",
     "root": {
@@ -36,7 +36,8 @@
               "activePaneId": "viewport",
               "panes": [
                 { "paneId": "viewport" },
-                { "paneId": "ui-editor" }
+                { "paneId": "ui-editor" },
+                { "paneId": "timeline" }
               ]
             }
           }

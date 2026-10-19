@@ -12,3 +12,11 @@
 .timeline-clip.selected { background-color: #a16b35; border-color: #e4b06d; }
 .timeline-clip.muted { background-color: #46505b; border-color: #687584; }
 .timeline-playhead { position: absolute; top: 0px; bottom: 0px; width: 1px; background-color: #f08d67; pointer-events: none; }
+.animation-state-machine-editor { display: block; width: 100%; height: 100%; overflow: auto; padding: 12px; background-color: #171b22; color: #cbd4e2; }
+.animation-state-machine-header { display: flex; justify-content: space-between; padding: 8px 10px; background-color: #242b35; color: #dce8f8; }
+.animation-state-machine-states { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+.animation-state-machine-state { display: flex; flex-direction: column; gap: 4px; min-width: 180px; padding: 10px; background-color: #26384a; border: 1px #45657f; border-radius: 3px; }
+.animation-state-machine-state.initial { border-color: #e4b06d; }
+.animation-state-machine-state span, .animation-state-machine-transitions span { color: #aebbd0; font-size: 11px; }
+.animation-state-machine-transitions { display: flex; flex-direction: column; gap: 5px; padding: 10px; background-color: #1d222a; }
+.animation-state-machine-transitions > div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; border-bottom: 1px #2c3541; }

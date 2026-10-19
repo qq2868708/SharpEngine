@@ -223,10 +223,14 @@ internal sealed class InputRuntimeService : IInputRuntime
         if (control.Length == 0) return false;
 
         // RmlUi and deterministic injection use the same modifier bit layout.
-        foreach (var (name, mask) in new[] { ("Keyboard/Shift", 1u),
-                     ("Keyboard/Control", 2u), ("Keyboard/Alt", 4u) })
-            if (name != control)
-                _controls[name] = new InputActionValue((modifiers & mask) != 0 ? 1 : 0);
+        foreach (var (Name, Mask) in new[] { ("Keyboard/Control", 1u),
+                     ("Keyboard/Shift", 2u), ("Keyboard/Alt", 4u) })
+        {
+            if (Name != control)
+            {
+                _controls[Name] = new InputActionValue((modifiers & Mask) != 0 ? 1 : 0);
+            }
+        }
 
         if (isDown || transient)
         {

@@ -77,6 +77,7 @@ try
             "Source/ForeignGame/ForeignGame.csproj",
             "Source/ForeignGame.Editor/ForeignGame.Editor.csproj",
         },
+            targets = new[] { "Editor", "Game" },
         plugins = new[]
         {
             "project://Plugins/ForeignPlugin/ForeignPlugin.sharpplugin",
@@ -115,9 +116,11 @@ try
           firstSolution.Contains("Development Editor|Win64", StringComparison.Ordinal) &&
           firstSolution.Contains("Shipping Editor|Win64", StringComparison.Ordinal),
         "Generated Solution must expose only the approved Editor configurations");
+    var NativeEngineRelativePath = Path.GetRelativePath(Path.GetDirectoryName(generated.SolutionPath)!,
+        Path.Combine(engineRoot, "Source", "Engine", "Engine.vcxproj"));
     Check(firstSolution.Contains("Editor Target", StringComparison.Ordinal) &&
-          firstSolution.Contains(Path.Combine(engineRoot, "Source", "Engine",
-              "Engine.vcxproj"), StringComparison.OrdinalIgnoreCase),
+          firstSolution.Contains(NativeEngineRelativePath.Replace(Path.DirectorySeparatorChar, '\\'),
+              StringComparison.OrdinalIgnoreCase),
         "Source Engine and generated Editor Target must coexist in the Solution");
     var engineProjects = EngineBuildGraph.Discover(engineRoot);
     Check(engineProjects.Any(project => project.ModuleId == "SharpEngine.Timeline.Runtime" &&
@@ -125,23 +128,28 @@ try
           engineProjects.Any(project => project.ModuleId == "SharpEngine.Timeline.Editor" &&
             project.ModuleType == "Editor"),
         "Engine discovery must expose Timeline Runtime and Editor as explicit Modules");
-    Check(firstSolution.Contains(Path.Combine(engineRoot, "Source",
-            "SharpEngine.Timeline.Runtime", "SharpEngine.Timeline.Runtime.csproj"),
+    var TimelineRuntimeRelativePath = Path.GetRelativePath(Path.GetDirectoryName(generated.SolutionPath)!,
+        Path.Combine(engineRoot, "Source", "SharpEngine.Timeline.Runtime", "SharpEngine.Timeline.Runtime.csproj"));
+    var TimelineEditorRelativePath = Path.GetRelativePath(Path.GetDirectoryName(generated.SolutionPath)!,
+        Path.Combine(engineRoot, "Source", "SharpEngine.Timeline.Editor", "SharpEngine.Timeline.Editor.csproj"));
+    Check(firstSolution.Contains(TimelineRuntimeRelativePath.Replace(Path.DirectorySeparatorChar, '\\'),
             StringComparison.OrdinalIgnoreCase) &&
-          firstSolution.Contains(Path.Combine(engineRoot, "Source",
-            "SharpEngine.Timeline.Editor", "SharpEngine.Timeline.Editor.csproj"),
+          firstSolution.Contains(TimelineEditorRelativePath.Replace(Path.DirectorySeparatorChar, '\\'),
             StringComparison.OrdinalIgnoreCase),
         "Generated Engine Solution must include Timeline Runtime and Editor projects");
     string SolutionId(string name) => System.Text.RegularExpressions.Regex.Match(firstSolution,
         "= \"" + System.Text.RegularExpressions.Regex.Escape(name) + "\", \"[^\"]+\", \"([^\"]+)\"").Groups[1].Value;
     var componentGeneratorGuid = SolutionId("ComponentGenerator");
     foreach (var configuration in new[] { "Debug", "Development", "Shipping" })
-    foreach (var target in new[] { "Editor", "Game" })
+    foreach (var target in project.Targets)
         Check(firstSolution.Contains(componentGeneratorGuid + "." + configuration +
                 " " + target + "|Win64.ActiveCfg = " + configuration + "|Any CPU", StringComparison.Ordinal) &&
             firstSolution.Contains(SolutionId(target + " Target") + "." + configuration +
                 " " + target + "|Win64.Build.0", StringComparison.Ordinal),
             "Each configuration must select its own unified Target: " + configuration + " " + target);
+    Check(!firstSolution.Contains("Server Target", StringComparison.Ordinal) &&
+          !launchSettings.Contains("Debug Server", StringComparison.Ordinal),
+        "Projects without Server in their manifest must not generate a Server Target");
     var nativeEnginePath = Path.Combine(engineRoot, "Source", "Engine", "Engine.vcxproj");
     var nativeEngineDocument = XDocument.Load(nativeEnginePath);
     var nativeEngineGuid = nativeEngineDocument.Descendants().First(element =>
@@ -233,6 +241,7 @@ try
     {
         "Editor",
         "Game",
+        "Server",
     })
     {
         var LegacySource = generated.TargetSourcePath.Replace(".Editor.Target.cs",
@@ -240,10 +249,31 @@ try
         File.WriteAllText(LegacySource, "SharpLog.Error(\"ProjectSelector\", \"Build this Target first\");");
     }
     _ = SolutionGenerator.EnsureCurrent(new ResolvedSharpProject(project, engine));
-    TargetWrapperCompileValidation.Run(generated.WrapperProjectPath, Check);
-    _ = SolutionGenerator.Generate(new ResolvedSharpProject(project, engine));
-    Check(firstSolution == File.ReadAllText(generated.SolutionPath) &&
-          firstStamp == File.ReadAllText(generated.StampPath),
+    TargetWrapperCompileValidation.Run(generated.WrapperProjectPath, project.Targets, Check);
+    _ = ProjectTargets.UpdateManifest(manifestPath, "Server", Add: true);
+    var serverProject = ProjectContracts.ReadProject(manifestPath);
+    var serverGenerated = SolutionGenerator.Generate(new ResolvedSharpProject(serverProject, engine));
+    var serverSolution = File.ReadAllText(serverGenerated.SolutionPath);
+    var serverLaunchSettings = File.ReadAllText(serverGenerated.LaunchSettingsPath);
+    Check(serverProject.Targets.SequenceEqual(new[] { "Editor", "Game", "Server" }) &&
+          serverSolution.Contains("Server Target", StringComparison.Ordinal) &&
+          serverSolution.Contains("Debug Server|Win64", StringComparison.Ordinal) &&
+          serverLaunchSettings.Contains("Debug Server", StringComparison.Ordinal),
+        "Adding Server target must persist the manifest and regenerate Rider/solution launch entries");
+    TargetWrapperCompileValidation.Run(serverGenerated.WrapperProjectPath, serverProject.Targets, Check);
+    _ = ProjectTargets.UpdateManifest(manifestPath, "Server", Add: false);
+    var restoredProject = ProjectContracts.ReadProject(manifestPath);
+    var restoredGenerated = SolutionGenerator.Generate(new ResolvedSharpProject(restoredProject, engine));
+    Check(!File.Exists(restoredGenerated.WrapperProjectPath.Replace(".Editor.Target.csproj",
+              ".Server.Target.csproj", StringComparison.Ordinal)) &&
+          !File.ReadAllText(restoredGenerated.SolutionPath).Contains("Server Target",
+              StringComparison.Ordinal),
+        "Removing Server target must remove generated Server files and configurations");
+    var restoredSolutionText = File.ReadAllText(generated.SolutionPath);
+    var restoredStampText = File.ReadAllText(generated.StampPath);
+    _ = SolutionGenerator.Generate(new ResolvedSharpProject(restoredProject, engine));
+    Check(restoredSolutionText == File.ReadAllText(generated.SolutionPath) &&
+          restoredStampText == File.ReadAllText(generated.StampPath),
         "Repeated Solution generation must be deterministic");
     Check(store.Unregister(association) && store.Resolve(association) is null,
         "Unregister must remove only the selected Engine association");

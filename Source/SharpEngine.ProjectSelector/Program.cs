@@ -34,6 +34,8 @@ internal static class Program
                 "generate" => Generate(args, implicitProject, noUi),
                 "generateprojectfiles" or "generate-project-files" =>
                     GenerateProjectFiles(args, implicitProject, noUi),
+                "add-target" => UpdateProjectTarget(args, implicitProject, noUi, Add: true),
+                "remove-target" => UpdateProjectTarget(args, implicitProject, noUi, Add: false),
                 "open-solution" => OpenSolution(args, implicitProject, noUi),
                 "open-editor" => OpenEditor(args, implicitProject, noUi),
                 "run-game" => OpenEditor(args, implicitProject, noUi, "Game"),
@@ -77,7 +79,7 @@ internal static class Program
         var installed = HasFlag(args, "--installed");
         var store = new EngineAssociationStore();
         var registration = store.Register(engineRoot, association, installed);
-        if (!HasFlag(args, "--no-file-association")) RegisterFileAssociation();
+        if (!HasFlag(args, "--no-file-association")) RegisterFileAssociation(engineRoot);
         WriteResult(args, new
         {
             success = true,
@@ -201,6 +203,27 @@ internal static class Program
             success = true,
             engineRoot = engine.Root,
             solutionPath = Path.Combine(engine.Root, "SharpEngine.sln"),
+        });
+        return 0;
+    }
+
+    private static int UpdateProjectTarget(string[] args, string? implicitProject,
+        bool noUi, bool Add)
+    {
+        var Target = RequiredOption(args, "--target");
+        var Resolved = ResolveProject(args, implicitProject, prompt: !noUi);
+        var Targets = ProjectTargets.UpdateManifest(Resolved.Project.ManifestPath, Target, Add);
+        var UpdatedProject = ProjectContracts.ReadProject(Resolved.Project.ManifestPath);
+        var Generated = SolutionGenerator.Generate(new ResolvedSharpProject(UpdatedProject,
+            Resolved.Engine));
+        WriteResult(args, new
+        {
+            success = true,
+            project = UpdatedProject.ManifestPath,
+            target = Target,
+            added = Add,
+            targets = Targets,
+            Generated.SolutionPath,
         });
         return 0;
     }
@@ -342,11 +365,11 @@ internal static class Program
         return new ResolvedSharpProject(project, engine);
     }
 
-    private static void RegisterFileAssociation()
+    private static void RegisterFileAssociation(string EngineRoot)
     {
         var Executable = EngineFirstUse.ExecutablePath;
         EngineFirstUse.ValidateExecutable(Executable);
-        if (new ProjectFileAssociation().Register(Executable))
+        if (new ProjectFileAssociation().Register(Executable, EngineRoot))
         {
             SharpLog.Info("ProjectSelector", "Registered .sharpproject shell actions and notified Explorer");
         }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Xml.Linq;
 using SharpEngine.Editor;
 using SharpEngine.World;
+using SharpEngine.Timeline;
 
 // Exercise the public API with the same versioned native callback boundary used
 // by the editor, without a window. UI assertions inspect the submitted RML.
@@ -79,20 +80,70 @@ internal static unsafe class EditorExtensionValidation
                 "Editor resource URIs must reject Plugin Content paths");
             var module = new TransformExtension();
             var registration = runtime.RegisterExtension(module);
-            using var projectMenu = runtime.Menus.RegisterMenu(new EditorMenu(
-                "validation-project", "Validation", 475));
+            var PluginAsset = runtime.Assets!.Assets.Single(asset =>
+                string.Equals(asset.Type, "PluginData", StringComparison.OrdinalIgnoreCase));
+            var OpenedBy = string.Empty;
+            using var DefaultAssetOpener = runtime.AssetOpeners.Register(new EditorAssetOpener(
+                "validation.plugin-default", "PluginData", _ => OpenedBy = "default"));
+            using var ProjectAssetOpener = runtime.AssetOpeners.Register(new EditorAssetOpener(
+                "validation.plugin-project", "PluginData", _ => OpenedBy = "project", Priority: 10));
+            require(runtime.AssetOpeners.Resolve(PluginAsset)?.Id == "validation.plugin-project",
+                "A higher-priority project opener must override the type default");
+            using var SpecificAssetOpener = runtime.AssetOpeners.Register(new EditorAssetOpener(
+                "validation.plugin-specific", "PluginData", _ => OpenedBy = "specific",
+                AssetId: PluginAsset.Id));
+            require(runtime.AssetOpeners.Resolve(PluginAsset)?.Id == "validation.plugin-specific",
+                "An asset-specific opener must override a type-wide opener");
+            var OpenedAsset = runtime.OpenAsset(PluginAsset.Id);
+            require(OpenedAsset.Success && OpenedBy == "specific" &&
+                OpenedAsset.OpenerId == "validation.plugin-specific",
+                "OpenAsset must execute the resolved opener and report its stable ID");
+            SpecificAssetOpener.Dispose();
+            require(runtime.AssetOpeners.Resolve(PluginAsset)?.Id == "validation.plugin-project",
+                "Disposing an asset-specific opener must restore the project override");
+            var TimelineExtensionType = typeof(TimelineEditorModule).Assembly.GetType(
+                "SharpEngine.Timeline.TimelineEditorExtension", throwOnError: true)!;
+            var TimelineExtension = (IEditorExtension)Activator.CreateInstance(
+                TimelineExtensionType, nonPublic: true)!;
+            using var TimelineRegistration = runtime.RegisterExtension(TimelineExtension);
+            var RobotWalkOpen = runtime.OpenAsset("engine://animations/robot-walk");
+            require(RobotWalkOpen.Success &&
+                RobotWalkOpen.OpenerId == "engine.skeletal-animation-editor" &&
+                runtime.DescribeEditorJson().Contains("engine://animations/robot-walk",
+                    StringComparison.Ordinal) &&
+                runtime.DescribeEditorJson().Contains("\"timeline\"", StringComparison.Ordinal),
+                "The built-in SkeletalAnimation opener must activate the Timeline pane and document");
+            var UefnIdleOpen = runtime.OpenAsset("engine://animations/uefn-mannequin-idle");
+            require(UefnIdleOpen.Success &&
+                runtime.DescribeEditorJson().Contains("engine://animations/uefn-mannequin-idle",
+                    StringComparison.Ordinal),
+                "Opening another SkeletalAnimation must preserve independent asset documents");
+            var LocomotionOpen = runtime.OpenAsset(
+                "engine://animation-state-machines/uefn-mannequin-locomotion");
+            var LocomotionEditor = runtime.DescribeEditorJson();
+            require(LocomotionOpen.Success &&
+                LocomotionOpen.OpenerId == "engine.animation-state-machine-editor" &&
+                LocomotionEditor.Contains("AnimationStateMachine", StringComparison.Ordinal) &&
+                LocomotionEditor.Contains("uefn-mannequin-locomotion", StringComparison.Ordinal) &&
+                LocomotionEditor.Contains("\"stateCount\"", StringComparison.Ordinal),
+                "AnimationStateMachine assets must use the unified opener flow and custom editor");
+            require(runtime.CustomBars.RegisteredSurfaces.Any(surface =>
+                    surface.Id == EditorCustomBarRegistry.ViewportSurfaceId) &&
+                runtime.CustomBars.RegisteredSurfaces.Any(surface =>
+                    surface.Id == EditorCustomBarRegistry.TimelineSurfaceId),
+                "Engine must create fixed Viewport and Animation Timeline CustomBar surfaces");
             using var projectCategory = runtime.Menus.RegisterCategory(new EditorMenuCategory(
-                "validation-project", "tools", 100));
+                "file", "validation-tools", 350));
             using var projectItem = runtime.Menus.RegisterItem(new EditorMenuItem(
-                "validation-project", "tools", "validation.reset", 100));
+                "file", "validation-tools", "validation.reset", 100));
             var checkedState = false;
             using var checkedCommand = runtime.Commands.Register(new EditorCommand(
                 "validation.checked", "Checked State", _ => checkedState = !checkedState,
                 getChecked: _ => checkedState));
             using var checkedCategory = runtime.Menus.RegisterCategory(new EditorMenuCategory(
-                "validation-project", "state", 200));
+                "file", "validation-state", 360));
             using var checkedItem = runtime.Menus.RegisterItem(new EditorMenuItem(
-                "validation-project", "state", "validation.checked", 100));
+                "file", "validation-state", "validation.checked", 100));
             using var objectCategory = runtime.ContextMenus.RegisterCategory(
                 new EditorContextMenuCategory(EditorContextMenuKind.Object, "tools"));
             using var objectItem = runtime.ContextMenus.RegisterItem(
@@ -107,10 +158,10 @@ internal static unsafe class EditorExtensionValidation
             require(button.Descendants("span").Any(element =>
                     element.Value == "Reset <selected> & transform"),
                 "Toolbar tooltips must preserve escaped project text");
-            require(Menus().Descendants("button").Any(element => element.Value == "Validation") &&
+            require(Menus().Descendants("button").Any(element => element.Value == "File") &&
                 Menus().Descendants("button").Any(element =>
                     (string?)element.Attribute("data-action") == "editor.command:validation.reset"),
-                "A project must be able to register a top-level menu and command placement");
+                "A project must extend the engine-created File menu with command placement");
             var checkedMenuItem = Menus().Descendants("button").Single(element =>
                 (string?)element.Attribute("data-action") == "editor.command:validation.checked");
             require(checkedMenuItem.Descendants("span").First().Value == "[ ]",

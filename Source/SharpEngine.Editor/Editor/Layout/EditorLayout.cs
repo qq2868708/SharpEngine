@@ -8,6 +8,7 @@ namespace SharpEngine.Editor.Layout;
 public static class EditorPaneIds
 {
     public const string Viewport = "viewport";
+    public const string Timeline = "timeline";
     public const string UiEditor = "ui-editor";
     public const string Hierarchy = "hierarchy";
     public const string Content = "content";
@@ -19,7 +20,7 @@ public static class EditorPaneIds
     public const string Logs = "logs";
 
     public static IReadOnlyList<string> BuiltIn { get; } =
-        [Viewport, UiEditor, Hierarchy, Content, Content2, Content3, Content4,
+        [Viewport, Timeline, UiEditor, Hierarchy, Content, Content2, Content3, Content4,
             Inspector, Console, Logs];
 
     public static IReadOnlyList<string> ContentManagers { get; } =
@@ -46,7 +47,7 @@ public enum DockEdge { Left, Right, Top, Bottom }
 
 public sealed class EditorLayoutDocument
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     [JsonRequired, JsonPropertyOrder(0)] public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     [JsonRequired, JsonPropertyOrder(1)] public DockHostState MainHost { get; set; } = new();
@@ -251,8 +252,60 @@ public static class EditorLayoutJson
         {
             if (!AddLogsToConsoleGroup(root))
                 throw new JsonException("Schema v2 layout does not contain a Console tab group.");
+            version = 3;
+        }
+
+        if (version == 3)
+        {
+            if (!AddTimelineToViewportGroup(root))
+                throw new JsonException("Schema v3 layout does not contain a Viewport tab group.");
             root["schemaVersion"] = EditorLayoutDocument.CurrentSchemaVersion;
         }
+    }
+
+    private static bool AddTimelineToViewportGroup(JsonObject root)
+    {
+        if (root["mainHost"] is not JsonObject mainHost ||
+            mainHost["root"] is not JsonObject node)
+        {
+            return false;
+        }
+
+        return AddTimelineToViewportNode(node);
+    }
+
+    private static bool AddTimelineToViewportNode(JsonObject node)
+    {
+        if (string.Equals(node["kind"]?.GetValue<string>(), "tabs",
+                StringComparison.Ordinal))
+        {
+            if (node["tabGroup"] is not JsonObject tabGroup ||
+                tabGroup["panes"] is not JsonArray panes)
+            {
+                return false;
+            }
+
+            var HasViewport = panes.Any(Pane => string.Equals(
+                (Pane as JsonObject)?["paneId"]?.GetValue<string>(),
+                EditorPaneIds.Viewport, StringComparison.Ordinal));
+            var HasTimeline = panes.Any(Pane => string.Equals(
+                (Pane as JsonObject)?["paneId"]?.GetValue<string>(),
+                EditorPaneIds.Timeline, StringComparison.Ordinal));
+            if (!HasViewport)
+            {
+                return false;
+            }
+
+            if (!HasTimeline)
+            {
+                panes.Add(new JsonObject { ["paneId"] = EditorPaneIds.Timeline });
+            }
+
+            return true;
+        }
+
+        return (node["first"] is JsonObject First && AddTimelineToViewportNode(First)) ||
+            (node["second"] is JsonObject Second && AddTimelineToViewportNode(Second));
     }
 
     private static bool AddLogsToConsoleGroup(JsonObject root)
@@ -732,6 +785,7 @@ public static class DockLayoutCalculator
         EditorPaneIds.IsContentManager(paneId) ? new(220, 180) : paneId switch
         {
             EditorPaneIds.Viewport => new(320, 240),
+            EditorPaneIds.Timeline => new(420, 180),
             EditorPaneIds.Hierarchy => new(180, 140),
             EditorPaneIds.Inspector => new(240, 180),
             EditorPaneIds.Console => new(300, 100),

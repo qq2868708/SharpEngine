@@ -39,8 +39,30 @@ Before designing or changing code:
 - Read [references/component-model.md](references/component-model.md) for component APIs, component state, identity, references, lifecycle, threading, or Authoring/Runtime work.
 - Read [references/ai-runtime-contract.md](references/ai-runtime-contract.md) for snapshots, revisions, transactions, commands, MCP, AI discovery, runtime input, UI observability, or deterministic automation.
 - Read [references/serialization-and-cook.md](references/serialization-and-cook.md) for asset formats, schema evolution, save/load, hot reload, migration, dependency discovery, or Cook work.
+- Read [references/asset-naming.md](references/asset-naming.md) when adding or migrating a resource file type or file extension.
 
-Read every reference whose domain the requested change crosses. A cross-cutting feature may require all three.
+Read every reference whose domain the requested change crosses. A cross-cutting feature may require all four.
+
+## Asset File Naming
+
+New resource source files must use a lowercase `s` prefix in the type suffix:
+use `.sskeletalmesh`, `.sskeleton`, `.sskeletalanimation`, `.sprefab`, or
+`.sworld` patterns as applicable. Do not introduce a new `.sharp...` resource
+extension. This rule applies to the resource file suffix, including the type
+part of a compound suffix such as `.sskeletalmesh.json`.
+
+Existing suffixes that do not follow this rule, including bare `.mesh`,
+`.staticmesh`, `.skeletalmesh`, `.skeleton`, `.skeletalanimation`, and
+`.sharp...` forms, are legacy compatibility inputs. Keep them readable and
+registered until an explicit migration is designed; do not mass-rename them as
+part of an unrelated feature. A migration must preserve asset identity, support
+old references, update the manifest atomically, and document the old and new
+suffixes.
+
+Do not apply the file-suffix rule to other contracts: manifest `type` values,
+stable asset IDs, importer names such as `SharpEngine.*`, and C# asset type names
+retain their established semantic naming unless that contract is separately
+versioned and migrated.
 
 ## Completion Standard
 

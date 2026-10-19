@@ -125,9 +125,10 @@ public sealed class TimelineView
             .Append(Escape(snapshot.TimelineId)).Append("\">");
         markup.Append("<div class=\"timeline-ruler\" data-timeline-action=\"seek\">");
         foreach (var tick in snapshot.Ruler)
-            markup.Append("<span class=\"timeline-tick").Append(tick.Major ? " major" : string.Empty)
+            markup.Append("<button class=\"timeline-tick").Append(tick.Major ? " major" : string.Empty)
                 .Append("\" style=\"left:").Append(Number(tick.X)).Append("px\" data-time=\"")
-                .Append(Number(tick.Time)).Append("\">").Append(Escape(tick.Label)).Append("</span>");
+                .Append(Number(tick.Time)).Append("\" data-action=\"editor.timeline-seek:")
+                .Append(Number(tick.Time)).Append("\">").Append(Escape(tick.Label)).Append("</button>");
         markup.Append("</div><div class=\"timeline-rows\">");
         foreach (var row in snapshot.Rows)
         {
@@ -142,7 +143,9 @@ public sealed class TimelineView
                     .Append(Number(clip.Bounds.X)).Append("px;top:").Append(Number(clip.Bounds.Y - row.Y))
                     .Append("px;width:").Append(Number(clip.Bounds.Width)).Append("px;height:")
                     .Append(Number(clip.Bounds.Height)).Append("px\" data-timeline-action=\"select-clip:")
-                    .Append(Escape(clip.ClipId)).Append("\">").Append(Escape(clip.Label)).Append("</button>");
+                    .Append(Escape(clip.ClipId)).Append("\" data-action=\"editor.timeline-select:")
+                    .Append(Escape(clip.ClipId)).Append("\" title=\"")
+                    .Append(Escape(clip.Label)).Append("\">").Append(Escape(clip.Label)).Append("</button>");
             markup.Append("</div>");
         }
         markup.Append("</div><div class=\"timeline-playhead\" style=\"left:")

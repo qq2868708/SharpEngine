@@ -1,5 +1,6 @@
 using SharpEngine.Settings;
 using System.Reflection;
+using SharpEngine.Assets;
 using SharpEngine.Components;
 using SharpEngine.World;
 
@@ -43,13 +44,17 @@ public sealed partial class EditorRuntime
                 if (Module.Type == "Runtime") registry.RegisterAssembly(Module.Assembly, Module.Id, Module.Hash);
                 settings.RegisterAssembly(Module.Assembly, SettingsScope.Project);
             }
+            var DiscoveredDataAssetTypes = DataAssetTypeRegistry.Discover(
+                Candidates.Where(Module => Module.Type == "Runtime")
+                    .Select(Module => Module.Assembly).ToArray());
             registry.ValidateRegistrations();
             if (_developmentSettings is not null) settings.CopyStateFrom(_developmentSettings);
             var sessions = _prefabTabs.Values.Select(tab => tab.Session)
                 .Concat(new[] { _authoring, _mainWorldTab?.Session }.OfType<WorldAuthoringSession>())
                 .Distinct().ToArray();
             foreach (var session in sessions) session.ValidateRegistry(registry);
-            return new ModuleReloadPreparation(this, registry, settings, sessions);
+            return new ModuleReloadPreparation(this, registry, settings, sessions,
+                DiscoveredDataAssetTypes);
         }
         catch { settings.Dispose(); throw; }
     }
@@ -67,7 +72,8 @@ public sealed partial class EditorRuntime
     // Preflight is read-only. Committing descriptors does not replace documents,
     // revisions, selections, savepoints, or Undo/Redo history.
     internal sealed class ModuleReloadPreparation(EditorRuntime editor, ComponentRegistry registry,
-        DevelopmentSettingsRegistry settings, WorldAuthoringSession[] sessions) : IDisposable
+        DevelopmentSettingsRegistry settings, WorldAuthoringSession[] sessions,
+        DataAssetTypeRegistry DataAssetTypes) : IDisposable
     {
         private bool _accepted;
         private bool _disposed;
@@ -83,9 +89,11 @@ public sealed partial class EditorRuntime
         private readonly string? _previousPrefabPath = editor._activePrefabPath;
         private readonly bool _previousUntitled = editor._worldIsUntitled;
         private readonly string? _previousAssetId = editor._worldAssetId;
+        private readonly DataAssetTypeRegistry PreviousDataAssetTypes = editor.DataAssetTypes;
         public void Commit()
         {
             foreach (var session in sessions) session.Document.Registry = registry;
+            editor.DataAssetTypes = DataAssetTypes;
             editor._developmentSettings = settings;
             settings.Activate();
         }
@@ -101,6 +109,7 @@ public sealed partial class EditorRuntime
             if (_accepted) return;
             foreach (var restore in _restore) restore();
             _restoreSettings?.Invoke();
+            editor.DataAssetTypes = PreviousDataAssetTypes;
             editor._developmentSettings = _previousSettings;
             editor._world = _previousWorld; editor._authoring = _previousAuthoring;
             editor._selection = _previousSelection; editor._dirty = _previousDirty;

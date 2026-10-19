@@ -38,8 +38,20 @@ public static class SceneRenderPreparation
                     if (Sources.Length == 1)
                     {
                         var Animator = Sources[0];
-                        Pose = SkeletalMeshComponent.SampleLegacy(Assets, MeshId, Animator.State["Clip"]?.GetValue<string>(),
-                            Animator.State["Time"]!.GetValue<double>(), Animator.State["Loop"]!.GetValue<bool>());
+                        var ControllerId = Animator.State["Controller"]?.GetValue<string>();
+                        if (ControllerId is not null)
+                        {
+                            var Binding = AnimatorControllerBinding.Load(Assets, ControllerId, MeshId);
+                            var StateId = Animator.State["StateId"]!.GetValue<string>();
+                            var State = Binding.Asset.State(StateId == "" ? Binding.Asset.InitialStateId : StateId);
+                            Pose = SkeletalMeshComponent.SampleLegacy(Assets, MeshId, State.ClipId,
+                                Animator.State["Time"]!.GetValue<double>(), State.Loop);
+                        }
+                        else
+                        {
+                            Pose = SkeletalMeshComponent.SampleLegacy(Assets, MeshId, Animator.State["Clip"]?.GetValue<string>(),
+                                Animator.State["Time"]!.GetValue<double>(), Animator.State["Loop"]!.GetValue<bool>());
+                        }
                     }
                     else if (Sources.Length == 0)
                     {

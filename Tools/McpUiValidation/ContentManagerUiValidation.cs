@@ -79,6 +79,42 @@ internal static class ContentManagerUiValidation
             Require(up["accepted"]!.GetValue<bool>(), $"Pointer up failed: {up}");
             return target.Host;
         }
+        void DoubleClick(string id)
+        {
+            var snap = Snapshot();
+            var target = Elements(snap).FirstOrDefault(p => Match(p.Element, id) &&
+                p.Element["visible"]!.GetValue<bool>() && p.Element["hitTarget"]!.GetValue<bool>());
+            if (target.Element is null)
+                throw new InvalidOperationException($"Control is not visible/clickable: {id}");
+            var bounds = target.Element["bounds"]!;
+            var hostId = target.Host["hostId"]!.GetValue<string>();
+            var elementId = target.Element["elementId"]!.GetValue<string>();
+            var x = (int)(bounds["x"]!.GetValue<double>() + bounds["width"]!.GetValue<double>() / 2);
+            var y = (int)(bounds["y"]!.GetValue<double>() + bounds["height"]!.GetValue<double>() / 2);
+            var frame = snap["frameId"]!.GetValue<ulong>();
+            for (var click = 0; click < 2; click++)
+            {
+                var down = Invoke("ui.pointer", new JsonObject
+                {
+                    ["hostId"] = hostId, ["event"] = "down", ["button"] = "left",
+                    ["x"] = x, ["y"] = y, ["buttons"] = new JsonArray(),
+                    ["modifiers"] = new JsonArray(), ["pointerId"] = 0,
+                    ["expectedFrameId"] = frame,
+                    ["expectedElementId"] = elementId,
+                });
+                Require(down["accepted"]!.GetValue<bool>(), $"Double-click down failed: {down}");
+                var up = Invoke("ui.pointer", new JsonObject
+                {
+                    ["hostId"] = hostId, ["event"] = "up", ["button"] = "left",
+                    ["x"] = x, ["y"] = y, ["buttons"] = new JsonArray(),
+                    ["modifiers"] = new JsonArray(), ["pointerId"] = 0,
+                    ["expectedFrameId"] = down["frameId"]!.GetValue<ulong>(),
+                    ["expectedElementId"] = elementId,
+                });
+                Require(up["accepted"]!.GetValue<bool>(), $"Double-click up failed: {up}");
+                frame = up["frameId"]!.GetValue<ulong>();
+            }
+        }
         JsonObject MovePointer(string id)
         {
             var snap = Snapshot();
@@ -255,6 +291,22 @@ internal static class ContentManagerUiValidation
         Click("content-2-view-list");
         Click("content-4-view-list");
         SaveFrames("four-docked");
+
+        // Double-click through the native pointer path. Closing the Timeline
+        // tab first forces the shared asset opener to create its floating host,
+        // which is the lifecycle used by a hidden animation editor pane.
+        Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
+        Invoke("editor.action", new() { ["action"] = "editor.dock-close:timeline" });
+        Click("editor.content.open:content:engine|Assets");
+        Click("editor.content.open:content:engine|Assets/AnimationControllers");
+        const string StateMachineAction =
+            "editor.content.select:content:engine://animation-state-machines/uefn-mannequin-locomotion";
+        DoubleClick(StateMachineAction);
+        var opened = Snapshot();
+        Require(opened["hosts"]!.AsArray().Any(host =>
+                host!["hostId"]!.GetValue<string>().StartsWith("float.timeline", StringComparison.Ordinal)),
+            "Double-clicking an animation state machine must keep the floating Timeline host visible");
+        SaveFrames("animation-state-machine-open");
         Console.WriteLine($"PASS: {assertions} Content Manager rendered UI assertions; evidence: {output}");
     }
 }

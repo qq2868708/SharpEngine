@@ -48,8 +48,8 @@ var Added = Data.AddComponent(Registry, Entity.EntityId, "engine.animator");
 var Animator = Added.Single(Component => Component.TypeId == "engine.animator");
 var Mesh = Data.AddComponent(Registry, Entity.EntityId, "engine.skeletal-mesh").Single(Component => Component.TypeId == "engine.skeletal-mesh");
 Check(Added.Count == 1 && Descriptor.Single, "Animator has an explicit optional target without adding a mesh");
-Check(Descriptor.SchemaVersion == 2 && Descriptor.Schema(Registry)["$schema"]!.GetValue<string>().Contains("2020-12"), "versioned schema discovery");
-Check(Animator.State.Count == 6 && Animator.State["Target"] is null && Animator.State["Clip"] is null && Animator.State["Time"]!.GetValue<double>() == 0 && Animator.State["Speed"]!.GetValue<float>() == 1 && Animator.State["Playing"]!.GetValue<bool>() && Animator.State["Loop"]!.GetValue<bool>(), "explicit defaults");
+Check(Descriptor.SchemaVersion == 3 && Descriptor.Schema(Registry)["$schema"]!.GetValue<string>().Contains("2020-12"), "versioned schema discovery");
+Check(Animator.State.Count == 11 && Animator.State["Target"] is null && Animator.State["Clip"] is null && Animator.State["Time"]!.GetValue<double>() == 0 && Animator.State["Speed"]!.GetValue<float>() == 1 && Animator.State["Playing"]!.GetValue<bool>() && Animator.State["Loop"]!.GetValue<bool>() && Animator.State["Controller"] is null && Animator.State["StateId"]!.GetValue<string>() == "" && Animator.State["Parameters"]!.AsArray().Count == 0 && Animator.State["MovementSource"] is null && Animator.State["MovementSpeedParameter"]!.GetValue<string>() == "", "explicit defaults");
 var Defaults = Data.Serialize();
 Check(SceneData.Parse(Defaults, Registry).Serialize() == Defaults, "default deterministic serialization");
 using (var Runtime = new RuntimeWorld(Data, Registry))
@@ -64,7 +64,7 @@ Check(Removable.Entities[0].Components.All(Component => Component.TypeId != "eng
 foreach (var Version in new[]
 {
     0,
-    3,
+    4,
 })
 {
     var Invalid = Data.Clone();
@@ -312,6 +312,7 @@ using (var Runtime = new RuntimeWorld(Dynamic, Registry, Assets))
     Check(Near(DynamicAnimator.Time, 0.25), "new Animator advances next tick");
 }
 AnimationPipelineValidation.Run(Assets, Registry, Check);
+AnimationStateMachineValidation.Run(Root, Assets, Registry, Check);
 Console.WriteLine($"[AnimationValidation] PASS: {Count} assertions; Playable playback, component transactions and skinned frame geometry");
 
 [ComponentTypeId("57cd3ab0-aa35-4ce9-ad6c-71d71d812aef"), ComponentSchemaVersion(1)]

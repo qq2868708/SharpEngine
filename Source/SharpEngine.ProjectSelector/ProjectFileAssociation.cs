@@ -15,13 +15,20 @@ internal sealed class ProjectFileAssociation
         this.NotifyChanged = NotifyChanged ?? NotifyAssociationChanged;
     }
 
-    internal bool Register(string Executable)
+    internal bool Register(string Executable, string? EngineRoot = null)
     {
         var Changed = SetDefault(".sharpproject", "SharpEngine.Project");
         Changed |= SetDefault("SharpEngine.Project", "SharpEngine Project");
         Changed |= SetShellCommand("open", "Open in SharpEngine", Executable, "open-editor");
         Changed |= SetShellCommand("GenerateProjectFiles", "Generate Project Files", Executable,
             "GenerateProjectFiles");
+        var EngineRootArgument = string.IsNullOrWhiteSpace(EngineRoot)
+            ? string.Empty
+            : " --engine-root " + Quote(EngineRoot);
+        Changed |= SetShellCommand("AddServerTarget", "Add Server Target", Executable,
+            "add-target --target Server" + EngineRootArgument);
+        Changed |= SetShellCommand("RemoveServerTarget", "Remove Server Target", Executable,
+            "remove-target --target Server" + EngineRootArgument);
         Changed |= SetShellCommand("solution", "Open Visual Studio Solution", Executable,
             "open-solution");
         using (var Shell = Registry.CurrentUser.OpenSubKey(
@@ -46,6 +53,8 @@ internal sealed class ProjectFileAssociation
         var Changed = SetDefault(Path, Label);
         return SetDefault(Path + @"\command", $"\"{Executable}\" {Command} --project \"%1\"") || Changed;
     }
+
+    private static string Quote(string Value) => "\"" + Value + "\"";
 
     private bool SetDefault(string RelativePath, string Value)
     {

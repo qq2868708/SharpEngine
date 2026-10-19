@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Source\SharpEngine.Editor\SharpEngine.Editor.csproj" />
+    <ProjectReference Include="..\..\Source\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" />
   </ItemGroup>
 </Project>

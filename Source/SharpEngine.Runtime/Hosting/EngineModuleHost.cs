@@ -26,15 +26,15 @@ internal sealed class EngineModuleHost : IDisposable
 
     internal static EngineModuleHost Prepare(string target, params Assembly[] assemblies)
     {
-        if (target is not ("Editor" or "Game"))
-            throw new ArgumentException("Engine Module target must be Editor or Game", nameof(target));
+        if (target is not ("Editor" or "Game" or "Server"))
+            throw new ArgumentException("Engine Module target must be Editor, Game, or Server", nameof(target));
 
         var modules = new List<(Assembly Assembly, string Id, string Type, Type Entry)>();
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var assembly in assemblies.Distinct())
         {
             var metadata = assembly.GetCustomAttribute<SharpEngineModuleAttribute>();
-            if (metadata is null || target == "Game" && metadata.Type == "Editor") continue;
+            if (metadata is null || (target is "Game" or "Server") && metadata.Type == "Editor") continue;
             if (!ids.Add(metadata.Id))
                 throw new InvalidDataException($"Engine Modules must not share id '{metadata.Id}'");
 

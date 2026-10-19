@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 3,
+  "kind": "prefab",
+  "worldId": "capsule-character-prefab",
+  "name": "Capsule Character",
+  "activeCameraId": null,
+  "entities": [
+    {
+      "entityId": "capsule-character-root",
+      "name": "Capsule Character",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "capsule-character-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              1,
+              0
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "capsule-character-animator",
+          "typeId": "engine.animator",
+          "schemaVersion": 3,
+          "enabled": true,
+          "state": {
+            "Target": "capsule-character-mesh",
+            "Clip": null,
+            "Time": 0,
+            "Speed": 1,
+            "Playing": true,
+            "Loop": true,
+            "Controller": "engine://animation-state-machines/uefn-mannequin-locomotion",
+            "StateId": "",
+            "Parameters": [
+              {
+                "ParameterId": "speed",
+                "Value": 0
+              },
+              {
+                "ParameterId": "jump",
+                "Value": 0
+              }
+            ],
+            "MovementSource": "capsule-character-movement",
+            "MovementSpeedParameter": "speed"
+          }
+        },
+        {
+          "componentId": "capsule-character-collider",
+          "typeId": "engine.capsule-collider",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Center": [
+              0,
+              0,
+              0
+            ],
+            "Layer": 0,
+            "IsTrigger": false,
+            "BlocksNavigation": true,
+            "Radius": 0.5,
+            "Height": 2
+          }
+        },
+        {
+          "componentId": "capsule-character-controllable",
+          "typeId": "engine.controllable",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "ControlEnabled": true
+          }
+        },
+        {
+          "componentId": "capsule-character-movement",
+          "typeId": "engine.movement",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "MaxSpeed": 5,
+            "Acceleration": 20,
+            "Deceleration": 30
+          }
+        },
+        {
+          "componentId": "capsule-character-player-controller",
+          "typeId": "engine.player-controller",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "ControlledEntity": "capsule-character-root",
+            "Priority": 0
+          }
+        },
+        {
+          "componentId": "capsule-character-mesh",
+          "typeId": "engine.skeletal-mesh",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Mesh": "engine://meshes/uefn-mannequin",
+            "Material": null,
+            "Animation": null,
+            "AnimationTime": 0,
+            "LoopAnimation": true,
+            "Color": [
+              0.82,
+              0.82,
+              0.86,
+              1
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

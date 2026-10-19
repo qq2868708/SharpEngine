@@ -31,6 +31,7 @@ public sealed partial class EditorRuntime
     private readonly EditorMenuRegistry _menus;
     private readonly EditorToolbarRegistry _toolbar;
     private readonly EditorContextMenuRegistry _contextMenus;
+    private readonly EditorCustomBarRegistry CustomBarRegistry;
     private readonly EditorCommandContext _commandContext;
     private readonly EditorContext _context;
     private readonly UiRuntimeService _uiRuntime = new();
@@ -46,6 +47,7 @@ public sealed partial class EditorRuntime
     private long _logFilePosition;
     private string _logFileRemainder = string.Empty;
     private AssetRegistry? _assets;
+    private DataAssetTypeRegistry DataAssetTypes = new();
     private ContentManagerCoordinator? _contentManagers;
     private WorldDocument? _world;
     private string _engineRoot = string.Empty;
@@ -89,6 +91,8 @@ public sealed partial class EditorRuntime
     private string _toolbarLeftMarkup = string.Empty;
     private string _toolbarCenterMarkup = string.Empty;
     private string _toolbarRightMarkup = string.Empty;
+    private string ViewportCustomBarMarkup = string.Empty;
+    private string TimelineCustomBarMarkup = string.Empty;
     private bool _rightPointerPending;
     private bool _rightPointerDragging;
     private int _rightPointerX;
@@ -113,8 +117,11 @@ public sealed partial class EditorRuntime
         _menus = new EditorMenuRegistry(_commands, MarkExtensionUiDirty);
         _toolbar = new EditorToolbarRegistry(_commands, MarkExtensionUiDirty);
         _contextMenus = new EditorContextMenuRegistry(_commands, MarkExtensionUiDirty);
+        CustomBarRegistry = new EditorCustomBarRegistry(this, MarkExtensionUiDirty);
+        AssetOpeners = new EditorAssetOpenerRegistry(this);
         _commandContext = new EditorCommandContext(this);
-        _context = new EditorContext(this, _commands, _menus, _toolbar, _contextMenus);
+        _context = new EditorContext(this, _commands, _menus, _toolbar, _contextMenus,
+            CustomBarRegistry);
         EditorSubsystems = SubsystemLifetime.CreateEditorScope(this);
         _logSubscription = SharpLog.Subscribe(entry =>
         {
@@ -131,7 +138,15 @@ public sealed partial class EditorRuntime
     public EditorMenuRegistry Menus => _menus;
     public EditorToolbarRegistry Toolbar => _toolbar;
     public EditorContextMenuRegistry ContextMenus => _contextMenus;
+    public EditorCustomBarRegistry CustomBars
+    {
+        get
+        {
+            return CustomBarRegistry;
+        }
+    }
     public EditorContext Context => _context;
+    public EditorAssetOpenerRegistry AssetOpeners { get; }
     public IUiRuntime UiRuntime => _uiRuntime;
     public IInputRuntime? InputRuntime => _inputRuntime;
     public EditorSelection Selection => _selection;
@@ -150,6 +165,13 @@ public sealed partial class EditorRuntime
     public EditorPlayState PlayState { get; private set; }
     public bool TransformSnapEnabled { get; set; }
     public bool IsDirty => _worldIsUntitled || _dirty || (_authoring?.IsDirty ?? false);
+    internal EditorCommandContext CommandContext
+    {
+        get
+        {
+            return _commandContext;
+        }
+    }
     public ulong DocumentRevision => _authoring?.DocumentRevision ?? 0;
     public WorldEditResult ReparentEntity(WorldReparentRequest request)
     {
@@ -174,7 +196,23 @@ public sealed partial class EditorRuntime
         return result;
     }
     public string DescribeSceneJson() => _world?.ToJson() ?? "{}";
-    public string DescribeAssetsJson() => _assets?.ToJson() ?? "{}";
+    public string DescribeAssetsJson()
+    {
+        var Assets = JsonNode.Parse(_assets?.ToJson() ?? "{}") as JsonObject ?? new JsonObject();
+        Assets["dataAssetTypes"] = new JsonArray(DataAssetTypes.Descriptors
+            .OrderBy(Descriptor => Descriptor.TypeId, StringComparer.Ordinal)
+            .Select(Descriptor => (JsonNode)new JsonObject
+            {
+                ["typeId"] = Descriptor.TypeId,
+                ["schemaVersion"] = Descriptor.SchemaVersion,
+                ["runtimeType"] = Descriptor.RuntimeType.FullName,
+                ["schema"] = Descriptor.Schema(),
+            }).ToArray());
+        return Assets.ToJsonString(new JsonSerializerOptions(JsonSerializerOptions.Default)
+        {
+            WriteIndented = true,
+        });
+    }
     public string DescribeContentJson() => _contentManagers?.ToJson() ?? "{}";
     public string DescribeInputJson() => _inputRuntime?.DescribeJson() ??
         "{\"schemaVersion\":1,\"available\":false}";
@@ -261,6 +299,8 @@ public sealed partial class EditorRuntime
             sceneDirectionalLightCount = _world?.Entities.Count(entity =>
                 entity.Kind == WorldEntityKind.Light) ?? 0,
         },
+        customBars = CustomBarRegistry.Describe(),
+        assetTools = AssetOpeners.Describe(),
         uiEditor = DescribeUiEditorState(),
         layout = _layout is null ? null : new
         {
@@ -495,6 +535,17 @@ public sealed partial class EditorRuntime
         PollDevelopmentSettings();
         PollMcpConfiguration();
         UpdateInputDemo();
+        foreach (var Extension in _extensions.Keys.OfType<IEditorExtensionUpdate>().ToArray())
+        {
+            try
+            {
+                Extension.Update(DeltaSeconds);
+            }
+            catch (Exception Exception)
+            {
+                SharpLog.Error("EditorExtension", "Editor extension update failed", Exception);
+            }
+        }
         // Conditions can depend on project C# state. Compare the resulting markup
         // before publishing, so an unchanged state preserves RmlUi focus/hover.
         RefreshExtensionUi();
@@ -544,7 +595,10 @@ public sealed partial class EditorRuntime
 
     public void PointerDown(nint windowHandle, int x, int y, uint button)
     {
-        if (button != 1 || _world is null || _assets is null) return;
+        if (PlayState != EditorPlayState.Stopped || button != 1 || _world is null || _assets is null)
+        {
+            return;
+        }
         if (_gizmoDragging) return;
         if (x < _lastViewport.X || y < _lastViewport.Y ||
             x > _lastViewport.Right || y > _lastViewport.Bottom) return;
@@ -556,11 +610,13 @@ public sealed partial class EditorRuntime
     public void ViewportInput(nint windowHandle, int x, int y, uint inputEvent,
         uint buttons, int wheelDelta)
     {
-        if (_world is null || _assets is null ||
+        if (PlayState != EditorPlayState.Stopped || _world is null || _assets is null ||
             (_lastViewport.Width > 0 &&
              (x < _lastViewport.X || y < _lastViewport.Y ||
-              x > _lastViewport.Right || y > _lastViewport.Bottom)))
+               x > _lastViewport.Right || y > _lastViewport.Bottom)))
+        {
             return;
+        }
         const uint RightButton = 0x0002;
         const uint MiddleButton = 0x0010;
         const uint LeftButton = 0x0001;
@@ -677,6 +733,10 @@ public sealed partial class EditorRuntime
     /// <summary>Receives Win32 virtual-key state while the viewport owns focus.</summary>
     public void ViewportKey(uint key, bool pressed, bool viewportFocused)
     {
+        if (PlayState != EditorPlayState.Stopped && key != 0)
+        {
+            return;
+        }
         if (key == 0)
         {
             _cameraTransactionGroup = null;
@@ -728,6 +788,17 @@ public sealed partial class EditorRuntime
         }
         MarkExtensionUiDirty();
         if (_commands.TryExecute(action, _commandContext)) return;
+        foreach (var Handler in _extensions.Keys.OfType<IEditorExtensionActionHandler>().ToArray())
+        {
+            try
+            {
+                if (Handler.TryHandleAction(action)) return;
+            }
+            catch (Exception Exception)
+            {
+                SharpLog.Error("EditorExtension", $"Editor extension action '{action}' failed", Exception);
+            }
+        }
         if (HandleUiEditorAction(action)) return;
         if (HandleComponentAction(action) || HandlePrefabAction(action)) return;
         if (_world is null || _assets is null) return;
@@ -737,6 +808,11 @@ public sealed partial class EditorRuntime
         { SelectEntity(action["editor.select-entity:".Length..]); return; }
         if (action.StartsWith("editor.select-asset:", StringComparison.Ordinal))
         { SelectAsset(action["editor.select-asset:".Length..]); return; }
+        if (action.StartsWith("editor.open-asset:", StringComparison.Ordinal))
+        {
+            OpenAsset(action["editor.open-asset:".Length..]);
+            return;
+        }
         if (action.StartsWith("editor.search-hierarchy:", StringComparison.Ordinal))
         {
             _hierarchySearch = action["editor.search-hierarchy:".Length..].Trim();
@@ -849,6 +925,13 @@ public sealed partial class EditorRuntime
             SelectAsset(contentValue);
             return;
         }
+        if (TryContentAction(action, "open-asset", out contentPaneId, out contentValue))
+        {
+            ActivateContentManager(contentPaneId);
+            SelectAsset(contentValue);
+            OpenAsset(contentValue);
+            return;
+        }
         if (TryContentAction(action, "open", out contentPaneId, out contentValue))
         {
             OpenContentEntry(contentPaneId, contentValue);
@@ -910,6 +993,10 @@ public sealed partial class EditorRuntime
                     PlayState = EditorPlayState.Stopped;
                     _seconds = 0;
                     _gizmoDragging = false;
+                    _orbiting = false;
+                    _panning = false;
+                    _rightPointerPending = false;
+                    _rightPointerDragging = false;
                     _navigationInitialized = false;
                     _pressedKeys.Clear();
                     _viewportKeyFocus = false;
@@ -1006,6 +1093,8 @@ public sealed partial class EditorRuntime
         _contextMenus.Clear();
         _toolbar.Clear();
         _menus.Clear();
+        CustomBarRegistry.Clear();
+        AssetOpeners.Clear();
         _commands.Clear();
         RefreshExtensionUi();
         SharpLog.Info("Editor", $"Shutdown after {_frameCount} managed frames",
@@ -1044,10 +1133,6 @@ public sealed partial class EditorRuntime
         SetText("scale", asset.Exists ? "Available" : "File missing");
         SetText("parent", "—");
         CommitContentManagerState($"Selected {asset.Id}");
-        if (asset.Type.Equals("RmlDocument", StringComparison.OrdinalIgnoreCase))
-            OpenUiAsset(asset);
-        if (asset.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase) && PlayState == EditorPlayState.Stopped)
-            OpenPrefab(_assets!.ResolvePath(asset)!);
     }
 
     private void OpenContentEntry(string managerId, string payload)
@@ -1084,6 +1169,7 @@ public sealed partial class EditorRuntime
         if (asset is not null)
         {
             SelectAsset(asset.Id);
+            OpenAsset(asset.Id);
             return;
         }
 
@@ -1255,6 +1341,10 @@ public sealed partial class EditorRuntime
         }
 
         RefreshExtensionUi();
+        foreach (var Extension in _extensions.Keys.OfType<IEditorExtensionUiRefresh>().ToArray())
+        {
+            Extension.RefreshUi();
+        }
     }
 
     internal void SetTextFromExtension(string id, string value)
@@ -1611,6 +1701,10 @@ public sealed partial class EditorRuntime
         RefreshUiEditor();
         RefreshLogUi();
         RefreshExtensionUi();
+        foreach (var Extension in _extensions.Keys.OfType<IEditorExtensionUiRefresh>().ToArray())
+        {
+            Extension.RefreshUi();
+        }
         RefreshWorldTitle();
     }
 
@@ -1883,7 +1977,13 @@ public sealed partial class EditorRuntime
                         ? "draggable=\"true\" data-prefab-asset=\"" + Escape(entry.AssetId ?? "") + "\" " : "")
                     .Append("class=\"asset-item ").Append(itemClass)
                     .Append(selected).Append(missing).Append("\" data-action=\"")
-                    .Append(action).Append("\" data-context-kind=\"").Append(contextKind)
+                    .Append(action).Append('"');
+                if (entry.AssetId is not null)
+                {
+                    markup.Append(" data-double-click-action=\"editor.content.open-asset:")
+                        .Append(paneId).Append(':').Append(Escape(entry.AssetId)).Append('"');
+                }
+                markup.Append(" data-context-kind=\"").Append(contextKind)
                     .Append("\" data-context-manager=\"").Append(paneId)
                     .Append("\" data-context-id=\"").Append(Escape(contextId))
                     .Append("\" data-context-source=\"").Append(sourceName)
@@ -2052,9 +2152,12 @@ public sealed partial class EditorRuntime
 
     private void UpdateNavigationMovement(float deltaSeconds)
     {
-        if (!_viewportKeyFocus || !float.IsFinite(deltaSeconds) || deltaSeconds <= 0 ||
+        if (PlayState != EditorPlayState.Stopped || !_viewportKeyFocus ||
+            !float.IsFinite(deltaSeconds) || deltaSeconds <= 0 ||
             _world?.ActiveCamera is not { } camera || _pressedKeys.Count == 0)
+        {
             return;
+        }
         EnsureNavigationState();
         var forward = EntityWorldDirection(camera, -Vector3.UnitZ);
         var right = Vector3.Normalize(Vector3.Cross(forward, Vector3.UnitY));

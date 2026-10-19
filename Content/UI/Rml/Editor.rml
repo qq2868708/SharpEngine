@@ -3,6 +3,7 @@
 <title>SharpEngine Editor</title>
 <link type="text/rcss" href="Editor.rcss" />
 <link type="text/rcss" href="Inspector.rcss" />
+<link type="text/rcss" href="Timeline.rcss" />
 </head>
 <body>
 <div id="editor">

@@ -59,6 +59,7 @@
           <tr><td>输入</td><td><code>InputAction</code> / <code>InputMappingContext</code></td><td>JSON schema v1</td><td><a href="../../../../../README.md#unified-input-routing">README 输入路由</a></td></tr>
           <tr><td>编辑器</td><td><code>EditorRuntime</code> / <code>editor.describe</code></td><td>snapshot schema 按能力声明</td><td><a href="../../../../EditorMcpUiObservability.md">Editor MCP UI</a></td></tr>
           <tr><td>时间线</td><td><code>PlayableGraph</code> / <code>TimelineAsset</code></td><td>Timeline schema v1</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
+          <tr><td>网络</td><td><code>UdpNetworkTransport</code> / <code>DedicatedServerNetworkHost</code> / <code>NetworkClientSession</code></td><td>network schema v1；UDP Command 与快照 Delta</td><td><a href="../../../../Networking.md">Networking</a></td></tr>
           <tr><td>FBX 资产</td><td><code>FbxSourceContract.ExportFbx</code> / <code>AssetContent.ExportFbx</code></td><td>来源 provenance + 语义等价导出</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
           <tr><td>设置</td><td><code>DevelopmentSettings</code></td><td>设置 ID + schema version</td><td><a href="../../../../../README.md#viewport-navigation-and-project-settings">README 设置</a></td></tr>
           <tr><td>日志</td><td><code>SharpLog</code></td><td>log envelope schema v1</td><td><a href="../../../../Logging.md">Logging</a></td></tr>
@@ -84,7 +85,7 @@
       <article class="api-entry">
         <h3><code>SharpEngine.Animation.AnimationStateMachineAsset</code></h3>
         <p>状态机资源使用 <code>.sanimationstatemachine</code> 和 schema v1，保存稳定的参数、状态、Clip 依赖和有序过渡。<code>AnimationStateMachineContent.Load</code> 先解析完整图并绑定所有骨骼动画；<code>AnimationStateMachineAsset.SelectTransition</code> 按资源顺序检查 exitTime 和数值条件。<code>engine://animation-state-machines/uefn-mannequin-locomotion</code> 在 engine manifest 中以 <code>readOnly=true</code>、<code>builtin</code> 和 <code>preset</code> 标签登记，并声明 mannequin skeleton 与四个 Clip 依赖。</p>
-        <p>Content Manager 的双击和语义打开都调用 <code>EditorRuntime.OpenAsset</code>；统一的 <code>EditorAssetOpenerRegistry</code> 通过 <code>engine.animation-state-machine-editor</code> 将该类型路由到 Animation Timeline 面板中的状态图视图。</p>
+        <p>Content Manager 的双击和语义打开都调用 <code>EditorRuntime.OpenAsset</code>；统一的 <code>EditorAssetOpenerRegistry</code> 通过 <code>engine.animation-state-machine-editor</code> 将该类型路由到 Animation Timeline 面板中的状态图视图。浮动面板关闭期间的 native host 会在当前窗口回调结束前完成延迟销毁，保证下一次打开复用 host ID 时不会误销毁新面板。</p>
         <p><code>AnimatorComponent</code> schema v3 的 <code>Controller</code>、<code>StateId</code>、<code>Parameters</code>、<code>MovementSource</code> 和 <code>MovementSpeedParameter</code> 是权威字段；运行帧 schema v2 公开当前状态、过渡、参数和采样结果。旧 Animator v1/v2 只补齐控制器字段，不改变既有单 Clip 语义。</p>
       </article>
       <article class="api-entry">
@@ -100,6 +101,13 @@
       <article class="api-entry">
         <h3><code>SharpEngine.Timeline</code></h3>
         <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code>、<code>AnimationNotify</code> 和 MarkerPlayable。编辑器扩展通过 <code>timeline.play</code>、<code>timeline.pause</code>、<code>timeline.stop</code>、<code>timeline.add-notify</code>、<code>timeline.undo</code>、<code>timeline.redo</code>、<code>timeline.save</code> 和 <code>timeline.seek-start</code> 命令驱动预览与编辑。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Networking</code></h3>
+        <p><code>NetworkSchemaCatalog</code> 登记稳定的组件属性和 RPC 描述；<code>NetworkCommandRouter</code> 只执行显式注册的 Command，并按 <code>ConnectionId + MessageId</code> 缓存幂等结果。</p>
+        <p><code>NetworkReplicationFrameBuilder</code> 从不可变 <code>RuntimeFrame</code> 生成完整快照或基于 <code>NetworkReplicationBaseline</code> 的字段差分。<code>DedicatedServerSession</code> 运行权威 Runtime Tick 并返回 <code>NetworkServerFrame</code>。</p>
+        <p><code>UdpNetworkTransport</code> 基于 LiteNetLib 提供 C# UDP、MTU 分片、CRC32C、连接超时、四种可靠性和四条通道；<code>DedicatedServerNetworkHost</code> 提供 Schema 指纹握手、Command 权限入口、每连接 baseline/ACK；<code>NetworkClientSession</code> 和 <code>NetworkReplicaState</code> 提供客户端握手、Command 发送和原子快照应用。当前协议版本为 <code>NetworkProtocol.SchemaVersion = 1</code>；QUIC、生产认证和客户端预测不属于本阶段公共实现。</p>
+        <p><code>INetworkServerRuntime</code> 是 Server Runtime Module 的注册契约，提供 <code>NetworkSchemaCatalog</code>、<code>RegisterCommand</code>、权限和相关性策略入口；Server Target 的原生入口为 <code>DedicatedServer.exe</code>。项目 manifest 的 <code>targets</code> 数组控制生成的 Target；默认值为 <code>["Editor", "Game"]</code>，Project Selector 的 <code>add-target --target Server</code> 和 <code>remove-target --target Server</code> 原子更新该契约。Windows 文件关联的 <code>AddServerTarget</code> 和 <code>RemoveServerTarget</code> shell verb 分别调用这两个命令，随后自动重新生成工程文件。</p>
       </article>
       <article class="api-entry">
         <h3><code>EditorAssetOpenerRegistry</code></h3>
@@ -122,26 +130,33 @@
     </section>
     <section class="section-card" id="data-assets">
       <h2>数据资产 API</h2>
-      <p><code>SharpEngine.Assets.DataAsset&lt;T&gt;</code>、<code>DataAssetTypeAttribute</code>、<code>DataPropertyAttribute</code>、<code>DataAssetTypeRegistry</code> 和 <code>DataAssetSerializer</code> 定义第一阶段数据资产契约。<code>.sdataasset</code> 使用类型声明的 schemaVersion，封套包含 <code>schemaVersion</code>、<code>kind</code>、<code>assetId</code> 和 <code>name</code>；manifest type 等于稳定类型 ID。</p>
-      <p>支持显式注册与程序集发现、属性描述和 JSON Schema、确定顺序序列化、强类型加载、范围与直接引用校验、只读保护和临时文件替换。该 API 不提供编辑器事务或完整 Cook。详见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
+      <p><code>DataAsset</code> 支持抽象基类和继承属性；每个可加载的具体派生类型使用 <code>DataAssetTypeAttribute</code> 声明稳定类型 ID，<code>sealed</code> 可选。<code>DataAsset&lt;T&gt;</code> 是叶子类型的便捷基类，<code>DataAssetFactory.Create&lt;T&gt;</code> 可创建任意具体派生类型。<code>DataPropertyAttribute</code>、<code>DataAssetTypeRegistry</code> 和 <code>DataAssetSerializer</code> 定义第一阶段数据资产契约。<code>.sdataasset</code> 使用类型声明的 schemaVersion，封套包含 <code>schemaVersion</code>、<code>kind</code>、<code>assetId</code> 和 <code>name</code>；manifest type 等于稳定类型 ID。</p>
+      <p>支持显式注册与程序集发现、属性描述和 JSON Schema、确定顺序序列化、强类型加载、范围与直接引用校验、只读保护和临时文件替换。<code>DataAssetTypeRegistry.Load&lt;TBase&gt;</code> 会按 manifest 类型创建具体派生值并返回可赋给基类的实例。Editor 的 Runtime Module 重载会原子替换项目数据资产类型注册表，并在失败时恢复旧注册表；<code>assets.describe</code> 与 <code>sharpengine://assets</code> 暴露当前类型和 Schema。该 API 不提供编辑器事务或完整 Cook。详见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>更新 <code>engine://animations/uefn-mannequin-walk</code> 与 <code>engine://animations/uefn-mannequin-run</code> 的生成数据：局部肢体旋转使用与 mannequin 绑定骨架相符的轴向和受控幅度；SkeletalAnimation schema 仍为 v1，<code>engine.animator</code> schema v3 不变。</li>
+        <li><code>SceneRenderer.BuildFrame</code> 的三角面光照包含固定基础环境光项，方向光为零或背向时仍输出可观察的材质颜色；该项属于派生渲染数据，不改变场景资产 schema。</li>
         <li>新增 <code>AnimationStateMachineAsset</code> 与 <code>engine.animator</code> schema v3；状态、参数、过渡和全部 Clip 依赖可从快照重建。</li>
         <li>登记 engine-owned、只读、builtin/preset 的 mannequin locomotion 状态机，并复用 <code>EditorAssetOpenerRegistry</code> 的统一打开流程。</li>
-        <li>增加数据资产类型声明与 .sdataasset 封套契约，类型 schema 从 v1 起显式声明；未引入已有资产格式迁移。</li>
+        <li>增加数据资产类型声明与 .sdataasset 封套契约，类型 schema 从 v1 起显式声明；支持抽象基类、继承字段和基类多态加载；未引入已有资产格式迁移。</li>
+        <li>Runtime Module 重载现在重新发现 DataAsset 类型并以原子注册表提交；失败回滚保留之前的类型发现结果，资产 MCP 查询使用同一快照。</li>
         <li>建立首版 API 索引，收录引擎 manifest、项目、World、输入、编辑器、Timeline、设置和日志契约。</li>
-        <li>增加固定 Editor Surface 扩展接口、Timeline 骨骼采样预览、Notify authoring session、面板命令和 CustomBar 描述字段；Timeline 资产 schema 仍为 v1。</li>
-        <li>增加 <code>SkeletalAnimation</code> 双击打开路由、独立 Timeline 文档状态以及 <code>EditorAssetOpenerRegistry</code> 的项目覆写契约。</li>
+        <li>Timeline 编辑器预览现在按骨骼父子层级从局部变换重建模型姿态，并按骨架范围自动取景；播放完成状态属于瞬态编辑器状态，Timeline 资产 schema 仍为 v1。</li>
+        <li>增加 <code>SkeletalAnimation</code> 双击打开路由、独立 Timeline 文档状态以及 <code>EditorAssetOpenerRegistry</code> 的项目覆写契约；明确浮动 Timeline 关闭后立即重开的 host 生命周期保证。</li>
         <li>规定新增或修改公共类型、稳定 ID、命令、MCP 能力和 schema 时必须同步更新本页。</li>
         <li>收录控制与移动组件的 typeId、schema 和 frame state 入口。</li>
+        <li>增加 <code>SharpEngine.Networking</code> 的 C# UDP transport、Schema handshake、DedicatedServerNetworkHost 和客户端 Replica API 索引。</li>
+        <li>增加 <code>INetworkServerRuntime</code> 项目模块契约、Server Target 的 <code>DedicatedServer.exe</code> 入口，以及 NetworkDedicatedServer 示例的模块注册边界。</li>
+        <li>将 Target 生成范围纳入项目 manifest 的 <code>targets</code> 契约；Server Target 不再对所有项目默认生成；.sharpproject 的 AddServerTarget/RemoveServerTarget shell verb 共用 Project Selector 命令并自动重新生成工程文件，项目 schemaVersion 仍为 3。</li>
         <li>登记胶囊体角色 Prefab 资产 ID、组件组成和内部引用重映射契约。</li>
         <li>更新角色 Prefab 为 mannequin skeletal mesh + Animator schema v3 与 locomotion state machine；胶囊 collider 仅提供 Trace，不生成渲染几何。</li>
         <li>增加 FBX provenance 字段和语义等价导出契约；明确导出文件不保证与来源字节一致。</li>
         <li>增加 <code>SkeletalAnimationCompatibility</code> 的显式绑定检查与 <code>SkeletalAnimationRetargeter</code> 的目标 Skeleton 资产契约；Retarget 不隐式发生。</li>
         <li>规定新增资源文件扩展名由语义类型小写化后加 <code>s</code> 前缀，并保留旧裸后缀和 <code>.sharp...</code> 后缀的兼容边界。</li>
         <li>修正输入修饰键位契约，并明确 Play 状态下 Runtime 输入与编辑器 Viewport 操作的隔离边界。</li>
+        <li>Windows 原生 <code>WM_*BUTTONDBLCLK</code> 现在会进入 Content Manager 的稳定双击动作路由；资产打开器契约和 schemaVersion 不变，自动化指针双击继续复用同一入口。</li>
       </ul>
     </section>
       </div>

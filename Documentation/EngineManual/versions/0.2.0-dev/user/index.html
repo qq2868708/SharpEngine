@@ -37,6 +37,7 @@
                         <li><a href="#control-movement">控制与移动</a></li>
                         <li><a href="#input-ui">输入与 UI</a></li>
                         <li><a href="#settings-modules">设置与模块</a></li>
+                        <li><a href="#networking">网络与 Dedicated Server</a></li>
                         <li><a href="#validation">验证边界</a></li>
                         <li><a href="#data-assets">数据资产</a></li>
                         <li><a href="#updates">本版更新</a></li>
@@ -64,8 +65,8 @@
     </section>
     <section class="section-card" id="animation-editor">
       <h2>动画时间轴与 Notify</h2>
-      <p>编辑器的 Animation Timeline 面板提供骨骼采样预览、时间尺、轨道、播放头和预览控制。打开 View 菜单中的 Animation Timeline 后，可以使用 Play、Pause、Stop 和时间尺按钮检查动画片段。</p>
-      <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation 资源会打开对应的 Animation Timeline 文档。Notify 轨道显示 Footstep、Attack Window 等事件。点击 Clip 可以查看当前 Notify，使用 Add Notify 会在预览时间线上创建新的事件并立即刷新视图。每个打开的资源保留自己的播放头、Undo、Redo 和 dirty 状态；项目资产支持 Save，引擎来源资产保持只读。</p>
+      <p>编辑器的 Animation Timeline 面板提供骨骼采样预览、时间尺、轨道、播放头和预览控制。预览会按骨骼父子层级累积姿态，并根据整套骨架范围自动取景，避免关节越界或连线被拉到面板外；播放到末尾后会显示完成状态。打开 View 菜单中的 Animation Timeline 后，可以使用 Play、Pause、Stop 和时间尺按钮检查动画片段。</p>
+      <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation 资源会打开对应的 Animation Timeline 文档。Windows 原生鼠标双击和自动化指针双击都会走同一套资源打开流程。Notify 轨道显示 Footstep、Attack Window 等事件。点击 Clip 可以查看当前 Notify，使用 Add Notify 会在预览时间线上创建新的事件并立即刷新视图。每个打开的资源保留自己的播放头、Undo、Redo 和 dirty 状态；项目资产支持 Save，引擎来源资产保持只读。关闭浮动 Animation Timeline 后再次双击资源会重新创建并保留该面板，仍然沿用同一套资源打开流程。</p>
       <p>Viewport 的 Transform 按钮和项目 Project Preview 按钮都通过引擎命令执行。项目可以扩展固定的 File 菜单、主 Toolbar 和 <code>viewport</code> CustomBar Surface，但不能创建新的顶层 Surface。</p>
     </section>
     <section class="section-card" id="world-assets">
@@ -98,6 +99,11 @@
       <p>引擎设置和项目设置使用统一的属性面板编辑。修改会即时检查有效性，支持撤销、重做和恢复，保存后才会成为项目内容。</p>
       <p>功能模块可以只服务编辑器、只服务运行模式，或同时服务两者。启动时会按照依赖关系载入模块，停止时会按相反顺序清理。</p>
     </section>
+    <section class="section-card" id="networking">
+      <h2>网络与 Dedicated Server</h2>
+      <p>网络模块提供版本化 Schema、服务器 Command 路由、幂等结果和基于 RuntimeFrame 的完整快照/字段差分。DedicatedServerSession 使用现有 RuntimeWorld 的固定 Tick 和提交边界运行权威模拟。</p>
+      <p><code>UdpNetworkTransport</code> 提供可运行的 C# UDP 收发，支持可靠有序投递、快照 ACK、连接超时和 payload 预算。服务器在 World 线程处理入站 Command，客户端只有在 Schema 指纹匹配并完成握手后才能发送 Command。项目默认只生成 Editor/Game；需要 Dedicated Server 时，在 Windows 资源管理器中右键项目的 <code>.sharpproject</code> 文件，选择 <code>Add Server Target</code>（Windows 11 可先选择“显示更多选项”）。该操作自动保存 Target 并重新生成工程文件，Rider 重新加载 solution 后即可使用 Server Target。QUIC、生产认证和客户端预测仍是后续工作。使用方式和验证命令见 <a href="../../../../Networking.md">网络、属性同步与 Dedicated Server 基础</a>。</p>
+    </section>
     <section class="section-card" id="validation">
       <h2>验证边界</h2>
       <p>功能验证分为内容检查、编辑器检查、运行检查、构建检查和发布包检查。某一层通过，只能说明该层的行为符合预期，不能替代其他层的验证。</p>
@@ -105,26 +111,33 @@
     </section>
     <section class="section-card" id="data-assets">
       <h2>数据资产</h2>
-      <p>项目可以用 C# 数据类型定义独立的配置资产，将同一种配置类型保存为多个 <code>.sdataasset</code> 文本资源，并通过稳定资产 ID 加载。字段约束和直接资源引用会在加载时校验。</p>
-      <p>当前提供类型、Schema、强类型加载和显式文件保存基础；通用创建菜单、Inspector 文档、撤销事务和热重载仍待接入。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
+      <p>项目可以用 C# 数据类型定义独立的配置资产，将同一种配置类型保存为多个 <code>.sdataasset</code> 文本资源，并通过稳定资产 ID 加载。字段约束和直接资源引用会在加载时校验。抽象基类可以复用字段，具体派生类各自声明资产类型；<code>sealed</code> 不是必需的。</p>
+      <p>当前提供类型、Schema、强类型加载和显式文件保存基础；通用创建菜单、Inspector 文档和撤销事务仍待接入。Editor 项目代码重载会重新发现 Runtime Module 中的具体数据资产类型，并更新 <code>assets.describe</code> 与 <code>sharpengine://assets</code> 的 Schema。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>修正 mannequin Walk/Run 示例 Clip 的局部关节旋转轴和幅度，移动采样时四肢保持连续；Animator、Playable 和状态机契约不变。</li>
+        <li>场景渲染增加基础环境光，骨骼模型背向方向光时仍保留可读的体积和关节轮廓；Sandbox 主相机调整为角色近景构图，便于检查蒙皮与动画姿态。</li>
         <li>新增可序列化的最小动画状态机，示例 mannequin 会根据移动速度在 Idle、Walk、Run 和 Jump 状态间切换。</li>
         <li>登记只读 builtin/preset locomotion 状态机，并通过统一资源打开器在 Animation Timeline 面板提供状态图编辑器视图。</li>
-        <li>增加由 C# 类型声明的版本化数据资产基础，支持字段约束、直接资产引用校验和强类型加载。</li>
+        <li>增加由 C# 类型声明的版本化数据资产基础，支持字段约束、直接资产引用校验、继承字段和基类多态加载。</li>
+        <li>项目 Runtime Module 重载会重新发现具体 DataAsset 类型；资产 MCP 查询现在稳定返回继承字段和派生字段的 Schema。</li>
         <li>建立版本化 HTML 手册入口，拆分为用户手册和 API 索引。</li>
         <li>定义功能修改必须同步更新手册并运行手册链接校验的维护约束。</li>
         <li>补充控制器、可控制目标和移动组件的用户工作流与运行时边界。</li>
         <li>新增胶囊体角色 Prefab、主场景实例和 WASD Play 移动验收流程。</li>
         <li>Sandbox 角色改用 UEFN mannequin 骨骼网格和循环 Walk 采样；胶囊体保留为不渲染的 Trace 碰撞组件。</li>
         <li>用户手册改为只描述功能用途、操作结果和使用限制；实现接口集中在 API 索引。</li>
-        <li>增加 Animation Timeline 骨骼预览、Notify 编辑的 revision/Undo/Redo/Save 流程，并记录固定菜单、Toolbar 与 CustomBar Surface 的扩展路径。</li>
-        <li>增加按资产双击打开 Timeline 工具的路由；项目或插件可以按 AssetId、资产类型和优先级覆写默认打开器。</li>
+        <li>增加 C# UDP transport、Schema 握手、快照 ACK、Command 收发和客户端 Replica。</li>
+        <li>增加 Server Target 与 <code>Examples/NetworkDedicatedServer</code> 示例，验证原生 Dedicated Server 加载 Runtime Module、双客户端位置同步和重复命令幂等。</li>
+        <li>Server Target 改为项目级可选项；资源管理器右键 .sharpproject → Add Server Target 会更新项目 manifest 并自动生成工程文件，Remove Server Target 会清理对应生成文件。</li>
+        <li>修正 Animation Timeline 骨骼预览：按父子层级累积姿态并自动取景，播放结束时显示完成状态；Notify 编辑继续使用 revision/Undo/Redo/Save 流程。</li>
+        <li>增加按资产双击打开 Timeline 工具的路由；项目或插件可以按 AssetId、资产类型和优先级覆写默认打开器；浮动 Timeline 关闭后可立即再次打开并复用统一生命周期。</li>
         <li>统一 FBX 导入来源校验和语义等价导出规则；导出不再要求保留原始 FBX 字节。</li>
         <li>增加显式骨骼动画 Retarget 验证：跨组动画必须生成目标 SkeletonId 的新资产，并通过目标蒙皮绑定检查后才能组合。</li>
         <li>修正编辑器修饰键位映射，并在 Play/运行时隔离 Viewport 编辑输入，避免游戏移动同时驱动编辑器相机。</li>
+        <li>修正 Windows 原生双击消息在 Content Manager 中只触发一次选择的问题；真实鼠标双击现在会打开对应资产编辑器。</li>
       </ul>
     </section>
       </div>

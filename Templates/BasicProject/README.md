@@ -15,7 +15,22 @@ The project contains two C# Modules:
 - `Source/__PROJECT_NAMESPACE__`: Runtime Module, referencing only
   `SharpEngine.Runtime.dll`.
 - `Source/__PROJECT_NAMESPACE__.Editor`: Editor Module, depending on the Runtime
-  Module and registering project menus and context commands.
+  Module and extending the engine-created File menu, main Toolbar, viewport
+  CustomBar and context commands.
+
+The generated Editor includes project-owned extension examples:
+
+- **Project Preview** CustomBar inside the Viewport: frame selection, show World
+  statistics, toggle grid snapping and show the project preview status.
+- **Project** Toolbar dropdown: save/export the current World, show World and
+  asset statistics, or describe the current selection.
+- **Reset Transform**, **Snap To Grid** and **Main Camera** Toolbar tools.
+- Matching commands under the engine-created **File** menu and scene/object/asset/
+  folder context menus. The generated Editor also exposes the Animation Timeline
+  pane with Play, Pause, Stop and Add Notify controls.
+
+These are registered by `Source/__PROJECT_NAMESPACE__.Editor/ProjectEditorExtension.cs`;
+remove or replace that extension when the project needs a different editor workflow.
 
 `__DISPLAY_NAME__.sln` is generated when the project is created. It shows the
 associated source Engine and the project Modules even when they are in unrelated
@@ -46,3 +61,24 @@ Creation copies the configured engine World preset into `Content/Worlds/Main.swo
 and records it as `world.startup`. Game requires this explicit saved World; Editor
 can also work with unsaved Worlds. Use `-Target Game` to build the standalone runtime
 and `-Command RunGame` to launch it. Game never loads the Editor Module.
+
+For a headless authoritative server, build the `Server` Target. Server loads
+Runtime Modules only and emits `Binaries/Win64/<Configuration>/Server/DedicatedServer.exe`.
+The project manifest must contain `world.startup`, and a Server Runtime Module
+can use the `SharpEngine.Networking` `INetworkServerRuntime` contract to register
+its Schema, Commands and authority policy.
+
+Projects do not generate a Server Target by default. Add it when the project
+needs a dedicated server, then regenerate the Rider solution:
+
+```powershell
+& "$env:SHARPENGINE_ROOT\Tools\SharpEngineProject.ps1" `
+  -Command AddTarget -Target Server `
+  -ProjectFile .\__DISPLAY_NAME__.sharpproject `
+  -EngineRoot $env:SHARPENGINE_ROOT
+```
+
+The generated solution then exposes `Debug/Development/Shipping Server` and a
+matching launch profile. `RemoveTarget -Target Server` removes the generated
+Server wrapper and profiles. The same operations are available as `Add Server
+Target` and `Remove Server Target` from the `.sharpproject` file context menu.

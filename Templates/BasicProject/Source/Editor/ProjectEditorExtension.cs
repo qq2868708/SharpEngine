@@ -3,9 +3,42 @@ using SharpEngine.World;
 
 namespace __PROJECT_NAMESPACE__.Editor;
 
-public sealed class ProjectEditorExtension : IEditorExtension
+public sealed class ProjectEditorExtension : IEditorExtension, IMenuExtension,
+    IToolBarExtension, ICustomBarExtension
 {
     private readonly List<IDisposable> Registrations = new();
+
+    public string MenuId
+    {
+        get
+        {
+            return "file";
+        }
+    }
+
+    public string ToolbarId
+    {
+        get
+        {
+            return EditorCustomBarRegistry.MainToolbarId;
+        }
+    }
+
+    public string BarId
+    {
+        get
+        {
+            return EditorCustomBarRegistry.ViewportSurfaceId;
+        }
+    }
+
+    public EditorCustomBarMode Mode
+    {
+        get
+        {
+            return EditorCustomBarMode.Append;
+        }
+    }
 
     public void Startup(EditorContext Context)
     {
@@ -49,26 +82,58 @@ public sealed class ProjectEditorExtension : IEditorExtension
             "project.show-folder-path", "Show Folder Path",
             Command => Command.SetStatus($"Folder: Content/{Command.SelectedFolderPath}"),
             Command => Command.Selection.Kind == EditorSelectionKind.Folder));
+        RegisterCommand(Context, new EditorCommand(
+            "project.save-and-export-scene", "Save And Export Scene",
+            Command =>
+            {
+                Command.Save();
+                Command.SaveSceneDescription();
+                Command.SetStatus("Project scene saved and exported");
+            },
+            CanSaveScene,
+            "Save the current World and export its JSON description"));
+        RegisterCommand(Context, new EditorCommand(
+            "project.show-world-stats", "Show World Statistics",
+            Command =>
+            {
+                var EntityCount = Command.World?.Entities.Count ?? 0;
+                var AssetCount = Command.Assets?.Assets.Count ?? 0;
+                Command.SetStatus($"World: {EntityCount} entities · {AssetCount} assets · {Command.PlayState}");
+            },
+            Command => Command.World is not null,
+            "Show the current World and asset counts"));
+        RegisterCommand(Context, new EditorCommand(
+            "project.describe-selection", "Describe Selection",
+            Command => Command.SetStatus(SelectionDescription(Command)),
+            HasSelection,
+            "Show the selected entity, asset, folder or scene"));
+        RegisterCommand(Context, new EditorCommand(
+            "project.preview-frame-selection", "Frame Selection",
+            Command => Command.SetStatus(FrameSelectionStatus(Command)),
+            HasSelection,
+            "Frame the selected object in the project preview"));
+        RegisterCommand(Context, new EditorCommand(
+            "project.preview-mode", "Project Preview",
+            Command => Command.SetStatus("Project preview is using the active Viewport custom bar"),
+            Command => Command.World is not null,
+            "Show the project preview integration status"));
 
-        Register(Registrations, Context.Menus.RegisterMenu(
-            new EditorMenu("project", "Project", 450)));
-        Register(Registrations, Context.Menus.RegisterCategory(
-            new EditorMenuCategory("project", "transform", 100)));
-        Register(Registrations, Context.Menus.RegisterCategory(
-            new EditorMenuCategory("project", "settings", 200)));
-        Register(Registrations, Context.Menus.RegisterItem(
-            new EditorMenuItem("project", "transform", "project.reset-transform", 100)));
-        Register(Registrations, Context.Menus.RegisterItem(
-            new EditorMenuItem("project", "settings", "project.snap-to-grid", 100)));
+        Register(Registrations, Context.Menus.RegisterExtension(this));
+        Register(Registrations, Context.Toolbar.RegisterExtension(this));
 
         RegisterContext(Context, EditorContextMenuKind.Object, "transform",
             "project.reset-position", "project.reset-rotation", "project.reset-scale");
         RegisterContext(Context, EditorContextMenuKind.Scene, "selection",
-            "project.select-main-camera");
+            "project.select-main-camera", "project.describe-selection");
+        RegisterContext(Context, EditorContextMenuKind.Scene, "workflow",
+            "project.show-world-stats", "project.save-and-export-scene");
+        RegisterContext(Context, EditorContextMenuKind.Object, "selection",
+            "project.describe-selection");
         RegisterContext(Context, EditorContextMenuKind.Asset, "inspect",
-            "project.show-asset-path");
+            "project.show-asset-path", "project.describe-selection");
         RegisterContext(Context, EditorContextMenuKind.Folder, "inspect",
-            "project.show-folder-path");
+            "project.show-folder-path", "project.describe-selection");
+        Register(Registrations, Context.CustomBars.Register(this));
     }
 
     public void Shutdown()
@@ -95,8 +160,82 @@ public sealed class ProjectEditorExtension : IEditorExtension
         }
     }
 
+    public void Extend(EditorMenuExtensionContext Context)
+    {
+        Context.RegisterCategory("project-tools", 350);
+        Context.RegisterCategory("project-selection", 360);
+        Context.RegisterCommand("project-tools", "project.reset-transform", 100);
+        Context.RegisterCommand("project-tools", "project.snap-to-grid", 200);
+        Context.RegisterCommand("project-tools", "project.save-and-export-scene", 300);
+        Context.RegisterCommand("project-tools", "project.show-world-stats", 400);
+        Context.RegisterCommand("project-selection", "project.select-main-camera", 100);
+        Context.RegisterCommand("project-selection", "project.describe-selection", 200);
+        Context.RegisterCommand("project-selection", "project.preview-mode", 300);
+    }
+
+    public void Extend(EditorToolbarExtensionContext Context)
+    {
+        Context.RegisterCategory("project-tools", 200);
+        Context.RegisterTool("project-workflow", "project-tools", "Project",
+            ["project.save-and-export-scene", "project.show-world-stats",
+                "project.describe-selection"], 100, "Project workflow commands");
+        Context.RegisterTool("project-reset-transform", "project-tools", "Reset Transform",
+            ["project.reset-transform"], 200, "Reset the selected entity transform");
+        Context.RegisterTool("project-snap-to-grid", "project-tools", "Snap To Grid",
+            ["project.snap-to-grid"], 300, "Toggle transform snapping", "grid");
+        Context.RegisterTool("project-main-camera", "project-tools", "Main Camera",
+            ["project.select-main-camera"], 400, "Select the active World camera");
+    }
+
     private static bool CanEditSelection(EditorCommandContext Command) =>
         Command.PlayState == EditorPlayState.Stopped && Command.SelectedEntity is not null;
+
+    private static bool CanSaveScene(EditorCommandContext Command) =>
+        Command.PlayState == EditorPlayState.Stopped && Command.World is not null;
+
+    private static bool HasSelection(EditorCommandContext Command) =>
+        Command.Selection.Kind != EditorSelectionKind.None;
+
+    private static string SelectionDescription(EditorCommandContext Command)
+    {
+        if (Command.SelectedEntity is { } Entity)
+        {
+            return $"Selected entity: {Entity.Name} ({Entity.Id})";
+        }
+        if (Command.SelectedAsset is { } Asset)
+        {
+            return $"Selected asset: {Asset.RelativePath}";
+        }
+        if (Command.SelectedFolderPath is { } FolderPath)
+        {
+            return $"Selected folder: Content/{FolderPath}";
+        }
+        if (Command.Selection.Kind == EditorSelectionKind.Scene)
+        {
+            return $"Selected scene: {Command.World?.Name ?? "World"}";
+        }
+        return "No project selection";
+    }
+
+    private static string FrameSelectionStatus(EditorCommandContext Command)
+    {
+        if (Command.SelectedEntity is { } Entity)
+        {
+            return $"Project preview framed: {Entity.Name}";
+        }
+
+        return "Project preview framed the current selection";
+    }
+
+    public string BuildMarkup(EditorCustomBarContext Context)
+    {
+        var Content = Context.CommandButton("project.preview-frame-selection", Icon: "all") +
+            Context.CommandButton("project.show-world-stats", Icon: "world") +
+            Context.CommandButton("project.snap-to-grid", Icon: "grid") +
+            Context.CommandButton("project.preview-mode", Icon: "camera");
+        return Context.Group("Project Preview", Content,
+            "custom-bar-group project-preview-custom-bar");
+    }
 
     private static void EditSelected(EditorCommandContext Command,
         Action<WorldEntity> Edit, string Status)

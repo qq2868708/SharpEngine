@@ -32,6 +32,13 @@ var animation = SkeletalAnimationContent.Load(registry, "engine://animations/rob
 Check(animation.Bones.Count == 3 && animation.Tracks.Count == 3 && Math.Abs(animation.Duration - 1) < 0.0001, "Robot walk asset must load with its skeleton and tracks");
 var roundTrip = SkeletalAnimationAsset.Parse(animation.Serialize(false));
 Check(roundTrip.Serialize(false) == animation.Serialize(false), "Skeletal animation serialization must be deterministic");
+var NotifiedAnimation = animation.WithNotifies([
+    new AnimationNotify("footstep", "Footstep", 0.5, 0.1),
+]);
+var NotifiedRoundTrip = SkeletalAnimationAsset.Parse(NotifiedAnimation.Serialize(false));
+Check(NotifiedRoundTrip.Notifies.Count == 1 &&
+      NotifiedRoundTrip.Notifies[0] == new AnimationNotify("footstep", "Footstep", 0.5, 0.1),
+    "Skeletal animation Notify data must round-trip through the asset schema");
 var middle = animation.Sample(0.25).Get("left-foot");
 Check(Math.Abs(animation.Sample(0.25).Get("root").Position.Y - 0.02f) < 0.0001f && middle.Scale == Vector3.One, "Bone tracks must interpolate into a pose");
 Check(Math.Abs(animation.SampleLooped(1.25).Time - 0.25) < 0.0001, "Looped sampling must wrap at clip duration");
@@ -59,6 +66,32 @@ var snapshot = view.BuildSnapshot(1000, 300);
 Check(snapshot.Rows.Count == 1 && snapshot.Rows[0].Clips.Count == 1, "Generic timeline view must expose tracks and clips");
 Check(snapshot.PlayheadX > snapshot.HeaderWidth && snapshot.Ruler.Count > 0, "Timeline view must produce ruler ticks and a playhead");
 Check(view.BuildMarkup(1000, 300).Contains("data-timeline-action=\"select-clip:robot-walk-clip\"", StringComparison.Ordinal), "Timeline markup must expose semantic clip selection");
+
+var authoring = new TimelineAuthoringSession(timeline);
+var notifyTrack = new TimelineTrack("notify", "Animation Notify", "robot", "notify",
+    [new TimelineClip("footstep", "Footstep", 0.5, 0.1)]);
+var editedTimeline = new TimelineDocument(timeline.TimelineId, timeline.Name, timeline.Duration,
+    timeline.FrameRate, timeline.Tracks.Append(notifyTrack).ToArray());
+var editResult = authoring.Replace(editedTimeline, "add-notify", authoring.DocumentRevision);
+Check(editResult.Success && authoring.IsDirty && authoring.DocumentRevision == 2,
+    "Timeline authoring edits must commit a revision and mark the source dirty");
+Check(authoring.Undo(authoring.DocumentRevision).Success &&
+      authoring.Document.Tracks.All(track => track.TrackId != "notify"),
+    "Timeline authoring Undo must restore the committed source document");
+Check(authoring.Redo(authoring.DocumentRevision).Success &&
+      authoring.Document.Tracks.Any(track => track.TrackId == "notify"),
+    "Timeline authoring Redo must restore the edited source document");
+var savedTimelinePath = Path.Combine(Path.GetTempPath(), $"sharpengine-timeline-{Guid.NewGuid():N}.json");
+try
+{
+    authoring.Save(savedTimelinePath);
+    Check(!authoring.IsDirty && TimelineDocument.Parse(File.ReadAllText(savedTimelinePath)).Tracks.Count == 2,
+        "Timeline authoring Save must validate and atomically persist the edited source");
+}
+finally
+{
+    if (File.Exists(savedTimelinePath)) File.Delete(savedTimelinePath);
+}
 
 var genericTimeline = new TimelineDocument("generic-events", "Generic Events", 2, 30,
 [

@@ -138,10 +138,14 @@ internal static class AnimationPipelineValidation
         Legacy.Entities.Single(Entity => Entity.EntityId == Child.EntityId).Components.Add(LegacyAnimator);
         LegacyAnimator.SchemaVersion = 1;
         LegacyAnimator.State.Remove("Target");
+        foreach (var Field in new[] { "Controller", "StateId", "Parameters", "MovementSource", "MovementSpeedParameter" })
+        {
+            LegacyAnimator.State.Remove(Field);
+        }
         var LegacyJson = Legacy.Serialize();
         var Migrated = SceneData.Parse(LegacyJson, Registry);
         var MigratedAnimator = Migrated.Entities.SelectMany(Entity => Entity.Components).Single(Component => Component.TypeId == "engine.animator");
-        Check(MigratedAnimator.SchemaVersion == 2 && MigratedAnimator.State["Target"]!.GetValue<string>() == LegacyMesh.ComponentId && Legacy.Serialize() == LegacyJson,
+        Check(MigratedAnimator.SchemaVersion == 3 && MigratedAnimator.State["Target"]!.GetValue<string>() == LegacyMesh.ComponentId && Legacy.Serialize() == LegacyJson,
             "v1 parse migration records the original same-entity target and preserves input data");
         using (var MigratedRuntime = new RuntimeWorld(Legacy, Registry, Assets))
         {

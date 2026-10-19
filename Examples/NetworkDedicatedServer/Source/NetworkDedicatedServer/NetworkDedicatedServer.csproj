@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>NetworkDedicatedServer</AssemblyName>
+    <RootNamespace>NetworkDedicatedServer</RootNamespace>
+    <SharpEngineModuleId>NetworkDedicatedServer</SharpEngineModuleId>
+    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Runtime">
+      <HintPath>$(SharpEngineRuntimeApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpEngine.Networking" Condition="'$(SharpEngineTarget)' == 'Server'">
+      <HintPath>$(SharpEngineNetworkingApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Module builds are unsupported. Use SharpEngineProject -Command Build." />
+    <Error Condition="'$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
+           Text="SharpEngineRuntimeApi must point to a built SharpEngine.Runtime.dll." />
+    <Error Condition="'$(SharpEngineTarget)' == 'Server' and ('$(SharpEngineNetworkingApi)' == '' or !Exists('$(SharpEngineNetworkingApi)'))"
+           Text="SharpEngineNetworkingApi must point to a built Server networking assembly." />
+  </Target>
+</Project>

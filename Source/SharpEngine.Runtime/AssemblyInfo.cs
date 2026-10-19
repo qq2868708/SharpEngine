@@ -7,3 +7,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("SharpEngine.InputValidation")]
 [assembly: InternalsVisibleTo("SharpEngine.SourceCreationValidation")]
 [assembly: InternalsVisibleTo("SharpEngine.ComponentValidation")]
+[assembly: InternalsVisibleTo("SharpEngine.PrefabMovementValidation")]

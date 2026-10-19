@@ -112,10 +112,18 @@ Run `Tools/GenerateProjectFiles.ps1 -EngineRoot <engine>` to regenerate the Engi
 solution. Use `Tools/SharpEngineProject.ps1 -Command GenerateProjectFiles
 -ProjectFile <project>` for a user solution, or pass `-ProjectFile` to the same
 `GenerateProjectFiles.ps1` wrapper. Solutions expose Debug/Development/Shipping ×
-Editor/Game. The generated solution keeps three roots: `Engine` contains engine
+the Targets enabled by the project manifest. `Editor` and `Game` are enabled by
+default; `Server` is opt-in. The generated solution keeps three roots: `Engine` contains engine
 source and Plugins, `Project` contains project `Source`, project `Plugins`, and
 `Config`, and `BuildTarget` contains the generated `Editor`/`Game` build
-wrappers. A Plugin's Modules are nested below its own `Plugins/<Name>/Source`
+wrappers and any explicitly enabled additional Targets. In Windows Explorer,
+right-click the project's `.sharpproject` and select `Add Server Target`
+(`Show more options` first on Windows 11). This updates the manifest and
+automatically regenerates the solution, Server wrapper, and launch profiles.
+Reload the solution in Rider to see the new Target. The equivalent CLI is
+`Tools/SharpEngineProject.ps1 -Command AddTarget -Target Server -ProjectFile <project>`
+; use the `Remove Server Target` context-menu action or `RemoveTarget` to remove it.
+A Plugin's Modules are nested below its own `Plugins/<Name>/Source`
 folder. An Engine-only solution omits the empty `Project` root.
 First Editor launch, project creation, and project-file generation share the
 Project Selector's `ensure-registered` operation. It registers the Engine and file

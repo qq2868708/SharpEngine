@@ -439,6 +439,10 @@ struct RmlUiShell::Impl
         int PointerX{};
         int PointerY{};
         bool PointerKnown{};
+        std::string LastAssetClickAction;
+        ULONGLONG LastAssetClickTime{};
+        int LastAssetClickX{};
+        int LastAssetClickY{};
 
         void ProcessEvent(Rml::Event& event) override;
     };
@@ -1971,6 +1975,34 @@ struct RmlUiShell::Impl
             return;
         }
         if (event.GetId() != Rml::EventId::Click) return;
+        // Selection replaces content nodes. Use the stable action rather than
+        // RmlUi's element identity, including clicks on an item's icon or label.
+        const auto DoubleAction = Attribute(
+            FindAttributeElement(target, "data-double-click-action"), "data-double-click-action");
+        if (!DoubleAction.empty() && event.GetParameter<int>("button", 0) == 0)
+        {
+            const auto Now = GetTickCount64();
+            const auto X = event.GetParameter<int>("mouse_x", 0);
+            const auto Y = event.GetParameter<int>("mouse_y", 0);
+            const bool IsDoubleClick = host.LastAssetClickAction == DoubleAction &&
+                Now - host.LastAssetClickTime <= GetDoubleClickTime() &&
+                std::abs(X - host.LastAssetClickX) <= GetSystemMetrics(SM_CXDOUBLECLK) / 2 &&
+                std::abs(Y - host.LastAssetClickY) <= GetSystemMetrics(SM_CYDOUBLECLK) / 2;
+            host.LastAssetClickAction = IsDoubleClick ? std::string{} : DoubleAction;
+            host.LastAssetClickTime = Now;
+            host.LastAssetClickX = X;
+            host.LastAssetClickY = Y;
+            if (IsDoubleClick)
+            {
+                HidePopups(host);
+                QueueAction(host, DoubleAction);
+                return;
+            }
+        }
+        else
+        {
+            host.LastAssetClickAction.clear();
+        }
         while (target)
         {
             const auto popupId = target->GetAttribute<Rml::String>(
@@ -2383,7 +2415,14 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         ~WindowProcedureScope()
         {
             if (--State.WindowProcedureDepth == 0)
+            {
                 State.FlushDeferredActions();
+                // Managed actions can request destruction of this host while
+                // the window callback is active. Complete that deferred
+                // destruction before the next native message can reuse the
+                // same host ID for a newly opened floating pane.
+                State.FlushPendingDestroy();
+            }
         }
     } procedureScope(state);
     state.System.SetWindow(window);
@@ -2451,11 +2490,14 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
                 }
     }
     const bool buttonMessage = message == WM_LBUTTONDOWN ||
+        message == WM_LBUTTONDBLCLK ||
         message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN ||
+        message == WM_RBUTTONDBLCLK || message == WM_MBUTTONDBLCLK ||
         message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
         message == WM_MBUTTONUP || message == WM_XBUTTONDOWN || message == WM_XBUTTONUP;
     if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
-        message == WM_MBUTTONDOWN) SetCapture(window);
+        message == WM_MBUTTONDOWN || message == WM_LBUTTONDBLCLK ||
+        message == WM_RBUTTONDBLCLK || message == WM_MBUTTONDBLCLK) SetCapture(window);
     bool pointerRouted = false;
     bool pointerViewport = false;
     int pointerX = 0;
@@ -2490,10 +2532,12 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
                 break;
             }
         const bool buttonDown = message == WM_LBUTTONDOWN ||
-            message == WM_RBUTTONDOWN || message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN;
+            message == WM_LBUTTONDBLCLK || message == WM_RBUTTONDOWN ||
+            message == WM_RBUTTONDBLCLK || message == WM_MBUTTONDOWN ||
+            message == WM_MBUTTONDBLCLK || message == WM_XBUTTONDOWN;
         if (buttonDown && viewport)
             state.ViewportCaptureWindow = window;
-        if (message == WM_LBUTTONDOWN)
+        if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK)
         {
             state.BeginPointerDrag(*host, host->Context->GetHoverElement(), screen);
         }
@@ -2526,13 +2570,15 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         if (message == WM_LBUTTONUP) pointerButtons |= MK_LBUTTON;
         if (message == WM_RBUTTONUP) pointerButtons |= MK_RBUTTON;
         if (message == WM_MBUTTONUP) pointerButtons |= MK_MBUTTON;
-        if (message == WM_RBUTTONDOWN || message == WM_RBUTTONUP) pointerCode = 1;
-        else if (message == WM_MBUTTONDOWN || message == WM_MBUTTONUP) pointerCode = 2;
+        if (message == WM_RBUTTONDOWN || message == WM_RBUTTONDBLCLK ||
+            message == WM_RBUTTONUP) pointerCode = 1;
+        else if (message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK ||
+            message == WM_MBUTTONUP) pointerCode = 2;
         else if (message == WM_XBUTTONDOWN || message == WM_XBUTTONUP)
             pointerCode = GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? 3 : 4;
         if (viewport || captured)
         {
-            if (message == WM_LBUTTONDOWN && viewport)
+            if ((message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) && viewport)
             {
                 if (viewportElement) viewportElement->Focus();
             }
@@ -2563,15 +2609,24 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         propagate = host->Context->ProcessMouseButtonDown(static_cast<int>(pointerCode), state.ModifierState());
     else if (message == WM_XBUTTONUP)
         propagate = host->Context->ProcessMouseButtonUp(static_cast<int>(pointerCode), state.ModifierState());
+    else if (message == WM_LBUTTONDBLCLK)
+        propagate = host->Context->ProcessMouseButtonDown(0, state.ModifierState());
+    else if (message == WM_RBUTTONDBLCLK)
+        propagate = host->Context->ProcessMouseButtonDown(1, state.ModifierState());
+    else if (message == WM_MBUTTONDBLCLK)
+        propagate = host->Context->ProcessMouseButtonDown(2, state.ModifierState());
     else if (message == WM_MOUSEHWHEEL)
         propagate = host->Context->ProcessMouseWheel({static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA, 0}, state.ModifierState());
     else if (state.InjectedModifiers >= 0 &&
         (buttonMessage || message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL))
     {
         const int modifiers = state.InjectedModifiers;
-        if (message == WM_LBUTTONDOWN) propagate = host->Context->ProcessMouseButtonDown(0, modifiers);
-        else if (message == WM_RBUTTONDOWN) propagate = host->Context->ProcessMouseButtonDown(1, modifiers);
-        else if (message == WM_MBUTTONDOWN) propagate = host->Context->ProcessMouseButtonDown(2, modifiers);
+        if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK)
+            propagate = host->Context->ProcessMouseButtonDown(0, modifiers);
+        else if (message == WM_RBUTTONDOWN || message == WM_RBUTTONDBLCLK)
+            propagate = host->Context->ProcessMouseButtonDown(1, modifiers);
+        else if (message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK)
+            propagate = host->Context->ProcessMouseButtonDown(2, modifiers);
         else if (message == WM_LBUTTONUP) propagate = host->Context->ProcessMouseButtonUp(0, modifiers);
         else if (message == WM_RBUTTONUP) propagate = host->Context->ProcessMouseButtonUp(1, modifiers);
         else if (message == WM_MBUTTONUP) propagate = host->Context->ProcessMouseButtonUp(2, modifiers);
@@ -2606,8 +2661,10 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
             uint32_t kind = 2;
             float valueX = pointerDeltaX;
             float valueY = pointerDeltaY;
-            if (message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
-                message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN) kind = 3;
+            if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK ||
+                message == WM_RBUTTONDOWN || message == WM_RBUTTONDBLCLK ||
+                message == WM_MBUTTONDOWN || message == WM_MBUTTONDBLCLK ||
+                message == WM_XBUTTONDOWN) kind = 3;
             else if (message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
                 message == WM_MBUTTONUP || message == WM_XBUTTONUP) kind = 4;
             else if (message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)

@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <SharpEngineRoot Condition="'$(SharpEngineRoot)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</SharpEngineRoot>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <SharpEnginePlatform Condition="'$(SharpEnginePlatform)' == ''">Win64</SharpEnginePlatform>
+    <SharpEngineTarget Condition="'$(SharpEngineTarget)' == ''">Server</SharpEngineTarget>
+    <SharpEngineOutputRoot Condition="'$(SharpEngineOutputRoot)' == ''">$(MSBuildThisFileDirectory)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\</SharpEngineOutputRoot>
+    <SharpEngineIntermediateRoot Condition="'$(SharpEngineIntermediateRoot)' == ''">$(MSBuildThisFileDirectory)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\Modules\</SharpEngineIntermediateRoot>
+    <OutputPath>$(SharpEngineOutputRoot)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateRoot)$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DefineConstants Condition="'$(SharpEngineTarget)' == 'Server'">$(DefineConstants);SHARPENGINE_SERVER</DefineConstants>
+  </PropertyGroup>
+</Project>

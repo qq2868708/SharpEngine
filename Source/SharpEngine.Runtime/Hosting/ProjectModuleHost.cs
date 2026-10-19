@@ -53,7 +53,7 @@ internal sealed class ProjectModuleHost : IDisposable
         var platform = targetDirectory.Parent?.Parent?.Name ?? string.Empty;
         if (platform != "Win64" ||
             configuration is not ("Debug" or "Development" or "Shipping") ||
-            target is not ("Editor" or "Game"))
+            target is not ("Editor" or "Game" or "Server"))
             throw new InvalidDataException(
                 $"The Editor is not running from a supported Engine Target: {targetDirectory.FullName}");
         var binariesTemplate = engineManifest.GetProperty("paths")
@@ -147,9 +147,9 @@ internal sealed class ProjectModuleHost : IDisposable
             for (var Index = 0; Index < Modules.Length; Index++)
             {
                 var Module = Modules[Index];
-                if (target == "Game" && Module.GetProperty("type").GetString() != "Runtime")
+                if ((target is "Game" or "Server") && Module.GetProperty("type").GetString() != "Runtime")
                 {
-                    throw new InvalidDataException("Game Target cannot load Editor Modules");
+                    throw new InvalidDataException($"{target} Target cannot load Editor Modules");
                 }
                 OnLoading?.Invoke(Module.GetProperty("id").GetString()!, Index, Modules.Length);
                 host.ReadModule(Module);

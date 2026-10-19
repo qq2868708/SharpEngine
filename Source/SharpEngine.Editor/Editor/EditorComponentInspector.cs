@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpEngine.Components;
+using SharpEngine.Assets;
+using SharpEngine.Hosting;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
@@ -11,6 +13,7 @@ namespace SharpEngine.Editor;
 public sealed partial class EditorRuntime : IComponentRuntime
 {
     private RuntimeWorld? _runtimeWorld;
+    private PlayerControllerInputBridge? PlayerControllerInput;
     private WorldDocument? _playAuthoringWorld;
     private string? _playSelection;
     private string _componentMarkup = "";
@@ -27,8 +30,17 @@ public sealed partial class EditorRuntime : IComponentRuntime
 
     public void RegisterComponentModule(Assembly assembly, string moduleId, string generationId)
     {
-        if (Components is null) throw new InvalidOperationException("World is not loaded");
+        if (Components is null)
+        {
+            throw new InvalidOperationException("World is not loaded");
+        }
+
         Components.RegisterAssembly(assembly, moduleId, generationId);
+        foreach (var Type in assembly.GetTypes().Where(Type =>
+                     !Type.IsAbstract && typeof(DataAsset).IsAssignableFrom(Type)))
+        {
+            DataAssetTypes.Register(Type);
+        }
     }
     public void CompleteComponentRegistration()
     {
@@ -42,12 +54,24 @@ public sealed partial class EditorRuntime : IComponentRuntime
     {
         ActivateMainWorld();
         if (_world is null) return;
+        _pressedKeys.Clear();
+        _viewportKeyFocus = false;
+        _gizmoDragging = false;
+        _orbiting = false;
+        _panning = false;
+        _rightPointerPending = false;
+        _rightPointerDragging = false;
         _playAuthoringWorld = _world;
         _playSelection = SelectedEntityId;
         Instance = new SharpEngine.Subsystems.RuntimeInstance(_assets, SubsystemLifetime);
         try
         {
             _runtimeWorld = Instance.CreateWorld(_world.Data, _world.Registry);
+            if (_inputRuntime is not null)
+            {
+                PlayerControllerInput = PlayerControllerInputBridge.TryCreate(_runtimeWorld,
+                    _inputRuntime);
+            }
         }
         catch
         {
@@ -61,6 +85,8 @@ public sealed partial class EditorRuntime : IComponentRuntime
     }
     private void EndComponentPlay()
     {
+        PlayerControllerInput?.Dispose();
+        PlayerControllerInput = null;
         _runtimeWorld?.Dispose(); _runtimeWorld = null;
         Instance?.Dispose();
         Instance = null;

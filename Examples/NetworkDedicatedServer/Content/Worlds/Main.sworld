@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 3,
+  "kind": "world",
+  "worldId": "network-dedicated-server",
+  "name": "Network Dedicated Server",
+  "activeCameraId": null,
+  "entities": [
+    {
+      "entityId": "player-a",
+      "name": "Player A",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "player-a-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [0, 0, 0],
+            "Rotation": [0, 0, 0],
+            "Scale": [1, 1, 1]
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "player-b",
+      "name": "Player B",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "player-b-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [10, 0, 0],
+            "Rotation": [0, 0, 0],
+            "Scale": [1, 1, 1]
+          }
+        }
+      ]
+    }
+  ]
+}

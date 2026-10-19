@@ -18,7 +18,7 @@ param(
     [ValidateSet('Debug', 'Development', 'Shipping')]
     [string]$Configuration = 'Debug',
 
-    [ValidateSet('Editor', 'Game', 'Tools')]
+    [ValidateSet('Editor', 'Game', 'Server', 'Tools')]
     [string]$Target = 'Editor'
 )
 
@@ -27,8 +27,8 @@ $ErrorActionPreference = 'Stop'
 
 $SupportedPlatforms = @('Win64')
 $SupportedConfigurations = @('Debug', 'Development', 'Shipping')
-$EngineTargets = @('Editor', 'Game', 'Tools')
-$ProjectTargets = @('Editor', 'Game')
+$EngineTargets = @('Editor', 'Game', 'Server', 'Tools')
+$ProjectTargets = @('Editor', 'Game', 'Server')
 $BinaryTemplate = 'Binaries/{platform}/{configuration}/{target}'
 $IntermediateTemplate = 'Intermediate/{platform}/{configuration}/{target}'
 $PropsBinariesDir = '$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)\'

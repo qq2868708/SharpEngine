@@ -6,6 +6,7 @@
 {"id":"input/actions/demo.move","type":"InputAction","name":"DemoMove","path":"Content/Input/Actions/DemoMove.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
 {"id":"input/contexts/demo-ui","type":"InputMappingContext","name":"DemoUi","path":"Content/Input/Contexts/DemoUi.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
 {"id":"input/contexts/demo-gameplay","type":"InputMappingContext","name":"DemoGameplay","path":"Content/Input/Contexts/DemoGameplay.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
+{"id":"prefabs/capsule-character","type":"Prefab","name":"Capsule Character","path":"Content/Prefabs/CapsuleCharacter.sprefab","importer":"SharpEngine.PrefabJson","tags":["prefab","character","sample"]},
     {
       "id": "worlds/main",
       "type": "World",
@@ -157,6 +158,16 @@
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "jump"],
       "metadata": {"duration": "1.0", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+    },
+    {
+      "id": "animation-state-machines/uefn-mannequin-locomotion",
+      "type": "AnimationStateMachine",
+      "name": "UEFN Mannequin Locomotion",
+      "path": "Content/Assets/AnimationControllers/UEFNMannequin.sanimationstatemachine",
+      "readOnly": true,
+      "importer": "SharpEngine.AnimationStateMachineJson",
+      "tags": ["builtin", "preset", "animation", "state-machine", "locomotion", "uefn", "mannequin"],
+      "metadata": {"preset": "true", "skeleton": "skeletons/uefn-mannequin", "states": "4", "parameters": "2", "clips": "4", "schemaVersion": "1"}
     },
     {
       "id": "materials/default",

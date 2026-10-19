@@ -13,7 +13,7 @@ internal sealed record EngineBuildProject(string Name, string Path, string Role,
 internal static class EngineBuildGraph
 {
     internal static readonly string[] Configurations = ["Debug", "Development", "Shipping"];
-    internal static readonly string[] Targets = ["Editor", "Game"];
+    internal static readonly string[] Targets = ["Editor", "Game", "Server"];
     internal static IReadOnlyList<EngineBuildProject> Discover(string root)
     {
         var source = Path.Combine(root, "Source");
@@ -69,12 +69,13 @@ internal static class EngineBuildGraph
     internal static void Build(string root, string target, string configuration, string platform)
     {
         if (!Targets.Contains(target) || !Configurations.Contains(configuration) || platform != "Win64")
-            throw new ArgumentException("Build requires Editor|Game, Debug|Development|Shipping, Win64");
+            throw new ArgumentException("Build requires Editor|Game|Server, Debug|Development|Shipping, Win64");
         root = Path.GetFullPath(root);
         var projects = Discover(root);
         if (projects.Count == 0)
         {
-            var path = Path.Combine(root, "Binaries", platform, configuration, target, "Engine.exe");
+            var executable = target == "Server" ? "DedicatedServer.exe" : "Engine.exe";
+            var path = Path.Combine(root, "Binaries", platform, configuration, target, executable);
             if (!File.Exists(path)) throw new FileNotFoundException("Installed engine target is unavailable", path);
             return;
         }

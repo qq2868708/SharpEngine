@@ -1,0 +1,27 @@
+{
+  "$schema": "https://sharpengine.dev/schemas/project-v3.json",
+  "schemaVersion": 3,
+  "projectId": "networkdedicatedserver",
+  "displayName": "Network Dedicated Server",
+  "engine": {
+    "id": "SharpEngine",
+    "version": "0.2.0-dev",
+    "association": "SharpEngine",
+    "manifest": "engine.json"
+  },
+  "modules": [
+    "Source/NetworkDedicatedServer/NetworkDedicatedServer.csproj"
+  ],
+  "targets": [
+    "Editor",
+    "Game",
+    "Server"
+  ],
+  "assets": {
+    "manifest": "Content/Assets/assets.json",
+    "root": "Content/Assets"
+  },
+  "world": {
+    "startup": "Content/Worlds/Main.sworld"
+  }
+}

@@ -11,6 +11,50 @@ public interface IEditorExtension
     void Shutdown();
 }
 
+public interface IEditorExtensionUpdate
+{
+    void Update(float DeltaSeconds);
+}
+
+public interface IEditorExtensionUiRefresh
+{
+    void RefreshUi();
+}
+
+public interface IEditorExtensionActionHandler
+{
+    bool TryHandleAction(string Action);
+}
+
+public interface IMenuExtension
+{
+    string MenuId { get; }
+
+    void Extend(EditorMenuExtensionContext context);
+}
+
+public interface IToolBarExtension
+{
+    string ToolbarId { get; }
+
+    void Extend(EditorToolbarExtensionContext context);
+}
+
+public interface ICustomBarExtension
+{
+    string BarId { get; }
+
+    EditorCustomBarMode Mode { get; }
+
+    string BuildMarkup(EditorCustomBarContext context);
+}
+
+public enum EditorCustomBarMode : byte
+{
+    Append,
+    Replace,
+}
+
 public enum EditorSelectionKind : byte { None, Scene, Entity, Asset, Folder }
 
 public sealed record EditorSelection(
@@ -216,13 +260,14 @@ public sealed class EditorContext
 {
     internal EditorContext(EditorRuntime runtime, EditorCommandRegistry commands,
         EditorMenuRegistry menus, EditorToolbarRegistry toolbar,
-        EditorContextMenuRegistry contextMenus)
+        EditorContextMenuRegistry contextMenus, EditorCustomBarRegistry customBars)
     {
         Runtime = runtime;
         Commands = commands;
         Menus = menus;
         Toolbar = toolbar;
         ContextMenus = contextMenus;
+        CustomBars = customBars;
     }
 
     public EditorRuntime Runtime { get; }
@@ -230,6 +275,8 @@ public sealed class EditorContext
     public EditorMenuRegistry Menus { get; }
     public EditorToolbarRegistry Toolbar { get; }
     public EditorContextMenuRegistry ContextMenus { get; }
+    public EditorCustomBarRegistry CustomBars { get; }
+    public EditorAssetOpenerRegistry AssetOpeners => Runtime.AssetOpeners;
     public EditorSelection Selection => Runtime.Selection;
     public WorldDocument? World => Runtime.World;
     public AssetRegistry? Assets => Runtime.Assets;
@@ -286,6 +333,9 @@ public sealed class EditorCommandRegistry
     }
 
     internal bool TryGet(string id, out EditorCommand command) => _commands.TryGetValue(id, out command!);
+
+    internal IReadOnlyList<EditorCommand> OrderedCommands() => _commands.Values
+        .OrderBy(Command => Command.Id, StringComparer.OrdinalIgnoreCase).ToArray();
 
     internal bool TryExecute(string action, EditorCommandContext context)
     {
@@ -382,6 +432,19 @@ public sealed class EditorToolbarRegistry
     public IReadOnlyList<EditorToolbarCategory> Categories => _categories.Values.ToArray();
     public IReadOnlyList<EditorToolbarTool> Tools => _tools.Values.ToArray();
 
+    public IDisposable RegisterExtension(IToolBarExtension Extension)
+    {
+        ArgumentNullException.ThrowIfNull(Extension);
+        if (!string.Equals(Extension.ToolbarId, EditorCustomBarRegistry.MainToolbarId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Toolbar surface '{Extension.ToolbarId}' is not created by the engine");
+        }
+
+        return EditorExtensionContextRegistration.Register(this, Extension);
+    }
+
     public IDisposable RegisterCategory(EditorToolbarCategory category)
     {
         ArgumentNullException.ThrowIfNull(category);
@@ -446,7 +509,19 @@ public sealed class EditorMenuRegistry
     public IReadOnlyList<EditorMenuCategory> Categories => _categories.ToArray();
     public IReadOnlyList<EditorMenuItem> Items => _items.ToArray();
 
-    public IDisposable RegisterMenu(EditorMenu menu)
+    public IDisposable RegisterExtension(IMenuExtension Extension)
+    {
+        ArgumentNullException.ThrowIfNull(Extension);
+        if (!_menus.ContainsKey(Extension.MenuId))
+        {
+            throw new InvalidOperationException(
+                $"Menu surface '{Extension.MenuId}' is not created by the engine");
+        }
+
+        return EditorExtensionContextRegistration.Register(this, Extension);
+    }
+
+    internal IDisposable RegisterBuiltInMenu(EditorMenu menu)
     {
         ArgumentNullException.ThrowIfNull(menu);
         if (!_menus.TryAdd(menu.Id, menu))

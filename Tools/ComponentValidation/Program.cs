@@ -15,7 +15,7 @@ var cycleRegistry = ComponentRegistry.CreateBuiltin();
 cycleRegistry.Register(new("test.a", 1, typeof(Other), "", false, [typeof(Fault)], [], () => new Other(), _ => new()), "test", "test");
 cycleRegistry.Register(new("test.b", 1, typeof(Fault), "", false, [typeof(Other)], [], () => new Fault(), _ => new()), "test", "test");
 Reject(() => cycleRegistry.ValidateRegistrations(), "dependency cycles rejected before instantiation");
-Check(registry.Types.Count == 17, "built-in and generated project descriptors register");
+Check(registry.Types.Count == 21, "built-in and generated project descriptors register");
 var probeType = registry.Get(typeof(Probe));
 Check(probeType.CreateDefaultState(registry)["_private"]!.GetValue<int>() == 17, "private field defaults generated without component construction");
 var data = new SceneData { Name = "Validation" };

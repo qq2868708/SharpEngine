@@ -21,17 +21,28 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpEngine.Runtime\SharpEngine.Runtime.csproj" />
-    <ProjectReference Include="..\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj" />
+    <ProjectReference Include="..\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj" Condition="'$(SharpEngineTarget)' != 'Server'" />
     <ProjectReference Include="..\SharpEngine.Editor\SharpEngine.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
     <ProjectReference Include="..\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
+    <ProjectReference Include="..\SharpEngine.Networking\SharpEngine.Networking.csproj" Condition="'$(SharpEngineTarget)' == 'Server'" />
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' == 'Game'">
     <Compile Remove="EditorEntrypoint.cs" />
     <Compile Remove="EditorFirstUse.cs" />
   </ItemGroup>
+  <ItemGroup Condition="'$(SharpEngineTarget)' == 'Server'">
+    <Compile Remove="EditorEntrypoint.cs" />
+    <Compile Remove="EditorFirstUse.cs" />
+    <Compile Remove="GameEntrypoint.cs" />
+    <Compile Remove="GameMcpHost.cs" />
+  </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' != 'Game'">
     <Compile Remove="GameEntrypoint.cs" />
     <Compile Remove="GameMcpHost.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SharpEngineTarget)' != 'Server'">
+    <Compile Remove="ServerEntrypoint.cs" />
+    <Compile Remove="DedicatedServerApplication.cs" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

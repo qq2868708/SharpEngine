@@ -2,7 +2,7 @@
 param(
     [ValidateSet('Build','Generate','GenerateProjectFiles','Clean')][string]$Command = 'Build',
     [string]$EngineRoot = (Split-Path $PSScriptRoot -Parent),
-    [ValidateSet('Editor','Game')][string]$Target = 'Editor',
+    [ValidateSet('Editor','Game','Server')][string]$Target = 'Editor',
     [ValidateSet('Debug','Development','Shipping')][string]$Configuration = 'Debug',
     [ValidateSet('Win64')][string]$Platform = 'Win64'
 )

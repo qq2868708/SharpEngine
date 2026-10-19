@@ -106,7 +106,7 @@ public static class SceneRenderer
                 var normal = Vector3.Normalize(Vector3.Cross(world1 - world0,
                     world2 - world0));
                 if (!IsFinite(normal)) continue;
-                var lighting = Vector3.Zero;
+                var lighting = new Vector3(0.24f);
                 foreach (var light in lights)
                 {
                     var diffuse = MathF.Max(0, Vector3.Dot(normal, -light.Direction));

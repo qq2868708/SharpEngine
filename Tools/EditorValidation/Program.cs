@@ -77,6 +77,13 @@ try
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    DataAssetModuleReloadValidation.Run(runtime, Require);
+    if (args.Contains("--data-assets-only", StringComparer.Ordinal))
+    {
+        runtime.Shutdown();
+        Console.WriteLine($"PASS: {assertions} focused data-asset and prerequisite assertions");
+        return;
+    }
     var logPath = Path.Combine(temporary.FullName, "Saved", "Logs", "Engine.log");
     using (var logStream = new FileStream(logPath, FileMode.Append, FileAccess.Write,
         FileShare.ReadWrite | FileShare.Delete))
@@ -116,6 +123,17 @@ try
         dockMarkup.Contains("id=\"logs-main\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("Unified Log", StringComparison.Ordinal),
         "Console and Logs must be separate dock panes with distinct markup");
+    Require(dockMarkup.Contains("data-pane-id=\"timeline\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("id=\"timelinePreview\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("id=\"timelineCustomBar\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("id=\"timelineView\"", StringComparison.Ordinal) &&
+        dockMarkup.Contains("id=\"timelineSelectedNotify\"", StringComparison.Ordinal),
+        "Animation Timeline markup must expose the preview, CustomBar, timeline view, and Notify inspector slots");
+    Require(runtime.CustomBars.RegisteredSurfaces.Any(surface =>
+            surface.Id == EditorCustomBarRegistry.ViewportSurfaceId) &&
+        runtime.CustomBars.BuildMarkup(EditorCustomBarRegistry.ViewportSurfaceId)
+            .Contains("core.viewport-move", StringComparison.Ordinal),
+        "Viewport CustomBar must be an engine-created surface with built-in transform commands");
     Require(runtime.Commands.Commands.Any(command => command.Id == "view.console") &&
         runtime.Commands.Commands.Any(command => command.Id == "view.logs") &&
         runtime.Menus.Items.Any(item => item.CommandId == "view.console") &&
@@ -337,12 +355,15 @@ try
             StringComparison.Ordinal),
         "The viewport must remain a dedicated 3D scene surface");
     runtime.InvokeUiAction("editor.select-asset:project://ui/main");
+    Require(runtime.OpenUiDocumentCount == 0,
+        "Selecting an RML asset must only select it, without opening an editor tool");
+    runtime.InvokeUiAction("editor.open-asset:project://ui/main");
     Require(runtime.ActiveUiDocumentId == "project://ui/main" &&
         runtime.OpenUiDocumentCount == 1 &&
         runtime.DescribeUiEditorJson().Contains("validation.main@1", StringComparison.Ordinal) &&
         runtime.DescribeUiEditorJson().Contains("\"viewModelContractAvailable\": true",
             StringComparison.Ordinal),
-        "Selecting an RML asset must open it in the dedicated multi-document UI Editor");
+        "Opening an RML asset must route to the dedicated multi-document UI Editor");
     runtime.InvokeUiAction("editor.ui-select:headline");
     runtime.InvokeUiAction("editor.ui-change:text:Edited through UI Editor");
     Require(runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
@@ -369,6 +390,12 @@ try
     Require(runtime.PlayState == EditorPlayState.Playing, "Play must enter simulation");
     var playing = runtime.World.Entities.First(e => e.Kind == WorldEntityKind.Mesh && !e.Asset.EndsWith("/plane"));
     Require(playing.Rotation != original, "Runtime component changes must drive the viewport world independently");
+    var PlayingCameraPosition = runtime.World.ActiveCamera!.Position;
+    runtime.ViewportKey(0x57, true, true);
+    runtime.Update(0.1f);
+    runtime.ViewportKey(0x57, false, true);
+    Require(runtime.World.ActiveCamera.Position == PlayingCameraPosition,
+        "Playing must route viewport keyboard input to gameplay without moving the editor camera");
     var pausedRotation = playing.Rotation;
     runtime.InvokeUiAction("editor.pause");
     runtime.Update(0.1f);
@@ -413,7 +440,9 @@ try
     Require(WorldDocument.Load(prefabPath).Entities[0].Position == new WorldVector3(11, 12, 13), "Save targets the active Prefab");
     runtime.InvokeUiAction("editor.prefab-world");
     Require(ReferenceEquals(mainWorldBeforePrefab, runtime.World) && runtime.World.Serialize() == mainStateBeforePrefab, "Switching documents restores the same World state");
-    runtime.InvokeUiAction("editor.prefab-instantiate:project://prefabs/player|");
+    var exportedPrefabAsset = runtime.Assets.ProjectAssets.Single(asset =>
+        string.Equals(asset.Type, "Prefab", StringComparison.OrdinalIgnoreCase));
+    runtime.InvokeUiAction($"editor.prefab-instantiate:{exportedPrefabAsset.Id}|");
     Require(runtime.World.Entities.Count == mainWorldBeforePrefab.Data.Entities.Count && runtime.World.Entities.Count == 6 &&
         runtime.World.Entities.Last().Id != "player" && runtime.World.Entities.Last().Position == new WorldVector3(11, 12, 13), "Prefab instantiation creates an independent World subtree with new IDs");
     runtime.InvokeUiAction("editor.undo");
