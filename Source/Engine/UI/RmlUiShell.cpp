@@ -966,7 +966,10 @@ struct RmlUiShell::Impl
         for (const auto& host : Hosts)
         {
             if (!host->Context || !host->Document || !host->Window) continue;
-            if (host->OwnsWindow && !IsWindowVisible(host->Window)) continue;
+            if (host->OwnsWindow && !StartupPending && !IsWindowVisible(host->Window))
+            {
+                continue;
+            }
             if (!first) result << ',';
             first = false;
             result << HostJson(*host);

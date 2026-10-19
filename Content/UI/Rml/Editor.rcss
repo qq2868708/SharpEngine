@@ -49,7 +49,7 @@ button .tooltip-right { left: auto; right: 0px; }
 .pane-tabs .selected { color: #dbe1ea; border-bottom: 2px #619ce0; height: 34px; padding-top: 8px; }
 .pane-tabs .small { padding: 0px 6px; font-size: 12px; background-color: transparent; border-width: 0px; }
 .pane-tabs .small.icon-button { width: 24px; height: 24px; padding: 4px; }
-.pane-content { padding: 10px; overflow: auto; flex-grow: 1; }
+.pane-content { padding: 10px; overflow: auto; flex-grow: 1; flex-basis: 0px; }
 input { display: block; width: 100%; height: 28px; padding: 5px 8px; margin-bottom: 10px; font-family: Segoe UI; font-size: 12px; color: #d6deeb; background-color: #191d24; border: 1px #383f4c; border-radius: 3px; }
 input:focus { border-color: #5d94d2; }
 .search-field { position: relative; margin-bottom: 10px; }
@@ -182,8 +182,10 @@ viewport { display: block; }
 .dock-tab-label { min-width: 0px; overflow: hidden; white-space: nowrap; }
 .dock-tab-close { width: 18px; height: 18px; flex-shrink: 0; margin-left: 7px; color: #7e8999; text-align: center; line-height: 17px; border-radius: 2px; }
 .dock-tab-close:hover { color: #ffffff; background-color: #a33c4c; }
-.dock-stack { display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; overflow: hidden; }
-.dock-pane { position: relative; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; overflow: hidden; }
+/* Dock bodies fill their allocation. Auto bases repeatedly measure the nested
+   pane contents before laying them out again at the final size during resize. */
+.dock-stack { display: flex; flex-direction: column; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; overflow: hidden; }
+.dock-pane { position: relative; flex-direction: column; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; overflow: hidden; }
 .dock-drop-preview { display: none; position: absolute; z-index: 250; pointer-events: none; }
 .dock-drop-preview.split { border: 2px #70a9df; background-color: #315f8b66; }
 .dock-drop-preview.merge { border: 2px #8bc5f5; background-color: #315f8b2f; }
@@ -195,7 +197,7 @@ viewport { display: block; }
 .pane-toolbar { display: flex; flex-shrink: 0; align-items: center; padding: 10px 10px 0px; }
 .pane-toolbar .search-field { flex-grow: 1; margin-right: 6px; }
 .pane-toolbar .small { width: 28px; height: 28px; padding: 4px; margin-bottom: 10px; }
-.hierarchy-items { flex-grow: 1; min-height: 0px; overflow: auto; padding: 0px 10px 10px; }
+.hierarchy-items { flex-grow: 1; flex-basis: 0px; min-height: 0px; overflow: auto; padding: 0px 10px 10px; }
 .hierarchy-row { display: flex; align-items: center; min-width: 0px; }
 .tree-toggle { width: 18px; height: 26px; flex-shrink: 0; padding: 0px; color: #8fa1b6; background-color: transparent; border-width: 0px; }
 .tree-toggle-spacer { width: 18px; flex-shrink: 0; }
@@ -207,8 +209,8 @@ viewport { display: block; }
 .hierarchy-drop-inside { background-color: #315f8b; }
 .hierarchy-drop-root { border: 2px #70a9df; background-color: #315f8b33; }
 .hierarchy-diagnostic { margin: 8px; padding: 8px; color: #efb2b2; border: 1px #8c4650; }
-.viewport-pane { position: relative; display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; }
-.viewport-pane #viewportCanvas { flex-grow: 1; min-width: 0px; min-height: 100px; }
+.viewport-pane { position: relative; display: flex; flex-direction: column; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; }
+.viewport-pane #viewportCanvas { flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 100px; }
 .ui-editor-pane { display: flex; flex-direction: column; flex-grow: 1; min-width: 640px; min-height: 360px; background-color: #15191f; }
 .ui-document-tabs { display: flex; height: 34px; flex-shrink: 0; align-items: stretch; padding-left: 6px; background-color: #181c22; border-bottom: 1px #303844; overflow: hidden; }
 .ui-document-tab { display: flex; align-items: center; min-width: 120px; max-width: 240px; height: 34px; padding: 0px 8px; margin-right: 2px; color: #8995a6; background-color: transparent; border-width: 0px; border-bottom: 2px transparent; border-radius: 0px; }
