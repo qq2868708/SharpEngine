@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "manualId": "SharpEngine.EngineManual",
+  "currentVersion": "0.2.0-dev",
+  "versions": [
+    {
+      "version": "0.2.0-dev",
+      "engineVersion": "0.2.0-dev",
+      "status": "development",
+      "entryPoint": "versions/0.2.0-dev/index.html",
+      "userManual": "versions/0.2.0-dev/user/index.html",
+      "apiIndex": "versions/0.2.0-dev/api/index.html"
+    }
+  ]
+}

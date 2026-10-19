@@ -22,3 +22,6 @@ new projects; keep their naming policy aligned with this one.
 
 For engine development and project-side engine extensions, follow
 [sharpengine-development](.agents/skills/sharpengine-development/SKILL.md).
+For every observable engine feature or public contract change, also follow
+[engine-manual](.agents/skills/engine-manual/SKILL.md) and update the current
+versioned HTML manual under `Documentation/EngineManual`.

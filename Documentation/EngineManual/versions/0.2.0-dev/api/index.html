@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SharpEngine 0.2.0-dev API 索引</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">SharpEngine 0.2.0-dev</p>
+      <h1>API 索引</h1>
+      <p>按稳定身份和契约查找可供项目、工具和 AI 使用的引擎入口。</p>
+    </header>
+    <div class="manual-layout">
+      <aside class="tree-sidebar">
+        <p class="tree-title">文档树</p>
+        <nav aria-label="手册树形导航">
+          <ul class="manual-tree">
+            <li><a href="../../../index.html">全部版本</a></li>
+            <li>
+              <details open>
+                <summary>0.2.0-dev</summary>
+                <ul>
+                  <li><a href="../index.html">版本首页</a></li>
+                  <li><a href="../user/index.html">用户手册</a></li>
+                  <li>
+                    <details open>
+                      <summary>API 索引</summary>
+                      <ul>
+                        <li><a href="index.html" aria-current="page">概览</a></li>
+                        <li><a href="#overview">入口总览</a></li>
+                        <li><a href="#entries">API 条目</a></li>
+                        <li><a href="#updates">本版更新</a></li>
+                      </ul>
+                    </details>
+                  </li>
+                </ul>
+              </details>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+      <div class="manual-content">
+    <section class="section-card" id="overview">
+      <h2>入口总览</h2>
+      <table>
+        <thead><tr><th>领域</th><th>入口</th><th>版本/身份</th><th>参考</th></tr></thead>
+        <tbody>
+          <tr><td>引擎分发</td><td><code>engine.json</code></td><td>manifest schema 2；engine version 0.2.0-dev</td><td><a href="../../../../../README.md">README</a></td></tr>
+          <tr><td>项目</td><td><code>*.sharpproject</code></td><td>project schema 3</td><td><a href="../../../../ProjectOrganization.md">Project Organization</a></td></tr>
+          <tr><td>世界</td><td><code>World</code> / <code>RuntimeWorld</code></td><td>World JSON v3；组件独立 schema</td><td><a href="../../../../InspectorComponentDesign.md">Component Design</a></td></tr>
+          <tr><td>控制与移动</td><td><code>engine.controllable</code> / <code>engine.player-controller</code> / <code>engine.ai-controller</code> / <code>engine.movement</code></td><td>组件 schema v1；frame state schema v1</td><td><a href="../../../../ControlAndMovement.md">Control and Movement</a></td></tr>
+          <tr><td>输入</td><td><code>InputAction</code> / <code>InputMappingContext</code></td><td>JSON schema v1</td><td><a href="../../../../../README.md#unified-input-routing">README 输入路由</a></td></tr>
+          <tr><td>编辑器</td><td><code>EditorRuntime</code> / <code>editor.describe</code></td><td>snapshot schema 按能力声明</td><td><a href="../../../../EditorMcpUiObservability.md">Editor MCP UI</a></td></tr>
+          <tr><td>时间线</td><td><code>PlayableGraph</code> / <code>TimelineAsset</code></td><td>Timeline schema v1</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
+          <tr><td>设置</td><td><code>DevelopmentSettings</code></td><td>设置 ID + schema version</td><td><a href="../../../../../README.md#viewport-navigation-and-project-settings">README 设置</a></td></tr>
+          <tr><td>日志</td><td><code>SharpLog</code></td><td>log envelope schema v1</td><td><a href="../../../../Logging.md">Logging</a></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="section-card" id="entries">
+      <h2>API 条目</h2>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Runtime</code></h3>
+        <p>RuntimeWorld、World、组件注册、实体和序列化入口。Authoring 数据是权威状态，Runtime World 从最近提交快照重建。</p>
+        <p>相关稳定身份包括 <code>engine.transform</code>、<code>engine.camera</code>、<code>engine.static-mesh</code> 和已注册的项目组件 typeId。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
+        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Runtime.Input</code></h3>
+        <p>InputAction、InputMappingContext 和统一输入路由。动作回调返回 <code>true</code> 时消费动作；事件顺序和 route 名称属于可观察契约。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Components</code> 控制与移动</h3>
+        <p><code>ControllableComponent</code>、<code>ControllerComponent</code>、<code>PlayerControllerComponent</code>、<code>AiControllerComponent</code> 和 <code>MovementComponent</code> 使用组件 typeId schema v1。控制器通过 <code>SetMoveInput</code> 提交当前帧意图；移动组件依赖 Transform 和 Controllable，并发布稳定的诊断 code 与速度 frame state。</p>
+        <p>绑定仲裁、运行时字段和示例见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Timeline</code></h3>
+        <p><code>IPlayable</code>、<code>PlayableGraph</code>、Timeline 文档和 MarkerPlayable。时间线可以承载非动画事件，资源 schema 和播放语义见专题文档。</p>
+      </article>
+      <article class="api-entry">
+        <h3>版本化 JSON 与 MCP</h3>
+        <p>AI-facing snapshot、组件、资产、设置和输入契约包含 schemaVersion。未知未来版本、未知必需类型和迁移失败必须返回结构化诊断；不能静默丢弃字段。</p>
+      </article>
+    </section>
+    <section class="section-card" id="updates">
+      <h2>本版更新</h2>
+      <ul>
+        <li>建立首版 API 索引，收录引擎 manifest、项目、World、输入、编辑器、Timeline、设置和日志契约。</li>
+        <li>规定新增或修改公共类型、稳定 ID、命令、MCP 能力和 schema 时必须同步更新本页。</li>
+        <li>收录控制与移动组件的 typeId、schema 和 frame state 入口。</li>
+      </ul>
+    </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

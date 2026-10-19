@@ -1,0 +1,279 @@
+:root {
+  color-scheme: dark;
+  --background: #101827;
+  --surface: #172235;
+  --surface-raised: #1d2d45;
+  --text: #edf4ff;
+  --muted: #a9b9d1;
+  --accent: #69d2c4;
+  --accent-strong: #9af3e7;
+  --border: #31435e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(145deg, #101827, #14243b 60%, #102a32);
+  color: var(--text);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  line-height: 1.65;
+}
+
+a {
+  color: var(--accent-strong);
+}
+
+.shell {
+  width: min(1440px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 48px 0 72px;
+}
+
+.manual-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.tree-sidebar {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(23, 34, 53, 0.96);
+}
+
+.tree-title {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.manual-tree,
+.manual-tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manual-tree ul {
+  margin: 4px 0 6px 14px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.manual-tree li {
+  margin: 3px 0;
+}
+
+.manual-tree summary,
+.manual-tree a {
+  display: block;
+  padding: 5px 7px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.manual-tree summary {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.manual-tree summary:hover,
+.manual-tree summary:focus-visible,
+.manual-tree a:hover,
+.manual-tree a:focus-visible,
+.manual-tree a[aria-current="page"] {
+  background: var(--surface-raised);
+  color: var(--accent-strong);
+}
+
+.manual-content {
+  min-width: 0;
+}
+
+.hero,
+.section-card,
+.version-card,
+.link-card,
+.api-entry {
+  border: 1px solid var(--border);
+  background: rgba(23, 34, 53, 0.92);
+  border-radius: 14px;
+}
+
+.hero {
+  padding: 36px;
+  margin-bottom: 22px;
+}
+
+.version-card,
+.section-card {
+  padding: 28px;
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+}
+
+h2 {
+  margin-top: 0;
+}
+
+h3 {
+  margin-bottom: 6px;
+}
+
+p {
+  color: var(--muted);
+}
+
+.link-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.link-card {
+  display: block;
+  padding: 20px;
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.link-card:hover,
+.link-card:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.link-card strong,
+.link-card span {
+  display: block;
+}
+
+.link-card strong {
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.link-card span {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.manual-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.manual-nav a {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.manual-nav a[aria-current="page"] {
+  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.toc {
+  columns: 2 260px;
+  padding-left: 20px;
+}
+
+.toc li {
+  break-inside: avoid;
+  margin-bottom: 8px;
+}
+
+.api-entry {
+  padding: 20px;
+  margin: 14px 0;
+}
+
+.api-entry code {
+  color: var(--accent-strong);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--accent-strong);
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(100% - 24px, 1120px);
+    padding-top: 24px;
+  }
+
+  .hero,
+  .section-card,
+  .version-card {
+    padding: 22px;
+  }
+}
+
+@media (max-width: 860px) {
+  .shell {
+    width: min(100% - 24px, 1120px);
+    padding-top: 24px;
+  }
+
+  .manual-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tree-sidebar {
+    position: static;
+    max-height: none;
+  }
+}

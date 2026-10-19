@@ -7,6 +7,11 @@ viewport, text, controls, and input. The Game target uses a Vulkan swapchain for
 the runtime scene and RmlUi's Vulkan renderer for the visible game UI in the same
 frame.
 
+The versioned HTML [engine manual](Documentation/EngineManual/index.html) is the
+navigation entry for feature-oriented user guidance and the public API index.
+Observable feature and contract changes must update the current manual version;
+the repository `engine-manual` skill defines the maintenance and validation gate.
+
 ## Build
 
 The native solution builds the RmlUi/FreeType dependencies and the managed

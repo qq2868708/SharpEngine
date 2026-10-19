@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SharpEngine 0.2.0-dev 用户手册</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">SharpEngine 0.2.0-dev</p>
+      <h1>用户手册</h1>
+      <p>按功能了解编辑器和运行时能做什么、适用场景、可观察结果以及使用限制。实现接口请查看 API 索引。</p>
+    </header>
+    <div class="manual-layout">
+      <aside class="tree-sidebar">
+        <p class="tree-title">文档树</p>
+        <nav aria-label="手册树形导航">
+          <ul class="manual-tree">
+            <li><a href="../../../index.html">全部版本</a></li>
+            <li>
+              <details open>
+                <summary>0.2.0-dev</summary>
+                <ul>
+                  <li><a href="../index.html">版本首页</a></li>
+                  <li>
+                    <details open>
+                      <summary>用户手册</summary>
+                      <ul>
+                        <li><a href="index.html" aria-current="page">概览</a></li>
+                        <li><a href="#getting-started">开始使用</a></li>
+                        <li><a href="#editor">编辑器工作流</a></li>
+                        <li><a href="#world-assets">世界与资源</a></li>
+                        <li><a href="#control-movement">控制与移动</a></li>
+                        <li><a href="#input-ui">输入与 UI</a></li>
+                        <li><a href="#settings-modules">设置与模块</a></li>
+                        <li><a href="#validation">验证边界</a></li>
+                        <li><a href="#updates">本版更新</a></li>
+                      </ul>
+                    </details>
+                  </li>
+                  <li><a href="../api/index.html">API 索引</a></li>
+                </ul>
+              </details>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+      <div class="manual-content">
+    <section class="section-card" id="getting-started">
+      <h2>开始使用</h2>
+      <p>创建或打开项目后，可以在编辑器中搭建场景、配置资源并预览结果，也可以启动独立运行模式检查游戏中的表现。</p>
+      <p>编辑器允许在没有现成项目内容时从空白状态开始；运行模式需要一个有效的启动场景。项目会记录所使用的引擎版本，保证团队成员看到一致的内容和行为。</p>
+    </section>
+    <section class="section-card" id="editor">
+      <h2>编辑器工作流</h2>
+      <p>编辑器提供视口、层级、资源浏览、属性检查、界面编辑和日志查看等面板。播放会使用当前已保存的内容创建独立的运行副本；停止后，运行期间的临时变化会被清除。</p>
+      <p>层级、变换、资源选择和设置编辑都支持撤销、重做和恢复。编辑器会在内容变化后重新载入可用结果；如果载入失败，会保留当前编辑状态并显示诊断信息。</p>
+      <p>资源浏览器支持按文件夹、名称、来源和类型查找内容，多个浏览器可以分别保留自己的位置、筛选条件和选择。</p>
+    </section>
+    <section class="section-card" id="world-assets">
+      <h2>世界与资源</h2>
+      <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
+      <p>源资源是可编辑内容的唯一依据；运行和发布过程中产生的构建结果可以重新生成。无法识别的内容会被保留并提示问题，不会悄悄变成可运行对象。</p>
+    </section>
+    <section class="section-card" id="control-movement">
+      <h2>控制与移动</h2>
+      <p>让角色或其他对象接受玩家或 AI 的控制，并按照移动意图在场景中移动。控制来源和移动能力彼此独立，因此同一套移动行为可以服务不同的控制方式。</p>
+      <p>当多个控制来源指向同一个对象时，引擎会按照优先级选择一个来源，保证结果稳定。对象不可用、控制冲突或控制暂时失效时，运行状态会显示相应诊断。</p>
+      <p>功能边界、可观察状态和使用限制见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
+    </section>
+    <section class="section-card" id="input-ui">
+      <h2>输入与 UI</h2>
+      <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。</p>
+      <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。</p>
+    </section>
+    <section class="section-card" id="settings-modules">
+      <h2>设置与模块</h2>
+      <p>引擎设置和项目设置使用统一的属性面板编辑。修改会即时检查有效性，支持撤销、重做和恢复，保存后才会成为项目内容。</p>
+      <p>功能模块可以只服务编辑器、只服务运行模式，或同时服务两者。启动时会按照依赖关系载入模块，停止时会按相反顺序清理。</p>
+    </section>
+    <section class="section-card" id="validation">
+      <h2>验证边界</h2>
+      <p>功能验证分为内容检查、编辑器检查、运行检查、构建检查和发布包检查。某一层通过，只能说明该层的行为符合预期，不能替代其他层的验证。</p>
+      <p>每个功能页面都会说明适用的验证范围和已观察到的结果；遇到问题时，优先查看对应功能的诊断信息和验证记录。</p>
+    </section>
+    <section class="section-card" id="updates">
+      <h2>本版更新</h2>
+      <ul>
+        <li>建立版本化 HTML 手册入口，拆分为用户手册和 API 索引。</li>
+        <li>定义功能修改必须同步更新手册并运行手册链接校验的维护约束。</li>
+        <li>补充控制器、可控制目标和移动组件的用户工作流与运行时边界。</li>
+        <li>用户手册改为只描述功能用途、操作结果和使用限制；实现接口集中在 API 索引。</li>
+      </ul>
+    </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -46,4 +46,12 @@ Read every reference whose domain the requested change crosses. A cross-cutting 
 
 For engine-owned behavior, add or update focused validation for the applicable contracts. New or changed built-in components require coverage for default and non-default serialization, round-trip fidelity, deterministic output, migration, invalid input diagnostics, Authoring-to-Runtime reconstruction, and revision/transaction behavior. Project components must satisfy engine registration and serialization checks, but the engine does not require project authors to provide the same test suite. Project MCP tests apply only to MCP capabilities the project actually exposes.
 
+Any change that adds, removes, fixes, or changes an observable feature or
+public contract must also use the repository `engine-manual` skill and update
+the current version under `Documentation/EngineManual`. Update the user-manual
+page for behavior and workflows, the API-index page for public contracts, and
+run its manual validator before declaring the change complete. A private
+implementation-only refactor may omit the manual, but state that boundary when
+reporting the work.
+
 Report any validation boundary honestly. A source review, direct semantic command test, or mocked action does not prove that a runtime UI control is visible and clickable.
