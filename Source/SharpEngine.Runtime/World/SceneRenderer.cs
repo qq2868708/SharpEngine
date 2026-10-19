@@ -29,14 +29,10 @@ public sealed record WorldViewportFrame(UiRect Bounds,
 
 public static class SceneRenderer
 {
-    private sealed record SkinBone(string Id, string? ParentId, BoneTransform BindTransform);
-    private sealed record SkinData(SkinBone[] Bones, int[][] BoneIndices, float[][] Weights);
     private sealed record MeshGeometry(Vector3[] Positions, int[] Indices,
-        Vector4 BaseColor, SkinData? Skin = null, string? Error = null);
+        Vector4 BaseColor, string? Error = null);
     private static readonly ConditionalWeakTable<AssetRegistry,
         ConcurrentDictionary<string, MeshGeometry>> AssetCaches = new();
-    private static readonly ConditionalWeakTable<AssetRegistry,
-        ConcurrentDictionary<string, SkeletalAnimationAsset>> AnimationCaches = new();
     private static readonly Vector3[] CubeVertices =
     {
         new(-0.5f, -0.5f, -0.5f), new(0.5f, -0.5f, -0.5f),
@@ -83,13 +79,19 @@ public static class SceneRenderer
 
         foreach (var (entity, componentType) in Renderables(world))
         {
+            var ComponentId = entity.Components.First(Component => Component.TypeId == componentType).ComponentId;
+            var SkeletonState = world.RenderStates.GetValueOrDefault(ComponentId) as SkeletonFrameState;
+            if (SkeletonState is not null && SkeletonState.Code != "SKELETON_READY")
+            {
+                diagnostics.Add($"{entity.Id}: {SkeletonState.Code}: {SkeletonState.Message}");
+            }
             var geometry = ResolveGeometry(entity, componentType, assets);
             if (geometry.Error is not null)
             {
                 diagnostics.Add($"{entity.Id}: {geometry.Error}");
                 continue;
             }
-            var vertices = ApplySkin(geometry, entity, componentType, assets);
+            var vertices = PreparedPositions(world, geometry, entity, componentType);
             var indices = geometry.Indices;
             var model = world.WorldMatrix(entity);
             var mvp = model * viewProjection;
@@ -168,7 +170,7 @@ public static class SceneRenderer
         {
             var geometry = ResolveGeometry(candidate, componentType, assets);
             if (geometry.Error is not null) continue;
-            var vertices = ApplySkin(geometry, candidate, componentType, assets);
+            var vertices = PreparedPositions(world, geometry, candidate, componentType);
             if (!Matrix4x4.Invert(world.WorldMatrix(candidate), out var modelInverse)) continue;
             var localOrigin = Vector3.Transform(origin, modelInverse);
             var localDirection = Vector3.TransformNormal(direction, modelInverse);
@@ -298,9 +300,7 @@ public static class SceneRenderer
                 }
                 var positions = GetEnumerable(mesh, "Positions").Select(ReadVector3).ToArray();
                 var indices = GetEnumerable(mesh, "Indices").Select(ReadInt).ToArray();
-                var skin = componentType == "engine.skeletal-mesh"
-                    ? ReadSkin(mesh) : null;
-                return new MeshGeometry(positions, indices, baseColor, skin);
+                return new MeshGeometry(positions, indices, baseColor);
             }
             catch (Exception exception) when (exception is KeyNotFoundException or
                 IOException or InvalidDataException or JsonException or
@@ -332,150 +332,41 @@ public static class SceneRenderer
 
     private static int ReadInt(object value) => Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
 
-    private static Vector3 ReadVector3(object value)
+    private static Vector3 ReadVector3(object Value)
     {
-        if (value is AssetVector3 vector) return new(vector.X, vector.Y, vector.Z);
-        return new(Convert.ToSingle(GetProperty(value, "X")), Convert.ToSingle(GetProperty(value, "Y")),
-            Convert.ToSingle(GetProperty(value, "Z")));
-    }
-
-    private static SkinData? ReadSkin(object mesh)
-    {
-        var rawBones = GetEnumerable(mesh, "Bones").ToArray();
-        var rawInfluences = GetEnumerable(mesh, "Influences").ToArray();
-        if (rawBones.Length == 0 || rawInfluences.Length == 0) return null;
-        var bones = rawBones.Select(ReadBone).ToArray();
-        var indices = new int[rawInfluences.Length][];
-        var weights = new float[rawInfluences.Length][];
-        for (var i = 0; i < rawInfluences.Length; i++)
+        if (Value is Vector3)
         {
-            var raw = rawInfluences[i];
-            indices[i] = ReadNumbers(raw, "BoneIndices", "Indices").Select(ReadInt).ToArray();
-            weights[i] = ReadNumbers(raw, "Weights").Select(Convert.ToSingle).ToArray();
-            if (indices[i].Length != weights[i].Length)
-                throw new InvalidDataException("Skeletal mesh influence indices and weights differ");
+            return (Vector3)Value;
         }
-        return new SkinData(bones, indices, weights);
-    }
-
-    private static SkinBone ReadBone(object value)
-    {
-        var id = GetString(value, "BoneId");
-        var parent = GetProperty(value, "ParentBoneId") as string;
-        var rawTransform = GetProperty(value, "BindTransform");
-        if (rawTransform is null) throw new InvalidDataException($"Bone '{id}' has no bind transform");
-        return new SkinBone(id, parent, ReadTransform(rawTransform));
-    }
-
-    private static BoneTransform ReadTransform(object value)
-    {
-        var position = ReadVector3(GetProperty(value, "Position") ?? throw new InvalidDataException("Transform position is missing"));
-        var rotation = ReadQuaternion(GetProperty(value, "Rotation") ?? throw new InvalidDataException("Transform rotation is missing"));
-        var scale = ReadVector3(GetProperty(value, "Scale") ?? throw new InvalidDataException("Transform scale is missing"));
-        return new BoneTransform(position, rotation, scale);
-    }
-
-    private static Quaternion ReadQuaternion(object value) => new(
-        Convert.ToSingle(GetProperty(value, "X")), Convert.ToSingle(GetProperty(value, "Y")),
-        Convert.ToSingle(GetProperty(value, "Z")), Convert.ToSingle(GetProperty(value, "W")));
-
-    private static IEnumerable<object> ReadNumbers(object value, params string[] names)
-    {
-        foreach (var name in names)
-            if (GetProperty(value, name) is IEnumerable values)
-                return values.Cast<object>();
-        throw new InvalidDataException("Skeletal mesh influence data is missing");
-    }
-
-    private static Vector3[] ApplySkin(MeshGeometry geometry, WorldEntity entity,
-        string componentType, AssetRegistry? assets)
-    {
-        if (geometry.Skin is null || assets is null || componentType != "engine.skeletal-mesh")
-            return geometry.Positions;
-        var result = geometry.Positions.ToArray();
-        var state = ComponentState(entity, componentType);
-        var animationId = StateString(state, "Animation");
-        SkeletalAnimationAsset? animation = null;
-        if (animationId.Length > 0)
+        if (Value is AssetVector3)
         {
-            try
-            {
-                var cache = AnimationCaches.GetOrCreateValue(assets);
-                animation = cache.GetOrAdd(animationId!, id => AssetContent.LoadSkeletalAnimation(assets, id));
-            }
-            catch (Exception exception) when (exception is KeyNotFoundException or IOException or
-                InvalidDataException or JsonException or UnauthorizedAccessException or InvalidOperationException)
-            {
-                // The mesh remains in bind pose when an optional animation is unavailable.
-            }
+            var Vector = (AssetVector3)Value;
+            return new(Vector.X, Vector.Y, Vector.Z);
         }
-        SkeletalPose? pose = null;
-        if (animation is not null)
-        {
-            try
-            {
-                var time = state?["AnimationTime"]?.GetValue<float>() ?? 0;
-                if (!float.IsFinite(time)) time = 0;
-                pose = (state?["LoopAnimation"]?.GetValue<bool>() ?? true)
-                    ? animation.SampleLooped(time) : animation.Sample(time);
-            }
-            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-            {
-                // Invalid optional animation state leaves the mesh in bind pose.
-            }
-        }
-        var bind = new Matrix4x4[geometry.Skin.Bones.Length];
-        var current = new Matrix4x4[geometry.Skin.Bones.Length];
-        var visiting = new HashSet<int>();
-        for (var i = 0; i < geometry.Skin.Bones.Length; i++)
-            ComputeBoneMatrices(i, geometry.Skin.Bones, pose, bind, current, visiting);
-        var skinMatrices = new Matrix4x4[bind.Length];
-        for (var i = 0; i < bind.Length; i++)
-            skinMatrices[i] = Matrix4x4.Invert(bind[i], out var inverse) ? inverse * current[i] : Matrix4x4.Identity;
-        for (var vertex = 0; vertex < result.Length && vertex < geometry.Skin.BoneIndices.Length; vertex++)
-        {
-            var total = 0f;
-            var skinned = Vector3.Zero;
-            var indices = geometry.Skin.BoneIndices[vertex];
-            var weights = geometry.Skin.Weights[vertex];
-            for (var influence = 0; influence < indices.Length; influence++)
-            {
-                var bone = indices[influence];
-                var weight = weights[influence];
-                if (bone < 0 || bone >= skinMatrices.Length || !float.IsFinite(weight) || weight <= 0) continue;
-                skinned += Vector3.Transform(result[vertex], skinMatrices[bone]) * weight;
-                total += weight;
-            }
-            if (total > 1e-6f) result[vertex] = skinned / total;
-        }
-        return result;
+        return new(Convert.ToSingle(GetProperty(Value, "X")), Convert.ToSingle(GetProperty(Value, "Y")),
+            Convert.ToSingle(GetProperty(Value, "Z")));
     }
 
-    private static void ComputeBoneMatrices(int index, SkinBone[] bones, SkeletalPose? pose,
-        Matrix4x4[] bind, Matrix4x4[] current, HashSet<int> visiting)
+    private static IReadOnlyList<Vector3> PreparedPositions(WorldDocument World, MeshGeometry Geometry,
+        WorldEntity Entity, string ComponentType)
     {
-        if (bind[index] != default) return;
-        if (!visiting.Add(index)) throw new InvalidDataException("Skeletal mesh bone parent cycle");
-        var bone = bones[index];
-        var parent = bone.ParentId is null ? -1 : Array.FindIndex(bones,
-            candidate => string.Equals(candidate.Id, bone.ParentId, StringComparison.Ordinal));
-        if (parent >= 0) ComputeBoneMatrices(parent, bones, pose, bind, current, visiting);
-        bind[index] = LocalMatrix(bone.BindTransform) * (parent >= 0 ? bind[parent] : Matrix4x4.Identity);
-        var transform = pose is null ? bone.BindTransform :
-            pose.Bones.FirstOrDefault(item => string.Equals(item.Item1, bone.Id, StringComparison.Ordinal),
-                (BoneId: bone.Id, Transform: bone.BindTransform)).Transform;
-        current[index] = LocalMatrix(transform) * (parent >= 0 ? current[parent] : Matrix4x4.Identity);
-        visiting.Remove(index);
+        if (ComponentType != "engine.skeletal-mesh")
+        {
+            return Geometry.Positions;
+        }
+        var Component = Entity.Components.First(Component => Component.TypeId == ComponentType);
+        var State = World.RenderStates.GetValueOrDefault(Component.ComponentId) as SkeletonFrameState;
+        if (State is null || State.MeshId != StateString(Component.State, "Mesh") || State.Positions.Count != Geometry.Positions.Length)
+        {
+            return Geometry.Positions;
+        }
+        return State.Positions;
     }
-
-    private static Matrix4x4 LocalMatrix(BoneTransform transform) =>
-        Matrix4x4.CreateScale(transform.Scale) * Matrix4x4.CreateFromQuaternion(transform.Rotation) *
-        Matrix4x4.CreateTranslation(transform.Position);
 
     public static void InvalidateAssets(AssetRegistry assets)
     {
         AssetCaches.Remove(assets);
-        AnimationCaches.Remove(assets);
+        AnimatorContent.Invalidate(assets);
     }
 
     internal static bool IsFinite(Vector3 v) =>

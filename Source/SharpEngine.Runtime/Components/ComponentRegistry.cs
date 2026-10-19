@@ -15,7 +15,8 @@ public sealed record ComponentField(string Name, Type ValueType,
 public sealed class ComponentDescriptor(string typeId, int schemaVersion, Type runtimeType,
     string menuPath, bool single, Type[] requires, ComponentField[] fields,
     Func<SharpComponent> factory, Func<ComponentRegistry, JsonObject> defaults,
-    Action<JsonObject, ComponentDiagnosticSink>? validate = null)
+    Action<JsonObject, ComponentDiagnosticSink>? validate = null,
+    Func<int, JsonObject, IReadOnlyList<ComponentRecord>, JsonObject>? Migrate = null)
 {
     public string TypeId { get; } = typeId;
     public int SchemaVersion { get; } = schemaVersion;
@@ -30,6 +31,10 @@ public sealed class ComponentDescriptor(string typeId, int schemaVersion, Type r
     internal Func<SharpComponent> Factory { get; } = factory;
     internal Func<ComponentRegistry, JsonObject> DefaultFactory { get; } = defaults;
     internal Action<JsonObject, ComponentDiagnosticSink>? Validator { get; } = validate;
+    internal Func<int, JsonObject, IReadOnlyList<ComponentRecord>, JsonObject>? Migration
+    {
+        get;
+    } = Migrate;
     public JsonObject CreateDefaultState(ComponentRegistry registry) => DefaultFactory(registry);
     public JsonObject Schema(ComponentRegistry registry)
     {
@@ -60,6 +65,21 @@ public sealed record DataDescriptor(Type Type, Func<object> Factory, ComponentFi
 
 public sealed class ComponentRegistry
 {
+    internal void MigrateScene(SceneData Scene)
+    {
+        foreach (var Entity in Scene.Entities)
+        {
+            foreach (var Component in Entity.Components)
+            {
+                var Descriptor = Find(Component.TypeId);
+                if (Descriptor?.Migration is not null && Component.SchemaVersion < Descriptor.SchemaVersion)
+                {
+                    Component.State = Descriptor.Migration(Component.SchemaVersion, (JsonObject)Component.State.DeepClone(), Entity.Components.AsReadOnly());
+                    Component.SchemaVersion = Descriptor.SchemaVersion;
+                }
+            }
+        }
+    }
     public Func<string, Type, bool>? AssetExists { get; set; }
     private readonly Dictionary<string, ComponentDescriptor> _types = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, DataDescriptor> _data = [];

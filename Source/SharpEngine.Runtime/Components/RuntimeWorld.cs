@@ -4,7 +4,7 @@ using SharpEngine.Logging;
 namespace SharpEngine.Components;
 
 /// <summary>Owns live instances. Authoring records never contain these objects.</summary>
-public sealed class RuntimeWorld : IDisposable
+public sealed partial class RuntimeWorld : IDisposable
 {
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private readonly Dictionary<string, SharpEntity> _entities = new(StringComparer.Ordinal);
@@ -12,8 +12,22 @@ public sealed class RuntimeWorld : IDisposable
     private readonly List<ComponentDiagnostic> _diagnostics = [];
     private readonly SceneData _identity;
     private SceneData _snapshot;
+    private RuntimeFrame PublishedFrame = null!;
+    public SharpEngine.Assets.AssetRegistry? Assets
+    {
+        get;
+    }
+    public RuntimeFrame Frame
+    {
+        get
+        {
+            CheckThread();
+            return PublishedFrame;
+        }
+    }
     private bool _inPhase, _draining, _activationPending, _disposed;
     private double _fixedTime;
+    private const double FixedIntervalSeconds = 1.0 / 60;
     public const float FixedDeltaSeconds = 1f / 60f;
     public ComponentRegistry Registry { get; }
     public ulong Revision { get; private set; } = 1;
@@ -21,13 +35,18 @@ public sealed class RuntimeWorld : IDisposable
     public IReadOnlyList<SharpEntity> Entities => _entities.Values.ToArray();
     public SharpEntity? FindEntity(string id) => _entities.GetValueOrDefault(id);
     public SharpComponent? FindComponent(string id) => _entities.Values.SelectMany(e => e.MutableComponents).FirstOrDefault(c => c.ComponentId == id);
-    public RuntimeWorld(SceneData source, ComponentRegistry registry)
+    public RuntimeWorld(SceneData Source, ComponentRegistry Registry, SharpEngine.Assets.AssetRegistry? Assets = null)
     {
-        Registry = registry;
-        source.Validate(registry);
-        _identity = source.Clone(); _snapshot = source.Clone();
-        CreateBatch(source.Entities);
-        Boundary(); Publish();
+        this.Registry = Registry;
+        this.Assets = Assets;
+        var Scene = Source.Clone();
+        Registry.MigrateScene(Scene);
+        Scene.Validate(Registry);
+        _identity = Scene.Clone();
+        _snapshot = Scene.Clone();
+        CreateBatch(Scene.Entities);
+        Boundary();
+        Publish();
     }
     public SceneData Snapshot() { CheckThread(); return _snapshot.Clone(); }
     public void CheckThread()
@@ -230,12 +249,16 @@ public sealed class RuntimeWorld : IDisposable
         var eligible = _entities.Values.SelectMany(e => e.MutableComponents).Where(c => c.Started).ToArray();
         IEnumerable<SharpComponent> Active() => eligible.Where(c => c.IsAlive && c.EffectiveEnabled);
         _fixedTime += deltaSeconds;
-        while (_fixedTime + 1e-9 >= FixedDeltaSeconds)
+        while (_fixedTime + 1e-9 >= FixedIntervalSeconds)
         {
-            _fixedTime -= FixedDeltaSeconds;
-            Phase("FixedUpdate", Active(), FixedDeltaSeconds); Boundary();
+            _fixedTime -= FixedIntervalSeconds;
+            Phase("FixedUpdate", Active(), FixedDeltaSeconds);
+            Boundary();
+            AdvanceNavigation(FixedDeltaSeconds, Active().OfType<NavAgentComponent>());
         }
         Phase("Update", Active(), deltaSeconds); Boundary();
+        Phase("Evaluate", Active(), deltaSeconds);
+        Boundary();
         Phase("LateUpdate", Active(), deltaSeconds); Boundary();
         Publish();
     }
@@ -270,7 +293,43 @@ public sealed class RuntimeWorld : IDisposable
         }
         return result;
     }
-    private void Publish() { _snapshot = Capture(); Revision++; }
+    private void Publish()
+    {
+        for (var Attempt = 0; ; Attempt++)
+        {
+            if (Attempt >= 1024)
+            {
+                throw new InvalidOperationException("Runtime frame preparation did not reach a stable boundary.");
+            }
+            var Components = _entities.Values.SelectMany(Entity => Entity.MutableComponents).Where(Component => Component.Started && Component.EffectiveEnabled).ToArray();
+            // Zero-delta evaluation reconciles seeks, retargeting and LateUpdate writes.
+            Phase("Evaluate", Components);
+            if (_pending.Count > 0 || _activationPending)
+            {
+                Boundary();
+                continue;
+            }
+            Phase("PrepareRender", Components);
+            if (_pending.Count > 0 || _activationPending)
+            {
+                Boundary();
+                continue;
+            }
+            break;
+        }
+        var States = new Dictionary<string, ComponentFrameState>(StringComparer.Ordinal);
+        foreach (var Component in _entities.Values.SelectMany(Entity => Entity.MutableComponents))
+        {
+            var State = Component.CaptureFrameState();
+            if (State is not null)
+            {
+                States.Add(Component.ComponentId, State);
+            }
+        }
+        _snapshot = Capture();
+        Revision++;
+        PublishedFrame = new(_snapshot, Revision, States);
+    }
     private void Report(string code, string id, string stage, Exception error)
     {
         _diagnostics.Add(new(code, id, stage, error.ToString(), Revision: Revision));

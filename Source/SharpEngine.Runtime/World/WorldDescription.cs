@@ -117,6 +117,23 @@ public sealed class WorldEntity
 
 public sealed class WorldDocument
 {
+    public RuntimeFrame? RuntimeFrame
+    {
+        get;
+        private set;
+    }
+    internal IReadOnlyDictionary<string, ComponentFrameState> RenderStates = new Dictionary<string, ComponentFrameState>();
+    public WorldDocument(RuntimeFrame Frame, ComponentRegistry Registry, string SourcePath = "<runtime>")
+        : this(Frame.Snapshot(), Registry, SourcePath)
+    {
+        ApplyRuntimeFrame(Frame);
+    }
+    public void ApplyRuntimeFrame(RuntimeFrame Frame)
+    {
+        Replace(Frame.Snapshot());
+        RuntimeFrame = Frame;
+        RenderStates = Frame.Components;
+    }
     public const int CurrentSchemaVersion = 3;
     private readonly List<WorldEntity> _entities = [];
     public ComponentRegistry Registry { get; internal set; }
@@ -132,6 +149,8 @@ public sealed class WorldDocument
     internal void SetSourcePath(string path) => SourcePath = Path.GetFullPath(path);
     internal void Replace(SceneData data)
     {
+        RuntimeFrame = null;
+        RenderStates = new Dictionary<string, ComponentFrameState>();
         Data = data;
         var existing = _entities.ToDictionary(e => e.Id, StringComparer.Ordinal);
         _entities.Clear();

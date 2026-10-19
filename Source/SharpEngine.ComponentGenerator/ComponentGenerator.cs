@@ -146,6 +146,11 @@ public sealed class ComponentGenerator : IIncrementalGenerator
                     .Append(Attr(type, "DisallowMultipleComponent") is not null ? "true" : "false").Append(", new global::System.Type[] {").Append(string.Join(",", requires))
                     .Append("}, __SharpFields(), () => new ").Append(name).Append("(), __SharpDefaults");
                 if (type.GetMembers("Validate").OfType<IMethodSymbol>().Any(m => m.IsStatic)) source.Append(", (state, diagnostics) => Validate(new GeneratedState(state, registry), diagnostics)");
+                var HasMigration = type.GetMembers("Migrate").OfType<IMethodSymbol>().Any(Method => Method.IsStatic);
+                if (HasMigration)
+                {
+                    source.Append(", Migrate: Migrate");
+                }
                 source.AppendLine("), module, generation); }");
                 registrations.Append(helper).AppendLine(".__SharpRegister(registry, module, generation);");
                 }

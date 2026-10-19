@@ -80,6 +80,7 @@ using (var runtime = new RuntimeWorld(world.Data, world.Registry))
     Check(runtime.FindComponent("static-mesh") is not null && runtime.FindComponent("skeletal-mesh") is not null,
         "RuntimeWorld rebuilds both mesh component types");
 }
+SceneRenderPreparation.Prepare(world, registry);
 var frame = SceneRenderer.BuildFrame(world, new UiRect(0, 0, 800, 500), registry);
 Check(frame.TriangleCount == 24 && frame.Diagnostics.Count == 0,
     "SceneRenderer draws static and skeletal mesh geometry");

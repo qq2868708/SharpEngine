@@ -63,7 +63,8 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
             World = WorldDocument.Load(worldPath, registry);
             if (World.ActiveCamera is null)
                 throw new InvalidDataException("GAME_CAMERA_REQUIRED: Startup World must contain an active camera");
-            RuntimeWorld = new RuntimeWorld(World.Data, registry);
+            RuntimeWorld = new RuntimeWorld(World.Data, registry, Assets);
+            World.ApplyRuntimeFrame(RuntimeWorld.Frame);
             Input.SetRouteEnabled(InputRoute.Editor, false);
             Input.SetRouteEnabled(InputRoute.RuntimeUi, true);
             Input.SetRouteEnabled(InputRoute.Gameplay, true);
@@ -82,7 +83,7 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
     {
         Input.AdvanceFrame(seconds);
         RuntimeWorld!.Tick(seconds);
-        World.Replace(RuntimeWorld.Snapshot());
+        World.ApplyRuntimeFrame(RuntimeWorld.Frame);
     }
 
     public void Dispose()

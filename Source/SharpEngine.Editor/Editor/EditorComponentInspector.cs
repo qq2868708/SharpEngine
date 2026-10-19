@@ -44,8 +44,8 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         if (_world is null) return;
         _playAuthoringWorld = _world;
         _playSelection = SelectedEntityId;
-        _runtimeWorld = new RuntimeWorld(_world.Data, _world.Registry);
-        _world = new WorldDocument(_runtimeWorld.Snapshot(), _world.Registry, "runtime:" + _world.SourcePath);
+        _runtimeWorld = new RuntimeWorld(_world.Data, _world.Registry, _assets);
+        _world = new WorldDocument(_runtimeWorld.Frame, _world.Registry, "runtime:" + _world.SourcePath);
         _inspectorEditing = false;
         RefreshLists(); RefreshComponentInspector(force: true);
     }
@@ -65,7 +65,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         if (_runtimeWorld is null || _world is null) return;
         var previousIds = string.Join('|', _world.Entities.Select(e => e.Id));
         _runtimeWorld.Tick(deltaSeconds);
-        _world.Replace(_runtimeWorld.Snapshot());
+        _world.ApplyRuntimeFrame(_runtimeWorld.Frame);
         if (previousIds != string.Join('|', _world.Entities.Select(e => e.Id))) RefreshHierarchy();
     }
     private void CommitCameraNavigation(WorldEntity camera, WorldVector3 position, WorldVector3 rotation)
@@ -75,7 +75,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
             var transform = camera.Components.Single(c => c.TypeId == "engine.transform");
             _ = runtime.Patch(transform.ComponentId, new() { ["Position"] = new JsonArray(position.X, position.Y, position.Z),
                 ["Rotation"] = new JsonArray(rotation.X, rotation.Y, rotation.Z) }, runtime.Revision).Value;
-            _world!.Replace(runtime.Snapshot());
+            _world!.ApplyRuntimeFrame(runtime.Frame);
         }
         else if (_authoring is not null)
         {
@@ -94,6 +94,8 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
             ["schema"] = t.Schema(Components!), ["defaults"] = t.CreateDefaultState(Components!) }).ToArray()),
         ["document"] = _world?.Data.ToJson(),
         ["diagnostics"] = JsonSerializer.SerializeToNode(_runtimeWorld?.Diagnostics ?? []),
+        ["navigation"] = _runtimeWorld?.Navigation.ToJson(),
+        ["animation"] = _runtimeWorld is null ? null : new SharpEngine.Animation.AnimationSnapshot(_runtimeWorld.Frame).ToJson(),
     }.ToJsonString();
 
     /// <summary>Shared UI/MCP authoring and runtime mutation surface.</summary>
@@ -125,7 +127,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
                     case "destroy-entity": _ = runtime.DestroyEntity(entityId).Value; break;
                     default: throw new InvalidOperationException("Unsupported Runtime operation");
                 }
-                _world.Replace(runtime.Snapshot());
+                _world.ApplyRuntimeFrame(runtime.Frame);
             }
             else result = _authoring.Edit("component." + operation, before, data =>
             {

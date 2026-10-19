@@ -84,7 +84,16 @@ public abstract class SharpComponent
     protected virtual void OnStart() { }
     protected virtual void OnFixedUpdate(float deltaSeconds) { }
     protected virtual void OnUpdate(float deltaSeconds) { }
+    /// <summary>Evaluate outputs after Update and reconcile with zero delta at publication. Advance time only by DeltaSeconds.</summary>
+    protected virtual void OnEvaluate(float DeltaSeconds)
+    {
+    }
     protected virtual void OnLateUpdate(float deltaSeconds) { }
+    /// <summary>Finalize derived render data after all LateUpdate callbacks.</summary>
+    protected virtual void OnPrepareRender()
+    {
+    }
+    protected internal virtual ComponentFrameState? CaptureFrameState() { return null; }
     protected virtual void OnDisable() { }
     protected virtual void OnUninitialize() { }
     internal void Invoke(string stage, float delta = 0)
@@ -96,7 +105,9 @@ public abstract class SharpComponent
             case "Start": OnStart(); break;
             case "FixedUpdate": OnFixedUpdate(delta); break;
             case "Update": OnUpdate(delta); break;
+            case "Evaluate": OnEvaluate(delta); break;
             case "LateUpdate": OnLateUpdate(delta); break;
+            case "PrepareRender": OnPrepareRender(); break;
             case "Disable": OnDisable(); break;
             case "Uninitialize": OnUninitialize(); break;
         }

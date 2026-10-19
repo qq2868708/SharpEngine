@@ -137,7 +137,15 @@ public abstract class PlayableBase : IPlayable
     protected static string RequireId(string value, string parameterName) =>
         string.IsNullOrWhiteSpace(value) ? throw new ArgumentException("A stable ID is required", parameterName) : value.Trim();
 
-    protected double ClampTime(double value) => Math.Clamp(value, 0, Duration);
+    protected double ClampTime(double Value)
+    {
+        if (LoopMode == PlayableLoopMode.Loop && Duration > 0)
+        {
+            var Wrapped = Value % Duration;
+            return Wrapped < 0 ? Wrapped + Duration : Wrapped;
+        }
+        return Math.Clamp(Value, 0, Duration);
+    }
 }
 
 /// <summary>

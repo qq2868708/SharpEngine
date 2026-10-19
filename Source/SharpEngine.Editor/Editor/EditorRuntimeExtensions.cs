@@ -16,7 +16,15 @@ public sealed partial class EditorRuntime
         _commands.Register(new EditorCommand("core.new-prefab", "New Prefab", _ => InvokeUiAction("editor.prefab-new"),
             _ => PlayState == EditorPlayState.Stopped));
         _commands.Register(new EditorCommand("core.new-entity", "Create Empty Entity", _ => InvokeUiAction("editor.component-create-entity")));
-        _commands.Register(new EditorCommand("core.step", "Step", _ => { _runtimeWorld?.Step(); if (_runtimeWorld is not null) _world!.Replace(_runtimeWorld.Snapshot()); RefreshInspector(); },
+        _commands.Register(new EditorCommand("core.step", "Step", _ =>
+        {
+            _runtimeWorld?.Step();
+            if (_runtimeWorld is not null)
+            {
+                _world!.ApplyRuntimeFrame(_runtimeWorld.Frame);
+            }
+            RefreshInspector();
+        },
             _ => PlayState == EditorPlayState.Paused));
         _commands.Register(new EditorCommand("core.new-project", "New Project...",
             command => command.SetStatus("Choose a folder for the new project")));

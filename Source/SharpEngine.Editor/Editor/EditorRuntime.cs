@@ -507,6 +507,7 @@ public sealed partial class EditorRuntime
         if (_nativeApi.TryGetViewportRect(out var viewport))
         {
             _lastViewport = viewport;
+            SceneRenderPreparation.Prepare(_world, _assets);
             var frame = WorldViewportRenderer.BuildFrame(_world, viewport, SelectedEntityId,
                 _assets, _viewportTool);
             _nativeApi.SubmitViewportFrame(frame);

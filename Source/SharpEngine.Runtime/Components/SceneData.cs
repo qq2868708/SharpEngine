@@ -202,7 +202,9 @@ public sealed class SceneData
             }
             scene.Entities.Add(entity);
         }
-        scene.Validate(registry); return scene;
+        registry.MigrateScene(scene);
+        scene.Validate(registry);
+        return scene;
     }
     private static void Exact(JsonObject value, params string[] fields)
     {

@@ -84,7 +84,13 @@ public sealed partial class EditorRuntime
                 var path = _assets.ResolvePath(asset)!;
                 var prefab = _prefabTabs.TryGetValue(path, out var tab) ? tab.World.Data.Clone() : WorldDocument.Load(path, Components).Data;
                 var parent = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : null;
-                if (_runtimeWorld is { } runtime) { var created = runtime.Instantiate(prefab, parent).Value; _world!.Replace(runtime.Snapshot()); _selection = new(EditorSelectionKind.Entity, created.EntityId); }
+                var Runtime = _runtimeWorld;
+                if (Runtime is not null)
+                {
+                    var Created = Runtime.Instantiate(prefab, parent).Value;
+                    _world!.ApplyRuntimeFrame(Runtime.Frame);
+                    _selection = new(EditorSelectionKind.Entity, Created.EntityId);
+                }
                 else
                 {
                     string? root = null;

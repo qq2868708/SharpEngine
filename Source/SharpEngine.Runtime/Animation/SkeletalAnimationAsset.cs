@@ -200,15 +200,8 @@ public sealed class SkeletalAnimationAsset
 
     private void Validate()
     {
-        if (Bones.Count == 0) throw new InvalidDataException("A skeletal animation requires at least one bone");
+        SkeletonAsset.ValidateBones(Bones);
         var boneIds = new HashSet<string>(Bones.Select(bone => bone.BoneId), StringComparer.Ordinal);
-        if (boneIds.Count != Bones.Count || boneIds.Any(string.IsNullOrWhiteSpace)) throw new InvalidDataException("Bone IDs must be unique and non-empty");
-        foreach (var bone in Bones)
-        {
-            if (string.IsNullOrWhiteSpace(bone.Name)) throw new InvalidDataException($"Bone '{bone.BoneId}' requires a name");
-            ValidateTransform(bone.BindTransform, $"bone '{bone.BoneId}' bindTransform");
-            if (bone.ParentBoneId is not null && !boneIds.Contains(bone.ParentBoneId)) throw new InvalidDataException($"Bone '{bone.BoneId}' references a parent that does not exist");
-        }
 
         var trackIds = new HashSet<string>(StringComparer.Ordinal);
         var trackBones = new HashSet<string>(StringComparer.Ordinal);
@@ -323,23 +316,35 @@ public sealed class SkeletalAnimationPlayable : PlayableBase
     public string TargetId { get; }
     public event Action<SkeletalPose>? PoseEvaluated;
 
-    public override void Evaluate(in PlayableEvaluationContext context, IPlayableOutputSink output)
+    public SkeletalPose SamplePose(double Time)
     {
-        var pose = LoopMode == PlayableLoopMode.Loop ? Asset.SampleLooped(context.Time) : Asset.Sample(context.Time);
-        PoseEvaluated?.Invoke(pose);
-        output.Emit(new PlayableOutput(PlayableId, TargetId, "skeleton.pose", pose.ToJson()));
+        return LoopMode == PlayableLoopMode.Loop ? Asset.SampleLooped(Time) : Asset.Sample(Time);
+    }
+
+    public override void Evaluate(in PlayableEvaluationContext Context, IPlayableOutputSink Output)
+    {
+        var Pose = SamplePose(Context.Time);
+        PoseEvaluated?.Invoke(Pose);
+        Output.Emit(new PlayableOutput(PlayableId, TargetId, "skeleton.pose", Pose.ToJson()));
     }
 }
 
 public static class SkeletalAnimationContent
 {
-    public static SkeletalAnimationAsset Load(AssetRegistry registry, string id)
+    public static SkeletalAnimationAsset Load(AssetRegistry Registry, string Id)
     {
-        ArgumentNullException.ThrowIfNull(registry);
-        var descriptor = registry.Find(id) ?? throw new KeyNotFoundException($"Asset was not registered: '{id}'");
-        if (!string.Equals(descriptor.Type, "SkeletalAnimation", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"Asset '{id}' is {descriptor.Type}, expected SkeletalAnimation");
-        var path = registry.ResolvePath(descriptor) ?? throw new InvalidDataException($"Asset '{id}' has no resolved path");
-        return SkeletalAnimationAsset.Parse(File.ReadAllText(path), path);
+        ArgumentNullException.ThrowIfNull(Registry);
+        var Descriptor = Registry.Find(Id) ?? throw new KeyNotFoundException($"Asset was not registered: '{Id}'");
+        if (!string.Equals(Descriptor.Type, "SkeletalAnimation", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"Asset '{Id}' is {Descriptor.Type}, expected SkeletalAnimation");
+        }
+        var Path = Registry.ResolvePath(Descriptor) ?? throw new InvalidDataException($"Asset '{Id}' has no resolved path");
+        var Animation = SkeletalAnimationAsset.Parse(File.ReadAllText(Path), Path);
+        if (!string.Equals(Animation.AssetId, Id, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"Animation asset ID '{Animation.AssetId}' does not match '{Id}'.");
+        }
+        return Animation;
     }
 }
