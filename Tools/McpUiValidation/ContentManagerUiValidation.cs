@@ -156,6 +156,7 @@ internal static class ContentManagerUiValidation
             .Where(p => p.Element["visible"]!.GetValue<bool>() &&
                 p.Element["actions"]!.AsArray().Any(a =>
                     a!.GetValue<string>().StartsWith($"editor.content.open:{pane}:", StringComparison.Ordinal) ||
+                    a!.GetValue<string>().StartsWith($"editor.content.select-folder:{pane}:", StringComparison.Ordinal) ||
                     a!.GetValue<string>().StartsWith($"editor.content.select:{pane}:", StringComparison.Ordinal)))
             .Select(p => p.Element).ToList();
 
@@ -169,7 +170,30 @@ internal static class ContentManagerUiValidation
             tiles[0]["bounds"]!["x"]!.GetValue<double>() !=
                 tiles[1]["bounds"]!["x"]!.GetValue<double>(),
             "Tile view must arrange entries horizontally before wrapping");
-        Click("editor.content.open:content:engine|Assets");
+        var RootFolder = State("content")["currentFolder"]!.GetValue<string>();
+        Click("editor.content.select-folder:content:engine|Assets");
+        Require(State("content")["currentFolder"]!.GetValue<string>() == RootFolder &&
+            State("content")["selectedPath"]!.GetValue<string>() == "Assets" &&
+            State("content")["selectedSource"]!.GetValue<string>() == "Engine",
+            "Single-clicking a folder must select it without changing the current folder");
+        var PluginsAction = Elements(Snapshot())
+            .SelectMany(p => p.Element["actions"]!.AsArray()
+                .Select(action => action!.GetValue<string>()))
+            .FirstOrDefault(action => action ==
+                "editor.content.select-folder:content:engine|Plugins");
+        if (PluginsAction is not null)
+        {
+            Click(PluginsAction);
+            Require(State("content")["currentFolder"]!.GetValue<string>() == RootFolder &&
+                State("content")["selectedPath"]!.GetValue<string>() == "Plugins" &&
+                State("content")["selectedSource"]!.GetValue<string>() == "Engine",
+                "Selecting the virtual Plugins folder must replace the previous folder selection");
+        }
+        DoubleClick("editor.content.select-folder:content:engine|Assets");
+        Require(State("content")["currentFolder"]!.GetValue<string>() == "Assets" &&
+            State("content")["selectedPath"] is null &&
+            State("content")["selectedSource"] is null,
+            "Double-clicking a folder must enter it and clear the folder selection");
         var hover = MovePointer("content-up");
         Require(hover["accepted"]!.GetValue<bool>(), "Parent folder hover must enter the native pointer path");
         SaveFrames("parent-hover");
@@ -187,7 +211,7 @@ internal static class ContentManagerUiValidation
         SaveFrames("list");
         var scrollBefore = Snapshot();
         var firstRow = Elements(scrollBefore).First(p => Match(p.Element,
-            "editor.content.open:content:engine|Assets"));
+            "editor.content.select-folder:content:engine|Assets"));
         var firstRowY = firstRow.Element["bounds"]!["y"]!.GetValue<double>();
         var headerY = Elements(scrollBefore).First(p => Match(p.Element, "content-search"))
             .Element["bounds"]!["y"]!.GetValue<double>();
@@ -209,7 +233,7 @@ internal static class ContentManagerUiValidation
         Require(Elements(scrollAfter).First(p => Match(p.Element, "content-search"))
                 .Element["bounds"]!["y"]!.GetValue<double>() == headerY &&
             Elements(scrollAfter).First(p => Match(p.Element,
-                "editor.content.open:content:engine|Assets"))
+                "editor.content.select-folder:content:engine|Assets"))
                 .Element["bounds"]!["y"]!.GetValue<double>() < firstRowY,
             "Scrolling results must move entries while leaving search and filters fixed");
         foreach (var pane in new[] { "content-2", "content-3", "content-4" })
@@ -297,8 +321,8 @@ internal static class ContentManagerUiValidation
         // which is the lifecycle used by a hidden animation editor pane.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
         Invoke("editor.action", new() { ["action"] = "editor.dock-close:timeline" });
-        Click("editor.content.open:content:engine|Assets");
-        Click("editor.content.open:content:engine|Assets/AnimationControllers");
+        DoubleClick("editor.content.select-folder:content:engine|Assets");
+        DoubleClick("editor.content.select-folder:content:engine|Assets/AnimationControllers");
         const string StateMachineAction =
             "editor.content.select:content:engine://animation-state-machines/uefn-mannequin-locomotion";
         DoubleClick(StateMachineAction);

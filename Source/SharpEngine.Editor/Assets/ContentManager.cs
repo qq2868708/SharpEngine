@@ -363,6 +363,8 @@ public sealed class ContentManager
         var root = GetSourceRoot(source) ?? _registry.EngineRoot;
         if (folder.Length == 0)
             return Path.Combine(root, "Content");
+        if (folder.Equals("Plugins", StringComparison.OrdinalIgnoreCase))
+            return Path.Combine(root, "Plugins");
         if (!folder.StartsWith("Plugins/", StringComparison.OrdinalIgnoreCase))
             return Path.Combine(GetContentRoot(source),
                 folder.Replace('/', Path.DirectorySeparatorChar));

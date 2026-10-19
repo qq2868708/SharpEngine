@@ -925,6 +925,15 @@ public sealed partial class EditorRuntime
             SelectAsset(contentValue);
             return;
         }
+        if (TryContentAction(action, "select-folder", out contentPaneId, out contentValue))
+        {
+            var Separator = contentValue.IndexOf('|');
+            if (Separator <= 0) return;
+            var Source = contentValue[..Separator].Equals("engine",
+                StringComparison.OrdinalIgnoreCase) ? AssetSource.Engine : AssetSource.Project;
+            SelectContentFolder(contentPaneId, Source, contentValue[(Separator + 1)..]);
+            return;
+        }
         if (TryContentAction(action, "open-asset", out contentPaneId, out contentValue))
         {
             ActivateContentManager(contentPaneId);
@@ -1963,7 +1972,9 @@ public sealed partial class EditorRuntime
                     string.Equals(manager.SelectedPath, entry.RelativePath,
                         StringComparison.OrdinalIgnoreCase) ? " selected" : string.Empty;
                 var icon = EditorIcon(entry.IsDirectory ? "Folder" : entry.Type);
-                var action = entry.IsDirectory || entry.AssetId is null
+                var action = entry.IsDirectory
+                    ? $"editor.content.select-folder:{paneId}:{sourceName}|{Escape(entry.RelativePath)}"
+                    : entry.AssetId is null
                     ? $"editor.content.open:{paneId}:{sourceName}|{Escape(entry.RelativePath)}"
                     : $"editor.content.select:{paneId}:{Escape(entry.AssetId)}";
                 var missing = entry.Exists ? string.Empty : " missing";
@@ -1978,7 +1989,13 @@ public sealed partial class EditorRuntime
                     .Append("class=\"asset-item ").Append(itemClass)
                     .Append(selected).Append(missing).Append("\" data-action=\"")
                     .Append(action).Append('"');
-                if (entry.AssetId is not null)
+                if (entry.IsDirectory)
+                {
+                    markup.Append(" data-double-click-action=\"editor.content.open:")
+                        .Append(paneId).Append(':').Append(sourceName).Append('|')
+                        .Append(Escape(entry.RelativePath)).Append('"');
+                }
+                else if (entry.AssetId is not null)
                 {
                     markup.Append(" data-double-click-action=\"editor.content.open-asset:")
                         .Append(paneId).Append(':').Append(Escape(entry.AssetId)).Append('"');

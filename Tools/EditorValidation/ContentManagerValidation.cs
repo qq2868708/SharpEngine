@@ -12,6 +12,19 @@ internal static class ContentManagerValidation
             runtime.InvokeUiAction("editor.dock-toggle:" + pane);
         runtime.InvokeUiAction("editor.content.source:content:engine");
         runtime.InvokeUiAction("editor.content.select:content:engine://meshes/cube");
+        runtime.InvokeUiAction("editor.content.select-folder:content:engine|Plugins");
+        require(coordinator.Get("content").CurrentFolder.Length == 0 &&
+            coordinator.Get("content").SelectedPath == "Plugins" &&
+            coordinator.Get("content").SelectedSource == AssetSource.Engine,
+            "Selecting the virtual Plugins folder must keep the root and replace the prior selection");
+        runtime.InvokeUiAction("editor.content.source:content:project");
+        runtime.InvokeUiAction("editor.content.select-folder:content:project|Plugins");
+        require(coordinator.Get("content").CurrentFolder.Length == 0 &&
+            coordinator.Get("content").SelectedPath == "Plugins" &&
+            coordinator.Get("content").SelectedSource == AssetSource.Project,
+            "Selecting the project virtual Plugins folder must keep the root and replace the prior selection");
+        runtime.InvokeUiAction("editor.content.source:content:engine");
+        runtime.InvokeUiAction("editor.content.select:content:engine://meshes/cube");
         runtime.InvokeUiAction("editor.content.source:content-2:project");
         runtime.InvokeUiAction("editor.content.open:content-2:project|Worlds");
         runtime.InvokeUiAction("editor.content.select:content-2:project://worlds/main");

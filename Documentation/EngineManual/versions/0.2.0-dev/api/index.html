@@ -75,7 +75,7 @@
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
-        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；<code>EditorPaneIds.Timeline</code> 是引擎创建的 Animation Timeline 面板。</p>
+        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；Content Manager 条目使用 <code>editor.content.select-folder:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 选择文件夹，双击动作使用 <code>editor.content.open:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 进入文件夹；<code>EditorPaneIds.Timeline</code> 是引擎创建的 Animation Timeline 面板。</p>
         <p><code>IMenuExtension</code>、<code>IToolBarExtension</code> 和 <code>ICustomBarExtension</code> 分别扩展固定 File 菜单、主 Toolbar 和引擎创建的 <code>viewport</code>/<code>timeline</code> CustomBar。CustomBar 的 <code>Append</code>/<code>Replace</code> 只影响显示，命令注册仍然保留；扩展不能创建或删除顶层 Surface。</p>
       </article>
       <article class="api-entry">
@@ -157,6 +157,7 @@
         <li>规定新增资源文件扩展名由语义类型小写化后加 <code>s</code> 前缀，并保留旧裸后缀和 <code>.sharp...</code> 后缀的兼容边界。</li>
         <li>修正输入修饰键位契约，并明确 Play 状态下 Runtime 输入与编辑器 Viewport 操作的隔离边界。</li>
         <li>Windows 原生 <code>WM_*BUTTONDBLCLK</code> 现在会进入 Content Manager 的稳定双击动作路由；资产打开器契约和 schemaVersion 不变，自动化指针双击继续复用同一入口。</li>
+        <li>明确 Content Manager 文件夹选择与导航契约：单击使用 <code>select-folder</code> 保持当前目录，双击使用 <code>open</code> 进入目标目录；资产的选择和双击打开契约保持不变。</li>
       </ul>
     </section>
       </div>
