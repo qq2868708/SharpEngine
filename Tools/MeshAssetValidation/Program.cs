@@ -11,13 +11,6 @@ void Check(bool value, string message)
     if (!value) throw new InvalidOperationException(message);
     checks++;
 }
-void Reject(Action action, string message)
-{
-    try { action(); }
-    catch (Exception error) when (error is InvalidDataException or FileNotFoundException)
-    { checks++; return; }
-    throw new InvalidOperationException($"Expected rejection: {message}");
-}
 
 var registry = AssetRegistry.Load(root);
 Check(registry.Diagnostics.All(diagnostic => !diagnostic.IsError), "Mesh manifest has no load errors");
@@ -25,40 +18,15 @@ EngineCubeValidation.Run(root, registry, Check);
 var staticMesh = AssetContent.LoadStaticMesh(registry, "engine://meshes/robot-static");
 var skeletalMesh = AssetContent.LoadSkeletalMesh(registry, "engine://meshes/robot-skeletal");
 var skeleton = AssetContent.LoadSkeleton(registry, "engine://skeletons/robot");
-Check(staticMesh.SourcePath is not null && staticMesh.SourceSha256 is not null, "Static mesh retains FBX provenance");
-Check(skeletalMesh.SourcePath is not null && skeletalMesh.SourceSha256 is not null, "Skeletal mesh retains FBX provenance");
-Check(skeleton.SourcePath is not null && skeleton.SourceSha256 is not null, "Skeleton retains FBX provenance");
+Check(staticMesh.SourcePath is null && staticMesh.SourceSha256 is null, "Static mesh is self-contained");
+Check(skeletalMesh.SourcePath is null && skeletalMesh.SourceSha256 is null, "Skeletal mesh is self-contained");
+Check(skeleton.SourcePath is null && skeleton.SourceSha256 is null, "Skeleton is self-contained");
 Check(StaticMeshAsset.Parse(staticMesh.Serialize(false)).Serialize(false) == staticMesh.Serialize(false),
     "Static mesh JSON round trip is deterministic");
 Check(SkeletalMeshAsset.Parse(skeletalMesh.Serialize(false)).Serialize(false) == skeletalMesh.Serialize(false),
     "Skeletal mesh JSON round trip is deterministic");
 Check(SkeletonAsset.Parse(skeleton.Serialize(false)).Serialize(false) == skeleton.Serialize(false),
     "Skeleton JSON round trip is deterministic");
-
-var source = Path.Combine(root, "Content", "Assets", "Sources", "Robot.fbx");
-var original = File.ReadAllBytes(source);
-var temporary = Path.Combine(Path.GetTempPath(), $"SharpEngine-{Guid.NewGuid():N}.fbx");
-try
-{
-    Check(AssetContent.ExportOriginalFbx(registry, "engine://meshes/robot-static", temporary) == temporary,
-        "Static mesh export reports destination");
-    Check(File.ReadAllBytes(temporary).AsSpan().SequenceEqual(original),
-        "Static mesh export preserves FBX bytes exactly");
-    Check(staticMesh.ExportOriginalFbx(registry, temporary) == temporary &&
-        File.ReadAllBytes(temporary).AsSpan().SequenceEqual(original),
-        "Static mesh instance export uses the same verified source contract");
-    Check(AssetContent.ExportOriginalFbx(registry, "engine://sources/robot-fbx", temporary) == temporary &&
-        File.ReadAllBytes(temporary).AsSpan().SequenceEqual(original),
-        "FBX source descriptor export preserves the authoritative bytes");
-    File.AppendAllText(source, "\n# changed after import\n");
-    Reject(() => AssetContent.ExportOriginalFbx(registry, "engine://meshes/robot-static", temporary),
-        "modified FBX source is rejected by SHA-256 verification");
-}
-finally
-{
-    File.WriteAllBytes(source, original);
-    File.Delete(temporary);
-}
 
 var world = WorldDocument.Parse("""
 {"schemaVersion":3,"kind":"world","worldId":"mesh-fixture","name":"Mesh Fixture","activeCameraId":"camera","entities":[

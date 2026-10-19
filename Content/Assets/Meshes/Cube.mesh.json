@@ -3,7 +3,7 @@
   "kind": "static-mesh",
   "assetId": "engine://meshes/cube",
   "name": "Cube",
-  "primitive": "Imported FBX",
+  "primitive": "Cube",
   "coordinateSystem": "Y-up",
   "defaultMaterial": "engine://materials/default",
   "positions": [
@@ -85,7 +85,5 @@
     3,
     1,
     5
-  ],
-  "sourcePath": "Content/Assets/Sources/Cube.fbx",
-  "sourceSha256": "C714C97FD6147485746A2E6F32182BBC8E37031A203C2ACB050D4BCB708E382F"
+  ]
 }

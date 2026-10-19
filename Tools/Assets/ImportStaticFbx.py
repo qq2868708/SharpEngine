@@ -1,7 +1,9 @@
 """Run with Blender --background --python this_file -- --help.
 
-Read the actual FBX into Blender, then emit SharpEngine's canonical static-mesh
-JSON. The manifest registration is an explicit separate authoring operation.
+Read an authoring FBX, then emit SharpEngine's canonical static-mesh JSON.
+Source files belong in a local authoring or validation directory; they are not
+written to Content and the generated formal asset has no source dependency by
+default.
 """
 import argparse
 import hashlib
@@ -13,7 +15,8 @@ import sys
 import bpy
 
 
-def import_static_fbx(source, root, destination, asset_id, name, material):
+def import_static_fbx(source, root, destination, asset_id, name, material,
+                      include_source_contract=False, primitive='Imported FBX'):
     source, root, destination = Path(source).resolve(), Path(root).resolve(), Path(destination).resolve()
     relative = source.relative_to(root).as_posix()
     if source.suffix.lower() != '.fbx':
@@ -48,8 +51,11 @@ def import_static_fbx(source, root, destination, asset_id, name, material):
     if hashlib.sha256(source.read_bytes()).hexdigest().upper() != original_hash:
         raise ValueError('FBX changed during import')
     payload = dict(schemaVersion=1, kind='static-mesh', assetId=asset_id, name=name,
-                   primitive='Imported FBX', coordinateSystem='Y-up', defaultMaterial=material,
-                   positions=positions, indices=indices, sourcePath=relative, sourceSha256=original_hash)
+                   primitive=primitive, coordinateSystem='Y-up', defaultMaterial=material,
+                   positions=positions, indices=indices)
+    if include_source_contract:
+        payload['sourcePath'] = relative
+        payload['sourceSha256'] = original_hash
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + '.tmp')
     temporary.write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
@@ -66,5 +72,9 @@ if __name__ == '__main__':
     parser.add_argument('--asset-id', required=True)
     parser.add_argument('--name', required=True)
     parser.add_argument('--material', default='engine://materials/default')
+    parser.add_argument('--include-source-contract', action='store_true')
+    parser.add_argument('--primitive', default='Imported FBX')
     options = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
-    import_static_fbx(options.input, options.source_root, options.output, options.asset_id, options.name, options.material)
+    import_static_fbx(options.input, options.source_root, options.output, options.asset_id,
+                      options.name, options.material, options.include_source_contract,
+                      options.primitive)

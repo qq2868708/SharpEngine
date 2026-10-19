@@ -415,8 +415,11 @@ project builder supplies their resolved paths to MSBuild and copies no engine
 source.
 
 Built-in meshes are real indexed triangle data:
-`engine://meshes/cube` is a unit cube (8 positions, 12 triangles) and
-`engine://meshes/plane` is a unit XZ plane (4 positions, 2 triangles).
+`engine://meshes/cube` is a unit cube (8 positions, 12 triangles),
+`engine://meshes/plane` is a unit XZ plane (4 positions, 2 triangles),
+`engine://meshes/capsule` is a radius-0.5 capsule with total height 2, and
+`engine://meshes/sphere` is a radius-0.5 sphere. Blender and FBX authoring
+inputs stay outside `Content`; the manifest exposes only these imported assets.
 `engine://materials/default` supplies the standard shader, base color,
 metallic, and roughness parameters. Load them through
 `AssetContent.LoadMesh(registry, id)` and

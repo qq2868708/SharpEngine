@@ -46,26 +46,7 @@
       "readOnly": true,
       "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "primitive"],
-      "metadata": {"primitive": "Cube", "source": "sources/cube-fbx", "blend": "sources/cube-blend", "vertices": "8", "triangles": "12", "units": "metres", "coordinateSystem": "Y-up"}
-    },
-    {
-      "id": "sources/cube-blend",
-      "type": "BlenderSource",
-      "name": "Cube Blender Source",
-      "path": "Content/Assets/Sources/Cube.blend",
-      "readOnly": true,
-      "importer": "Blender.Source",
-      "tags": ["builtin", "source", "blender", "primitive"]
-    },
-    {
-      "id": "sources/cube-fbx",
-      "type": "FBXSource",
-      "name": "Cube FBX Source",
-      "path": "Content/Assets/Sources/Cube.fbx",
-      "readOnly": true,
-      "importer": "SharpEngine.FbxSource",
-      "tags": ["builtin", "source", "fbx", "primitive"],
-      "metadata": {"sha256": "C714C97FD6147485746A2E6F32182BBC8E37031A203C2ACB050D4BCB708E382F", "blend": "sources/cube-blend"}
+      "metadata": {"primitive": "Cube", "vertices": "8", "triangles": "12", "units": "metres", "coordinateSystem": "Y-up"}
     },
     {
       "id": "meshes/plane",
@@ -77,14 +58,24 @@
       "metadata": {"primitive": "Plane", "vertices": "4", "triangles": "2"}
     },
     {
-      "id": "sources/robot-fbx",
-      "type": "FBXSource",
-      "name": "Robot FBX Source",
-      "path": "Content/Assets/Sources/Robot.fbx",
+      "id": "meshes/capsule",
+      "type": "Mesh",
+      "name": "Capsule",
+      "path": "Content/Assets/Meshes/Capsule.mesh.json",
       "readOnly": true,
-      "importer": "SharpEngine.FbxSource",
-      "tags": ["source", "fbx", "robot"],
-      "metadata": {"sha256": "7C7552CB66FC5E9CACBD6EE4788CA235ECF7553F676AAFFC1EA0E524EF175353"}
+      "importer": "SharpEngine.StaticMeshJson",
+      "tags": ["builtin", "primitive"],
+      "metadata": {"primitive": "Capsule", "vertices": "258", "triangles": "512", "units": "metres", "coordinateSystem": "Y-up"}
+    },
+    {
+      "id": "meshes/sphere",
+      "type": "Mesh",
+      "name": "Sphere",
+      "path": "Content/Assets/Meshes/Sphere.mesh.json",
+      "readOnly": true,
+      "importer": "SharpEngine.StaticMeshJson",
+      "tags": ["builtin", "primitive"],
+      "metadata": {"primitive": "Sphere", "vertices": "114", "triangles": "224", "units": "metres", "coordinateSystem": "Y-up"}
     },
     {
       "id": "skeletons/robot",
@@ -102,7 +93,7 @@
       "path": "Content/Assets/StaticMeshes/Robot.staticmesh.json",
       "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "mesh", "static", "robot"],
-      "metadata": {"source": "sources/robot-fbx", "vertices": "8", "triangles": "12"}
+      "metadata": {"vertices": "8", "triangles": "12"}
     },
     {
       "id": "meshes/robot-skeletal",
@@ -111,7 +102,7 @@
       "path": "Content/Assets/Meshes/Robot.skeletalmesh.json",
       "importer": "SharpEngine.SkeletalMeshJson",
       "tags": ["builtin", "mesh", "skeletal", "robot"],
-      "metadata": {"source": "sources/robot-fbx", "skeleton": "skeletons/robot", "vertices": "8", "triangles": "12"}
+      "metadata": {"skeleton": "skeletons/robot", "vertices": "8", "triangles": "12"}
     },
     {
       "id": "materials/default",

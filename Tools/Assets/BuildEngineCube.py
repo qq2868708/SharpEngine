@@ -1,10 +1,11 @@
 """Blender --background --python Tools/Assets/BuildEngineCube.py.
 
-Create the editable engine primitive, export FBX, reopen both artifacts and
-import geometry from the FBX (never from the pre-export Blender mesh).
+Create temporary authoring artifacts outside Content, export FBX, reopen both
+artifacts and import geometry from the FBX (never from the pre-export mesh).
+Only the imported formal JSON asset is written to Content.
 """
 import json
-import re
+import hashlib
 from pathlib import Path
 import sys
 
@@ -16,10 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ImportStaticFbx import import_static_fbx
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCES = ROOT / 'Content/Assets/Sources'
+VALIDATION = ROOT / 'Saved/Validation/EngineCube'
+SOURCES = VALIDATION / 'Sources'
 BLEND = SOURCES / 'Cube.blend'
 FBX = SOURCES / 'Cube.fbx'
 REPORT = ROOT / 'Saved/Validation/EngineCube/readback.json'
+FORMAL_ASSET = ROOT / 'Content/Assets/Meshes/Cube.mesh.json'
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.context.preferences.filepaths.save_version = 0
@@ -49,8 +52,10 @@ bpy.ops.export_scene.fbx(filepath=str(FBX), use_selection=True, object_types={'M
                          apply_unit_scale=True, apply_scale_options='FBX_SCALE_UNITS',
                          use_mesh_modifiers=True, mesh_smooth_type='FACE',
                          use_triangles=True, bake_anim=False, add_leaf_bones=False)
-payload = import_static_fbx(FBX, ROOT, ROOT / 'Content/Assets/Meshes/Cube.mesh.json',
-                            'engine://meshes/cube', 'Cube', 'engine://materials/default')
+payload = import_static_fbx(FBX, ROOT, FORMAL_ASSET,
+                            'engine://meshes/cube', 'Cube', 'engine://materials/default',
+                            primitive='Cube')
+source_sha256 = hashlib.sha256(FBX.read_bytes()).hexdigest().upper()
 assert len(payload['positions']) == 8 and len(payload['indices']) == 36
 for axis in range(3):
     assert abs(min(point[axis] for point in payload['positions']) + 0.5) < 1e-5
@@ -61,17 +66,9 @@ for offset in range(0, 36, 3):
 imported = next(obj for obj in bpy.context.scene.objects if obj.type == 'MESH')
 assert imported.data.uv_layers and len(imported.data.materials) == 1
 assert all(not polygon.use_smooth for polygon in imported.data.polygons)
-manifest = ROOT / 'Content/Assets/assets.json'
-text = manifest.read_text(encoding='utf-8')
-text, replacements = re.subn(r'("id": "sources/cube-fbx",[\s\S]*?"sha256": ")[^"]+',
-                              lambda match: match[1] + payload['sourceSha256'], text, count=1)
-assert replacements == 1, 'Cube FBX source must be registered before rebuilding'
-temporary_manifest = manifest.with_suffix('.json.tmp')
-temporary_manifest.write_text(text, encoding='utf-8')
-temporary_manifest.replace(manifest)
 report = dict(schemaVersion=1, assetId=payload['assetId'], blenderVersion=bpy.app.version_string,
-              blendPath=BLEND.relative_to(ROOT).as_posix(), sourcePath=payload['sourcePath'],
-              sourceSha256=payload['sourceSha256'], positions=8, triangles=12,
+              blendPath=BLEND.relative_to(ROOT).as_posix(), sourcePath=FBX.relative_to(ROOT).as_posix(),
+              sourceSha256=source_sha256, positions=8, triangles=12,
               bounds=[[min(point[axis] for point in payload['positions']) for axis in range(3)],
                       [max(point[axis] for point in payload['positions']) for axis in range(3)]],
               boundsTolerance=1e-5, unit='metre', coordinateSystem='Y-up',
