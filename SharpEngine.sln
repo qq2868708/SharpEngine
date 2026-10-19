@@ -14,7 +14,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Config", "Config", "{72BE0ED6-A9F4-3678-9234-5313A8E05D81}"
 ProjectSection(SolutionItems) = preProject
 		Config\DefaultEditorLayout.json = Config\DefaultEditorLayout.json
-	EndProjectSection
+		Config\Mcp.json = Config\Mcp.json
+EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "EngineTestPlugin", "EngineTestPlugin", "{E461C176-00E9-E880-4DB6-45A26431D811}"
 ProjectSection(SolutionItems) = preProject
