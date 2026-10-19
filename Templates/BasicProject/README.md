@@ -4,6 +4,12 @@ This project references a registered SharpEngine distribution from the root
 schema 3 `__DISPLAY_NAME__.sharpproject` file. `SHARPENGINE_ROOT` may explicitly
 override its Engine association for CI and automation.
 
+`AGENTS.md` and `.editorconfig` define the default C# naming convention: PascalCase
+for types, members (including private fields), parameters, local variables and
+lambda parameters, with no `_`, `m_` or `s_` field prefixes. AI code guidance and
+IDE naming suggestions use the same policy. Serialized keys and external API
+names retain their required spelling. Edit these two files to customize it.
+
 The project contains two C# Modules:
 
 - `Source/__PROJECT_NAMESPACE__`: Runtime Module, referencing only

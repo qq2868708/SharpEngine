@@ -185,6 +185,8 @@ function Invoke-NewProject {
 
     $files = @(
         @{ Source = 'BasicProject.sharpproject.template'; Target = "$Name.sharpproject" },
+        @{ Source = 'AGENTS.md'; Target = 'AGENTS.md' },
+        @{ Source = '.editorconfig'; Target = '.editorconfig' },
         @{ Source = 'Directory.Build.props'; Target = 'Directory.Build.props' },
         @{ Source = 'Source\Runtime\Runtime.csproj.template'; Target = "Source\$namespace\$namespace.csproj" },
         @{ Source = 'Source\Runtime\RuntimeModule.cs'; Target = "Source\$namespace\${namespace}Module.cs" },

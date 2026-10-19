@@ -5,18 +5,21 @@ namespace __PROJECT_NAMESPACE__.Editor;
 
 public sealed class __PROJECT_NAMESPACE__EditorModule : ISharpEngineModule
 {
-    private IDisposable? _extension;
+    private IDisposable? Extension;
 
-    public void Startup(ModuleContext context)
+    public void Startup(ModuleContext Context)
     {
-        if (context is not EditorModuleContext editor)
+        var Editor = Context as EditorModuleContext;
+        if (Editor is null)
+        {
             throw new InvalidOperationException("Editor Module requires EditorModuleContext");
-        _extension = editor.RegisterEditorExtension(new ProjectEditorExtension());
+        }
+        Extension = Editor.RegisterEditorExtension(new ProjectEditorExtension());
     }
 
     public void Shutdown()
     {
-        _extension?.Dispose();
-        _extension = null;
+        Extension?.Dispose();
+        Extension = null;
     }
 }

@@ -1,0 +1,39 @@
+root = true
+
+[*.cs]
+# SharpEngine uses PascalCase for all C# identifiers, including private fields,
+# parameters and locals. External/ code keeps its own conventions.
+dotnet_naming_rule.sharpengine_pascal_case.severity = suggestion
+dotnet_naming_rule.sharpengine_pascal_case.symbols = sharpengine_identifiers
+dotnet_naming_rule.sharpengine_pascal_case.style = sharpengine_pascal_case
+dotnet_naming_rule.sharpengine_pascal_case.import_to_resharper = false
+
+dotnet_naming_symbols.sharpengine_identifiers.applicable_kinds = namespace, class, struct, interface, enum, delegate, method, property, event, field, parameter, type_parameter, local, local_function
+dotnet_naming_symbols.sharpengine_identifiers.applicable_accessibilities = *
+
+dotnet_naming_style.sharpengine_pascal_case.capitalization = pascal_case
+dotnet_naming_style.sharpengine_pascal_case.required_prefix =
+dotnet_naming_style.sharpengine_pascal_case.required_suffix =
+dotnet_naming_style.sharpengine_pascal_case.word_separator =
+
+# Rider/ReSharper predefined rules override its built-in camelCase/_camelCase
+# defaults. Keep these aligned with the .NET naming rule above.
+resharper_csharp_naming_rule.types_and_namespaces = AaBb
+resharper_csharp_naming_rule.interfaces = I+AaBb
+resharper_csharp_naming_rule.type_parameters = T+AaBb
+resharper_csharp_naming_rule.method = AaBb
+resharper_csharp_naming_rule.property = AaBb
+resharper_csharp_naming_rule.event = AaBb
+resharper_csharp_naming_rule.locals = AaBb
+resharper_csharp_naming_rule.local_constants = AaBb
+resharper_csharp_naming_rule.parameters = AaBb
+resharper_csharp_naming_rule.public_fields = AaBb
+resharper_csharp_naming_rule.private_instance_fields = AaBb
+resharper_csharp_naming_rule.private_static_fields = AaBb
+resharper_csharp_naming_rule.constants = AaBb
+resharper_csharp_naming_rule.private_constants = AaBb
+resharper_csharp_naming_rule.static_readonly = AaBb
+resharper_csharp_naming_rule.private_static_readonly = AaBb
+resharper_csharp_naming_rule.enum_member = AaBb
+resharper_csharp_naming_rule.local_functions = AaBb
+resharper_csharp_naming_rule.other = AaBb

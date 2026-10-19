@@ -9,6 +9,11 @@ Treat SharpEngine as an AI-first component engine. Every semantic state an AI ca
 
 ## Work From The Contract
 
+Follow the root `AGENTS.md` and `.editorconfig` naming policy: PascalCase for C#
+members, private fields, parameters and locals, without private-field prefixes.
+Keep serialized names and external API contracts stable. New project templates
+must carry the same defaults in their own `AGENTS.md` and `.editorconfig`.
+
 Before designing or changing code:
 
 1. Inspect the current implementation and trace the actual read, mutation, save, runtime, and Cook paths involved. Do not infer behavior from UI labels or documentation alone.

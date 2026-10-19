@@ -5,105 +5,109 @@ namespace __PROJECT_NAMESPACE__.Editor;
 
 public sealed class ProjectEditorExtension : IEditorExtension
 {
-    private readonly List<IDisposable> _registrations = new();
+    private readonly List<IDisposable> Registrations = new();
 
-    public void Startup(EditorContext context)
+    public void Startup(EditorContext Context)
     {
-        RegisterCommand(context, new EditorCommand(
+        RegisterCommand(Context, new EditorCommand(
             "project.reset-transform", "Reset Transform",
-            command => EditSelected(command, entity =>
+            Command => EditSelected(Command, Entity =>
             {
-                entity.Position = WorldVector3.Zero;
-                entity.Rotation = WorldVector3.Zero;
-                entity.Scale = WorldVector3.One;
+                Entity.Position = WorldVector3.Zero;
+                Entity.Rotation = WorldVector3.Zero;
+                Entity.Scale = WorldVector3.One;
             }, "Reset transform"), CanEditSelection));
-        RegisterCommand(context, new EditorCommand(
+        RegisterCommand(Context, new EditorCommand(
             "project.reset-position", "Reset Position",
-            command => EditSelected(command,
-                entity => entity.Position = WorldVector3.Zero, "Reset position"),
+            Command => EditSelected(Command,
+                Entity => Entity.Position = WorldVector3.Zero, "Reset position"),
             CanEditSelection));
-        RegisterCommand(context, new EditorCommand(
+        RegisterCommand(Context, new EditorCommand(
             "project.reset-rotation", "Reset Rotation",
-            command => EditSelected(command,
-                entity => entity.Rotation = WorldVector3.Zero, "Reset rotation"),
+            Command => EditSelected(Command,
+                Entity => Entity.Rotation = WorldVector3.Zero, "Reset rotation"),
             CanEditSelection));
-        RegisterCommand(context, new EditorCommand(
+        RegisterCommand(Context, new EditorCommand(
             "project.reset-scale", "Reset Scale",
-            command => EditSelected(command,
-                entity => entity.Scale = WorldVector3.One, "Reset scale"),
+            Command => EditSelected(Command,
+                Entity => Entity.Scale = WorldVector3.One, "Reset scale"),
             CanEditSelection));
-        RegisterCommand(context, new EditorCommand(
+        RegisterCommand(Context, new EditorCommand(
             "project.snap-to-grid", "Snap To Grid",
-            command => command.TransformSnapEnabled = !command.TransformSnapEnabled,
-            getChecked: command => command.TransformSnapEnabled));
-        RegisterCommand(context, new EditorCommand(
+            Command => Command.TransformSnapEnabled = !Command.TransformSnapEnabled,
+            getChecked: Command => Command.TransformSnapEnabled));
+        RegisterCommand(Context, new EditorCommand(
             "project.select-main-camera", "Select Main Camera",
-            command => command.Runtime.InvokeUiAction("editor.select-camera"),
-            command => command.World?.ActiveCamera is not null));
-        RegisterCommand(context, new EditorCommand(
+            Command => Command.Runtime.InvokeUiAction("editor.select-camera"),
+            Command => Command.World?.ActiveCamera is not null));
+        RegisterCommand(Context, new EditorCommand(
             "project.show-asset-path", "Show Asset Path",
-            command => command.SetStatus(
-                $"Asset: {command.SelectedAsset?.RelativePath ?? command.Selection.Path}"),
-            command => command.Selection.Kind == EditorSelectionKind.Asset));
-        RegisterCommand(context, new EditorCommand(
+            Command => Command.SetStatus(
+                $"Asset: {Command.SelectedAsset?.RelativePath ?? Command.Selection.Path}"),
+            Command => Command.Selection.Kind == EditorSelectionKind.Asset));
+        RegisterCommand(Context, new EditorCommand(
             "project.show-folder-path", "Show Folder Path",
-            command => command.SetStatus($"Folder: Content/{command.SelectedFolderPath}"),
-            command => command.Selection.Kind == EditorSelectionKind.Folder));
+            Command => Command.SetStatus($"Folder: Content/{Command.SelectedFolderPath}"),
+            Command => Command.Selection.Kind == EditorSelectionKind.Folder));
 
-        Register(_registrations, context.Menus.RegisterMenu(
+        Register(Registrations, Context.Menus.RegisterMenu(
             new EditorMenu("project", "Project", 450)));
-        Register(_registrations, context.Menus.RegisterCategory(
+        Register(Registrations, Context.Menus.RegisterCategory(
             new EditorMenuCategory("project", "transform", 100)));
-        Register(_registrations, context.Menus.RegisterCategory(
+        Register(Registrations, Context.Menus.RegisterCategory(
             new EditorMenuCategory("project", "settings", 200)));
-        Register(_registrations, context.Menus.RegisterItem(
+        Register(Registrations, Context.Menus.RegisterItem(
             new EditorMenuItem("project", "transform", "project.reset-transform", 100)));
-        Register(_registrations, context.Menus.RegisterItem(
+        Register(Registrations, Context.Menus.RegisterItem(
             new EditorMenuItem("project", "settings", "project.snap-to-grid", 100)));
 
-        RegisterContext(context, EditorContextMenuKind.Object, "transform",
+        RegisterContext(Context, EditorContextMenuKind.Object, "transform",
             "project.reset-position", "project.reset-rotation", "project.reset-scale");
-        RegisterContext(context, EditorContextMenuKind.Scene, "selection",
+        RegisterContext(Context, EditorContextMenuKind.Scene, "selection",
             "project.select-main-camera");
-        RegisterContext(context, EditorContextMenuKind.Asset, "inspect",
+        RegisterContext(Context, EditorContextMenuKind.Asset, "inspect",
             "project.show-asset-path");
-        RegisterContext(context, EditorContextMenuKind.Folder, "inspect",
+        RegisterContext(Context, EditorContextMenuKind.Folder, "inspect",
             "project.show-folder-path");
     }
 
     public void Shutdown()
     {
-        for (var index = _registrations.Count - 1; index >= 0; index--)
-            _registrations[index].Dispose();
-        _registrations.Clear();
+        for (var Index = Registrations.Count - 1; Index >= 0; Index--)
+        {
+            Registrations[Index].Dispose();
+        }
+        Registrations.Clear();
     }
 
-    private void RegisterCommand(EditorContext context, EditorCommand command) =>
-        Register(_registrations, context.Commands.Register(command));
+    private void RegisterCommand(EditorContext Context, EditorCommand Command) =>
+        Register(Registrations, Context.Commands.Register(Command));
 
-    private void RegisterContext(EditorContext context, EditorContextMenuKind kind,
-        string categoryId, params string[] commandIds)
+    private void RegisterContext(EditorContext Context, EditorContextMenuKind Kind,
+        string CategoryId, params string[] CommandIds)
     {
-        Register(_registrations, context.ContextMenus.RegisterCategory(
-            new EditorContextMenuCategory(kind, categoryId)));
-        for (var index = 0; index < commandIds.Length; index++)
-            Register(_registrations, context.ContextMenus.RegisterItem(
-                new EditorContextMenuItem(kind, categoryId, commandIds[index], index * 100)));
+        Register(Registrations, Context.ContextMenus.RegisterCategory(
+            new EditorContextMenuCategory(Kind, CategoryId)));
+        for (var Index = 0; Index < CommandIds.Length; Index++)
+        {
+            Register(Registrations, Context.ContextMenus.RegisterItem(
+                new EditorContextMenuItem(Kind, CategoryId, CommandIds[Index], Index * 100)));
+        }
     }
 
-    private static bool CanEditSelection(EditorCommandContext command) =>
-        command.PlayState == EditorPlayState.Stopped && command.SelectedEntity is not null;
+    private static bool CanEditSelection(EditorCommandContext Command) =>
+        Command.PlayState == EditorPlayState.Stopped && Command.SelectedEntity is not null;
 
-    private static void EditSelected(EditorCommandContext command,
-        Action<WorldEntity> edit, string status)
+    private static void EditSelected(EditorCommandContext Command,
+        Action<WorldEntity> Edit, string Status)
     {
-        var entity = command.SelectedEntity!;
-        edit(entity);
-        command.MarkDirty();
-        command.RefreshUi();
-        command.SetStatus($"{status}: {entity.Name}");
+        var Entity = Command.SelectedEntity!;
+        Edit(Entity);
+        Command.MarkDirty();
+        Command.RefreshUi();
+        Command.SetStatus($"{Status}: {Entity.Name}");
     }
 
-    private static void Register(List<IDisposable> registrations,
-        IDisposable registration) => registrations.Add(registration);
+    private static void Register(List<IDisposable> Registrations,
+        IDisposable Registration) => Registrations.Add(Registration);
 }

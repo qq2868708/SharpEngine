@@ -8,5 +8,9 @@ public sealed class GameDevelopmentSettings : DevelopmentSettings
 {
     [Setting("moveSpeed", DisplayName = "Move Speed", Minimum = 0,
         Description = "Default world-space movement speed.")]
-    public float MoveSpeed { get; init; } = 600.0f;
+    public float MoveSpeed
+    {
+        get;
+        init;
+    } = 600.0f;
 }
