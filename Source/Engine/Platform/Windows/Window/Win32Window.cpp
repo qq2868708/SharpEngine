@@ -104,7 +104,7 @@ static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-bool Win32Window::Create(uint32_t width, uint32_t height, const wchar_t* title)
+bool Win32Window::Create(uint32_t width, uint32_t height, const wchar_t* title, bool Visible)
 {
     hInstance = GetModuleHandle(nullptr);
     WNDCLASS wc{};
@@ -126,7 +126,7 @@ bool Win32Window::Create(uint32_t width, uint32_t height, const wchar_t* title)
 
     hWnd = CreateWindowEx(
         windowExStyle, wc.lpszClassName, title,
-        windowStyle | WS_VISIBLE,
+        windowStyle | (Visible ? WS_VISIBLE : 0),
         CW_USEDEFAULT, CW_USEDEFAULT,
         static_cast<int>(width), static_cast<int>(height),
         nullptr, nullptr, hInstance, this

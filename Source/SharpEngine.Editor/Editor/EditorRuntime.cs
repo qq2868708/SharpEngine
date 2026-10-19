@@ -397,8 +397,11 @@ public sealed partial class EditorRuntime
         return frame is null ? null : UiPngEncoder.Encode(frame);
     }
 
-    public void Initialize()
+    public void Initialize() { Initialize(null); }
+
+    internal void Initialize(Action<int, string, string>? ReportProgress)
     {
+        ReportProgress?.Invoke(36, "SharpEngine.Editor", "Initializing editor services and settings");
         _engineRoot = FindEngineRoot();
         _projectManifest = FindProjectManifest();
         _projectRoot = _projectManifest is null ? null :
@@ -406,7 +409,9 @@ public sealed partial class EditorRuntime
         SharpLog.Initialize("Editor", _projectRoot, _engineRoot);
         ResetLogFileTail();
         InitializeDevelopmentSettings();
+        ReportProgress?.Invoke(43, "AssetRegistry", "Scanning engine and project assets");
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
+        ReportProgress?.Invoke(51, "EditorLayout", "Restoring editor layout and content browsers");
         _defaultLayout = _layoutStore.LoadDefault(_engineRoot);
         try
         {
@@ -429,6 +434,7 @@ public sealed partial class EditorRuntime
         contentLayout.ContentManagers = _contentManagers.Capture().ToList();
         contentLayout.ActiveContentManagerId = _contentManagers.ActivePaneId;
         _layout = new EditorLayoutSession(contentLayout);
+        ReportProgress?.Invoke(57, "World", "Loading the initial world");
         var loadedWorld = WorldAssetWorkflow.LoadInitial(_engineRoot, _projectRoot,
             _projectManifest, _assets);
         _world = loadedWorld.Document;
@@ -444,6 +450,7 @@ public sealed partial class EditorRuntime
         if (_contentManagers.Active.SelectedPath is not null ||
             _contentManagers.Active.SelectedId is not null)
             ApplyActiveContentSelection();
+        ReportProgress?.Invoke(63, "EditorUI", "Building editor panels and live session");
         RegisterBuiltInEditorUi();
         RefreshDockUi(force: true);
         RefreshWorldTitle();

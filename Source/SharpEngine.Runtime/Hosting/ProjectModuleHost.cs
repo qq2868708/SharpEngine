@@ -22,7 +22,13 @@ internal sealed class ProjectModuleHost : IDisposable
     private string? _assemblyDirectory;
     private Func<AssemblyLoadContext, AssemblyName, Assembly?>? _resolver;
 
-    internal static ProjectModuleHost? Prepare(params Assembly[] additionalSharedAssemblies)
+    internal static ProjectModuleHost? Prepare(params Assembly[] AdditionalSharedAssemblies)
+    {
+        return Prepare(null, AdditionalSharedAssemblies);
+    }
+
+    internal static ProjectModuleHost? Prepare(Action<string, int, int>? OnLoading,
+        params Assembly[] AdditionalSharedAssemblies)
     {
         var projectManifest = Environment.GetEnvironmentVariable(
             "SHARPENGINE_PROJECT_MANIFEST");
@@ -116,7 +122,7 @@ internal sealed class ProjectModuleHost : IDisposable
         var shadowDirectory = Path.Combine(intermediateDirectory, "HotReload", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(shadowDirectory);
         var loadContext = new ProjectLoadContext(shadowDirectory,
-            new[] { typeof(ISharpEngineModule).Assembly }.Concat(additionalSharedAssemblies).ToArray());
+            new[] { typeof(ISharpEngineModule).Assembly }.Concat(AdditionalSharedAssemblies).ToArray());
         var host = new ProjectModuleHost(loadContext)
         { _assemblyDirectory = shadowDirectory };
         try
@@ -137,11 +143,16 @@ internal sealed class ProjectModuleHost : IDisposable
             }
             host._resolver = (_, name) => host.ResolveAssembly(name);
             host._loadContext.Resolving += host._resolver;
-            foreach (var module in root.GetProperty("modules").EnumerateArray())
+            var Modules = root.GetProperty("modules").EnumerateArray().ToArray();
+            for (var Index = 0; Index < Modules.Length; Index++)
             {
-                if (target == "Game" && module.GetProperty("type").GetString() != "Runtime")
+                var Module = Modules[Index];
+                if (target == "Game" && Module.GetProperty("type").GetString() != "Runtime")
+                {
                     throw new InvalidDataException("Game Target cannot load Editor Modules");
-                host.ReadModule(module);
+                }
+                OnLoading?.Invoke(Module.GetProperty("id").GetString()!, Index, Modules.Length);
+                host.ReadModule(Module);
             }
             return host;
         }
@@ -221,22 +232,30 @@ internal sealed class ProjectModuleHost : IDisposable
         _entryTypes.Add(entryTypeName);
     }
 
-    internal void Start(Func<string, string, ModuleContext> createContext)
+    internal void Start(Func<string, string, ModuleContext> CreateContext,
+        Action<string, int, int>? OnStarting = null)
     {
-        using var entered = _registrations.Enter();
-        var projectRoot = Path.GetDirectoryName(Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST"))!;
-        for (var index = 0; index < Assemblies.Count; index++)
+        using var Entered = _registrations.Enter();
+        for (var Index = 0; Index < Assemblies.Count; Index++)
         {
-            var (assembly, id, type, _) = Assemblies[index];
-            var entryType = assembly.GetType(_entryTypes[index], throwOnError: true)!;
-            if (Activator.CreateInstance(entryType) is not ISharpEngineModule instance)
-                throw new InvalidDataException($"Module '{id}' entry does not implement ISharpEngineModule");
+            var (Assembly, Id, Type, _) = Assemblies[Index];
+            OnStarting?.Invoke(Id, Index, Assemblies.Count);
+            var EntryType = Assembly.GetType(_entryTypes[Index], throwOnError: true)!;
+            var Instance = Activator.CreateInstance(EntryType) as ISharpEngineModule;
+            if (Instance is null)
+            {
+                throw new InvalidDataException($"Module '{Id}' entry does not implement ISharpEngineModule");
+            }
             // Include the partially started module in cleanup on failure.
-            _modules.Add(instance);
-            ModuleContext context = createContext(id, type);
-            instance.Startup(context);
-            SharpLog.Info("Module", $"Started {id} ({type})",
-                new Dictionary<string, string> { ["module"] = id, ["type"] = type });
+            _modules.Add(Instance);
+            ModuleContext Context = CreateContext(Id, Type);
+            Instance.Startup(Context);
+            SharpLog.Info("Module", $"Started {Id} ({Type})",
+                new Dictionary<string, string>
+                {
+                    ["module"] = Id,
+                    ["type"] = Type
+                });
         }
     }
 

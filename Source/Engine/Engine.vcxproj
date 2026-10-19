@@ -154,12 +154,14 @@
     <ClInclude Include="RenderCore\Public\RenderCore.h" />
     <ClInclude Include="UI\RmlUiShell.h" />
     <ClInclude Include="Platform\Windows\SharpEngineBranding.h" />
+    <ClInclude Include="Platform\Windows\StartupSplash.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="SharpEngine.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Editor\EditorMain.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
+    <ClCompile Include="Platform\Windows\StartupSplash.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
     <ClCompile Include="Game\GameMain.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\PreviewRenderer.cpp" />
     <ClCompile Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.cpp" />

@@ -462,6 +462,7 @@ struct RmlUiShell::Impl
     int PixelFormat{};
     PIXELFORMATDESCRIPTOR PixelFormatDescription{};
     bool Ready{};
+    bool StartupPending{};
     bool ComInitialized{};
     int CallbackDepth{};
     int WindowProcedureDepth{};
@@ -2092,6 +2093,7 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     auto& state = *State;
     if (state.Ready || !window) return false;
     state.MainWindow = window;
+    state.StartupPending = !IsWindowVisible(window);
     state.EngineRoot = engineRoot;
     state.ComInitialized = SUCCEEDED(
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
@@ -2175,6 +2177,22 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     return true;
 }
 
+void RmlUiShell::ShowWindows()
+{
+    auto& State = *this->State;
+    State.StartupPending = false;
+    ShowWindow(State.MainWindow, SW_SHOW);
+    for (const auto& Host : State.Hosts)
+    {
+        if (Host->OwnsWindow)
+        {
+            const auto Style = GetWindowLongPtrW(Host->Window, GWL_EXSTYLE);
+            SetWindowLongPtrW(Host->Window, GWL_EXSTYLE, Style & ~WS_EX_NOACTIVATE);
+            ShowWindow(Host->Window, SW_SHOWNOACTIVATE);
+        }
+    }
+}
+
 HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
                                   const char* titleUtf8)
 {
@@ -2183,7 +2201,10 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     if (auto* existing = state.FindHost(hostId))
     {
         if (titleUtf8) SetWindowTextW(existing->Window, Utf8ToWide(titleUtf8).c_str());
-        ShowWindow(existing->Window, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
+        if (!state.StartupPending)
+        {
+            ShowWindow(existing->Window, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
+        }
         return existing->Window;
     }
 
@@ -2274,8 +2295,11 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
         reinterpret_cast<LONG_PTR>(&RmlUiShell::WindowProcedure)));
     const HWND result = host->Window;
     state.Hosts.push_back(std::move(host));
-    ShowWindow(result, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
-    UpdateWindow(result);
+    if (!state.StartupPending)
+    {
+        ShowWindow(result, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
+        UpdateWindow(result);
+    }
     EngineLog::Info("RmlUi", "Dock host created id=" + std::string(hostId) +
         " document=" + documentPath);
     return result;
@@ -2629,7 +2653,7 @@ bool RmlUiShell::Render(bool ObserveUi)
     {
         auto& host = *hostPointer;
         if (!host.Context || !host.Window ||
-            (host.OwnsWindow && !IsWindowVisible(host.Window))) continue;
+            (host.OwnsWindow && !state.StartupPending && !IsWindowVisible(host.Window))) continue;
         RECT client{};
         GetClientRect(host.Window, &client);
         if (client.right <= 0 || client.bottom <= 0) continue;

@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using SharpEngine.Editor;
 using SharpEngine.Logging;
 using SharpEngine.Runtime;
+using SharpEngine.Runtime.Interop;
 using SharpEngine.Timeline;
 
 namespace SharpEngine.Host;
@@ -17,47 +18,54 @@ public static class HostEntrypoint
 
     [UnmanagedCallersOnly]
     public static int Initialize(
-        nint windowHandle,
-        uint width,
-        uint height,
-        nint nativeApi)
+        nint WindowHandle,
+        uint Width,
+        uint Height,
+        nint NativeApi)
     {
+        var Progress = new NativeStartupProgress(NativeApi);
         try
         {
-            s_runtime = new EditorRuntime(windowHandle, width, height, nativeApi);
-            s_runtime.Initialize();
+            s_runtime = new EditorRuntime(WindowHandle, Width, Height, NativeApi);
+            s_runtime.Initialize(Progress.Report);
+            Progress.Report(66, "EditorIntegration", "Registering editor tools and input bindings");
             EditorFirstUse.TryRegister(s_runtime.EngineRoot,
                 Path.GetDirectoryName(typeof(HostEntrypoint).Assembly.Location)!);
             s_input = InputRuntimeService.Load(s_runtime.Assets ??
                 throw new InvalidOperationException("The asset registry is unavailable"));
             s_runtime.AttachInputRuntime(s_input);
             RegisterEditorInput(s_runtime, s_input);
-            var moduleRoot = Path.GetDirectoryName(s_runtime.ProjectManifest ??
+            var ModuleRoot = Path.GetDirectoryName(s_runtime.ProjectManifest ??
                 Path.Combine(s_runtime.EngineRoot, "engine.json"))!;
             s_engineModules = EngineModuleHost.Prepare("Editor",
                 typeof(TimelineRuntimeModule).Assembly,
                 typeof(TimelineEditorModule).Assembly);
-            s_engineModules.Start((id, type) => type == "Editor"
-                ? new EditorModuleContext(moduleRoot, id, s_runtime, s_input)
-                : new ModuleContext(moduleRoot, id, type, s_runtime.UiRuntime, s_input, s_runtime));
+            s_engineModules.Start((Id, Type) => Type == "Editor"
+                ? new EditorModuleContext(ModuleRoot, Id, s_runtime, s_input)
+                : new ModuleContext(ModuleRoot, Id, Type, s_runtime.UiRuntime, s_input, s_runtime),
+                (Id, Index, Count) => Progress.Report(70 + Index * 7 / Count, Id, "Starting engine module"));
             try
             {
-                s_modules = ProjectModuleIntegration.Load(s_runtime, s_input);
-                if (s_modules is null) s_runtime.CompleteComponentRegistration();
+                s_modules = ProjectModuleIntegration.Load(s_runtime, s_input, Progress.Report);
+                if (s_modules is null)
+                {
+                    s_runtime.CompleteComponentRegistration();
+                }
             }
-            catch (Exception error)
+            catch (Exception Error)
             {
                 s_runtime.SetProjectCodeAvailable(false, "Project code failed to load; edit code and rebuild to recover");
-                SharpLog.Error("ProjectModules", "Project code failed to load", error);
-                s_runtime.SetProjectBuildStatus("ReloadFailed", error.ToString());
+                SharpLog.Error("ProjectModules", "Project code failed to load", Error);
+                s_runtime.SetProjectBuildStatus("ReloadFailed", Error.ToString());
             }
+            Progress.Report(95, "ProjectCode", "Initializing project build and reload services");
             s_projectCode = new ProjectCodeService(s_runtime, s_input, s_modules);
             s_modules = null; // Ownership transferred to the build/reload service.
             return 0;
         }
-        catch (Exception exception)
+        catch (Exception Exception)
         {
-            SharpLog.Critical("Editor", "Initialize failed", exception);
+            SharpLog.Critical("Editor", "Initialize failed", Exception);
             s_modules?.Dispose();
             s_modules = null;
             s_engineModules?.Dispose();

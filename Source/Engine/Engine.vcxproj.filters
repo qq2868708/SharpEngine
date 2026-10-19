@@ -111,6 +111,9 @@
     <ClInclude Include="Platform\Windows\SharpEngineBranding.h">
       <Filter>Platform\Windows</Filter>
     </ClInclude>
+    <ClInclude Include="Platform\Windows\StartupSplash.h">
+      <Filter>Platform\Windows</Filter>
+    </ClInclude>
     <ClInclude Include="Platform\Windows\Window\Win32Window.h">
       <Filter>Platform\Windows\Window</Filter>
     </ClInclude>
@@ -165,6 +168,9 @@
     </ClCompile>
     <ClCompile Include="Editor\EditorMain.cpp">
       <Filter>Editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Platform\Windows\StartupSplash.cpp">
+      <Filter>Platform\Windows</Filter>
     </ClCompile>
     <ClCompile Include="ManagedHost.cpp">
       <Filter>源文件</Filter>

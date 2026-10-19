@@ -4,29 +4,46 @@ namespace SharpEngine.Editor.Hosting;
 
 internal static class ProjectModuleIntegration
 {
-    internal static ProjectModuleHost? Load(EditorRuntime runtime, IInputRuntime input)
+    internal static ProjectModuleHost? Load(EditorRuntime Runtime, IInputRuntime Input,
+        Action<int, string, string>? ReportProgress = null)
     {
-        var host = ProjectModuleHost.Prepare(typeof(EditorRuntime).Assembly);
-        if (host is null) return null;
-        EditorRuntime.ModuleReloadPreparation? preparation = null;
+        ReportProgress?.Invoke(78, "ProjectModules", "Verifying published project and plugin assemblies");
+        var Host = ProjectModuleHost.Prepare((Id, Index, Count) =>
+            ReportProgress?.Invoke(79 + Index * 6 / Count, Id, "Loading project module assembly"),
+            typeof(EditorRuntime).Assembly);
+        if (Host is null)
+        {
+            return null;
+        }
+        EditorRuntime.ModuleReloadPreparation? Preparation = null;
         try
         {
-            preparation = runtime.PrepareModuleReload(host.Assemblies);
-            preparation.Commit();
-            Start(host, runtime, input);
-            runtime.SetProjectCodeAvailable(true, "Project code loaded");
-            preparation.Accept();
-            return host;
+            ReportProgress?.Invoke(85, "Components", "Registering project component types");
+            Preparation = Runtime.PrepareModuleReload(Host.Assemblies);
+            Preparation.Commit();
+            Start(Host, Runtime, Input, (Id, Index, Count) =>
+                ReportProgress?.Invoke(87 + Index * 7 / Count, Id, "Starting project module"));
+            Runtime.SetProjectCodeAvailable(true, "Project code loaded");
+            Preparation.Accept();
+            return Host;
         }
-        catch { host.Dispose(); throw; }
-        finally { preparation?.Dispose(); }
+        catch
+        {
+            Host.Dispose();
+            throw;
+        }
+        finally
+        {
+            Preparation?.Dispose();
+        }
     }
 
-    internal static void Start(ProjectModuleHost host, EditorRuntime runtime, IInputRuntime input)
+    internal static void Start(ProjectModuleHost Host, EditorRuntime Runtime, IInputRuntime Input,
+        Action<string, int, int>? OnStarting = null)
     {
-        var root = Path.GetDirectoryName(Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST"))!;
-        host.Start((id, type) => type == "Editor"
-            ? new EditorModuleContext(root, id, runtime, input)
-            : new ModuleContext(root, id, type, runtime.UiRuntime, input, runtime));
+        var Root = Path.GetDirectoryName(Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST"))!;
+        Host.Start((Id, Type) => Type == "Editor"
+            ? new EditorModuleContext(Root, Id, Runtime, Input)
+            : new ModuleContext(Root, Id, Type, Runtime.UiRuntime, Input, Runtime), OnStarting);
     }
 }

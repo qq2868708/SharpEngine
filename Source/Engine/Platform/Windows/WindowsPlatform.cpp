@@ -24,10 +24,11 @@ namespace Platform
     NativeWindowHandle CreateMainWindow(
         uint32 width,
         uint32 height,
-        const wchar_t* title)
+        const wchar_t* title,
+        bool Visible)
     {
         GMainWindow = new Win32Window();
-        GMainWindow->Create(width, height, title);
+        GMainWindow->Create(width, height, title, Visible);
 
         NativeWindowHandle handle{};
         handle.Window   = (void*)GMainWindow->GetHWND();

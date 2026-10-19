@@ -19,6 +19,7 @@ public:
     bool Initialize(HWND window, const std::filesystem::path& engineRoot);
     void Shutdown();
     bool Render(bool ObserveUi = false);
+    void ShowWindows();
     HWND CreateDockWindow(std::string_view hostId, const char* titleUtf8);
     bool DestroyDockWindow(std::string_view hostId);
     bool SetHostMarkup(std::string_view hostId, const char* elementId,

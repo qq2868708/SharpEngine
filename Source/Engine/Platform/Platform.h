@@ -34,7 +34,8 @@ namespace Platform
     NativeWindowHandle CreateMainWindow(
         uint32 width,
         uint32 height,
-        const wchar_t* title
+        const wchar_t* title,
+        bool Visible = true
     );
 
     bool PollEvents();

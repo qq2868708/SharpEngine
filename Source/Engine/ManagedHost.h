@@ -81,9 +81,12 @@ using ManagedReadUiFrameFn = uint32_t(__cdecl*)(uint64_t frameId,
                                                  uint32_t* width,
                                                  uint32_t* height);
 
+using ManagedReportStartupProgressFn = void(__cdecl*)(int32_t Percent,
+    const char* ModuleUtf8, const char* DetailUtf8);
+
 struct ManagedHostApi
 {
-    uint32_t Version = 9;
+    uint32_t Version = 10;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -110,6 +113,9 @@ struct ManagedHostApi
     ManagedUiPointerFn UiPointer = nullptr;
     ManagedUiKeyFn UiKey = nullptr;
     ManagedReadUiFrameFn ReadUiFrame = nullptr;
+    // Version 10 appends an optional startup-only callback. Call synchronously
+    // during Initialize; never retain it in project state or module contexts.
+    ManagedReportStartupProgressFn ReportStartupProgress = nullptr;
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

@@ -8,6 +8,7 @@
 #include <string_view>
 #include <thread>
 #include "Platform/Platform.h"
+#include "Platform/Windows/StartupSplash.h"
 #include "ManagedHost.h"
 #include "Logging/EngineLog.h"
 #include "UI/RmlUiShell.h"
@@ -16,6 +17,14 @@ namespace
 {
     RmlUiShell* GUi{};
     ManagedHost* GManaged{};
+    StartupSplash* GSplash{};
+    void __cdecl ReportStartupProgress(int32_t Percent, const char* Module, const char* Detail)
+    {
+        if (GSplash)
+        {
+            GSplash->Report(Percent, Module, Detail);
+        }
+    }
     void __cdecl SetWindowTitleUtf8(void* window, const char* text)
     {
         if (!window || !text) return;
@@ -198,6 +207,7 @@ int wmain(int argc,wchar_t** argv)
     std::filesystem::path screenshot;
     bool mcpStdio=false;
     bool mcpIsolated=false;
+    bool NoSplash = false;
     for (int i=1;i<argc;++i)
     {
         const std::wstring_view argument(argv[i]);
@@ -207,7 +217,12 @@ int wmain(int argc,wchar_t** argv)
         else if (argument==L"--screenshot" && i+1<argc) screenshot=argv[++i];
         else if (argument==L"--mcp-stdio") mcpStdio=true;
         else if (argument==L"--mcp-isolated") mcpIsolated=true;
+        else if (argument == L"--no-splash")
+        {
+            NoSplash = true;
+        }
     }
+    StartupSplash Splash(!mcpStdio && !mcpIsolated && !NoSplash, projectManifest.stem().wstring());
     const auto executableDirectory=ExecutableDirectory();
     auto engineRoot=FindEngineRoot(executableDirectory);
     if (engineRoot.empty())
@@ -249,11 +264,13 @@ int wmain(int argc,wchar_t** argv)
     }
 
     SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Editor");
+    Splash.Report(8, "Platform", "Initializing native editor window");
     Platform::Initialize();
-    auto window=Platform::CreateMainWindow(1440,900,L"SharpEngine Editor");
+    auto window=Platform::CreateMainWindow(1440,900,L"SharpEngine Editor", false);
     if (!window.Window) { Platform::Shutdown(); return -1; }
     if (mcpIsolated) ShowWindow(static_cast<HWND>(window.Window),SW_HIDE);
     RmlUiShell ui;
+    Splash.Report(16, "RenderCore / RmlUi", "Initializing graphics, fonts and editor shell");
     if (!ui.Initialize(static_cast<HWND>(window.Window),engineRoot))
     {
         EngineLog::Error("RmlUi", "Initialization failed");
@@ -262,11 +279,15 @@ int wmain(int argc,wchar_t** argv)
     GUi=&ui;
     ManagedHost managed;
     GManaged=&managed;
-    const ManagedHostApi api{9,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput,&CreateDockWindow,&DestroyDockWindow,&SetHostMarkup,&ChooseWorldSavePath,&GetUiSnapshot,&UiPointer,&UiKey,&ReadUiFrame};
+    const ManagedHostApi api{10,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput,&CreateDockWindow,&DestroyDockWindow,&SetHostMarkup,&ChooseWorldSavePath,&GetUiSnapshot,&UiPointer,&UiKey,&ReadUiFrame,&ReportStartupProgress};
+    Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
     const bool loaded=managed.Initialize(
         (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),
         (executableDirectory/L"SharpEngine.Host.dll").wstring());
-    if (!loaded || !managed.Start(window.Window,1440,900,&api))
+    GSplash = &Splash;
+    const bool Started = loaded && managed.Start(window.Window,1440,900,&api);
+    GSplash = nullptr;
+    if (!Started)
     {
         EngineLog::Error("ManagedHost", "Initialization failed");
         GManaged=nullptr; GUi=nullptr; ui.Shutdown(); Platform::Shutdown(); return -1;
@@ -304,6 +325,7 @@ int wmain(int argc,wchar_t** argv)
         managed.InputEvent(hostId, eventKind, code, x, y, valueX, valueY,
             buttons, modifiers, uiHandled ? 1 : 0, viewportFocused ? 1 : 0);
     });
+    Splash.Report(98, "Editor", "Preparing the first editor frame");
     auto previous=std::chrono::steady_clock::now();
     uint32_t frames=0;
     bool renderFailed=false;
@@ -315,6 +337,15 @@ int wmain(int argc,wchar_t** argv)
         const auto now=std::chrono::steady_clock::now();
         managed.Update(std::chrono::duration<float>(now-previous).count()); previous=now;
         if (!ui.Render()) { EngineLog::Error("RmlUi", "Present failed"); renderFailed=true; break; }
+        if (frames == 0)
+        {
+            Splash.Report(100, "Editor", "Editor ready");
+            if (!mcpIsolated)
+            {
+                ui.ShowWindows();
+            }
+            Splash.Close();
+        }
         ++frames; if (frameLimit && frames>=frameLimit) break;
         // Rendering and presentation count toward the minimum frame interval.
         std::this_thread::sleep_until(now + std::chrono::milliseconds(8));

@@ -33,4 +33,5 @@ namespace SharpEngine.Runtime.Interop;
             byte*, uint, uint> UiKey;
         public delegate* unmanaged[Cdecl]<ulong, byte*, byte*, uint, uint*, uint*, uint>
             ReadUiFrame;
+        public delegate* unmanaged[Cdecl]<int, byte*, byte*, void> ReportStartupProgress;
     }

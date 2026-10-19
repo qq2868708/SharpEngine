@@ -55,20 +55,23 @@ internal sealed class EngineModuleHost : IDisposable
         return new EngineModuleHost(modules);
     }
 
-    internal void Start(Func<string, string, ModuleContext> createContext)
+    internal void Start(Func<string, string, ModuleContext> CreateContext,
+        Action<string, int, int>? OnStarting = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(createContext);
-        using var entered = _registrations.Enter();
+        ArgumentNullException.ThrowIfNull(CreateContext);
+        using var Entered = _registrations.Enter();
         try
         {
-            foreach (var module in _modules)
+            for (var Index = 0; Index < _modules.Count; Index++)
             {
-                var instance = (ISharpEngineModule)(Activator.CreateInstance(module.Entry) ??
-                    throw new InvalidDataException($"Could not construct Engine Module '{module.Id}'"));
-                _started.Add(instance);
-                instance.Startup(createContext(module.Id, module.Type));
-                SharpLog.Info("EngineModule", $"Started {module.Id} ({module.Type})");
+                var Module = _modules[Index];
+                OnStarting?.Invoke(Module.Id, Index, _modules.Count);
+                var Instance = (ISharpEngineModule)(Activator.CreateInstance(Module.Entry) ??
+                    throw new InvalidDataException($"Could not construct Engine Module '{Module.Id}'"));
+                _started.Add(Instance);
+                Instance.Startup(CreateContext(Module.Id, Module.Type));
+                SharpLog.Info("EngineModule", $"Started {Module.Id} ({Module.Type})");
             }
         }
         catch

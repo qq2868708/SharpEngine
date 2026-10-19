@@ -10,7 +10,7 @@ using Win32MouseButtonCallback = void(__cdecl*)(HWND window, int x, int y,
 class Win32Window
 {
 public:
-    bool Create(uint32_t width, uint32_t height, const wchar_t* title);
+    bool Create(uint32_t width, uint32_t height, const wchar_t* title, bool Visible = true);
     void Destroy();
 
     bool PollEvents();
