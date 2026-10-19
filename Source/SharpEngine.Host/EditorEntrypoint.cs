@@ -26,6 +26,8 @@ public static class HostEntrypoint
         {
             s_runtime = new EditorRuntime(windowHandle, width, height, nativeApi);
             s_runtime.Initialize();
+            EditorFirstUse.TryRegister(s_runtime.EngineRoot,
+                Path.GetDirectoryName(typeof(HostEntrypoint).Assembly.Location)!);
             s_input = InputRuntimeService.Load(s_runtime.Assets ??
                 throw new InvalidOperationException("The asset registry is unavailable"));
             s_runtime.AttachInputRuntime(s_input);

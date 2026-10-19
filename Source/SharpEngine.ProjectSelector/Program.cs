@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Win32;
 using SharpEngine.Logging;
 
 namespace SharpEngine.ProjectSelector;
@@ -28,6 +27,7 @@ internal static class Program
             return command switch
             {
                 "register" => Register(args, noUi),
+                "ensure-registered" => EnsureRegistered(args),
                 "unregister" => Unregister(args, noUi),
                 "list" => List(args, noUi),
                 "resolve" => Resolve(args, implicitProject, prompt: false),
@@ -91,6 +91,37 @@ internal static class Program
         return 0;
     }
 
+    private static int EnsureRegistered(string[] Args)
+    {
+        var Registration = new EngineFirstUse().EnsureRegistered(
+            Option(Args, "--engine-root") ?? FindEngineRoot(), EngineFirstUse.ExecutablePath);
+        WriteResult(Args, new
+        {
+            success = true,
+            Registration.Association,
+            Registration.Root,
+        });
+        return 0;
+    }
+
+    private static void EnsureFirstUse(string EngineRoot)
+    {
+        if (Environment.GetEnvironmentVariable("SHARPENGINE_REGISTER_ON_FIRST_USE") == "0")
+        {
+            return;
+        }
+        try
+        {
+            _ = new EngineFirstUse().EnsureRegistered(EngineRoot, EngineFirstUse.ExecutablePath);
+        }
+        catch (Exception Error)
+        {
+            // Desktop integration must not prevent editing or project-file generation.
+            // Retrying on the next use also repairs partial/missing registry entries.
+            SharpLog.Warning("ProjectSelector", "Automatic desktop registration failed: " + Error.Message);
+        }
+    }
+
     private static int Unregister(string[] args, bool noUi)
     {
         var association = RequiredOption(args, "--association");
@@ -139,6 +170,7 @@ internal static class Program
     {
         var resolved = ResolveProject(args, implicitProject, prompt: !noUi);
         var generated = SolutionGenerator.Generate(resolved);
+        EnsureFirstUse(resolved.Engine.Root);
         WriteResult(args, new
         {
             success = true,
@@ -163,6 +195,7 @@ internal static class Program
         engineRoot = Path.GetFullPath(engineRoot);
         var engine = ProjectContracts.ReadEngine(engineRoot);
         SolutionGenerator.GenerateEngine(engine.Root);
+        EnsureFirstUse(engine.Root);
         WriteResult(args, new
         {
             success = true,
@@ -176,6 +209,7 @@ internal static class Program
     {
         var resolved = ResolveProject(args, implicitProject, prompt: !noUi);
         var generated = SolutionGenerator.EnsureCurrent(resolved);
+        EnsureFirstUse(resolved.Engine.Root);
         _ = Process.Start(new ProcessStartInfo(generated.SolutionPath)
         {
             UseShellExecute = true,
@@ -202,8 +236,22 @@ internal static class Program
             UseShellExecute = false,
             WorkingDirectory = resolved.Project.Root,
         };
+        if (target == "Editor")
+        {
+            EnsureFirstUse(resolved.Engine.Root);
+        }
         start.ArgumentList.Add("--project");
         start.ArgumentList.Add(resolved.Project.ManifestPath);
+        for (var index = 0; index < args.Length; index++)
+        {
+            if (args[index].StartsWith("--render-backend=", StringComparison.Ordinal))
+                start.ArgumentList.Add(args[index]);
+            else if (args[index] == "--render-backend")
+            {
+                start.ArgumentList.Add(args[index]);
+                if (index + 1 < args.Length) start.ArgumentList.Add(args[++index]);
+            }
+        }
         if (HasFlag(args, "--smoke-test")) start.ArgumentList.Add("--smoke-test");
         if (Option(args, "--frames") is { } frames)
         {
@@ -252,7 +300,9 @@ internal static class Program
 
     private static int GenerateEngine(string[] args)
     {
-        SolutionGenerator.GenerateEngine(RequiredOption(args, "--engine-root"));
+        var EngineRoot = RequiredOption(args, "--engine-root");
+        SolutionGenerator.GenerateEngine(EngineRoot);
+        EnsureFirstUse(EngineRoot);
         return 0;
     }
 
@@ -294,44 +344,12 @@ internal static class Program
 
     private static void RegisterFileAssociation()
     {
-        var executable = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(executable) ||
-            !string.Equals(Path.GetExtension(executable), ".exe",
-                StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(Path.GetFileName(executable), "dotnet.exe",
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "File association registration requires the built Project Selector executable");
-        using var extension = Registry.CurrentUser.CreateSubKey(
-            @"Software\Classes\.sharpproject", writable: true)!;
-        extension.SetValue(string.Empty, "SharpEngine.Project", RegistryValueKind.String);
-        using var projectClass = Registry.CurrentUser.CreateSubKey(
-            @"Software\Classes\SharpEngine.Project", writable: true)!;
-        projectClass.SetValue(string.Empty, "SharpEngine Project", RegistryValueKind.String);
-        SetShellCommand("open", "Open in SharpEngine", executable, "open-editor");
-        DeleteShellCommand("generate");
-        SetShellCommand("GenerateProjectFiles", "Generate Project Files", executable,
-            "GenerateProjectFiles");
-        SetShellCommand("solution", "Open Visual Studio Solution", executable,
-            "open-solution");
-    }
-
-    private static void DeleteShellCommand(string verb)
-    {
-        using var shell = Registry.CurrentUser.OpenSubKey(
-            @"Software\Classes\SharpEngine.Project\shell", writable: true);
-        shell?.DeleteSubKeyTree(verb, throwOnMissingSubKey: false);
-    }
-
-    private static void SetShellCommand(string verb, string label, string executable,
-        string command)
-    {
-        using var shell = Registry.CurrentUser.CreateSubKey(
-            $@"Software\Classes\SharpEngine.Project\shell\{verb}", writable: true)!;
-        shell.SetValue(string.Empty, label, RegistryValueKind.String);
-        using var commandKey = shell.CreateSubKey("command", writable: true)!;
-        commandKey.SetValue(string.Empty,
-            $"\"{executable}\" {command} --project \"%1\"", RegistryValueKind.String);
+        var Executable = EngineFirstUse.ExecutablePath;
+        EngineFirstUse.ValidateExecutable(Executable);
+        if (new ProjectFileAssociation().Register(Executable))
+        {
+            SharpLog.Info("ProjectSelector", "Registered .sharpproject shell actions and notified Explorer");
+        }
     }
 
     private static void WriteResult(string[] args, object value)

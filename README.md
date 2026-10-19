@@ -117,7 +117,19 @@ behavior to `SharpEngine.Editor.EditorRuntime` from the public managed DLL.
 into the project. `SHARPENGINE_ROOT` or `-EngineRoot` remains an explicit CI and
 automation override.
 
-Register a source Engine once, including the `.sharpproject` shell actions:
+The first Editor launch, project creation, or project-file generation automatically
+registers the Engine and `.sharpproject` shell actions for the current Windows user.
+Source builds, installed engines, and extracted distributions share the same
+`ensure-registered` operation. Distributions must include the Project Selector
+executable and its dependencies under `Binaries/Win64/<Configuration>/Tools`;
+registration uses these binaries without compiling source. Existing installer
+associations are preserved; otherwise each engine root receives its own GUID.
+Later use repairs missing or outdated shell actions without rewriting correct
+entries, and notifies Explorer when changes occur. Compilation alone does not
+register anything. CI can disable automatic setup with
+`SHARPENGINE_REGISTER_ON_FIRST_USE=0`.
+
+To register an existing executable manually:
 
 ```powershell
 .\Binaries\Win64\Debug\Tools\SharpEngine.ProjectSelector.exe register `
@@ -125,9 +137,11 @@ Register a source Engine once, including the `.sharpproject` shell actions:
 ```
 
 Registration adds `Open in SharpEngine`, `Generate Project Files`, and `Open
-Visual Studio Solution` to the `.sharpproject` file context menu. Re-run this
-command after replacing the Project Selector executable so the shell command
-points at the current build.
+Visual Studio Solution` to the `.sharpproject` file context menu. First use from a
+new location updates the shell commands to point at that tool. An installer may
+also invoke `register --installed` explicitly; subsequent first-use checks reuse
+that registration. Simply extracting files does not execute registration: launch
+the Editor or a project tool once.
 
 Create a project from the checked-out engine or an installed distribution:
 

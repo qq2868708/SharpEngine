@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj" />
+    <Compile Include="..\..\Source\SharpEngine.Host\EditorFirstUse.cs" Link="EditorFirstUse.cs" />
   </ItemGroup>
 </Project>

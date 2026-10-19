@@ -17,10 +17,6 @@ function Get-FullPath([string]$Path) {
 
 $defaultEngineRoot = Split-Path $PSScriptRoot -Parent
 $engineRoot = if ($EngineRoot) { Get-FullPath $EngineRoot } else { Get-FullPath $defaultEngineRoot }
-$selectorProject = Join-Path $engineRoot 'Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj'
-if (!(Test-Path -LiteralPath $selectorProject -PathType Leaf)) {
-    throw "SharpEngine Project Selector was not found: $selectorProject"
-}
 
 $selectorArguments = @(
     'GenerateProjectFiles',
@@ -35,7 +31,5 @@ if ($ProjectFile) {
     $selectorArguments += @('--engine-root', $engineRoot)
 }
 
-& dotnet run --project $selectorProject -- $selectorArguments
-if ($LASTEXITCODE -ne 0) {
-    throw "SharpEngine project-file generation failed with exit code $LASTEXITCODE"
-}
+& (Join-Path $PSScriptRoot 'Invoke-ProjectSelector.ps1') -EngineRoot $engineRoot `
+    -Configuration $Configuration -Platform $Platform -SelectorArguments $selectorArguments

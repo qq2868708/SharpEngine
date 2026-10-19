@@ -108,7 +108,19 @@ source and Plugins, `Project` contains project `Source`, project `Plugins`, and
 `Config`, and `BuildTarget` contains the generated `Editor`/`Game` build
 wrappers. A Plugin's Modules are nested below its own `Plugins/<Name>/Source`
 folder. An Engine-only solution omits the empty `Project` root.
-After registering the Engine, the `.sharpproject` context menu exposes the same
+First Editor launch, project creation, and project-file generation share the
+Project Selector's `ensure-registered` operation. It registers the Engine and file
+actions for the current Windows user, reuses an existing installer association,
+and allocates a per-root GUID otherwise. Later use repairs missing or outdated
+shell entries and notifies Explorer only when changes occur. Compilation has no
+registration side effects. Set `SHARPENGINE_REGISTER_ON_FIRST_USE=0` to disable
+automatic setup in CI; explicit `register` / `ensure-registered` remain available.
+Installed and extracted distributions must include the Project Selector executable
+and its runtime dependencies in their Tools binaries. Editor startup and scripts
+use that executable without a source build. Extraction itself runs no code; the
+first Editor/project-tool launch performs setup. Registration failures are logged
+without blocking Editor startup or project-file generation and retried on later use.
+The `.sharpproject` context menu exposes the same
 `Generate Project Files` operation and writes the generated solution beside the
 project manifest.
 Only the selected generated Target wrapper participates in Solution Build. It invokes

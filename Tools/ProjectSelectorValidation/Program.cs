@@ -11,6 +11,13 @@ var registryPath = @"Software\SharpEngine\Tests\" + Guid.NewGuid().ToString("N")
 var temporary = Directory.CreateTempSubdirectory("SharpEngine-ProjectSelectorValidation-");
 try
 {
+    ProjectFileAssociationValidation.Run(registryPath, temporary.FullName, Check);
+    EngineFirstUseValidation.Run(registryPath, temporary.FullName, engineRoot, Check);
+    if (args.Contains("--registration-only", StringComparer.OrdinalIgnoreCase))
+    {
+        Console.WriteLine($"PASS: {assertions} desktop registration assertions");
+        return 0;
+    }
     var store = new EngineAssociationStore(registryPath);
     const string association = "{11111111-2222-3333-4444-555555555555}";
     var registration = store.Register(engineRoot, association, installed: false);

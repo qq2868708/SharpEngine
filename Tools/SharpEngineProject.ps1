@@ -11,6 +11,7 @@ param(
     [ValidateSet('Editor', 'Game')][string]$Target = 'Editor',
     [ValidateSet('Debug', 'Development', 'Shipping')][string]$Configuration = 'Debug',
     [ValidateSet('Win64')][string]$Platform = 'Win64',
+    [ValidateSet('opengl', 'vulkan')][string]$RenderBackend,
     [switch]$Json
 )
 
@@ -152,8 +153,29 @@ function Invoke-NewProject {
     }
     $association = if ($EngineAssociation) { $EngineAssociation }
         else { Find-EngineAssociation $engineFull }
-    if (!$association) {
-        throw "Engine root '$engineFull' is not registered. Run SharpEngine.ProjectSelector register first, or specify -EngineAssociation."
+    if ([Environment]::GetEnvironmentVariable('SHARPENGINE_REGISTER_ON_FIRST_USE') -ne '0')
+    {
+        $registrationOutput = [System.IO.Path]::GetTempFileName()
+        try
+        {
+            & (Join-Path $PSScriptRoot 'Invoke-ProjectSelector.ps1') -EngineRoot $engineFull `
+                -Configuration $Configuration -Platform $Platform -SelectorArguments @(
+                    'ensure-registered', '--engine-root', $engineFull, '--no-ui',
+                    '--output', $registrationOutput) | Out-Host
+            $registration = Get-Content -Raw -LiteralPath $registrationOutput | ConvertFrom-Json
+            if (!$association)
+            {
+                $association = [string]$registration.Association
+            }
+        }
+        finally
+        {
+            Remove-Item -LiteralPath $registrationOutput -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if (!$association)
+    {
+        throw "Automatic registration is disabled and Engine root '$engineFull' is not registered. Specify -EngineAssociation, or enable first-use registration."
     }
     Assert-EngineAssociation $association
     $projectId = $Name.ToLowerInvariant() -replace '[^a-z0-9]', ''
@@ -285,27 +307,26 @@ function Invoke-Rebuild([string]$Path) {
 
 function Invoke-Selector([string]$SelectorCommand, [string]$Path, [bool]$NoUi,
     [string]$EngineRootOverride = '') {
-    $bootstrapEngineRoot = Split-Path -Parent $PSScriptRoot
-    $selectorDirectory = Join-Path $bootstrapEngineRoot `
-        "Binaries\$Platform\$Configuration\Tools"
-    $selectorDll = Join-Path $selectorDirectory 'SharpEngine.ProjectSelector.dll'
-    $selectorProject = Join-Path $bootstrapEngineRoot `
-        'Source\SharpEngine.ProjectSelector\SharpEngine.ProjectSelector.csproj'
     $selectorArguments = @($SelectorCommand, '--project', (Get-FullPath $Path),
         '--configuration', $Configuration)
     $explicitRoot = if ($EngineRootOverride) { Get-FullPath $EngineRootOverride }
         elseif ($EngineRoot) { Get-FullPath $EngineRoot }
         else { [Environment]::GetEnvironmentVariable('SHARPENGINE_ROOT') }
     if ($explicitRoot) { $selectorArguments += @('--engine-root', $explicitRoot) }
+    if ($RenderBackend -and $SelectorCommand -in @('open-editor', 'run-game')) {
+        $selectorArguments += @('--render-backend', $RenderBackend)
+    }
     if ($NoUi) { $selectorArguments += '--no-ui' }
-    if (Test-Path -LiteralPath $selectorDll -PathType Leaf) {
-        & dotnet $selectorDll @selectorArguments
-    } else {
-        & dotnet run --project $selectorProject -c $Configuration -- @selectorArguments
+    $selectorRoot = if ($explicitRoot)
+    {
+        $explicitRoot
     }
-    if ($LASTEXITCODE -ne 0) {
-        throw "SharpEngine Project Selector '$SelectorCommand' failed with exit code $LASTEXITCODE"
+    else
+    {
+        Split-Path -Parent $PSScriptRoot
     }
+    & (Join-Path $PSScriptRoot 'Invoke-ProjectSelector.ps1') -EngineRoot $selectorRoot `
+        -Configuration $Configuration -Platform $Platform -SelectorArguments $selectorArguments
 }
 
 function Invoke-GenerateProjectFiles([string]$Path, [string]$EngineRootOverride = '') {

@@ -27,6 +27,7 @@
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' == 'Game'">
     <Compile Remove="EditorEntrypoint.cs" />
+    <Compile Remove="EditorFirstUse.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' != 'Game'">
     <Compile Remove="GameEntrypoint.cs" />
