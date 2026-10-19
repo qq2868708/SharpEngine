@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using SharpEngine.World;
+
 namespace SharpEngine.Editor;
 
 /// <summary>
@@ -224,6 +226,8 @@ public static class McpEndpoint
             "assets.describe" => new ToolCall(runtime.DescribeAssetsJson(), false),
             "content.describe" => new ToolCall(runtime.DescribeContentJson(), false),
             "editor.describe" => new ToolCall(runtime.DescribeEditorJson(), false),
+            "editor.mcp.describe" => new ToolCall(runtime.DescribeMcpJson(), false),
+            "editor.mcp.configure" => ConfigureMcp(runtime, request),
             "input.describe" => new ToolCall(runtime.DescribeInputJson(), false),
             "scene.reparent" => DispatchReparent(runtime, request),
             "viewport.input" => new ToolCall(DispatchViewportInput(runtime, request), false),
@@ -268,6 +272,14 @@ public static class McpEndpoint
         var action = RequiredString(request, "params", "arguments", "action");
         runtime.InvokeUiAction(action);
         return runtime.DescribeEditorJson();
+    }
+
+    private static ToolCall ConfigureMcp(EditorRuntime Runtime, JsonElement Request)
+    {
+        var Arguments = Request.GetProperty("params").GetProperty("arguments");
+        var Result = Runtime.ConfigureMcp(RequiredInt(Arguments, "port"),
+            RequiredULong(Arguments, "expectedRevision"));
+        return new ToolCall(Result.ToJsonString(), Result["success"]?.GetValue<bool>() != true);
     }
 
     private static string DispatchViewportInput(EditorRuntime runtime, JsonElement request)

@@ -5,81 +5,95 @@
 #include "RenderBackend_Offscreen.h"
 #include "RenderBackend_NullRHI.h"
 
-static RenderBackend* GBackend = nullptr;
+static std::unique_ptr<RenderBackend> GBackend;
+
+std::unique_ptr<RenderBackend> CreateRenderBackend(const RenderInitDesc& desc)
+{
+    std::unique_ptr<RenderBackend> backend;
+    switch (desc.Backend)
+    {
+    case RenderBackendType::Vulkan:
+        backend = std::make_unique<RenderBackend_Vulkan>();
+        break;
+    case RenderBackendType::Offscreen:
+        backend = std::make_unique<RenderBackend_Offscreen>();
+        break;
+    case RenderBackendType::NullRHI:
+        backend = std::make_unique<RenderBackend_NullRHI>();
+        break;
+    case RenderBackendType::OpenGL:
+        backend = std::make_unique<RenderBackend_OpenGL>();
+        break;
+    default:
+        return nullptr;
+    }
+    if (!backend->Initialize(&desc))
+    {
+        return nullptr;
+    }
+    return backend;
+}
+
+RenderBackend* GetActiveRenderBackend() { return GBackend.get(); }
 
 bool RC_Initialize(const RenderInitDesc* desc)
 {
     RC_Shutdown();
-    RenderBackend* backend = nullptr;
-    switch (desc ? desc->Backend : RenderBackendType::OpenGL)
+    if (!desc)
     {
-    case RenderBackendType::Vulkan:
-        backend = new RenderBackend_Vulkan();
-        break;
-    case RenderBackendType::Offscreen:
-        backend = new RenderBackend_Offscreen();
-        break;
-    case RenderBackendType::NullRHI:
-        backend = new RenderBackend_NullRHI();
-        break;
-    case RenderBackendType::OpenGL:
-    default:
-        backend = new RenderBackend_OpenGL();
-        break;
-    }
-    if (!backend->Initialize(desc))
-    {
-        delete backend;
         return false;
     }
-    GBackend = backend;
-    return true;
+    GBackend = CreateRenderBackend(*desc);
+    return GBackend != nullptr;
 }
 
-void RC_Shutdown()
-{
-    delete GBackend;
-    GBackend = nullptr;
-}
+void RC_Shutdown() { GBackend.reset(); }
 
 void RC_BeginFrame()
 {
-    if (GBackend) GBackend->BeginFrame();
+    if (GBackend)
+    {
+        GBackend->BeginFrame();
+    }
 }
 
 void RC_SubmitFrame(const RenderFrame* frame)
 {
-    if (GBackend) GBackend->SubmitFrame(frame);
+    if (GBackend)
+    {
+        GBackend->SubmitFrame(frame);
+    }
 }
 
 void RC_EndFrame()
 {
-    if (GBackend) GBackend->EndFrame();
+    if (GBackend)
+    {
+        GBackend->EndFrame();
+    }
 }
 
 void RC_Resize(uint32_t width, uint32_t height)
 {
-    if (GBackend) GBackend->Resize(width, height);
+    if (GBackend)
+    {
+        GBackend->Resize(width, height);
+    }
 }
 
 void RC_RequestScreenshot(const wchar_t* path)
 {
-    if (GBackend) GBackend->RequestScreenshot(path);
+    if (GBackend)
+    {
+        GBackend->RequestScreenshot(path);
+    }
 }
 
 void RC_GetStats(RenderStats* stats)
 {
-    if (!stats) return;
+    if (!stats)
+    {
+        return;
+    }
     *stats = GBackend ? GBackend->GetStats().Public() : RenderStats{};
-}
-
-bool RC_HandleWindowMessage(void* window, uint32_t message,
-                            uintptr_t wParam, intptr_t lParam)
-{
-    return GBackend && GBackend->HandleWindowMessage(window, message, wParam, lParam);
-}
-
-bool RC_IsUiFocused()
-{
-    return GBackend && GBackend->IsUiFocused();
 }

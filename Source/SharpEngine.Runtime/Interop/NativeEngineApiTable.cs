@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-namespace SharpEngine.Runtime.Interop;
+namespace SharpEngine.Interop;
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct NativeEngineApiTable
     {

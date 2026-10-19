@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace SharpEngine.Runtime;
+namespace SharpEngine.Settings;
 
 public enum SettingsScope : byte
 {

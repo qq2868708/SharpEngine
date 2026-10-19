@@ -84,9 +84,5 @@ extern "C"
     // Returns transient renderer evidence for bounded validation. The result
     // is never serialized into authored content.
     RC_API void RC_GetStats(RenderStats* stats);
-    // Routes a native window message through the active backend UI first.
-    // Returns true when the UI consumed the message.
-    RC_API bool RC_HandleWindowMessage(void* window, uint32_t message,
-                                       uintptr_t wParam, intptr_t lParam);
-    RC_API bool RC_IsUiFocused();
+
 }

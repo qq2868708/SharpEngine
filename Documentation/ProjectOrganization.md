@@ -4,6 +4,15 @@ Each engine `.csproj` or `.vcxproj` declares one `SharpEngineRole`. Project refe
 define managed build dependencies. `EngineBuildGraph` discovers these declarations;
 there is no second engine-project list in the solution generator or layout checker.
 
+C# namespaces follow source responsibilities and directories. The core Runtime and
+Editor projects use `SharpEngine` as their root namespace: `Animation/` contains
+`SharpEngine.Animation`, `Input/` contains `SharpEngine.Input`, `Settings/` contains
+`SharpEngine.Settings`, and `Modules/` contains `SharpEngine.Modules`. UI and component
+runtime interfaces live alongside their implementations in `UI/` and `Components/`.
+Editor-specific code uses `Editor/`, including `Editor/Hosting/` and `Editor/Layout/`;
+World authoring stays in `World/` under `SharpEngine.World`. Build project and assembly
+names describe build boundaries and do not determine source namespaces or placement.
+
 ## Content and Resources
 
 `Content` is the authoritative asset root. Files represented by an engine or project

@@ -7,7 +7,6 @@ using System.Text.Json.Nodes;
 using SharpEngine.Components;
 using SharpEngine.Editor;
 using SharpEngine.Host;
-using SharpEngine.Runtime;
 
 var repository = Path.GetFullPath(args[0]);
 var engine = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
@@ -43,7 +42,23 @@ foreach (var name in new[] { "Game", "Game.Editor" })
 {{(editor ? "<Reference Include=\"SharpEngine.Editor\"><HintPath>$(SharpEngineEditorApi)</HintPath><Private>false</Private></Reference>" : "")}}
 </ItemGroup></Project>
 """);
-    File.WriteAllText(Path.Combine(path, "Module.cs"), $"using SharpEngine.Runtime; namespace Sample.{name}; public class Module : ISharpEngineModule {{ public void Startup(ModuleContext c) {{ }} public void Shutdown() {{ }} }}");
+    File.WriteAllText(Path.Combine(path, "Module.cs"), $$"""
+using SharpEngine.Modules;
+using SharpEngine.Settings;
+
+namespace Sample.{{name}};
+
+public class Module : ISharpEngineModule
+{
+    public void Startup(ModuleContext Context)
+    {
+    }
+
+    public void Shutdown()
+    {
+    }
+}
+""");
     if (!editor) File.AppendAllText(Path.Combine(path, "Module.cs"), """
 
 [DevelopmentSettings("sample.reload", SettingsScope.Project)]
@@ -184,7 +199,7 @@ void WaitFor(string expected)
     throw new Exception("Timeout: " + runtime.DescribeProjectCodeJson());
 }
 static string EditorModule(bool fail) => $$"""
-using SharpEngine.Runtime;
+using SharpEngine.Modules;
 using SharpEngine.Editor;
 namespace Sample.Game.Editor;
 public class Module : ISharpEngineModule {

@@ -1,4 +1,4 @@
-namespace SharpEngine.Runtime;
+namespace SharpEngine.Input;
 
 public enum InputDeviceKind
 {

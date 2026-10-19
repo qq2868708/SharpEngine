@@ -14,9 +14,9 @@ button:focus { border-color: #68a9f2; }
 .icon { display: inline-block; width: 16px; height: 16px; vertical-align: middle; flex-shrink: 0; pointer-events: none; }
 .icon-label .icon { margin-right: 6px; }
 .icon-button { position: relative; width: 30px; height: 28px; padding: 5px; line-height: 16px; }
-button .control-tooltip { display: none; position: absolute; top: 100%; left: 0px; z-index: 200; width: auto; height: auto; margin: 5px 0px 0px; padding: 6px 8px; border: 1px #48576a; border-radius: 3px; background-color: #191d24; color: #d4dae4; font-size: 11px; font-weight: normal; line-height: 16px; white-space: nowrap; pointer-events: none; }
-button:hover .control-tooltip { display: block; }
-button .tooltip-right { left: auto; right: 0px; }
+button .control-tooltip { display: none; }
+#editor-control-tooltip { display: none; position: fixed; top: 0px; left: 0px; z-index: 1000; width: auto; height: auto; min-width: 0px; max-width: 320px; margin: 0px; padding: 6px 8px; border: 1px #48576a; border-radius: 3px; background-color: #191d24; color: #d4dae4; font-size: 11px; font-weight: normal; line-height: 16px; text-align: left; white-space: pre-wrap; word-break: break-word; pointer-events: none; focus: none; }
+#editor-control-tooltip-text { display: block; min-width: 0px; pointer-events: none; focus: none; }
 #menubar button { background-color: transparent; border-width: 0; padding: 6px 10px; }
 #menubar button:hover { background-color: #303640; }
 #projectTitle { color: #8f99a9; font-size: 12px; }
@@ -33,6 +33,11 @@ button .tooltip-right { left: auto; right: 0px; }
 .toolbar-tool { position: relative; height: 32px; margin-right: 5px; }
 .toolbar-button { position: relative; min-width: 32px; height: 30px; padding: 5px 8px; }
 .toolbar-button .icon { width: 16px; height: 16px; }
+#toolbar-tool-mcp { min-width: 122px; color: #b9e6ff; background-color: #24465d; border-color: #4a8cb6; font-weight: bold; }
+#toolbar-tool-mcp:hover { color: #ffffff; background-color: #315d79; border-color: #7ac4f2; }
+.settings-field.mcp-configuration-row { align-items: flex-start; }
+.mcp-configuration-row .settings-field-copy { flex-shrink: 0; }
+.settings-control.mcp-configuration-path { width: 55%; min-width: 0px; word-break: break-all; font-size: 11px; line-height: 17px; }
 .toolbar-button.disabled, .menu-command.disabled { color: #68778b; background-color: #242a33; border-color: #353d49; pointer-events: none; focus: none; }
 .dropdown-arrow { margin-left: 6px; color: #91a0b4; font-size: 9px; }
 .toolbar-popup { top: 32px; left: 0px; }

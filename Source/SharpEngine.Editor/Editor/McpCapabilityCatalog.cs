@@ -81,7 +81,7 @@ internal static class McpCapabilityCatalog
                         ["name"] = new JsonObject { ["type"] = "string" },
                         ["template"] = new JsonObject { ["enum"] = new JsonArray("class", "component") } },
                     ["required"] = new JsonArray("moduleProject", "directory", "name", "template"), ["additionalProperties"] = false }, ObjectOutput()),
-            Read("components.describe", "Discover component schemas, defaults, context, revisions and live component data."),
+            Read("components.describe", "Discover component schemas, defaults, context, revisions, live component data and runtime navigation/animation observations."),
             new("components.edit", 1, "Edit components or create/remove entities through shared transactions.", "edit",
                 new JsonObject { ["$schema"] = "https://json-schema.org/draft/2020-12/schema", ["type"] = "object",
                     ["properties"] = new JsonObject {
@@ -98,6 +98,11 @@ internal static class McpCapabilityCatalog
             Read("assets.describe", "Return the engine and project asset registry with source and importer metadata."),
             Read("content.describe", "Return all four independent content managers, their queries, filters, selections, Tile/List modes, and active routing target (schema v2)."),
             Read("editor.describe", "Return the committed editor snapshot and links to capability and live UI resources."),
+            Read("editor.mcp.describe", "Read the MCP configuration, active HTTP endpoint, revision and diagnostics."),
+            new("editor.mcp.configure", 1,
+                "Save the MCP port and immediately restart its HTTP endpoint. Disconnects HTTP clients; not part of scene Undo.",
+                "external", McpConfigurationInput(), ObjectOutput(), RequiresLiveUi: true,
+                RevisionPrecondition: "MCP configuration revision"),
             Read("input.describe", "Return loaded InputActions, mapping contexts, live control state, and recent routed events."),
             new("scene.reparent", 1,
                 "Atomically reparent or reorder one World entity through the shared Authoring transaction layer.",
@@ -157,6 +162,31 @@ internal static class McpCapabilityCatalog
 
     private static McpCapabilityDescriptor Read(string id, string description) =>
         new(id, 1, description, "read", EmptyInput(), ObjectOutput());
+
+    private static JsonObject McpConfigurationInput()
+    {
+        return new JsonObject
+        {
+            ["$schema"] = "https://json-schema.org/draft/2020-12/schema",
+            ["type"] = "object",
+            ["properties"] = new JsonObject
+            {
+                ["port"] = new JsonObject
+                {
+                    ["type"] = "integer",
+                    ["minimum"] = 1,
+                    ["maximum"] = 65535,
+                },
+                ["expectedRevision"] = new JsonObject
+                {
+                    ["type"] = "integer",
+                    ["minimum"] = 0,
+                },
+            },
+            ["required"] = new JsonArray("port", "expectedRevision"),
+            ["additionalProperties"] = false,
+        };
+    }
 
     private static JsonObject EmptyInput() => new()
     {

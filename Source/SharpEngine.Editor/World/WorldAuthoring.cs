@@ -3,7 +3,7 @@ using SharpEngine.World;
 using SharpEngine.Components;
 using System.Text.Json.Nodes;
 
-namespace SharpEngine.Editor;
+namespace SharpEngine.World;
 
 public enum WorldHierarchyPlacement : byte
 {

@@ -25,7 +25,14 @@ var sessionId = Guid.NewGuid().ToString("N");
 var settingsProject = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
 var editorArguments = new List<string> { "--mcp-isolated", "--mcp-session-id", sessionId };
 if (!string.IsNullOrWhiteSpace(settingsProject)) editorArguments.AddRange(["--project", settingsProject]);
-using var editor = Start(executable, editorArguments.ToArray());
+var RenderBackend = args.FirstOrDefault(Argument => Argument.StartsWith("--render-backend=", StringComparison.Ordinal));
+if (RenderBackend is not null)
+{
+    editorArguments.Add(RenderBackend);
+}
+var McpValidationPath = args.Contains("--mcp-only", StringComparer.Ordinal)
+    ? McpUiValidation.CreateConfiguration(root) : null;
+using var editor = Start(executable, editorArguments.ToArray(), McpValidationPath);
 var editorErrors = editor.StandardError.ReadToEndAsync();
 var editorOutput = editor.StandardOutput.ReadToEndAsync();
 Process? bridge = null;
@@ -45,7 +52,7 @@ try
     Require(File.Exists(registry), "Isolated Editor must publish a session registration");
     Thread.Sleep(250);
 
-    bridge = Start(executable, "--mcp-stdio");
+    bridge = Start(executable, ["--mcp-stdio"]);
     _ = bridge.StandardError.ReadToEndAsync();
     JsonObject Call(int id, string method, JsonObject? parameters = null)
     {
@@ -71,6 +78,31 @@ try
             ["arguments"] = arguments,
         });
 
+    JsonObject ObservedKey(int Id, string ExpectedFocus, JsonObject Arguments)
+    {
+        JsonObject? Result = null;
+        for (var Attempt = 0; Attempt < 5; ++Attempt)
+        {
+            var Observation = Structured(Tool(Id + 2000 + Attempt, "ui.describe", new JsonObject()));
+            var ObservedHost = Observation["hosts"]!.AsArray().First(Node =>
+                Node?["hostId"]?.GetValue<string>() == Arguments["hostId"]!.GetValue<string>())!;
+            if (ObservedHost["focusedElementId"]?.GetValue<string>() != ExpectedFocus)
+            {
+                throw new InvalidOperationException($"Expected keyboard focus {ExpectedFocus}: {ObservedHost}");
+            }
+            Arguments["expectedFrameId"] = Observation["frameId"]!.GetValue<ulong>();
+            Result = Structured(Tool(Id, "ui.key", Arguments.DeepClone().AsObject()));
+            if (Result["accepted"]?.GetValue<bool>() == true ||
+                Result["diagnostics"]?[0]?["code"]?.GetValue<string>() != "UI_FRAME_STALE")
+            {
+                return Result;
+            }
+            // A rejected stale-frame request emits no key. Observe again and
+            // recheck focus before retrying, as an MCP client must do.
+        }
+        return Result!;
+    }
+
     _ = Call(1, "initialize");
     var bootstrap = Call(2, "tools/list");
     Require(bootstrap["result"]?["tools"]?.AsArray().Count == 3,
@@ -91,6 +123,12 @@ try
             "notifications/resources/list_changed",
         "Attachment must notify clients that the resource list changed");
 
+    if (args.Contains("--mcp-only", StringComparer.Ordinal))
+    {
+        McpUiValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} MCP configuration and rendered UI integration assertions");
+        return;
+    }
     if (args.Contains("--source-only", StringComparer.Ordinal))
     {
         SourceWizardUiValidation.Run(root, Require, Tool, Call);
@@ -292,17 +330,17 @@ try
     Require(focusDown["accepted"]!.GetValue<bool>() &&
             focusUp["accepted"]!.GetValue<bool>(),
         "Coordinate input must focus a real RmlUi input control");
-    var key = Structured(Tool(18, "ui.key", new JsonObject
+    var key = ObservedKey(18, inputId, new JsonObject
     {
         ["hostId"] = host["hostId"]!.GetValue<string>(),
         ["event"] = "text",
         ["text"] = "mcp",
         ["modifiers"] = new JsonArray(),
         ["expectedFrameId"] = focusUp["frameId"]!.GetValue<ulong>(),
-    }));
+    });
     Require(key["accepted"]!.GetValue<bool>() &&
             key["targetElementId"]!.GetValue<string>() == inputId,
-        "Text input must traverse the currently focused RmlUi path");
+        $"Text input must traverse the currently focused RmlUi path: {key.ToJsonString()}");
     var afterText = Structured(Tool(19, "ui.describe", new JsonObject()));
     var observedInput = afterText["hosts"]![0]?["elements"]?.AsArray()
         .Select(node => node!.AsObject()).First(element =>
@@ -328,14 +366,14 @@ try
     var viewportUp = Structured(Tool(101, "ui.pointer",
         PointerArguments("up", "left", viewportDown["frameId"]!.GetValue<ulong>(),
             "host/main/id/viewportCanvas", viewportX, viewportY, ["left"])));
-    var playKeyDown = Structured(Tool(102, "ui.key", new JsonObject
+    var playKeyDown = ObservedKey(102, "host/main/id/viewportCanvas", new JsonObject
     {
         ["hostId"] = host["hostId"]!.GetValue<string>(),
         ["event"] = "down",
         ["key"] = 0x74,
         ["modifiers"] = new JsonArray(),
         ["expectedFrameId"] = viewportUp["frameId"]!.GetValue<ulong>(),
-    }));
+    });
     var inputResource = Call(103, "resources/read", new JsonObject
     {
         ["uri"] = "sharpengine://input",
@@ -349,31 +387,31 @@ try
                 node?["actionId"]?.GetValue<string>() ==
                     "engine://input/actions/editor.play-pause" &&
                 node?["phase"]?.GetValue<string>() == "Performed"),
-        "Viewport F5 must traverse RmlUi and the unified InputRouter before executing the Editor action");
-    var playKeyUp = Structured(Tool(104, "ui.key", new JsonObject
+        $"Viewport F5 must traverse RmlUi and the unified InputRouter before executing the Editor action: {playKeyDown.ToJsonString()}, input={inputSnapshot.ToJsonString()}");
+    var playKeyUp = ObservedKey(104, "host/main/id/viewportCanvas", new JsonObject
     {
         ["hostId"] = host["hostId"]!.GetValue<string>(),
         ["event"] = "up",
         ["key"] = 0x74,
         ["modifiers"] = new JsonArray(),
         ["expectedFrameId"] = playKeyDown["frameId"]!.GetValue<ulong>(),
-    }));
-    var stopKeyDown = Structured(Tool(105, "ui.key", new JsonObject
+    });
+    var stopKeyDown = ObservedKey(105, "host/main/id/viewportCanvas", new JsonObject
     {
         ["hostId"] = host["hostId"]!.GetValue<string>(),
         ["event"] = "down",
         ["key"] = 0x77,
         ["modifiers"] = new JsonArray(),
         ["expectedFrameId"] = playKeyUp["frameId"]!.GetValue<ulong>(),
-    }));
-    _ = Structured(Tool(106, "ui.key", new JsonObject
+    });
+    _ = ObservedKey(106, "host/main/id/viewportCanvas", new JsonObject
     {
         ["hostId"] = host["hostId"]!.GetValue<string>(),
         ["event"] = "up",
         ["key"] = 0x77,
         ["modifiers"] = new JsonArray(),
         ["expectedFrameId"] = stopKeyDown["frameId"]!.GetValue<ulong>(),
-    }));
+    });
 
     afterText = Structured(Tool(107, "ui.describe", new JsonObject()));
     var splitterAfterText = afterText["hosts"]![0]?["elements"]?.AsArray()
@@ -429,12 +467,33 @@ try
             "Every visible host must publish pixels in its own coordinate space");
     }
 
+    _ = Tool(100, "editor.action", new JsonObject
+    {
+        ["action"] = "editor.dock-toggle:console",
+    });
+    var AfterDockClose = Structured(Tool(101, "ui.describe", new JsonObject()));
+    Require(AfterDockClose["hosts"]!.AsArray().Count == 1 &&
+            AfterDockClose["frameId"]!.GetValue<ulong>() > floating["frameId"]!.GetValue<ulong>(),
+        "Closing a floating surface must preserve a newly presented main surface");
+    var MainAfterClose = Call(102, "resources/read", new JsonObject
+    {
+        ["uri"] = $"sharpengine://ui/frames/{AfterDockClose["frameId"]!.GetValue<ulong>()}/main.png",
+    });
+    Require(MainAfterClose["result"]?["contents"]?[0]?["mimeType"]?.GetValue<string>() == "image/png",
+        "The main renderer must retain readback after another surface is destroyed");
+
     Console.WriteLine($"PASS: {assertions} MCP UI integration assertions");
 }
 finally
 {
     if (bridge is { HasExited: false }) bridge.Kill(entireProcessTree: true);
     if (!editor.HasExited) editor.Kill(entireProcessTree: true);
+    editor.WaitForExit(5000);
+    var BackendEvidence = Path.Combine(root, "Saved", "Validation", "EditorUiMcp",
+        RenderBackend?.Split('=').Last() ?? "default");
+    Directory.CreateDirectory(BackendEvidence);
+    File.WriteAllText(Path.Combine(BackendEvidence, "editor-stderr.txt"), editorErrors.GetAwaiter().GetResult());
+    File.WriteAllText(Path.Combine(BackendEvidence, "editor-stdout.txt"), editorOutput.GetAwaiter().GetResult());
     if (args.Contains("--inspector-only", StringComparer.Ordinal) || args.Contains("--source-only", StringComparer.Ordinal))
     {
         editor.WaitForExit(5000);
@@ -487,9 +546,9 @@ static DecodedPng DecodePng(byte[] png)
     return new DecodedPng(width, height, rgba);
 }
 
-static Process Start(string executable, params string[] arguments)
+static Process Start(string Executable, string[] Arguments, string? McpConfigurationPath = null)
 {
-    var start = new ProcessStartInfo(executable)
+    var StartInfo = new ProcessStartInfo(Executable)
     {
         UseShellExecute = false,
         CreateNoWindow = true,
@@ -497,9 +556,16 @@ static Process Start(string executable, params string[] arguments)
         RedirectStandardOutput = true,
         RedirectStandardError = true,
     };
-    foreach (var argument in arguments) start.ArgumentList.Add(argument);
-    var process = Process.Start(start) ?? throw new IOException($"Could not start {executable}");
-    return process;
+    if (McpConfigurationPath is not null)
+    {
+        StartInfo.Environment["SHARPENGINE_MCP_CONFIG"] = McpConfigurationPath;
+    }
+    foreach (var Argument in Arguments)
+    {
+        StartInfo.ArgumentList.Add(Argument);
+    }
+    var ProcessValue = Process.Start(StartInfo) ?? throw new IOException($"Could not start {Executable}");
+    return ProcessValue;
 }
 
 static string FindEngineRoot()

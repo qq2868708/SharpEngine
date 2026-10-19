@@ -1,4 +1,4 @@
-namespace SharpEngine.Runtime;
+namespace SharpEngine.Modules;
 
 /// <summary>Owns engine registrations made by one loaded project generation.</summary>
 public sealed class ModuleRegistrationScope : IDisposable

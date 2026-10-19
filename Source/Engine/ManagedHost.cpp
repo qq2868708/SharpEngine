@@ -465,10 +465,10 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
         ResetRuntime();
         return false;
     }
-#ifndef SHARPENGINE_GAME
     if (!loadManagedFunction(L"RunMcp", &ManagedRunMcpFunction))
+    {
         ManagedRunMcpFunction = nullptr;
-#endif
+    }
     return true;
 }
 

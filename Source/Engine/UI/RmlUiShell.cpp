@@ -1,4 +1,6 @@
 #include "RmlUiShell.h"
+#include "RmlColorPicker.h"
+#include "RmlControlTooltip.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Box.h>
 #include <RmlUi/Core/ElementInstancer.h>
@@ -7,11 +9,11 @@
 #include <dwmapi.h>
 #include <shobjidl.h>
 #include "RmlUi_Platform_Win32.h"
-#include "RmlUi_Renderer_GL2.h"
+#include "../RenderCore/Private/RenderBackend.h"
+#include "../RenderCore/Private/RenderCapture.h"
 #include "../Logging/EngineLog.h"
 #include "../RenderCore/Public/RenderCore.h"
 #include "Platform/Windows/SharpEngineBranding.h"
-#include <gl/GL.h>
 #include <windowsx.h>
 #include <algorithm>
 #include <cctype>
@@ -274,19 +276,6 @@ namespace
     }
 }
 
-class CountedRenderer : public RenderInterface_GL2
-{
-public:
-    uint32_t DrawCalls{};
-    void RenderGeometry(Rml::CompiledGeometryHandle handle,
-                        Rml::Vector2f translation,
-                        Rml::TextureHandle texture) override
-    {
-        ++DrawCalls;
-        RenderInterface_GL2::RenderGeometry(handle, translation, texture);
-    }
-};
-
 constexpr std::string_view ResourceScheme = "sharpengine-resource://";
 
 std::filesystem::path ProjectRootFromEnvironment()
@@ -430,7 +419,7 @@ struct RmlUiShell::Impl
         std::string Id;
         std::string ContextName;
         HWND Window{};
-        HDC Dc{};
+        std::unique_ptr<RenderBackend> Surface;
         WNDPROC OriginalProcedure{};
         Rml::Context* Context{};
         Rml::ElementDocument* Document{};
@@ -443,6 +432,7 @@ struct RmlUiShell::Impl
         std::string ComponentSource;
         std::string PrefabSource;
         bool InspectorGesture{};
+        RmlColorPicker ColorPicker;
         int MarkupDepth{};
         Rml::Element* HierarchyDropTarget{};
         std::string HierarchyDropClass;
@@ -457,10 +447,7 @@ struct RmlUiShell::Impl
     std::filesystem::path EngineRoot;
     SystemInterface_Win32 System;
     Win32FileInterface Files;
-    CountedRenderer Renderer;
-    HGLRC Gl{};
-    int PixelFormat{};
-    PIXELFORMATDESCRIPTOR PixelFormatDescription{};
+    RenderBackendType Backend = RenderBackendType::OpenGL;
     bool Ready{};
     bool StartupPending{};
     bool ComInitialized{};
@@ -679,6 +666,10 @@ struct RmlUiShell::Impl
         if (element->HasAttribute("data-pane-id")) return "pane";
         if (element->HasAttribute("data-dock-pane")) return "tab";
         if (element->HasAttribute("data-dock-group")) return "tab-group";
+        if (element->HasAttribute("data-color-control"))
+        {
+            return "input";
+        }
         const auto& tag = element->GetTagName();
         if (tag == "button")
             for (auto* parent = element->GetParentNode(); parent;
@@ -997,11 +988,10 @@ struct RmlUiShell::Impl
         frame.Width = static_cast<uint32_t>((std::max)(0L, client.right));
         frame.Height = static_cast<uint32_t>((std::max)(0L, client.bottom));
         if (frame.Width == 0 || frame.Height == 0) return frame;
-        frame.Pixels.resize(static_cast<size_t>(frame.Width) * frame.Height * 4);
-        glReadBuffer(GL_FRONT);
-        glReadPixels(0, 0, static_cast<GLsizei>(frame.Width),
-                     static_cast<GLsizei>(frame.Height), 0x80E1,
-                     GL_UNSIGNED_BYTE, frame.Pixels.data());
+        if (!host.Surface->ReadPixels(frame.Pixels, frame.Width, frame.Height))
+        {
+            frame.Pixels.clear();
+        }
         return frame;
     }
 
@@ -1066,7 +1056,7 @@ struct RmlUiShell::Impl
     bool SetCurrentHost(Host& host)
     {
         System.SetWindow(host.Window);
-        return !Gl || (host.Dc && wglMakeCurrent(host.Dc, Gl) != FALSE);
+        return host.Surface && host.Surface->MakeCurrent();
     }
 
     void HidePopups(Host& host)
@@ -1842,6 +1832,15 @@ struct RmlUiShell::Impl
     void ProcessEvent(Host& host, Rml::Event& event)
     {
         if (host.MarkupDepth != 0) return;
+        std::string ColorCommand;
+        if (host.ColorPicker.ProcessEvent(event, host.Document, ColorCommand))
+        {
+            if (!ColorCommand.empty())
+            {
+                QueueAction(host, ColorCommand);
+            }
+            return;
+        }
         Rml::Element* target = event.GetTargetElement();
         if (event.GetId() == Rml::EventId::Mousedown && FindAttributeElement(target, "data-component-slider"))
         {
@@ -2058,15 +2057,20 @@ struct RmlUiShell::Impl
             host.Context = nullptr;
             host.Document = nullptr;
         }
-        if (auto* main = FindMainHost(); main && main->Dc)
-            wglMakeCurrent(main->Dc, Gl);
+        // Removing a context does not remove its RenderManager. Release cached
+        // font/texture resources while every owning surface is still alive.
+        Rml::ReleaseRenderManagers();
+        host.Surface.reset();
+        if (auto* main = FindMainHost())
+        {
+            SetCurrentHost(*main);
+        }
         if (host.Window)
         {
             if (host.OriginalProcedure)
                 SetWindowLongPtrW(host.Window, GWLP_WNDPROC,
                     reinterpret_cast<LONG_PTR>(host.OriginalProcedure));
             RemovePropW(host.Window, HostProperty);
-            if (host.Dc) ReleaseDC(host.Window, host.Dc);
             DestroyWindow(host.Window);
         }
         EngineLog::Info("RmlUi", "Dock host destroyed id=" + host.Id);
@@ -2091,13 +2095,14 @@ void RmlUiShell::Impl::Host::ProcessEvent(Rml::Event& event)
 RmlUiShell::RmlUiShell() : State(std::make_unique<Impl>()) {}
 RmlUiShell::~RmlUiShell() { Shutdown(); }
 
-bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot)
+bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot, RenderBackendType backend)
 {
     auto& state = *State;
     if (state.Ready || !window) return false;
     state.MainWindow = window;
     state.StartupPending = !IsWindowVisible(window);
     state.EngineRoot = engineRoot;
+    state.Backend = backend;
     state.ComInitialized = SUCCEEDED(
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
 
@@ -2106,39 +2111,24 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     host->Id = "main";
     host->ContextName = "editor.main";
     host->Window = window;
-    host->Dc = GetDC(window);
-    if (!host->Dc) return false;
-    state.Hosts.push_back(std::move(host));
-    auto& main = *state.Hosts.back();
-
-    auto& format = state.PixelFormatDescription;
-    format.nSize = sizeof(format);
-    format.nVersion = 1;
-    format.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-    format.iPixelType = PFD_TYPE_RGBA;
-    format.cColorBits = 32;
-    format.cDepthBits = 24;
-    format.cStencilBits = 8;
-    state.PixelFormat = ChoosePixelFormat(main.Dc, &format);
-    if (!state.PixelFormat ||
-        !SetPixelFormat(main.Dc, state.PixelFormat, &format)) return false;
-    state.Gl = wglCreateContext(main.Dc);
-    if (!state.Gl || !wglMakeCurrent(main.Dc, state.Gl)) return false;
-
     RECT renderClient{};
     GetClientRect(window, &renderClient);
-    const RenderInitDesc renderDesc{
-        window,
-        static_cast<uint32_t>((std::max)(0L, renderClient.right)),
-        static_cast<uint32_t>((std::max)(0L, renderClient.bottom)),
-        false,
+    const RenderInitDesc surfaceDesc
+    {
+        window, static_cast<uint32_t>(renderClient.right), static_cast<uint32_t>(renderClient.bottom), false, backend
     };
-    if (!RC_Initialize(&renderDesc)) return false;
+    host->Surface = CreateRenderBackend(surfaceDesc);
+    if (!host->Surface)
+    {
+        return false;
+    }
+    state.Hosts.push_back(std::move(host));
+    auto& main = *state.Hosts.back();
 
     state.System.SetWindow(window);
     state.Files.ConfigureResourceRoots(engineRoot);
     Rml::SetSystemInterface(&state.System);
-    Rml::SetRenderInterface(&state.Renderer);
+    Rml::SetRenderInterface(main.Surface->GetUiRenderer());
     Rml::SetFileInterface(&state.Files);
     if (!Rml::Initialise()) return false;
     state.Ready = true;
@@ -2147,7 +2137,7 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     RECT client{};
     GetClientRect(window, &client);
     main.Context = Rml::CreateContext(main.ContextName,
-        {client.right, client.bottom}, &state.Renderer, &main.Ime);
+        {client.right, client.bottom}, main.Surface->GetUiRenderer(), &main.Ime);
     if (!main.Context) return false;
     const bool regular = Rml::LoadFontFace("C:/Windows/Fonts/segoeui.ttf");
     Rml::LoadFontFace("C:/Windows/Fonts/segoeuib.ttf");
@@ -2159,6 +2149,7 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     main.Document = main.Context->LoadDocument(documentPath);
     if (!main.Document) return false;
     main.Document->AddEventListener(Rml::EventId::Click, &main);
+    main.Document->AddEventListener(Rml::EventId::Mousemove, &main, true);
     main.Document->AddEventListener(Rml::EventId::Change, &main);
     main.Document->AddEventListener(Rml::EventId::Focus, &main, true);
     main.Document->AddEventListener(Rml::EventId::Blur, &main, true);
@@ -2240,29 +2231,32 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     const COLORREF noBorder = DWMWA_COLOR_NONE;
     DwmSetWindowAttribute(host->Window, DWMWA_BORDER_COLOR,
                           &noBorder, sizeof(noBorder));
-    host->Dc = GetDC(host->Window);
-    if (!host->Dc || !SetPixelFormat(host->Dc, state.PixelFormat,
-                                     &state.PixelFormatDescription))
-    {
-        if (host->Dc) ReleaseDC(host->Window, host->Dc);
-        DestroyWindow(host->Window);
-        return nullptr;
-    }
-    if (!state.SetCurrentHost(*host))
-    {
-        ReleaseDC(host->Window, host->Dc);
-        DestroyWindow(host->Window);
-        return nullptr;
-    }
     RECT client{};
     GetClientRect(host->Window, &client);
+    const RenderInitDesc surfaceDesc
+    {
+        host->Window, static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom), false, state.Backend
+    };
+    host->Surface = CreateRenderBackend(surfaceDesc);
+    if (!host->Surface)
+    {
+        DestroyWindow(host->Window);
+        if (auto* main = state.FindMainHost())
+        {
+            state.SetCurrentHost(*main);
+        }
+        return nullptr;
+    }
     host->Context = Rml::CreateContext(host->ContextName,
-        {client.right, client.bottom}, &state.Renderer, &host->Ime);
+        {client.right, client.bottom}, host->Surface->GetUiRenderer(), &host->Ime);
     if (!host->Context)
     {
-        if (auto* main = state.FindMainHost(); main && main->Dc)
-            wglMakeCurrent(main->Dc, state.Gl);
-        ReleaseDC(host->Window, host->Dc);
+        Rml::ReleaseRenderManagers();
+        host->Surface.reset();
+        if (auto* main = state.FindMainHost())
+        {
+            state.SetCurrentHost(*main);
+        }
         DestroyWindow(host->Window);
         return nullptr;
     }
@@ -2272,13 +2266,17 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     if (!host->Document)
     {
         Rml::RemoveContext(host->ContextName);
-        if (auto* main = state.FindMainHost(); main && main->Dc)
-            wglMakeCurrent(main->Dc, state.Gl);
-        ReleaseDC(host->Window, host->Dc);
+        Rml::ReleaseRenderManagers();
+        host->Surface.reset();
+        if (auto* main = state.FindMainHost())
+        {
+            state.SetCurrentHost(*main);
+        }
         DestroyWindow(host->Window);
         return nullptr;
     }
     host->Document->AddEventListener(Rml::EventId::Click, host.get());
+    host->Document->AddEventListener(Rml::EventId::Mousemove, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Change, host.get());
     host->Document->AddEventListener(Rml::EventId::Focus, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Blur, host.get(), true);
@@ -2334,13 +2332,9 @@ void RmlUiShell::Shutdown()
     state.CallbackDepth = 0;
     while (state.Hosts.size() > 1)
         state.DestroyHostNow(state.Hosts.back()->Id);
-    HDC mainDc = nullptr;
-    HWND mainWindow = nullptr;
     if (!state.Hosts.empty())
     {
         auto& main = *state.Hosts.front();
-        mainDc = main.Dc;
-        mainWindow = main.Window;
         state.SetCurrentHost(main);
         if (main.Context)
         {
@@ -2363,15 +2357,7 @@ void RmlUiShell::Shutdown()
         Rml::Shutdown();
         state.Ready = false;
     }
-    RC_Shutdown();
-    if (mainDc && mainWindow) ReleaseDC(mainWindow, mainDc);
     state.Hosts.clear();
-    if (state.Gl)
-    {
-        wglMakeCurrent(nullptr, nullptr);
-        wglDeleteContext(state.Gl);
-        state.Gl = nullptr;
-    }
     if (state.ComInitialized)
     {
         CoUninitialize();
@@ -2656,47 +2642,34 @@ bool RmlUiShell::Render(bool ObserveUi)
     {
         auto& host = *hostPointer;
         if (!host.Context || !host.Window ||
-            (host.OwnsWindow && !state.StartupPending && !IsWindowVisible(host.Window))) continue;
+            (host.OwnsWindow && !state.StartupPending && !IsWindowVisible(host.Window)) || IsIconic(host.Window)) continue;
         RECT client{};
         GetClientRect(host.Window, &client);
         if (client.right <= 0 || client.bottom <= 0) continue;
         if (!state.SetCurrentHost(host))
         {
-            EngineLog::Error("RmlUi", "Could not bind OpenGL context for host=" + host.Id);
+            EngineLog::Error("RmlUi", "Could not activate graphics surface for host=" + host.Id);
             presented = false;
             continue;
         }
         host.Context->SetDimensions({client.right, client.bottom});
         host.Context->Update();
-        // RmlUi's scrollable flex item can leave percentage children with an
-        // indefinite containing width. Resolve the Inspector against its Dock
-        // allocation after layout, including detached panes and splitter drags.
-        if (auto* inspector = host.Document->GetElementById("componentInspector"))
-        {
-            const float width = (std::max)(0.0f, inspector->GetParentNode()->GetParentNode()->GetBox().GetSize(Rml::BoxArea::Border).x - 20.0f);
-            if (width > 0 && std::abs(inspector->GetAttribute<float>("data-layout-width", -1) - width) > 0.1f)
-            {
-                inspector->SetProperty("width", std::to_string(width) + "px");
-                inspector->SetAttribute("data-layout-width", width);
-                host.Context->Update();
-            }
-        }
-        state.Renderer.SetViewport(client.right, client.bottom);
-        state.Renderer.DrawCalls = 0;
-        state.Renderer.BeginFrame();
-        state.Renderer.Clear();
+        host.ColorPicker.AfterLayout(host.Document);
+        RmlControlTooltip::Update(*host.Context, *host.Document);
+        host.Surface->Resize(static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom));
+        host.Surface->BeginFrame();
         ViewportElement::RenderTarget = host.Id == "main" ? this : nullptr;
         host.Context->Render();
         ViewportElement::RenderTarget = nullptr;
-        state.Renderer.EndFrame();
-        const bool hostPresented = SwapBuffers(host.Dc) != FALSE;
+        host.Surface->EndFrame();
+        const bool hostPresented = host.Surface->WasPresented();
         presented = presented && hostPresented;
         if (hostPresented) frame.Hosts.push_back(Impl::FrameHostMetadata(host));
         if (hostPresented && !host.Reported)
         {
             std::ostringstream firstFrame;
             firstFrame << "First frame presented host=" << host.Id
-                       << " ui-draw-calls=" << state.Renderer.DrawCalls;
+                       << " ui-draw-calls=" << host.Surface->GetUiDrawCalls();
             if (host.Id == "main")
             {
                 UiViewportRect viewport{};
@@ -2734,10 +2707,17 @@ void RmlUiShell::RenderViewport(const UiViewportRect& viewport)
     if (!host) return;
     RECT client{};
     GetClientRect(host->Window, &client);
-    RenderPreviewScene(viewport.X, viewport.Y, viewport.Width, viewport.Height,
-        static_cast<float>(client.bottom), state.Triangles.data(),
-        static_cast<uint32_t>(state.Triangles.size()), state.Lines.data(),
-        static_cast<uint32_t>(state.Lines.size()));
+    const RenderFrame frame
+    {
+        viewport.X, viewport.Y, viewport.Width, viewport.Height, static_cast<float>(client.bottom),
+        {
+            state.Triangles.data(), static_cast<uint32_t>(state.Triangles.size())
+        },
+        {
+            state.Lines.data(), static_cast<uint32_t>(state.Lines.size())
+        }
+    };
+    host->Surface->SubmitFrame(&frame);
 }
 void RmlUiShell::SetText(const char* id, const char* utf8)
 {
@@ -2774,7 +2754,23 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
     auto* element = host->Document->GetElementById(elementId);
     if (!element) return false;
     ++host->MarkupDepth;
+    // Dock resize rebuilds the workspace. Retain the Inspector subtree so its
+    // uncommitted inputs, picker draft and scroll position survive the rebuild.
+    Rml::ElementPtr Inspector;
+    if (strcmp(elementId, "workspace") == 0)
+    {
+        auto* Previous = element->GetElementById("inspectorContent");
+        if (Previous && Previous->GetParentNode())
+        {
+            Inspector = Previous->GetParentNode()->RemoveChild(Previous);
+        }
+    }
     element->SetInnerRML(markup);
+    auto* Placeholder = Inspector ? element->GetElementById("inspectorContent") : nullptr;
+    if (Placeholder && Placeholder->GetParentNode())
+    {
+        Placeholder->GetParentNode()->ReplaceChild(std::move(Inspector), Placeholder);
+    }
     --host->MarkupDepth;
     return true;
 }
@@ -3175,31 +3171,11 @@ uint32_t RmlUiShell::ReadFrame(uint64_t frameId, std::string_view hostId,
 bool RmlUiShell::CaptureScreenshot(const std::filesystem::path& path)
 {
     auto* host = State->FindMainHost();
-    if (!host || !State->Gl) return false;
-    RECT rect{};
-    GetClientRect(host->Window, &rect);
-    if (rect.right <= 0 || rect.bottom <= 0) return false;
-    if (!State->SetCurrentHost(*host)) return false;
-    std::vector<unsigned char> pixels(
-        static_cast<size_t>(rect.right) * rect.bottom * 4);
-    glReadBuffer(GL_FRONT);
-    glReadPixels(0, 0, rect.right, rect.bottom, 0x80E1,
-                 GL_UNSIGNED_BYTE, pixels.data());
-    BITMAPFILEHEADER file{};
-    file.bfType = 0x4d42;
-    file.bfOffBits = sizeof(file) + sizeof(BITMAPINFOHEADER);
-    file.bfSize = file.bfOffBits + static_cast<DWORD>(pixels.size());
-    BITMAPINFOHEADER info{};
-    info.biSize = sizeof(info);
-    info.biWidth = rect.right;
-    info.biHeight = rect.bottom;
-    info.biPlanes = 1;
-    info.biBitCount = 32;
-    info.biCompression = BI_RGB;
-    info.biSizeImage = static_cast<DWORD>(pixels.size());
-    std::ofstream output(path, std::ios::binary);
-    output.write(reinterpret_cast<const char*>(&file), sizeof(file));
-    output.write(reinterpret_cast<const char*>(&info), sizeof(info));
-    output.write(reinterpret_cast<const char*>(pixels.data()), pixels.size());
-    return output.good();
+    if (!host || !State->SetCurrentHost(*host))
+    {
+        return false;
+    }
+    std::vector<unsigned char> pixels;
+    uint32_t width{}, height{};
+    return host->Surface->ReadPixels(pixels, width, height) && WriteRenderCapture(path, pixels, width, height);
 }

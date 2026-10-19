@@ -1,6 +1,6 @@
+using SharpEngine.Settings;
 using SharpEngine.Editor;
 using SharpEngine.Editor.Layout;
-using SharpEngine.Runtime;
 using SharpEngine.UI;
 using SharpEngine.World;
 
@@ -27,6 +27,7 @@ static bool MatrixNear(System.Numerics.Matrix4x4 left, System.Numerics.Matrix4x4
 try
 {
     DevelopmentSettingsValidation.Run(temporary.FullName, Require);
+    McpConfigurationValidation.Run(temporary.FullName, Require);
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));

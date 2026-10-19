@@ -1,6 +1,6 @@
+using SharpEngine.Settings;
 using System.Reflection;
 using SharpEngine.Components;
-using SharpEngine.Runtime;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
@@ -26,9 +26,11 @@ public sealed partial class EditorRuntime
         SetStatus(message);
     }
 
-    internal ModuleReloadPreparation PrepareModuleReload(IEnumerable<(Assembly Assembly, string Id, string Type, string Hash)> modules)
+    internal ModuleReloadPreparation PrepareModuleReload(IEnumerable<(Assembly Assembly, string Id, string Type, string Hash)> Modules)
     {
         if (PlayState != EditorPlayState.Stopped) throw new InvalidOperationException("Stop Play before applying project code");
+        var Candidates = Modules.ToArray();
+        SubsystemLifetime.Registry.ValidateModules(Candidates.Select(Module => (Module.Assembly, Module.Id, Module.Type)));
         var registry = ComponentRegistry.CreateBuiltin();
         registry.AssetExists = (id, type) => _assets?.Find(id) is { Exists: true } asset &&
             EditorAssetReferenceTypes.Matches(asset.Type, type);
@@ -36,10 +38,10 @@ public sealed partial class EditorRuntime
         try
         {
             settings.RegisterAssembly(typeof(EditorRuntime).Assembly, SettingsScope.Engine);
-            foreach (var module in modules)
+            foreach (var Module in Candidates)
             {
-                if (module.Type == "Runtime") registry.RegisterAssembly(module.Assembly, module.Id, module.Hash);
-                settings.RegisterAssembly(module.Assembly, SettingsScope.Project);
+                if (Module.Type == "Runtime") registry.RegisterAssembly(Module.Assembly, Module.Id, Module.Hash);
+                settings.RegisterAssembly(Module.Assembly, SettingsScope.Project);
             }
             registry.ValidateRegistrations();
             if (_developmentSettings is not null) settings.CopyStateFrom(_developmentSettings);

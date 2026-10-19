@@ -12,6 +12,7 @@
 #include "ManagedHost.h"
 #include "Logging/EngineLog.h"
 #include "UI/RmlUiShell.h"
+#include "RenderCore/Public/RenderOptions.h"
 
 namespace
 {
@@ -202,6 +203,8 @@ namespace
 }
 int wmain(int argc,wchar_t** argv)
 {
+    RenderOptions renderOptions;
+    std::string renderError;
     std::filesystem::path projectManifest;
     uint32_t frameLimit=0;
     std::filesystem::path screenshot;
@@ -211,6 +214,10 @@ int wmain(int argc,wchar_t** argv)
     for (int i=1;i<argc;++i)
     {
         const std::wstring_view argument(argv[i]);
+        if (renderOptions.Parse(i, argc, argv, renderError))
+        {
+            continue;
+        }
         if (argument==L"--project" && i+1<argc) projectManifest=argv[++i];
         else if (argument==L"--frames" && i+1<argc) frameLimit=static_cast<uint32_t>(std::stoul(argv[++i]));
         else if (argument==L"--smoke-test") frameLimit=10;
@@ -221,6 +228,11 @@ int wmain(int argc,wchar_t** argv)
         {
             NoSplash = true;
         }
+    }
+    if (!renderError.empty())
+    {
+        EngineLog::Error("Editor", renderError);
+        return 2;
     }
     StartupSplash Splash(!mcpStdio && !mcpIsolated && !NoSplash, projectManifest.stem().wstring());
     const auto executableDirectory=ExecutableDirectory();
@@ -271,7 +283,7 @@ int wmain(int argc,wchar_t** argv)
     if (mcpIsolated) ShowWindow(static_cast<HWND>(window.Window),SW_HIDE);
     RmlUiShell ui;
     Splash.Report(16, "RenderCore / RmlUi", "Initializing graphics, fonts and editor shell");
-    if (!ui.Initialize(static_cast<HWND>(window.Window),engineRoot))
+    if (!ui.Initialize(static_cast<HWND>(window.Window),engineRoot,renderOptions.Backend))
     {
         EngineLog::Error("RmlUi", "Initialization failed");
         ui.Shutdown(); Platform::Shutdown(); return -1;

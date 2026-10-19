@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using SharpEngine.Logging;
+using SharpEngine.Subsystems;
 
 namespace SharpEngine.Components;
 
@@ -13,6 +14,15 @@ public sealed partial class RuntimeWorld : IDisposable
     private readonly SceneData _identity;
     private SceneData _snapshot;
     private RuntimeFrame PublishedFrame = null!;
+    private readonly bool OwnsInstance;
+    public RuntimeInstance Instance
+    {
+        get;
+    }
+    public SubsystemCollection Subsystems
+    {
+        get;
+    } = null!;
     public SharpEngine.Assets.AssetRegistry? Assets
     {
         get;
@@ -35,18 +45,33 @@ public sealed partial class RuntimeWorld : IDisposable
     public IReadOnlyList<SharpEntity> Entities => _entities.Values.ToArray();
     public SharpEntity? FindEntity(string id) => _entities.GetValueOrDefault(id);
     public SharpComponent? FindComponent(string id) => _entities.Values.SelectMany(e => e.MutableComponents).FirstOrDefault(c => c.ComponentId == id);
-    public RuntimeWorld(SceneData Source, ComponentRegistry Registry, SharpEngine.Assets.AssetRegistry? Assets = null)
+    public RuntimeWorld(SceneData Source, ComponentRegistry Registry, SharpEngine.Assets.AssetRegistry? Assets = null, RuntimeInstance? Instance = null)
     {
         this.Registry = Registry;
-        this.Assets = Assets;
+        this.Assets = Assets ?? Instance?.Assets;
         var Scene = Source.Clone();
         Registry.MigrateScene(Scene);
         Scene.Validate(Registry);
         _identity = Scene.Clone();
         _snapshot = Scene.Clone();
-        CreateBatch(Scene.Entities);
-        Boundary();
-        Publish();
+        OwnsInstance = Instance is null;
+        this.Instance = Instance ?? new RuntimeInstance(this.Assets);
+        this.Instance.Attach(this);
+        try
+        {
+            _inPhase = true;
+            Subsystems = new(this.Instance.Engine.Registry, SubsystemScope.World, this, this.Instance.Subsystems);
+            CreateBatch(Scene.Entities);
+            Boundary();
+            Publish();
+            this.Instance.Commit();
+        }
+        catch
+        {
+            _inPhase = false;
+            Dispose();
+            throw;
+        }
     }
     public SceneData Snapshot() { CheckThread(); return _snapshot.Clone(); }
     public void CheckThread()
@@ -240,15 +265,32 @@ public sealed partial class RuntimeWorld : IDisposable
         }
         finally { _draining = false; }
     }
-    public void Tick(float deltaSeconds)
+    public void Tick(float DeltaSeconds)
     {
         CheckThread();
-        if (!float.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
+        if (_inPhase || _draining)
+        {
+            throw new InvalidOperationException("World ticks cannot run inside lifecycle callbacks.");
+        }
+        if (!float.IsFinite(DeltaSeconds) || DeltaSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(DeltaSeconds));
+        }
         Boundary();
         // New additions during this tick start updating on the following tick.
-        var eligible = _entities.Values.SelectMany(e => e.MutableComponents).Where(c => c.Started).ToArray();
-        IEnumerable<SharpComponent> Active() => eligible.Where(c => c.IsAlive && c.EffectiveEnabled);
-        _fixedTime += deltaSeconds;
+        var Eligible = _entities.Values.SelectMany(e => e.MutableComponents).Where(Component => Component.Started).ToArray();
+        IEnumerable<SharpComponent> Active() => Eligible.Where(Component => Component.IsAlive && Component.EffectiveEnabled);
+        _inPhase = true;
+        try
+        {
+            Subsystems.Update(DeltaSeconds);
+        }
+        finally
+        {
+            _inPhase = false;
+        }
+        Boundary();
+        _fixedTime += DeltaSeconds;
         while (_fixedTime + 1e-9 >= FixedIntervalSeconds)
         {
             _fixedTime -= FixedIntervalSeconds;
@@ -256,10 +298,12 @@ public sealed partial class RuntimeWorld : IDisposable
             Boundary();
             AdvanceNavigation(FixedDeltaSeconds, Active().OfType<NavAgentComponent>());
         }
-        Phase("Update", Active(), deltaSeconds); Boundary();
-        Phase("Evaluate", Active(), deltaSeconds);
+        Phase("Update", Active(), DeltaSeconds);
         Boundary();
-        Phase("LateUpdate", Active(), deltaSeconds); Boundary();
+        Phase("Evaluate", Active(), DeltaSeconds);
+        Boundary();
+        Phase("LateUpdate", Active(), DeltaSeconds);
+        Boundary();
         Publish();
     }
     public void Step() => Tick(FixedDeltaSeconds);
@@ -327,8 +371,9 @@ public sealed partial class RuntimeWorld : IDisposable
             }
         }
         _snapshot = Capture();
+        Subsystems.Commit();
         Revision++;
-        PublishedFrame = new(_snapshot, Revision, States);
+        PublishedFrame = new(_snapshot, Revision, States, Subsystems.ToJson());
     }
     private void Report(string code, string id, string stage, Exception error)
     {
@@ -342,11 +387,37 @@ public sealed partial class RuntimeWorld : IDisposable
                 ["revision"] = Revision.ToString(),
             });
     }
+    internal void CheckDisposal()
+    {
+        CheckThread();
+        if (_inPhase || _draining)
+        {
+            throw new InvalidOperationException("Destroy entities through the scheduled mutation API during lifecycle callbacks.");
+        }
+    }
     public void Dispose()
     {
         if (_disposed) return;
-        CheckThread(); _draining = true;
+        CheckDisposal();
+        Instance.Engine.Registry.Run(() =>
+        {
+        });
+        _draining = true;
         try { Remove(_entities.Values.SelectMany(e => e.MutableComponents).ToArray(), _entities.Values.ToArray()); }
-        finally { while (_pending.TryDequeue(out var pending)) pending.Cancel(); _disposed = true; _draining = false; }
+        finally
+        {
+            while (_pending.TryDequeue(out var Pending))
+            {
+                Pending.Cancel();
+            }
+            Subsystems?.Dispose();
+            _disposed = true;
+            _draining = false;
+            Instance.Detach(this);
+            if (OwnsInstance)
+            {
+                Instance.Dispose();
+            }
+        }
     }
 }

@@ -2,10 +2,10 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
 using System.Text.Json;
-using SharpEngine.Runtime;
+using SharpEngine.Modules;
 using SharpEngine.Logging;
 
-namespace SharpEngine.Runtime.Hosting;
+namespace SharpEngine.Hosting;
 
 internal sealed class ProjectModuleHost : IDisposable
 {
@@ -249,6 +249,7 @@ internal sealed class ProjectModuleHost : IDisposable
             // Include the partially started module in cleanup on failure.
             _modules.Add(Instance);
             ModuleContext Context = CreateContext(Id, Type);
+            Context.Subsystems?.SubsystemLifetime.Registry.RegisterAssembly(Assembly, Id, Type);
             Instance.Startup(Context);
             SharpLog.Info("Module", $"Started {Id} ({Type})",
                 new Dictionary<string, string>

@@ -655,7 +655,7 @@ static AssemblyMetadata InspectAssembly(string path)
         var directlyImplementsModule = definition.GetInterfaceImplementations()
             .Select(reader.GetInterfaceImplementation)
             .Any(value => InterfaceName(reader, value.Interface) ==
-                "SharpEngine.Runtime.ISharpEngineModule");
+                "SharpEngine.Modules.ISharpEngineModule");
         if (!directlyImplementsModule) continue;
         var visibility = definition.Attributes & TypeAttributes.VisibilityMask;
         var isPublic = visibility is TypeAttributes.Public or TypeAttributes.NestedPublic;

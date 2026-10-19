@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace SharpEngine.Runtime.Interop;
+namespace SharpEngine.Interop;
 
 // Transient, startup-scoped bridge; older native hosts simply have no callback.
 internal unsafe readonly struct NativeStartupProgress

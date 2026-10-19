@@ -1,6 +1,9 @@
-namespace SharpEngine.Runtime;
-
+using SharpEngine.Components;
+using SharpEngine.UI;
+using SharpEngine.Input;
 using SharpEngine.Logging;
+
+namespace SharpEngine.Modules;
 
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
 public sealed class SharpEngineModuleAttribute(string id, string type) : Attribute
@@ -18,18 +21,6 @@ public interface ISharpEngineModule
 {
     void Startup(ModuleContext context);
     void Shutdown();
-}
-
-public sealed record UiViewModelContract(string Id, int Version,
-    string RuntimeType, string JsonSchema)
-{
-    public string Key => $"{Id}@{Version}";
-}
-
-public interface IUiRuntime
-{
-    IReadOnlyList<UiViewModelContract> ViewModelContracts { get; }
-    IDisposable RegisterViewModel<T>(string id, int version) where T : class;
 }
 
 public class ModuleContext
@@ -52,11 +43,14 @@ public class ModuleContext
     public IUiRuntime? Ui { get; }
     public IInputRuntime? Input { get; }
     public IComponentRuntime? Components { get; }
+    public SharpEngine.Subsystems.ISubsystemRuntime? Subsystems
+    {
+        get
+        {
+            return Components as SharpEngine.Subsystems.ISubsystemRuntime;
+        }
+    }
     /// <summary>Structured logger scoped to this module id.</summary>
     public ISharpLogger Logger { get; }
 }
 
-public interface IComponentRuntime
-{
-    SharpEngine.Components.RuntimeWorld? RuntimeWorld { get; }
-}

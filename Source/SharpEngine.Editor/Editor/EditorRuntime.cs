@@ -1,3 +1,6 @@
+using SharpEngine.Settings;
+using SharpEngine.Input;
+using SharpEngine.Interop;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Diagnostics;
@@ -9,7 +12,6 @@ using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
 using SharpEngine.Logging;
-using SharpEngine.Runtime;
 using SharpEngine.UI;
 using SharpEngine.World;
 
@@ -113,6 +115,7 @@ public sealed partial class EditorRuntime
         _contextMenus = new EditorContextMenuRegistry(_commands, MarkExtensionUiDirty);
         _commandContext = new EditorCommandContext(this);
         _context = new EditorContext(this, _commands, _menus, _toolbar, _contextMenus);
+        EditorSubsystems = SubsystemLifetime.CreateEditorScope(this);
         _logSubscription = SharpLog.Subscribe(entry =>
         {
             if (_knownLogEntries.TryAdd(LogIdentity(entry), 0))
@@ -361,6 +364,7 @@ public sealed partial class EditorRuntime
         return new
         {
             sessionId = McpSessionDescriptor?.SessionId,
+            transport = DescribeMcpState(),
             capabilitiesResource = "sharpengine://capabilities",
             uiResource = HasLiveUi ? "sharpengine://ui" : null,
             inputResource = "sharpengine://input",
@@ -481,13 +485,15 @@ public sealed partial class EditorRuntime
             ["documentUi"] = _nativeApi.HasDocumentUi.ToString(),
             ["assembly"] = typeof(EditorRuntime).Assembly.GetName().Name ?? string.Empty,
         });
-        if (HasLiveUi) _mcpSession = new EditorMcpSessionHost(this);
+        InitializeMcp();
     }
 
-    public void Update(float deltaSeconds)
+    public void Update(float DeltaSeconds)
     {
+        SubsystemLifetime.Update(DeltaSeconds);
         DrainLogs();
         PollDevelopmentSettings();
+        PollMcpConfiguration();
         UpdateInputDemo();
         // Conditions can depend on project C# state. Compare the resulting markup
         // before publishing, so an unchanged state preserves RmlUi focus/hover.
@@ -498,11 +504,11 @@ public sealed partial class EditorRuntime
             return;
         }
         _frameCount++;
-        UpdateNavigationMovement(deltaSeconds);
-        if (PlayState == EditorPlayState.Playing && float.IsFinite(deltaSeconds))
+        UpdateNavigationMovement(DeltaSeconds);
+        if (PlayState == EditorPlayState.Playing && float.IsFinite(DeltaSeconds))
         {
-            _seconds += Math.Clamp(deltaSeconds, 0, 0.1f);
-            UpdateComponentRuntime(Math.Clamp(deltaSeconds, 0, 0.1f));
+            _seconds += Math.Clamp(DeltaSeconds, 0, 0.1f);
+            UpdateComponentRuntime(Math.Clamp(DeltaSeconds, 0, 0.1f));
         }
         if (_nativeApi.TryGetViewportRect(out var viewport))
         {
@@ -521,10 +527,10 @@ public sealed partial class EditorRuntime
                 });
                 foreach (var diagnostic in frame.Diagnostics) Log(diagnostic);
             }
-            _statsElapsed += Math.Max(0, deltaSeconds);
+            _statsElapsed += Math.Max(0, DeltaSeconds);
             if (_statsElapsed > 0.3f || _frameCount == 1)
             {
-                SetText("fps", deltaSeconds > 0 ? $"{1 / deltaSeconds:0} FPS" : "— FPS");
+                SetText("fps", DeltaSeconds > 0 ? $"{1 / DeltaSeconds:0} FPS" : "— FPS");
                 SetText("viewportStats",
                     $"{frame.EntityCount} entities · {frame.TriangleCount} triangles · " +
                     $"{_world.Entities.Count(entity => entity.Kind == WorldEntityKind.Light)} scene lights · {PlayState}");
@@ -704,6 +710,10 @@ public sealed partial class EditorRuntime
             action = action[(separator + 1)..];
         }
         if (HandleSourceAction(actionHostId, action)) return;
+        if (HandleMcpAction(actionHostId, action))
+        {
+            return;
+        }
         if (HandleDevelopmentSettingsAction(actionHostId, action)) return;
         if (HandleInputDemoAction(actionHostId, action)) return;
         if (actionHostId == "prefab-editor" && action == "window.closed")
@@ -987,13 +997,12 @@ public sealed partial class EditorRuntime
 
     public void Shutdown()
     {
-        _runtimeWorld?.Dispose();
-        _runtimeWorld = null;
-        _mcpSession?.Dispose();
-        _mcpSession = null;
+        StopRuntimeInstance();
+        ShutdownMcp();
         foreach (var registration in _extensions.Values.Reverse().ToArray())
             registration.Dispose();
         ShutdownDevelopmentSettings();
+        SubsystemLifetime.Dispose();
         _contextMenus.Clear();
         _toolbar.Clear();
         _menus.Clear();
@@ -1588,10 +1597,9 @@ public sealed partial class EditorRuntime
     private void RefreshDockUiAndContents()
     {
         RefreshDockUi();
-        // SetHostMarkup replaces the dock document, including the Inspector's
-        // componentInspector container. The cached markup belongs to the old
-        // DOM, so invalidate it before RefreshInspector repopulates the new
-        // container.
+        // Invalidate generated content for rebuilt or moved panes. The native
+        // host retains the Inspector subtree during same-host dock rebuilding
+        // so a focused input or color picker keeps its uncommitted draft.
         _componentMarkup = "";
         _contentMarkup.Clear();
         _uiText.Clear();

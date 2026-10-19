@@ -8,7 +8,7 @@ using SharpEngine.World;
 
 namespace SharpEngine.Editor;
 
-public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntime
+public sealed partial class EditorRuntime : IComponentRuntime
 {
     private RuntimeWorld? _runtimeWorld;
     private WorldDocument? _playAuthoringWorld;
@@ -44,7 +44,17 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         if (_world is null) return;
         _playAuthoringWorld = _world;
         _playSelection = SelectedEntityId;
-        _runtimeWorld = new RuntimeWorld(_world.Data, _world.Registry, _assets);
+        Instance = new SharpEngine.Subsystems.RuntimeInstance(_assets, SubsystemLifetime);
+        try
+        {
+            _runtimeWorld = Instance.CreateWorld(_world.Data, _world.Registry);
+        }
+        catch
+        {
+            Instance.Dispose();
+            Instance = null;
+            throw;
+        }
         _world = new WorldDocument(_runtimeWorld.Frame, _world.Registry, "runtime:" + _world.SourcePath);
         _inspectorEditing = false;
         RefreshLists(); RefreshComponentInspector(force: true);
@@ -52,6 +62,8 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
     private void EndComponentPlay()
     {
         _runtimeWorld?.Dispose(); _runtimeWorld = null;
+        Instance?.Dispose();
+        Instance = null;
         if (_playAuthoringWorld is not null) _world = _playAuthoringWorld;
         _playAuthoringWorld = null;
         var restore = SelectedEntityId is { } selected && _world?.Entities.Any(e => e.Id == selected) == true ? selected :
@@ -60,13 +72,13 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         _inspectorEditing = false; _componentMarkup = "";
         RefreshLists();
     }
-    private void UpdateComponentRuntime(float deltaSeconds)
+    private void UpdateComponentRuntime(float DeltaSeconds)
     {
         if (_runtimeWorld is null || _world is null) return;
-        var previousIds = string.Join('|', _world.Entities.Select(e => e.Id));
-        _runtimeWorld.Tick(deltaSeconds);
+        var PreviousIds = string.Join('|', _world.Entities.Select(e => e.Id));
+        Instance!.Tick(DeltaSeconds);
         _world.ApplyRuntimeFrame(_runtimeWorld.Frame);
-        if (previousIds != string.Join('|', _world.Entities.Select(e => e.Id))) RefreshHierarchy();
+        if (PreviousIds != string.Join('|', _world.Entities.Select(e => e.Id))) RefreshHierarchy();
     }
     private void CommitCameraNavigation(WorldEntity camera, WorldVector3 position, WorldVector3 rotation)
     {
@@ -96,6 +108,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         ["diagnostics"] = JsonSerializer.SerializeToNode(_runtimeWorld?.Diagnostics ?? []),
         ["navigation"] = _runtimeWorld?.Navigation.ToJson(),
         ["animation"] = _runtimeWorld is null ? null : new SharpEngine.Animation.AnimationSnapshot(_runtimeWorld.Frame).ToJson(),
+        ["subsystems"] = DescribeSubsystems(),
     }.ToJsonString();
 
     /// <summary>Shared UI/MCP authoring and runtime mutation surface.</summary>
@@ -271,54 +284,118 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
     }
     private void RefreshComponentInspector(bool force = false)
     {
-        if (_inspectorEditing && !force) return;
-        var entity = SelectedEntity;
-        var markup = new StringBuilder();
-        if (entity is not null && Components is not null)
+        if (_inspectorEditing && !force)
         {
-            markup.Append("<div class=\"inspector-context\">").Append(_runtimeWorld is null ? "Authoring" : "Runtime — changes discarded on Stop").Append("</div>");
-            markup.Append("<div class=\"field\"><label>Active</label><input type=\"checkbox\" ").Append(entity.ActiveSelf ? "checked=\"checked\" " : "")
-                .Append("data-action=\"editor.component-active:").Append(!entity.ActiveSelf ? "true" : "false").Append("\" /></div>");
-            foreach (var component in entity.Components)
+            return;
+        }
+        var Entity = SelectedEntity;
+        var Markup = new StringBuilder();
+        if (Entity is not null && Components is not null)
+        {
+            Markup.Append("<div class=\"inspector-entity-state\"><span class=\"inspector-context\">")
+                .Append(_runtimeWorld is null ? "Authoring" : "Runtime — changes discarded on Stop")
+                .Append("</span><label class=\"inspector-active\"><span>Active</span><input type=\"checkbox\" title=\"Entity active\" ")
+                .Append(Entity.ActiveSelf ? "checked=\"checked\" " : "")
+                .Append("data-action=\"editor.component-active:").Append(!Entity.ActiveSelf ? "true" : "false").Append("\" /></label></div>");
+            foreach (var Component in Entity.Components)
             {
-                var type = Components.Find(component.TypeId); if (type is null) continue;
-                var id = Escape(component.ComponentId);
-                markup.Append("<div class=\"component\" data-component-id=\"").Append(id).Append("\" draggable=\"true\"><div class=\"component-title\">")
-                    .Append("<button data-action=\"editor.component-collapse:").Append(id).Append("\">").Append(_collapsedComponents.Contains(component.ComponentId) ? "+ " : "− ").Append(Escape(type.DisplayName)).Append("</button>");
-                if (component.TypeId != "engine.transform") markup.Append("<input type=\"checkbox\" ").Append(component.Enabled ? "checked=\"checked\" " : "").Append("data-action=\"editor.component-enabled:").Append(id).Append(':').Append(!component.Enabled ? "true" : "false").Append("\" />");
-                markup.Append("</div>");
-                if (!_collapsedComponents.Contains(component.ComponentId))
+                var Type = Components.Find(Component.TypeId);
+                if (Type is null)
                 {
-                    foreach (var field in type.Fields.Where(f => !f.Hidden))
+                    continue;
+                }
+                var Id = Escape(Component.ComponentId);
+                var Collapsed = _collapsedComponents.Contains(Component.ComponentId);
+                var Icon = Component.TypeId switch
+                {
+                    "engine.transform" => "move",
+                    "engine.mesh-renderer" => "mesh",
+                    "engine.camera" => "camera",
+                    "engine.light" => "light",
+                    _ => "data",
+                };
+                Markup.Append("<div class=\"component\" data-component-id=\"").Append(Id).Append("\" draggable=\"true\"><div class=\"component-title component-header\">")
+                    .Append("<button title=\"").Append(Escape(Type.DisplayName)).Append("\" data-action=\"editor.component-collapse:").Append(Id).Append("\">")
+                    .Append(InspectorIcon(Collapsed ? "chevron-right" : "chevron-down", "component-chevron"))
+                    .Append(InspectorIcon(Icon, "component-type-icon"))
+                    .Append("<span class=\"component-name\">").Append(Escape(InspectorComponentTitle(Type.DisplayName))).Append("</span></button>");
+                if (Component.TypeId != "engine.transform")
+                {
+                    Markup.Append("<input type=\"checkbox\" title=\"Enable component\" ").Append(Component.Enabled ? "checked=\"checked\" " : "")
+                        .Append("data-action=\"editor.component-enabled:").Append(Id).Append(':').Append(!Component.Enabled ? "true" : "false").Append("\" />");
+                }
+                Markup.Append("</div>");
+                if (!Collapsed)
+                {
+                    foreach (var Field in Type.Fields.Where(Field => !Field.Hidden))
                     {
-                        if (field.Header is not null) markup.Append("<div class=\"component-title\">").Append(Escape(field.Header)).Append("</div>");
-                        AppendComponentField(markup, component, field, field.Name, component.State[field.Name], field.ValueType);
+                        if (Field.Header is not null)
+                        {
+                            Markup.Append("<div class=\"component-title\">").Append(Escape(Field.Header)).Append("</div>");
+                        }
+                        AppendComponentField(Markup, Component, Field, Field.Name, Component.State[Field.Name], Field.ValueType);
                     }
-                    markup.Append("<div class=\"component-actions\"><button data-action=\"editor.component-reset:").Append(id).Append("\">Reset</button>");
-                    if (component.TypeId != "engine.transform")
+                    Markup.Append("<div class=\"component-actions\"><button data-action=\"editor.component-reset:").Append(Id).Append("\">")
+                        .Append(InspectorIcon("reset")).Append("<span>Reset</span></button><div class=\"grow\" />");
+                    if (Component.TypeId != "engine.transform")
                     {
-                        string? reason = null;
-                        try { var staging = _world!.Data.Clone(); staging.RemoveComponent(Components, entity.Id, component.ComponentId); }
-                        catch (Exception error) { reason = error.Message; }
-                        markup.Append("<button ").Append(reason is null ? "" : "disabled=\"disabled\" title=\"" + Escape(reason) + "\" ").Append("data-action=\"editor.component-remove:").Append(id).Append("\">Remove</button>");
+                        string? Reason = null;
+                        try
+                        {
+                            var Staging = _world!.Data.Clone();
+                            Staging.RemoveComponent(Components, Entity.Id, Component.ComponentId);
+                        }
+                        catch (Exception Error)
+                        {
+                            Reason = Error.Message;
+                        }
+                        Markup.Append("<button class=\"component-icon-button component-danger\" ")
+                            .Append(Reason is null ? "" : "disabled=\"disabled\" ")
+                            .Append("title=\"").Append(Escape(Reason ?? "Remove component")).Append("\" data-action=\"editor.component-remove:").Append(Id).Append("\">")
+                            .Append(InspectorActionIcon("trash", Reason ?? "Remove component")).Append("</button>");
                     }
                     if (_runtimeWorld is null)
                     {
-                        var index = entity.Record.Components.IndexOf(component);
-                        if (index > 0) markup.Append("<button data-action=\"editor.component-reorder:").Append(id).Append(':').Append(index - 1).Append("\">↑</button>");
-                        if (index + 1 < entity.Components.Count) markup.Append("<button data-action=\"editor.component-reorder:").Append(id).Append(':').Append(index + 1).Append("\">↓</button>");
+                        var Index = Entity.Record.Components.IndexOf(Component);
+                        if (Index > 0)
+                        {
+                            Markup.Append("<button class=\"component-icon-button\" title=\"Move component up\" data-action=\"editor.component-reorder:").Append(Id).Append(':').Append(Index - 1).Append("\">")
+                                .Append(InspectorActionIcon("up", "Move component up")).Append("</button>");
+                        }
+                        if (Index + 1 < Entity.Components.Count)
+                        {
+                            Markup.Append("<button class=\"component-icon-button\" title=\"Move component down\" data-action=\"editor.component-reorder:").Append(Id).Append(':').Append(Index + 1).Append("\">")
+                                .Append(InspectorActionIcon("down", "Move component down")).Append("</button>");
+                        }
                     }
-                    markup.Append("</div>");
+                    Markup.Append("</div>");
                 }
-                markup.Append("</div>");
+                Markup.Append("</div>");
             }
-            markup.Append("<button id=\"add-component\" class=\"add-component\" data-action=\"editor.component-menu\">+ Add Component</button>");
-            if (_addComponentOpen) markup.Append("<input id=\"component-search\" type=\"text\" placeholder=\"Search components\" value=\"").Append(Escape(_componentSearch)).Append("\" data-change-action=\"editor.component-search:\" /><div id=\"componentMenuResults\">").Append(AddComponentMarkup()).Append("</div>");
-            markup.Append("<button data-action=\"editor.prefab-export\">Save as Prefab</button><button data-action=\"editor.component-destroy-entity\">Delete Entity</button>");
+            Markup.Append("<button id=\"add-component\" class=\"add-component\" data-action=\"editor.component-menu\">")
+                .Append(InspectorIcon("add")).Append("<span>Add Component</span></button>");
+            if (_addComponentOpen)
+            {
+                Markup.Append("<input id=\"component-search\" type=\"text\" placeholder=\"Search components\" value=\"").Append(Escape(_componentSearch)).Append("\" data-change-action=\"editor.component-search:\" /><div id=\"componentMenuResults\">").Append(AddComponentMarkup()).Append("</div>");
+            }
+            Markup.Append("<div class=\"component-actions component-entity-actions\"><button class=\"component-prefab\" data-action=\"editor.prefab-export\">")
+                .Append(InspectorIcon("export")).Append("<span>Save as Prefab</span></button><button class=\"component-icon-button component-danger\" title=\"Delete entity\" data-action=\"editor.component-destroy-entity\">")
+                .Append(InspectorActionIcon("trash", "Delete entity")).Append("</button></div>");
         }
-        markup.Append("<div id=\"componentError\" class=\"component-error\"></div>");
-        var html = markup.ToString();
-        if (force || html != _componentMarkup) { _nativeApi.SetUiMarkup("componentInspector", html); _componentMarkup = html; }
+        Markup.Append("<div id=\"componentError\" class=\"component-error\"></div>");
+        var Html = Markup.ToString();
+        if (force || Html != _componentMarkup)
+        {
+            _nativeApi.SetUiMarkup("componentInspector", Html);
+            _componentMarkup = Html;
+        }
+    }
+    private static string InspectorIcon(string Name, string Class = "") => $"<img class=\"icon {Class}\" src=\"{EditorResourceUris.IconSource(Name)}\" />";
+    private static string InspectorActionIcon(string Name, string Tooltip) => InspectorIcon(Name) + "<span class=\"control-tooltip tooltip-right\">" + Escape(Tooltip) + "</span>";
+    private static string InspectorComponentTitle(string Name)
+    {
+        var Title = Name.EndsWith("Component", StringComparison.Ordinal) && Name.Length > 9 ? Name[..^9] : Name;
+        return System.Text.RegularExpressions.Regex.Replace(Title, "(?<=[a-z0-9])(?=[A-Z])", " ");
     }
     private void RefreshAddComponentMenu() => _nativeApi.SetUiMarkup("componentMenuResults", AddComponentMarkup());
     private string AddComponentMarkup()
@@ -363,7 +440,10 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
             var array = value as JsonArray ?? new JsonArray();
             html.Append("<div class=\"component-nested\"><label>").Append(Escape(name)).Append("</label>");
             var element = vector ? typeof(float) : type.IsArray ? type.GetElementType()! : type.GetGenericArguments()[0];
-            if (vector) html.Append("<div class=\"component-vector\">");
+            if (vector)
+            {
+                html.Append(type == typeof(Color) ? "<div class=\"component-vector component-color\">" : "<div class=\"component-vector\">");
+            }
             for (int i = 0; i < array.Count; i++)
             {
                 AppendComponentField(html, component, field with { DisplayName = vector ? (type == typeof(Color) ? "RGBA" : "XYZW")[i].ToString() : i.ToString(), Minimum = null, Maximum = null }, path + "/" + i, array[i], element);
@@ -386,6 +466,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
                     html.Append("<button title=\"Choose color\" style=\"background-color:rgb(").Append((int)(color.R*255)).Append(',').Append((int)(color.G*255)).Append(',').Append((int)(color.B*255)).Append(");\" data-action=\"").Append(Escape(colorAction)).Append("\"> </button>");
                 }
                 html.Append("</div>");
+                AppendInspectorColorPicker(html, component.ComponentId, path, array);
             }
             html.Append("</div>"); return;
         }
@@ -412,7 +493,7 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         else if (type == typeof(bool)) html.Append("<input id=\"").Append(controlId).Append("\" type=\"checkbox\" ").Append(value?.GetValue<bool>() == true ? "checked=\"checked\" " : "").Append("data-action=\"").Append(actionPrefix).Append(value?.GetValue<bool>() == true ? "false" : "true").Append("\" />");
         else
         {
-            var text = type == typeof(string) ? value?.GetValue<string>() ?? "" : value?.ToJsonString() ?? "null";
+            var text = InspectorFieldText(value, type);
             if (type == typeof(string) && field.Lines > 0)
                 html.Append("<textarea id=\"").Append(controlId).Append("\" rows=\"").Append(field.Lines).Append("\" data-component-input=\"true\" data-original-value=\"").Append(Escape(text)).Append("\" data-commit-action=\"").Append(actionPrefix).Append("\">").Append(Escape(text)).Append("</textarea>");
             else html.Append("<input id=\"").Append(controlId).Append("\" type=\"text\" value=\"").Append(Escape(text)).Append("\" data-component-input=\"true\" data-original-value=\"").Append(Escape(text)).Append("\" data-commit-action=\"").Append(actionPrefix).Append("\" />");
@@ -422,4 +503,18 @@ public sealed partial class EditorRuntime : SharpEngine.Runtime.IComponentRuntim
         html.Append("</div>");
     }
     private string DefaultElement(Type type) => ComponentValue.Encode(type.IsValueType ? Activator.CreateInstance(type) : type == typeof(string) ? "" : null, type, Components!)?.ToJsonString() ?? "null";
+    private static string InspectorFieldText(JsonNode? Value, Type ValueType)
+    {
+        if (ValueType == typeof(string))
+        {
+            return Value?.GetValue<string>() ?? "";
+        }
+        var Text = Value?.ToJsonString() ?? "null";
+        if (Value is not null && (ValueType == typeof(float) || ValueType == typeof(double)))
+        {
+            var Number = double.Parse(Text, CultureInfo.InvariantCulture);
+            return Number.ToString("G6", CultureInfo.InvariantCulture);
+        }
+        return Text;
+    }
 }

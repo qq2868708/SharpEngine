@@ -1,8 +1,8 @@
 using System.Reflection;
-using SharpEngine.Runtime;
+using SharpEngine.Modules;
 using SharpEngine.Logging;
 
-namespace SharpEngine.Runtime.Hosting;
+namespace SharpEngine.Hosting;
 
 /// <summary>
 /// Owns the lifecycle of Engine-owned feature Modules that are statically linked
@@ -70,7 +70,9 @@ internal sealed class EngineModuleHost : IDisposable
                 var Instance = (ISharpEngineModule)(Activator.CreateInstance(Module.Entry) ??
                     throw new InvalidDataException($"Could not construct Engine Module '{Module.Id}'"));
                 _started.Add(Instance);
-                Instance.Startup(CreateContext(Module.Id, Module.Type));
+                var Context = CreateContext(Module.Id, Module.Type);
+                Context.Subsystems?.SubsystemLifetime.Registry.RegisterAssembly(Module.Assembly, Module.Id, Module.Type);
+                Instance.Startup(Context);
                 SharpLog.Info("EngineModule", $"Started {Module.Id} ({Module.Type})");
             }
         }

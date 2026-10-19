@@ -136,6 +136,43 @@ internal static class InspectorUiValidation
                 "Inspector component remains visible after splitter layout commit");
         }
         JsonObject Entity(string id) => Data()["document"]!["entities"]!.AsArray().Single(e => e!["entityId"]!.GetValue<string>() == id)!.AsObject();
+        // Real hit-tested input must reach the continuous picker, while drafts
+        // remain separate from the revision-checked component transaction.
+        Click("editor.select-entity:crate");
+        Click("editor.component-collapse:crate-transform");
+        var PickerId = "color-picker-crate-mesh-renderer-Color";
+        var OriginalColor = Entity("crate")["components"]!.AsArray().Single(Component =>
+            Component!["typeId"]!.GetValue<string>() == "engine.mesh-renderer")!["state"]!["Color"]!.DeepClone();
+        var OriginalRevision = Data()["revision"]!.GetValue<ulong>();
+        Click(PickerId + "-open");
+        Click(PickerId + "-hue");
+        Click(PickerId + "-sv");
+        Click(PickerId + "-alpha");
+        var DraftPreview = Find(Read(), PickerId + "-preview")["text"]!.GetValue<string>();
+        DragMainDockSplitterPreservesInspector(PickerId + "-hue");
+        require(Find(Read(), PickerId + "-preview")["text"]!.GetValue<string>() == DraftPreview,
+            "Dock resizing preserves the open color picker and its draft");
+        require(Data()["revision"]!.GetValue<ulong>() == OriginalRevision,
+            "Continuous picker drafts do not mutate the committed document");
+        Click(PickerId + "-cancel");
+        require(Data()["revision"]!.GetValue<ulong>() == OriginalRevision,
+            "Cancel discards the picker draft without a revision or Undo entry");
+        Click(PickerId + "-open");
+        Click(PickerId + "-hue");
+        Click(PickerId + "-sv");
+        Click(PickerId + "-alpha");
+        Click(PickerId + "-apply");
+        var PickedColor = Entity("crate")["components"]!.AsArray().Single(Component =>
+            Component!["typeId"]!.GetValue<string>() == "engine.mesh-renderer")!["state"]!["Color"]!.AsArray();
+        require(PickedColor[0]!.GetValue<float>() > 0 && PickedColor[0]!.GetValue<float>() < 0.5f &&
+            PickedColor[1]!.GetValue<float>() > PickedColor[0]!.GetValue<float>() &&
+            PickedColor[3]!.GetValue<float>() > 0.3f && PickedColor[3]!.GetValue<float>() < 0.7f,
+            "The saturation/value plane, hue strip and opacity slider commit a continuous RGBA color");
+        Click("menu-root-edit");
+        Click("editor.command:core.undo");
+        require(JsonNode.DeepEquals(OriginalColor, Entity("crate")["components"]!.AsArray().Single(Component =>
+            Component!["typeId"]!.GetValue<string>() == "engine.mesh-renderer")!["state"]!["Color"]),
+            "One Undo restores the exact original color after applying the picker");
         Click("editor.component-create-entity");
         var created = Data()["document"]!["entities"]!.AsArray().Last()!;
         var entityId = created["entityId"]!.GetValue<string>();

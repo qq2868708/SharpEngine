@@ -1,8 +1,9 @@
+using SharpEngine.Input;
 using System.Runtime.InteropServices;
 using SharpEngine.Editor;
 using SharpEngine.Logging;
-using SharpEngine.Runtime;
-using SharpEngine.Runtime.Interop;
+using SharpEngine.Modules;
+using SharpEngine.Interop;
 using SharpEngine.Timeline;
 
 namespace SharpEngine.Host;
@@ -66,6 +67,7 @@ public static class HostEntrypoint
         catch (Exception Exception)
         {
             SharpLog.Critical("Editor", "Initialize failed", Exception);
+            s_runtime?.StopRuntimeInstance();
             s_modules?.Dispose();
             s_modules = null;
             s_engineModules?.Dispose();
@@ -107,6 +109,7 @@ public static class HostEntrypoint
     {
         try
         {
+            s_runtime?.StopRuntimeInstance();
             s_projectCode?.Dispose();
             s_projectCode = null;
             s_modules?.Dispose();

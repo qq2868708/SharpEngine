@@ -18,7 +18,7 @@ public sealed partial class EditorRuntime
         _commands.Register(new EditorCommand("core.new-entity", "Create Empty Entity", _ => InvokeUiAction("editor.component-create-entity")));
         _commands.Register(new EditorCommand("core.step", "Step", _ =>
         {
-            _runtimeWorld?.Step();
+            Instance?.Step();
             if (_runtimeWorld is not null)
             {
                 _world!.ApplyRuntimeFrame(_runtimeWorld.Frame);
@@ -142,6 +142,12 @@ public sealed partial class EditorRuntime
             getIcon: _ => PlayState == EditorPlayState.Playing ? "pause" : "play"));
         _toolbar.RegisterTool(new EditorToolbarTool("stop", "playback", "Stop",
             ["core.stop"], 200, "Stop", "stop"));
+        _commands.Register(new EditorCommand("core.mcp-settings", "MCP Settings...",
+            _ => OpenMcpSettings(), tooltip: "Configure the MCP port and restart the server"));
+        _toolbar.RegisterCategory(new EditorToolbarCategory("mcp", 100, EditorToolbarAlignment.Right));
+        _toolbar.RegisterTool(new EditorToolbarTool("mcp", "mcp", "MCP",
+            ["core.mcp-settings"], 100, "Configure the MCP port and restart the server",
+            getLabel: _ => McpToolbarLabel()));
     }
 
     private void RegisterPaneVisibilityCommand(string commandId, string label, string paneId)

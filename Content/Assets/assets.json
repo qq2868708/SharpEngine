@@ -43,9 +43,29 @@
       "type": "Mesh",
       "name": "Cube",
       "path": "Content/Assets/Meshes/Cube.mesh.json",
-      "importer": "SharpEngine.MeshJson",
+      "readOnly": true,
+      "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "primitive"],
-      "metadata": {"primitive": "Cube", "vertices": "8", "triangles": "12"}
+      "metadata": {"primitive": "Cube", "source": "sources/cube-fbx", "blend": "sources/cube-blend", "vertices": "8", "triangles": "12", "units": "metres", "coordinateSystem": "Y-up"}
+    },
+    {
+      "id": "sources/cube-blend",
+      "type": "BlenderSource",
+      "name": "Cube Blender Source",
+      "path": "Content/Assets/Sources/Cube.blend",
+      "readOnly": true,
+      "importer": "Blender.Source",
+      "tags": ["builtin", "source", "blender", "primitive"]
+    },
+    {
+      "id": "sources/cube-fbx",
+      "type": "FBXSource",
+      "name": "Cube FBX Source",
+      "path": "Content/Assets/Sources/Cube.fbx",
+      "readOnly": true,
+      "importer": "SharpEngine.FbxSource",
+      "tags": ["builtin", "source", "fbx", "primitive"],
+      "metadata": {"sha256": "C714C97FD6147485746A2E6F32182BBC8E37031A203C2ACB050D4BCB708E382F", "blend": "sources/cube-blend"}
     },
     {
       "id": "meshes/plane",

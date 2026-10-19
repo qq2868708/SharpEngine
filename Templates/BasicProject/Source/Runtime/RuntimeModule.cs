@@ -1,4 +1,5 @@
-using SharpEngine.Runtime;
+using SharpEngine.Input;
+using SharpEngine.Modules;
 
 namespace __PROJECT_NAMESPACE__;
 

@@ -31,6 +31,7 @@
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' != 'Game'">
     <Compile Remove="GameEntrypoint.cs" />
+    <Compile Remove="GameMcpHost.cs" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

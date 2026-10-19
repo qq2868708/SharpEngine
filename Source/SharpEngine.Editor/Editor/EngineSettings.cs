@@ -1,4 +1,4 @@
-using SharpEngine.Runtime;
+using SharpEngine.Settings;
 
 namespace SharpEngine.Editor;
 

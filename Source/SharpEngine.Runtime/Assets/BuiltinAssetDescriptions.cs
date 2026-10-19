@@ -77,6 +77,12 @@ public static class AssetContent
             return WavefrontObjImporter.Load(assetPath, asset.Name);
         using var document = LoadDocument(registry, id, "Mesh");
         var root = document.RootElement;
+        if (root.TryGetProperty("kind", out _))
+        {
+            // Canonical imported meshes must also verify FBX provenance when
+            // consumed by legacy MeshRenderer components.
+            return LoadStaticMesh(registry, id).ToMeshDescription();
+        }
         var positions = new List<AssetVector3>();
         foreach (var value in root.GetProperty("positions").EnumerateArray())
         {

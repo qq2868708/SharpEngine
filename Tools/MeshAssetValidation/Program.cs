@@ -21,6 +21,7 @@ void Reject(Action action, string message)
 
 var registry = AssetRegistry.Load(root);
 Check(registry.Diagnostics.All(diagnostic => !diagnostic.IsError), "Mesh manifest has no load errors");
+EngineCubeValidation.Run(root, registry, Check);
 var staticMesh = AssetContent.LoadStaticMesh(registry, "engine://meshes/robot-static");
 var skeletalMesh = AssetContent.LoadSkeletalMesh(registry, "engine://meshes/robot-skeletal");
 var skeleton = AssetContent.LoadSkeleton(registry, "engine://skeletons/robot");

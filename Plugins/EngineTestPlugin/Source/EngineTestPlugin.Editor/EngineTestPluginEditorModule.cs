@@ -1,4 +1,4 @@
-using SharpEngine.Runtime;
+using SharpEngine.Modules;
 
 [assembly: SharpEngineModule("SharpEngine.Test.EnginePlugin.Editor", "Editor")]
 

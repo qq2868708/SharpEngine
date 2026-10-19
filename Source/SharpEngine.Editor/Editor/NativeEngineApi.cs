@@ -1,12 +1,10 @@
-using SharpEngine.Runtime.Interop;
+using SharpEngine.Interop;
 using System.Text;
 using System.Runtime.InteropServices;
 using SharpEngine.UI;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
-
-internal sealed record NativeUiFrame(uint Width, uint Height, byte[] BgraPixels);
 
 internal unsafe readonly struct NativeEngineApi
 {

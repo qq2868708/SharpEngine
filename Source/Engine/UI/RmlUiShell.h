@@ -16,7 +16,7 @@ class RmlUiShell
 public:
     RmlUiShell();
     ~RmlUiShell();
-    bool Initialize(HWND window, const std::filesystem::path& engineRoot);
+    bool Initialize(HWND window, const std::filesystem::path& engineRoot, RenderBackendType backend = RenderBackendType::OpenGL);
     void Shutdown();
     bool Render(bool ObserveUi = false);
     void ShowWindows();

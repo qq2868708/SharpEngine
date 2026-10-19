@@ -88,8 +88,7 @@
       <EntryPointSymbol>wmainCRTStartup</EntryPointSymbol>
       <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
       <AdditionalLibraryDirectories>$(SharpUiBuildDir)\$(SharpUiConfiguration);$(SharpUiBuildDir)\FreeType\$(SharpUiConfiguration);$(VULKAN_SDK)\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies Condition="'$(SharpEngineTarget)' != 'Game'">rmlui.lib;opengl32.lib;ole32.lib;uuid.lib;$(SharpFreeTypeLibrary);vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(SharpEngineTarget)' == 'Game'">rmlui.lib;opengl32.lib;ole32.lib;uuid.lib;$(SharpFreeTypeLibrary);vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>rmlui.lib;opengl32.lib;ole32.lib;uuid.lib;$(SharpFreeTypeLibrary);vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -153,6 +152,12 @@
     <ClInclude Include="RenderCore\Private\Vulkan\VkSwapchain.h" />
     <ClInclude Include="RenderCore\Public\RenderCore.h" />
     <ClInclude Include="UI\RmlUiShell.h" />
+    <ClInclude Include="UI\RmlColorPicker.h" />
+    <ClInclude Include="UI\RmlControlTooltip.h" />
+    <ClInclude Include="UI\GameUiShell.h" />
+    <ClInclude Include="UI\UiObservation.h" />
+    <ClInclude Include="RenderCore\Public\RenderOptions.h" />
+    <ClInclude Include="RenderCore\Private\RenderCapture.h" />
     <ClInclude Include="Platform\Windows\SharpEngineBranding.h" />
     <ClInclude Include="Platform\Windows\StartupSplash.h" />
   </ItemGroup>
@@ -174,10 +179,10 @@
     <ClCompile Include="RenderCore\Private\Common\*.cpp;RenderCore\Private\Vulkan\*.cpp;RenderCore\Private\RenderCore.cpp;UI\*.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
     <ClCompile Include="RenderCore\Private\RenderCore.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" Condition="'$(SharpEngineTarget)' != 'Game'" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_VK.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
+    <ClCompile Include="UI\GameUiShell.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_VK.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

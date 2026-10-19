@@ -38,3 +38,32 @@ mesh, skeleton, and skeletal mesh JSON. Validation covers deterministic asset
 round trips, exact FBX byte export, source hash mismatch rejection, component
 registration, World JSON round trip, RuntimeWorld reconstruction, and viewport
 rendering/picking.
+
+The engine Cube retains `engine://meshes/cube` and the `Mesh` descriptor type
+for existing MeshRenderer references. Its canonical static-mesh JSON is derived
+by importing the actual `Content/Assets/Sources/Cube.fbx`; both mesh loading
+paths verify `sourcePath` and `sourceSha256`. `Cube.blend` is the editable DCC
+source, and the FBX is the authoritative exchange source for engine import.
+Both are registered as read-only engine assets.
+
+Rebuild with Blender 5.2:
+
+```powershell
+& $Blender --background --python-exit-code 1 --python Tools/Assets/BuildEngineCube.py
+```
+
+The cube is centred at the origin, one metre (one engine unit) on every side,
+with identity object transforms. Blender uses Z-up; FBX export uses Y-up and
+-Z forward. The importer converts Blender's FBX readback to right-handed Y-up
+engine coordinates and bakes mesh transforms. The source FBX contains outward
+triangles, flat face normals, UVs and one Default material slot. The current
+runtime JSON schema consumes positions, indices and the default material;
+UVs and source normals remain in Blender/FBX, and are not yet runtime vertex
+attributes. Rebuilding checks the saved Blender file, imports the exported FBX,
+and writes readback evidence to `Saved/Validation/EngineCube/readback.json`.
+
+To import another static FBX already inside its owning asset root, run Blender
+with `Tools/Assets/ImportStaticFbx.py -- --input <fbx> --source-root <root>
+--output <mesh.json> --asset-id <stable-id> --name <name>`. Register its output
+and source in the owning manifest explicitly. Reimporting unchanged FBX bytes
+produces the same JSON; regenerating the FBX can change its source hash.

@@ -57,6 +57,46 @@ those exact pixels as PNG for the MCP resource without exposing native handles.
 
 ## Session Selection and Transport
 
+The right side of the Editor toolbar always shows `MCP : <port>`. Click it to
+open MCP Settings, edit the port, and choose **Confirm & Restart**. Confirmation
+atomically saves the independent `Config/Mcp.json` file and immediately restarts
+the HTTP endpoint. Cancel discards the draft. Confirming the current port also
+restarts the endpoint. Port conflicts and save failures leave the previous valid
+configuration and service intact and display a diagnostic in the window.
+
+The file belongs to the open project, or to the engine workspace when no project
+is open. It is created on first launch if absent. `SHARPENGINE_MCP_CONFIG` may
+select a separate absolute configuration path for isolated sessions and tests.
+
+```json
+{
+  "schemaVersion": 1,
+  "port": 17700
+}
+```
+
+The default connection URL is `http://127.0.0.1:17700/mcp`. This is a local-only,
+stateless MCP Streamable HTTP endpoint: JSON-RPC POST returns JSON, notifications
+return 202, and GET returns 405 because no SSE stream is provided. HTTP requests
+share the existing capability dispatch and run on the Editor thread. Restarting
+disconnects HTTP clients; the stdio bridge and its named-pipe session remain
+available. Reconnect HTTP clients to the new port after a change.
+
+`editor.mcp.describe` exposes schema version 1, configuration path, configured and
+active ports, endpoint, running state, configuration revision and diagnostics.
+`editor.describe.mcp.transport` carries the same state. The external capability
+`editor.mcp.configure` accepts `port` and `expectedRevision` and shares the UI's
+save/restart operation. These are editor preferences, outside scene Undo/Redo.
+External file edits are checked once per second; invalid versions, unknown fields
+or unavailable ports retain the last valid live service and report an error.
+
+Run `dotnet run --project Tools/McpUiValidation -c Debug -- Debug --mcp-only`
+after building the Editor to validate the rendered toolbar and settings window,
+coordinate typing/clicks, HTTP transport, port changes, cancellation, occupied
+ports, save failure, revision conflicts and external reload. The fixture uses
+its own configuration and saves matching PNG/semantic evidence under
+`Saved/Validation/Mcp`.
+
 `--mcp-stdio` starts a sessionless bridge. It does not initialize an
 `EditorRuntime`, load a World, or execute project Modules. Before attachment it
 exposes only:

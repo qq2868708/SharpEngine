@@ -351,6 +351,11 @@ Export, and Play/Pause/Stop controls. Move, Rotate, and Scale are scoped to the
 
 ### Embedded MCP
 
+The Editor toolbar shows **MCP : 17700** on the right. Click it to edit the port;
+**Confirm & Restart** saves `Config/Mcp.json` and restarts MCP immediately. Connect
+HTTP clients to `http://127.0.0.1:17700/mcp` (or the configured port). Each project
+has its own configuration; without a project the engine workspace owns the file.
+
 The public editor exposes an engine-owned MCP stdio session bridge. Start it with:
 
 ```powershell

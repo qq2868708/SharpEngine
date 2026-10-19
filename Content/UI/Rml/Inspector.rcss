@@ -1,34 +1,100 @@
 #componentInspector { display: block; width: 100%; position: relative; z-index: 1; }
-#inspectorContent { position: relative; width: 100%; height: 100%; display: block; overflow-y: auto; flex-grow: 1; min-width: 0px; }
-.component { width: auto; min-width: 0px; }
-.component-title button { width: auto; min-width: 0px; flex-grow: 1; }
-.inspector-context { color: #8dbcf2; padding: 6px 0; font-size: 11px; }
-.component { padding-bottom: 8px; }
-.component-title { display: flex; align-items: center; drag: drag-drop; }
-.component-title button { flex: 1; text-align: left; }
-.component-field { display: flex; flex-wrap: wrap; align-items: center; margin: 4px 0; }
-.component-field label { min-width: 80px; flex: 1; }
-.component-field input, .component-field select { width: 128px; min-width: 60px; flex-grow: 1; }
-.component-vector { display: flex; flex-wrap: nowrap; width: 100%; }
-.component-palette { display: flex; padding: 4px; }
-.component-palette button { width: 22px; height: 22px; padding: 0; margin: 2px; }
-#componentInspector input[type=checkbox] { width: 18px; min-width: 18px; height: 18px; flex-grow: 0; margin-left: 6px; }
-#componentInspector input[type=checkbox]:checked { background-color: #5599dd; border: 2px #aecfff; }
+#inspectorContent { position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; display: block; overflow: auto; min-width: 0px; }
+#inspectorContent { padding: 12px; background-color: #20252d; }
+#inspectorContent #selectedObject { margin: 0px 0px 4px; font-size: 17px; font-weight: bold; color: #e3e9f2; }
+#inspectorContent #selectedKind { margin-bottom: 10px; font-size: 10px; line-height: 16px; color: #7f8da0; word-break: break-word; }
+#inspectorContent .field { align-items: center; min-width: 0px; }
+#inspectorContent .field label { flex-shrink: 0; }
+#inspectorContent .field span { min-width: 0px; line-height: 16px; word-break: break-word; }
+.inspector-entity-state { display: flex; align-items: center; justify-content: space-between; min-height: 28px; margin-bottom: 12px; }
+.inspector-context { display: inline-block; color: #8baed2; padding: 3px 7px; font-size: 10px; line-height: 14px; background-color: #273341; border-radius: 3px; }
+.inspector-active { display: flex; align-items: center; color: #a3afbf; font-size: 11px; }
+.inspector-active span { margin-right: 8px; }
+#inspectorContent .component { width: auto; min-width: 0px; margin-bottom: 12px; padding: 0px; background-color: #242a33; border: 1px #363e4b; border-radius: 4px; }
+#inspectorContent .component-title { display: block; padding: 8px 10px; font-size: 10px; color: #95a4b8; background-color: transparent; border-bottom: 1px #303844; }
+#inspectorContent .component-header { display: flex; align-items: center; height: 36px; padding: 0px 10px; background-color: #2b323d; drag: drag-drop; }
+#inspectorContent .component-title button { display: flex; align-items: center; flex: 1; width: auto; min-width: 0px; height: 34px; padding: 0px; text-align: left; color: #d4deeb; background-color: transparent; border-width: 0px; overflow: hidden; white-space: nowrap; }
+#inspectorContent .component-title button:hover { color: #ffffff; }
+.component-chevron { width: 12px; height: 12px; margin-right: 6px; }
+.component-type-icon { width: 15px; height: 15px; margin-right: 7px; }
+.component-name { flex-grow: 1; min-width: 0px; font-size: 12px; overflow: hidden; white-space: nowrap; }
+#inspectorContent .field { padding: 7px 10px; font-size: 11px; border-bottom-width: 0px; }
+#inspectorContent .field label { color: #8f9eb2; }
+.component-field { display: flex; flex-wrap: wrap; align-items: center; min-width: 0px; margin: 0px; }
+.component-field label { width: 74px; min-width: 74px; padding-right: 8px; line-height: 16px; }
+.component-field input, .component-field select { width: 112px; min-width: 64px; flex-grow: 1; margin-bottom: 0px; }
+#componentInspector input[type=text], #componentInspector textarea { background-color: #1b2028; border: 1px #3a4554; border-radius: 3px; color: #d3deed; }
+#componentInspector input[type=text]:hover, #componentInspector textarea:hover { border-color: #556377; }
+#componentInspector input[type=text]:focus, #componentInspector textarea:focus { border-color: #6b9bd0; }
+.component-field select { height: 28px; font-size: 12px; text-align: left; color: #d6deeb; }
+.component-field select selectvalue { display: block; height: 28px; margin-right: 24px; padding: 5px 8px; line-height: 16px; white-space: nowrap; background-color: #1b2028; border: 1px #3a4554; border-radius: 3px; }
+.component-field select selectarrow { width: 24px; height: 28px; padding: 4px; decorator: image("sharpengine-resource://engine/Resources/Editor/Icons/chevron-down.tga" contain); background-color: #303a48; border: 1px #3f4d60; border-radius: 3px; }
+.component-field select selectarrow:hover { background-color: #40536c; }
+.component-field select:focus selectvalue { border-color: #5d94d2; }
+.component-field select selectbox { width: 100%; max-height: 224px; margin-top: 3px; padding: 4px; background-color: #252e3b; border: 1px #607b9b; border-radius: 4px; }
+.component-field select option { display: block; min-height: 26px; padding: 5px 8px; line-height: 16px; white-space: nowrap; overflow: hidden; }
+.component-field select option:checked { color: #ffffff; background-color: #314d6a; }
+.component-field select option:hover { color: #ffffff; background-color: #3d5e80; }
+.component-vector { display: flex; flex-wrap: nowrap; width: 100%; gap: 6px; margin-top: 5px; }
+.component-palette { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 0px 2px; }
+.component-palette button { width: 18px; height: 18px; padding: 0px; margin: 0px; border: 1px #6b7686; border-radius: 3px; }
+.component-palette button:hover { border: 2px #d9e9fc; }
+.color-picker { display: block; margin-top: 8px; }
+.color-picker-toggle { display: flex; align-items: center; width: 100%; height: 28px; padding: 4px 7px; background-color: #303b4a; border: 1px #4b5e75; color: #c4d7ee; font-size: 11px; }
+.color-picker-toggle:hover { background-color: #3b4b60; }
+.color-picker-chip { display: block; width: 28px; height: 16px; margin-right: 8px; border: 1px #8291a6; }
+.color-picker-toggle .icon { width: 14px; height: 14px; margin-left: auto; }
+.color-picker-panel { display: none; padding: 10px; margin-top: 5px; background-color: #1a2029; border: 1px #485a71; border-radius: 4px; }
+.color-picker-panel > label { display: block; font-size: 10px; line-height: 15px; color: #8e9fb6; margin-top: 7px; }
+.color-picker-sv { display: block; position: relative; width: 100%; height: 130px; background-color: #ff0000; decorator: image("sharpengine-resource://engine/Resources/Editor/ColorPicker/sv.tga"); cursor: cross; }
+.color-picker-marker { position: absolute; width: 8px; height: 8px; margin-left: -5px; margin-top: -5px; border: 2px white; border-radius: 5px; background-color: #00000000; pointer-events: none; }
+.color-picker-hue { display: block; position: relative; width: 100%; height: 15px; decorator: image("sharpengine-resource://engine/Resources/Editor/ColorPicker/hue.tga"); cursor: pointer; }
+.color-picker-track-marker { position: absolute; width: 3px; height: 17px; top: -1px; margin-left: -2px; border: 1px white; background-color: #1a2029; pointer-events: none; }
+.color-picker-preview { display: block; height: 27px; margin-top: 7px; padding: 5px; font-size: 10px; color: #d5deeb; background-color: #293443; border-left-width: 22px; }
+.color-picker-buttons { display: flex; gap: 7px; margin-top: 8px; }
+.color-picker-buttons button { flex: 1; height: 26px; padding: 4px; background-color: #2f3947; border: 1px #4a5a70; color: #bccbdf; font-size: 11px; }
+.color-picker-buttons button:hover { border-color: #8cb5e6; }
+.color-picker-buttons .color-picker-apply { background-color: #315c87; border-color: #5a8dbf; color: #edf6ff; }
+#componentInspector input[type=checkbox] { display: inline-block; width: 16px; min-width: 16px; height: 16px; padding: 0px; margin: 0px; flex-grow: 0; flex-shrink: 0; background-color: #1b222c; border: 1px #57667b; border-radius: 3px; cursor: pointer; }
+#componentInspector input[type=checkbox]:hover { border-color: #8bb9ec; }
+#componentInspector input[type=checkbox]:checked { decorator: image("sharpengine-resource://engine/Resources/Editor/Icons/check.tga" contain); background-color: #3978b5; border: 1px #6da6de; }
+#componentInspector input[type=checkbox]:focus { border-color: #c4e0ff; }
+#componentInspector .component-header input[type=checkbox] { margin-left: 8px; }
 #componentInspector input[type=range] { width: 100%; height: 18px; margin-top: 4px; }
 #componentInspector input[type=range] slidertrack { background-color: #171e27; height: 4px; margin-top: 7px; }
 #componentInspector input[type=range] sliderbar { background-color: #69a4df; width: 12px; height: 16px; }
 #componentInspector textarea { width: 100%; min-height: 64px; }
-.component-vector .component-field { width: 33.333%; min-width: 0px; padding: 4px 2px; }
-.component-vector .component-field label { width: 12px; min-width: 12px; flex-grow: 0; }
-.component-vector .component-field input { width: 45px; min-width: 20px; }
-.component-nested { margin-left: 8px; padding-left: 6px; border-left: 1px #3c4656; }
-.component-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.component-actions button { padding: 3px 7px; }
+#inspectorContent .component-vector .component-field { flex-grow: 1; flex-basis: 0px; flex-wrap: nowrap; min-width: 0px; padding: 0px; }
+.component-vector .component-field label { width: 16px; min-width: 16px; padding-right: 0px; flex-grow: 0; font-size: 10px; }
+.component-vector .component-field:nth-child(1) label { color: #d19998; }
+.component-vector .component-field:nth-child(2) label { color: #93ba9c; }
+.component-vector .component-field:nth-child(3) label { color: #91add0; }
+.component-vector .component-field:nth-child(4) label { color: #b4a1c9; }
+.component-vector .component-field input { width: 0px; min-width: 0px; flex-basis: 0px; padding: 5px 6px; }
+.component-color { flex-wrap: wrap; }
+#inspectorContent .component-color .component-field { flex-basis: 40%; }
+.component-nested { margin: 0px; padding: 8px 10px; border-left-width: 0px; }
+.component-nested > label { display: block; color: #9eacc0; font-size: 11px; line-height: 16px; }
+.component-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0px; padding: 7px 9px; border-top: 1px #303844; }
+.component-actions button { position: relative; display: flex; align-items: center; height: 25px; padding: 4px 7px; font-size: 10px; color: #9aaabd; background-color: #2a323e; border: 1px #3c495b; }
+.component-actions button:hover { color: #e2edfb; background-color: #3b485a; border-color: #6c829e; }
+.component-actions button:disabled { opacity: 0.4; cursor: default; }
+.component-actions .icon { width: 13px; height: 13px; margin-right: 5px; }
+.component-actions .component-icon-button { width: 25px; padding: 5px; }
+.component-actions .component-icon-button .icon { margin-right: 0px; }
+.component-actions .component-danger:hover { color: #ffe1e6; background-color: #633745; border-color: #ac6375; }
+.component-entity-actions { padding: 0px; margin-bottom: 14px; border-top-width: 0px; }
+.component-prefab { flex-grow: 1; justify-content: center; }
 .component-error { color: #ff9292; white-space: pre-wrap; }
 .component-menu-item { display: block; width: 100%; text-align: left; margin-top: 3px; }
-.add-component { width: 100%; margin: 8px 0; }
+.add-component { display: flex; align-items: center; justify-content: center; width: 100%; height: 32px; margin: 2px 0px 9px; padding: 6px 10px; color: #a8c8e9; background-color: #293b4e; border: 1px #466383; font-size: 11px; }
+.add-component .icon { width: 14px; height: 14px; margin-right: 7px; }
+.add-component:hover { color: #eff7ff; background-color: #354f6c; border-color: #7aa5d4; }
 .legacy-inspector-details { display: none; }
 .asset-item[data-prefab-asset] { drag: drag-drop; }
 .prefab-editor { padding: 12px; overflow-y: auto; height: 100%; }
 .prefab-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
 .prefab-entity { display: block; width: 100%; text-align: left; margin: 4px 0; }
+#inspectorContent scrollbarvertical { width: 8px; background-color: #1b2028; }
+#inspectorContent scrollbarvertical sliderbar { width: 5px; min-height: 24px; margin-left: 1px; background-color: #48576a; border-radius: 3px; }
+#inspectorContent scrollbarvertical sliderbar:hover { background-color: #6a9ed1; }

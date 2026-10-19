@@ -1,3 +1,4 @@
+using SharpEngine.Modules;
 using System.Text.Json;
 using System.Reflection;
 using SharpEngine.Assets;
@@ -7,13 +8,23 @@ using SharpEngine.Logging;
 using SharpEngine.Settings;
 using SharpEngine.UI;
 using SharpEngine.World;
+using SharpEngine.Subsystems;
 
-namespace SharpEngine.Runtime.Hosting;
+namespace SharpEngine.Hosting;
 
 /// <summary>Standalone game composition. Editor Play uses the same RuntimeWorld,
 /// input service, component catalogs, and scene renderer.</summary>
-internal sealed class GameSession : IComponentRuntime, IDisposable
+internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDisposable
 {
+    public EngineLifetime SubsystemLifetime
+    {
+        get;
+    } = new();
+    public RuntimeInstance? Instance
+    {
+        get;
+        private set;
+    }
     private ProjectModuleHost? _modules;
     private EngineModuleHost? _engineModules;
     private DevelopmentSettingsRegistry? _settings;
@@ -46,6 +57,7 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
         Input = InputRuntimeService.Load(Assets);
         try
         {
+            Instance = new RuntimeInstance(Assets, SubsystemLifetime);
             _settings = new DevelopmentSettingsRegistry(projectRoot, engineRoot);
             var registry = ComponentRegistry.CreateBuiltin();
             _engineModules = EngineModuleHost.Prepare("Game", engineModuleAssemblies);
@@ -63,7 +75,7 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
             World = WorldDocument.Load(worldPath, registry);
             if (World.ActiveCamera is null)
                 throw new InvalidDataException("GAME_CAMERA_REQUIRED: Startup World must contain an active camera");
-            RuntimeWorld = new RuntimeWorld(World.Data, registry, Assets);
+            RuntimeWorld = Instance.CreateWorld(World.Data, registry);
             World.ApplyRuntimeFrame(RuntimeWorld.Frame);
             Input.SetRouteEnabled(InputRoute.Editor, false);
             Input.SetRouteEnabled(InputRoute.RuntimeUi, true);
@@ -79,18 +91,22 @@ internal sealed class GameSession : IComponentRuntime, IDisposable
         catch { Dispose(); throw; }
     }
 
-    public void Update(float seconds)
+    public void Update(float Seconds)
     {
-        Input.AdvanceFrame(seconds);
-        RuntimeWorld!.Tick(seconds);
-        World.ApplyRuntimeFrame(RuntimeWorld.Frame);
+        Input.AdvanceFrame(Seconds);
+        SubsystemLifetime.Update(Seconds);
+        Instance!.Tick(Seconds);
+        World.ApplyRuntimeFrame(RuntimeWorld!.Frame);
     }
 
     public void Dispose()
     {
-        RuntimeWorld?.Dispose(); RuntimeWorld = null;
+        Instance?.Dispose();
+        Instance = null;
+        RuntimeWorld = null;
         _modules?.Dispose(); _modules = null;
         _engineModules?.Dispose(); _engineModules = null;
+        SubsystemLifetime.Dispose();
         _settings?.Dispose(); _settings = null;
     }
 }

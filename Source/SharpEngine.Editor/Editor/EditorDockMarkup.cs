@@ -185,10 +185,10 @@ internal static class EditorDockMarkup
                 markup.Append("<div id=\"inspectorContent\" class=\"pane-content\"><div id=\"selectedObject\">Main Scene</div><div class=\"object-kind\" id=\"selectedKind\">World</div><div id=\"componentInspector\"></div><div class=\"legacy-inspector-details\"><div class=\"component-title\">Details</div><div class=\"field\"><label>Parent</label><span id=\"parent\">None</span></div><div class=\"field\"><label>Position</label><span id=\"position\">0 / 0 / 0</span></div><div class=\"field\"><label>Rotation</label><span id=\"rotation\">0 / 0 / 0</span></div><div class=\"field\"><label>Scale</label><span id=\"scale\">1 / 1 / 1</span></div></div><div class=\"component\"><div class=\"component-title\">Properties</div><div class=\"field\"><label>State</label><span id=\"status\">Ready</span></div><div class=\"field\"><label>Source</label><span id=\"assetSource\">Engine</span></div></div></div>");
                 break;
             case EditorPaneIds.Console:
-                markup.Append("<div class=\"console-header\"><span class=\"good\">Editor status</span></div><div class=\"console-line\"><span class=\"log-time\">[Editor]</span><span id=\"detailsText\">Engine initialized.</span></div><div class=\"console-line muted\"><span class=\"log-time\">[UI]</span><span>RmlUi 6.1 / OpenGL renderer</span></div>");
+                markup.Append("<div class=\"console-header\"><span class=\"good\">Editor status</span></div><div class=\"console-line\"><span class=\"log-time\">[Editor]</span><span id=\"detailsText\">Engine initialized.</span></div><div class=\"console-line muted\"><span class=\"log-time\">[UI]</span><span>RmlUi 6.1</span></div>");
                 break;
             case EditorPaneIds.Logs:
-                markup.Append("<div class=\"logs-pane\"><div class=\"logs-header\"><span class=\"logs-title\">Unified Log</span><span class=\"logs-hint\">time · level · source · category · message</span></div><div id=\"")
+                markup.Append("<div class=\"logs-pane\"><div class=\"logs-header\"><span class=\"logs-title\">Unified Log</span><span class=\"logs-hint\">time 路 level 路 source 路 category 路 message</span></div><div id=\"")
                     .Append(Escape(LogEntriesId(hostId)))
                     .Append("\" class=\"log-entries\">")
                     .Append(BuildLogEntriesMarkup([]))

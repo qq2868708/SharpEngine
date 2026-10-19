@@ -12,6 +12,7 @@ public abstract class ComponentFrameState
 public sealed class RuntimeFrame
 {
     private readonly SceneData Scene;
+    private readonly JsonObject SubsystemState;
     public ulong Revision
     {
         get;
@@ -21,9 +22,10 @@ public sealed class RuntimeFrame
         get;
     }
 
-    internal RuntimeFrame(SceneData Scene, ulong Revision, IDictionary<string, ComponentFrameState> Components)
+    internal RuntimeFrame(SceneData Scene, ulong Revision, IDictionary<string, ComponentFrameState> Components, JsonObject Subsystems)
     {
         this.Scene = Scene.Clone();
+        SubsystemState = (JsonObject)Subsystems.DeepClone();
         this.Revision = Revision;
         this.Components = new ReadOnlyDictionary<string, ComponentFrameState>(new Dictionary<string, ComponentFrameState>(Components, StringComparer.Ordinal));
     }
@@ -43,6 +45,7 @@ public sealed class RuntimeFrame
             ["schemaVersion"] = 1,
             ["revision"] = Revision,
             ["components"] = States,
+            ["subsystems"] = SubsystemState.DeepClone(),
         };
     }
 }

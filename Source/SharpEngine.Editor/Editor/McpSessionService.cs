@@ -174,10 +174,22 @@ internal sealed class EditorMcpSessionHost : IDisposable
 
     internal McpEditorSessionDescriptor Descriptor => _registration.Descriptor;
 
+    internal async Task<string?> RequestAsync(string Line, CancellationToken Token)
+    {
+        var Completion = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var Registration = Token.Register(() => Completion.TrySetCanceled(Token));
+        _requests.Enqueue(new PendingRequest(Line, Completion));
+        return await Completion.Task.ConfigureAwait(false);
+    }
+
     internal void Pump()
     {
         while (_requests.TryDequeue(out var request))
         {
+            if (request.Completion.Task.IsCompleted)
+            {
+                continue;
+            }
             try
             {
                 request.Completion.TrySetResult(

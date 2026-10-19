@@ -1,3 +1,4 @@
+using SharpEngine.Modules;
 using SharpEngine.Assets;
 using SharpEngine.Logging;
 using SharpEngine.World;
@@ -33,7 +34,7 @@ public sealed class EditorCommand
         Id = EditorExtensionIds.Validate(id, nameof(id));
         Label = EditorExtensionIds.RequireLabel(label, nameof(label));
         ArgumentNullException.ThrowIfNull(execute);
-        var owner = SharpEngine.Runtime.ModuleRegistrationScope.Current;
+        var owner = ModuleRegistrationScope.Current;
         Execute = owner is null ? execute : context => { using var entered = owner.Enter(); execute(context); };
         CanExecute = canExecute;
         Tooltip = string.IsNullOrWhiteSpace(tooltip) ? null : tooltip.Trim();
@@ -555,7 +556,7 @@ internal sealed class EditorRegistration : IDisposable
     public EditorRegistration(Action dispose)
     {
         _dispose = dispose;
-        SharpEngine.Runtime.ModuleRegistrationScope.Track(this);
+        ModuleRegistrationScope.Track(this);
     }
     public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
 }
