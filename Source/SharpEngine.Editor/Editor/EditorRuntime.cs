@@ -152,6 +152,7 @@ public sealed partial class EditorRuntime
     public EditorSelection Selection => _selection;
     internal string EngineRoot => _engineRoot;
     internal string? ProjectManifest => _projectManifest;
+    internal DataAssetTypeRegistry RegisteredDataAssetTypes => DataAssetTypes;
     internal bool HasLiveUi => _windowHandle != 0 && _nativeApi.HasUiObservability;
     internal McpEditorSessionDescriptor? McpSessionDescriptor => _mcpSession?.Descriptor;
     public string? SelectedEntityId => _selection.Kind == EditorSelectionKind.Entity ? _selection.Id : null;

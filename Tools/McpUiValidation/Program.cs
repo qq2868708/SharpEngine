@@ -153,6 +153,12 @@ try
         Console.WriteLine($"PASS: {assertions} Timeline preview integration assertions");
         return;
     }
+    if (args.Contains("--asset-editors-only", StringComparer.Ordinal))
+    {
+        AssetEditorSuiteValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} asset editor rendered UI assertions");
+        return;
+    }
     var tools = Call(5, "tools/list")["result"]?["tools"]?.AsArray() ?? [];
     var pointerTool = tools.Select(node => node?.AsObject()).First(tool =>
         tool?["name"]?.GetValue<string>() == "ui.pointer")!;

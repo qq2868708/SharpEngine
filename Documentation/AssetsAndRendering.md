@@ -56,6 +56,16 @@ The built-in primitive set includes formal `Mesh` assets for `Cube`, `Plane`,
 0.5 and total height 2. Sphere has radius 0.5. All use Y-up coordinates and
 carry indexed triangle geometry directly in `Content/Assets/Meshes`.
 
+Content Manager opens Mesh, StaticMesh, SkeletalMesh, Skeleton, and Material in
+dedicated top-level asset editors. Mesh previews render the real indexed geometry;
+Skeleton previews use the explicit `previewMeshId` when available and otherwise
+draw the bind hierarchy. Imported geometry, indices, bone topology, and skinning
+weights are read-only. A writable project Mesh/SkeletalMesh may change only its
+`defaultMaterial`; a writable Skeleton may change only `previewMeshId`. Material
+schema v1 fields (`shader`, `baseColor`, `metallic`, and `roughness`) are fully
+authorable. Every accepted edit validates the complete source document and joins
+the editor-local revision and Undo/Redo history before explicit atomic Save.
+
 To rebuild the Cube import validation evidence with Blender 5.2:
 
 ```powershell

@@ -3,6 +3,7 @@ using SharpEngine.Editor;
 using SharpEngine.Editor.Layout;
 using SharpEngine.UI;
 using SharpEngine.World;
+using System.Text.Json.Nodes;
 
 var root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 var previousRoot = Environment.GetEnvironmentVariable("SHARPENGINE_ROOT");
@@ -31,6 +32,16 @@ try
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));
+    var materialDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "Content", "Assets", "Materials"));
+    var meshDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "Content", "Assets", "Meshes"));
+    var dataDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "Content", "Assets", "Data"));
+    var inputActionDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "Content", "Input", "Actions"));
+    var inputContextDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName,
+        "Content", "Input", "Contexts"));
     var pluginRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName,
         "Plugins", "ValidationPlugin"));
     var pluginAssets = Directory.CreateDirectory(Path.Combine(pluginRoot.FullName,
@@ -62,11 +73,38 @@ try
         """);
     File.WriteAllText(Path.Combine(ui.FullName, "Main.rcss"),
         ".screen { display: flex; flex-direction: column; } .headline { color: #ffffff; }");
+    var materialPath = Path.Combine(materialDirectory.FullName, "Validation.material.json");
+    File.WriteAllText(materialPath, """
+        {"schemaVersion":1,"name":"Validation Material","shader":"Standard","baseColor":[0.2,0.4,0.7,1],"metallic":0.1,"roughness":0.6}
+        """);
+    var meshPath = Path.Combine(meshDirectory.FullName, "Validation.mesh.json");
+    File.WriteAllText(meshPath, """
+        {"schemaVersion":1,"name":"Validation Mesh","primitive":"Triangle","coordinateSystem":"Y-up","defaultMaterial":"project://materials/validation","positions":[[-0.5,0,0],[0.5,0,0],[0,1,0]],"indices":[0,1,2]}
+        """);
+    var inputActionPath = Path.Combine(inputActionDirectory.FullName,
+        "ValidationMove.inputaction.json");
+    File.WriteAllText(inputActionPath, """
+        {"schemaVersion":1,"actionId":"project://input/actions/validation-move","valueType":"Axis2D","continuous":true}
+        """);
+    var inputContextPath = Path.Combine(inputContextDirectory.FullName,
+        "Validation.inputmapping.json");
+    File.WriteAllText(inputContextPath, """
+        {"schemaVersion":1,"contextId":"project://input/contexts/validation","route":"Gameplay","priority":0,"activateByDefault":false,"bindings":[{"action":"project://input/actions/validation-move","control":"Keyboard/W","scaleX":0,"scaleY":1,"modifiers":[],"exactModifiers":false}]}
+        """);
+    var dataAssetPath = Path.Combine(dataDirectory.FullName, "ReloadRifle.sdataasset");
+    File.WriteAllText(dataAssetPath, """
+        {"schemaVersion":1,"kind":"Validation.Reload.Rifle","assetId":"project://data/reload-rifle","name":"Reload Rifle","damage":35,"magazineSize":30}
+        """);
     File.WriteAllText(Path.Combine(assets.FullName, "assets.json"), """
         {"schemaVersion":1,"assets":[
           {"id":"worlds/main","type":"World","path":"Content/Worlds/Main.sworld"},
           {"id":"ui/main","type":"RmlDocument","path":"Content/UI/Main.rml"},
-          {"id":"ui/main-style","type":"StyleSheet","path":"Content/UI/Main.rcss"}
+          {"id":"ui/main-style","type":"StyleSheet","path":"Content/UI/Main.rcss"},
+          {"id":"materials/validation","type":"Material","path":"Content/Assets/Materials/Validation.material.json"},
+          {"id":"meshes/validation","type":"Mesh","path":"Content/Assets/Meshes/Validation.mesh.json"},
+          {"id":"input/actions/validation-move","type":"InputAction","path":"Content/Input/Actions/ValidationMove.inputaction.json"},
+          {"id":"input/contexts/validation","type":"InputMappingContext","path":"Content/Input/Contexts/Validation.inputmapping.json"},
+          {"id":"data/reload-rifle","type":"Validation.Reload.Rifle","path":"Content/Assets/Data/ReloadRifle.sdataasset"}
         ]}
         """);
     var manifest = Path.Combine(temporary.FullName, "Validation.sharpproject");
@@ -135,7 +173,7 @@ try
         runtime.Menus.Items.Any(item => item.CommandId == "view.logs"),
         "View menu must expose independent Console and Logs commands");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
-    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 4,
+    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 9,
         "Public, project, and Plugin Content assets must both be available to a project editor");
     var pluginAsset = runtime.Assets.Find("project://plugins/validation.plugin/sample");
     Require(pluginAsset?.OwnerId == "validation.plugin" &&
@@ -395,6 +433,126 @@ try
     Require(File.ReadAllText(uiPath).Contains("Saved UI headline", StringComparison.Ordinal) &&
         !AssetEditorDirty("project://ui/main"),
         "UI Save must validate and atomically replace the authoritative RML source");
+
+    foreach (var AssetId in new[]
+    {
+        "engine://meshes/cube",
+        "engine://meshes/robot-static",
+        "engine://meshes/uefn-mannequin",
+        "engine://skeletons/uefn-mannequin",
+        "engine://materials/default",
+        "engine://ui/editor-style",
+        "engine://input/actions/demo.move",
+        "engine://input/contexts/demo-gameplay",
+    })
+    {
+        var Opened = runtime.OpenAsset(AssetId);
+        Require(Opened.Success && !AssetEditorDirty(AssetId),
+            $"Engine asset editor must open read-only asset {AssetId}");
+    }
+
+    var ProjectMeshOpen = runtime.OpenAsset("project://meshes/validation");
+    var ProjectMeshRoot = AssetEditorRoot("project://meshes/validation");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectMeshRoot}:editor.mesh-default-material:engine://materials/default");
+    Require(ProjectMeshOpen.Success && AssetEditorDirty("project://meshes/validation"),
+        "Mesh editor must author only the project mesh default material");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectMeshRoot}:editor.asset-save");
+    Require(File.ReadAllText(meshPath).Contains("engine://materials/default",
+            StringComparison.Ordinal) && !AssetEditorDirty("project://meshes/validation"),
+        "Mesh editor Save must validate and atomically persist defaultMaterial");
+
+    var ProjectMaterialOpen = runtime.OpenAsset("project://materials/validation");
+    var ProjectMaterialRoot = AssetEditorRoot("project://materials/validation");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectMaterialRoot}:editor.material-field:metallic:0.45");
+    Require(ProjectMaterialOpen.Success && AssetEditorDirty("project://materials/validation"),
+        "Material editor must author structured shader parameters");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectMaterialRoot}:editor.asset-command:undo");
+    Require(!AssetEditorDirty("project://materials/validation"),
+        "Material editor Undo must restore its savepoint");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectMaterialRoot}:editor.asset-command:redo");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectMaterialRoot}:editor.asset-save");
+    Require(File.ReadAllText(materialPath).Contains("0.45", StringComparison.Ordinal) &&
+        !AssetEditorDirty("project://materials/validation"),
+        "Material editor Redo and Save must persist the validated value");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectMaterialRoot}:editor.material-field:metallic:2");
+    Require(!AssetEditorDirty("project://materials/validation"),
+        "Material editor must reject out-of-range parameters without partial mutation");
+    var SavedMaterialText = File.ReadAllText(materialPath);
+    File.WriteAllText(materialPath, SavedMaterialText + Environment.NewLine);
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectMaterialRoot}:editor.material-field:roughness:0.55");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectMaterialRoot}:editor.asset-save");
+    Require(AssetEditorDirty("project://materials/validation") &&
+        File.ReadAllText(materialPath) == SavedMaterialText + Environment.NewLine,
+        "Asset editor Save must reject an external source change without overwriting it");
+    File.WriteAllText(materialPath, SavedMaterialText);
+    runtime.InvokeUiAction($"editor.host-action:{ProjectMaterialRoot}:editor.asset-save");
+    Require(!AssetEditorDirty("project://materials/validation"),
+        "Asset editor Save must succeed after the external conflict is resolved");
+
+    var ProjectStyleOpen = runtime.OpenAsset("project://ui/main-style");
+    var ProjectStyleRoot = AssetEditorRoot("project://ui/main-style");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectStyleRoot}:editor.asset-command:add-line");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectStyleRoot}:editor.stylesheet-line:1:.probe {{ color: #123456; }}");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectStyleRoot}:editor.stylesheet-line-remove:1");
+    Require(!AssetEditorDirty("project://ui/main-style"),
+        "StyleSheet editor add and remove line actions must restore the savepoint exactly");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectStyleRoot}:editor.stylesheet-line:0:.screen {{ color: #abcdef; }}");
+    Require(ProjectStyleOpen.Success && AssetEditorDirty("project://ui/main-style"),
+        "StyleSheet editor must retain an editable RCSS text document");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectStyleRoot}:editor.asset-save");
+    Require(File.ReadAllText(Path.Combine(ui.FullName, "Main.rcss")).Contains("#abcdef",
+            StringComparison.Ordinal) && !AssetEditorDirty("project://ui/main-style"),
+        "StyleSheet editor Save must persist a syntax-valid RCSS source");
+
+    var ProjectActionOpen = runtime.OpenAsset(
+        "project://input/actions/validation-move");
+    var ProjectActionRoot = AssetEditorRoot(
+        "project://input/actions/validation-move");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectActionRoot}:editor.input-field:valueType:Axis1D");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectActionRoot}:editor.asset-save");
+    Require(ProjectActionOpen.Success && File.ReadAllText(inputActionPath)
+            .Contains("Axis1D", StringComparison.Ordinal),
+        "InputAction editor must validate and save its structured fields");
+
+    var ProjectContextOpen = runtime.OpenAsset("project://input/contexts/validation");
+    var ProjectContextRoot = AssetEditorRoot("project://input/contexts/validation");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectContextRoot}:editor.input-field:priority:5");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectContextRoot}:editor.asset-command:add-binding");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectContextRoot}:editor.asset-save");
+    Require(ProjectContextOpen.Success && File.ReadAllText(inputContextPath)
+            .Contains("\"priority\": 5", StringComparison.Ordinal) &&
+        JsonNode.Parse(File.ReadAllText(inputContextPath))!["bindings"]!.AsArray().Count == 2,
+        "InputMappingContext editor must edit fields and add validated bindings");
+
+    var DataAssetOpen = runtime.OpenAsset("project://data/reload-rifle");
+    var DataAssetRoot = AssetEditorRoot("project://data/reload-rifle");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-field:damage:42");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-field:magazineSize:12");
+    runtime.InvokeUiAction($"editor.host-action:{DataAssetRoot}:editor.asset-save");
+    var SavedDataAsset = JsonNode.Parse(File.ReadAllText(dataAssetPath))!;
+    Require(DataAssetOpen.Success && SavedDataAsset["damage"]!.GetValue<double>() == 42 &&
+        SavedDataAsset["magazineSize"]!.GetValue<int>() == 12,
+        "Generic DataAsset reflection editor must validate and save inherited and local properties");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-field:damage:-1");
+    Require(!AssetEditorDirty("project://data/reload-rifle"),
+        "Generic DataAsset editor must enforce reflected range constraints atomically");
+
     var initialCameraPosition = runtime.World!.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);
     runtime.Update(0.1f);

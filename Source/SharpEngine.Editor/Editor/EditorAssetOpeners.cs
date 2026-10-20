@@ -41,7 +41,8 @@ public sealed class EditorAssetOpenContext
 public sealed class EditorAssetOpener
 {
     private EditorAssetOpener(string Id, string AssetType, int Priority,
-        string? AssetId, Func<JsonObject>? GetState, string? EditorId)
+        string? AssetId, Func<JsonObject>? GetState, string? EditorId,
+        Func<AssetDescriptor, bool>? CanOpen)
     {
         this.Id = EditorExtensionIds.Validate(Id, nameof(Id));
         this.AssetType = EditorExtensionIds.RequireLabel(AssetType, nameof(AssetType));
@@ -49,11 +50,13 @@ public sealed class EditorAssetOpener
         this.EditorId = EditorExtensionIds.Validate(EditorId ?? Id, nameof(EditorId));
         this.Priority = Priority;
         this.GetState = GetState;
+        this.CanOpen = CanOpen;
     }
 
     public EditorAssetOpener(string Id, string AssetType, Action<EditorAssetOpenContext> Open,
         int Priority = 0, string? AssetId = null, Func<JsonObject>? GetState = null,
-        string? EditorId = null) : this(Id, AssetType, Priority, AssetId, GetState, EditorId)
+        string? EditorId = null, Func<AssetDescriptor, bool>? CanOpen = null)
+        : this(Id, AssetType, Priority, AssetId, GetState, EditorId, CanOpen)
     {
         ArgumentNullException.ThrowIfNull(Open);
         var Owner = ModuleRegistrationScope.Current;
@@ -66,8 +69,9 @@ public sealed class EditorAssetOpener
 
     public EditorAssetOpener(string Id, string AssetType,
         Func<EditorAssetOpenContext, IAssetEditorInstance> Create,
-        int Priority = 0, string? AssetId = null, string? EditorId = null)
-        : this(Id, AssetType, Priority, AssetId, null, EditorId)
+        int Priority = 0, string? AssetId = null, string? EditorId = null,
+        Func<AssetDescriptor, bool>? CanOpen = null)
+        : this(Id, AssetType, Priority, AssetId, null, EditorId, CanOpen)
     {
         ArgumentNullException.ThrowIfNull(Create);
         var Owner = ModuleRegistrationScope.Current;
@@ -86,6 +90,7 @@ public sealed class EditorAssetOpener
     internal Action<EditorAssetOpenContext>? Open { get; }
     internal Func<EditorAssetOpenContext, IAssetEditorInstance>? Create { get; }
     internal Func<JsonObject>? GetState { get; }
+    internal Func<AssetDescriptor, bool>? CanOpen { get; }
 }
 
 public sealed class EditorAssetOpenerRegistry
@@ -130,9 +135,12 @@ public sealed class EditorAssetOpenerRegistry
     public EditorAssetOpener? Resolve(AssetDescriptor Asset)
     {
         return Entries.AsEnumerable().Reverse()
-            .Where(Entry => string.Equals(Entry.AssetType, Asset.Type, StringComparison.OrdinalIgnoreCase) &&
+            .Where(Entry => (string.Equals(Entry.AssetType, Asset.Type,
+                    StringComparison.OrdinalIgnoreCase) || Entry.AssetType == "*") &&
+                (Entry.CanOpen is null || Entry.CanOpen(Asset)) &&
                 (Entry.AssetId is null || string.Equals(Entry.AssetId, Asset.Id, StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(Entry => Entry.AssetId is not null)
+            .ThenByDescending(Entry => Entry.AssetType != "*")
             .ThenByDescending(Entry => Entry.Priority).FirstOrDefault();
     }
 

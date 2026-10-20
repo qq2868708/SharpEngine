@@ -81,6 +81,7 @@ internal static class ContentManagerUiValidation
         }
         void DoubleClick(string id)
         {
+            Click("content-view-tile");
             var snap = Snapshot();
             var target = Elements(snap).FirstOrDefault(p => Match(p.Element, id) &&
                 p.Element["visible"]!.GetValue<bool>() && p.Element["hitTarget"]!.GetValue<bool>());

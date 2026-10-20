@@ -353,6 +353,44 @@ viewport { display: block; }
 .prefab-asset-hierarchy { display: flex; flex-direction: column; width: 100%; height: 100%; padding: 6px; overflow: auto; }
 .prefab-entity.selected { color: #ffffff; background-color: #31506c; border-color: #5d94d2; }
 .asset-prefab-details { width: 100%; height: 100%; }
+.asset-preview-surface { position: relative; display: flex; width: 100%; height: 100%; min-width: 0px; min-height: 0px; background-color: #0d1218; }
+.asset-preview-surface viewport { flex-grow: 1; min-width: 0px; min-height: 0px; }
+.asset-preview-overlay { position: absolute; top: 10px; left: 12px; display: flex; flex-direction: column; padding: 7px 9px; color: #d8e2ee; background-color: #171d25dd; border: 1px #3a4655; font-size: 10px; pointer-events: none; }
+.asset-preview-overlay span + span { margin-top: 3px; color: #8292a6; }
+.asset-inspector { width: 100%; max-width: 100%; height: 100%; min-width: 0px; padding: 10px; overflow-x: hidden; overflow-y: auto; }
+.asset-field { display: flex; flex-direction: column; width: 100%; max-width: 100%; min-width: 0px; margin-bottom: 10px; overflow: hidden; }
+.asset-field label { margin-bottom: 4px; color: #8fa2b8; font-size: 10px; }
+.asset-field > span { min-height: 25px; padding: 5px 7px; color: #d5deea; background-color: #191e25; border: 1px #313946; word-break: break-all; }
+.asset-field input { width: 100%; max-width: 100%; min-width: 0px; margin-bottom: 0px; }
+.asset-field textarea { min-height: 110px; }
+.asset-field-hint { min-height: 0px !important; margin-top: 3px; padding: 0px !important; color: #67788d !important; background-color: transparent !important; border-width: 0px !important; font-size: 9px; }
+.asset-source-view { width: 834px; height: 100%; padding: 6px; overflow: auto; background-color: #11161c; }
+.asset-source-readonly-line { color: #b8c9dc; font-family: Segoe UI; font-size: 10px; text-align: left; }
+.asset-source-truncated { margin: 8px 42px; padding: 8px; color: #a8b6c7; background-color: #202833; border-left: 2px #6686a8; font-size: 10px; }
+.asset-source-form { font-family: Segoe UI; }
+.asset-source-page { width: 820px; margin-bottom: 8px; padding: 7px 9px; color: #9aabc0; background-color: #1d2530; border-left: 2px #5e8bb6; font-size: 10px; }
+.asset-source-row { width: 100%; max-width: 100%; min-width: 0px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px #242c36; }
+.asset-source-remove { align-self: flex-end; min-width: 72px; height: 25px; margin-top: 4px; padding: 3px 8px; color: #a7b2c1; background-color: #252c35; }
+.asset-diagnostics { width: 100%; height: 100%; padding: 6px; overflow: auto; }
+.asset-tree { width: 100%; height: 100%; padding: 6px; overflow: auto; }
+.asset-tree-row { display: flex; align-items: center; min-height: 25px; border-bottom: 1px #252d38; }
+.asset-tree-row strong { min-width: 140px; color: #d7e0eb; font-size: 11px; }
+.asset-tree-row span { color: #77899f; font-family: Segoe UI; font-size: 9px; }
+.asset-reference-row { display: flex; flex-direction: column; margin-bottom: 7px; padding: 7px; background-color: #1c232c; border-left: 2px #4e8a70; }
+.asset-reference-row strong { color: #d9e2ed; }
+.asset-reference-row span { margin-top: 3px; color: #73859a; font-family: Segoe UI; font-size: 9px; }
+.stylesheet-preview { width: 100%; height: 100%; padding: 8px; overflow: auto; }
+.stylesheet-rule-preview { display: flex; flex-direction: column; width: 820px; min-width: 0px; margin-bottom: 7px; padding: 9px; border: 1px #424954; border-radius: 3px; }
+.stylesheet-rule-preview strong { margin-bottom: 5px; }
+.stylesheet-rule-preview span { font-family: Segoe UI; font-size: 9px; white-space: pre-wrap; }
+.input-bindings { width: 100%; max-width: 100%; height: 100%; min-width: 0px; padding: 8px; overflow-x: hidden; overflow-y: auto; }
+.input-bindings .asset-field input { width: 760px; max-width: 760px; }
+.input-bindings .asset-field { width: 760px; max-width: 760px; }
+.input-bindings .asset-field > span { width: 760px; max-width: 760px; }
+.input-binding-heading { display: flex; align-items: center; width: 760px; height: 28px; margin-bottom: 8px; }
+.input-binding-heading strong { color: #d9e4ef; }
+.input-binding-heading button { min-width: 72px; height: 24px; margin-left: auto; padding: 2px 8px; }
+.data-asset-properties { padding-bottom: 30px; }
 .menu-path { padding: 6px 12px 4px; color: #65758a; font-size: 9px; overflow: hidden; }
 /* GL2 has no offscreen layer/filter support; box-shadow produces an untextured white quad. */
 .menu-popup { display: none; position: absolute; top: 32px; left: 0px; z-index: 300; width: 236px; padding: 5px; background-color: #22262e; color: #d4dae4; border: 1px #4a5566; border-radius: 4px; }

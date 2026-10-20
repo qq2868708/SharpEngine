@@ -62,7 +62,7 @@
       <p>编辑器提供视口、层级、资源浏览、属性检查、界面编辑和日志查看等面板。播放会使用当前已保存的内容创建独立的运行副本；停止后，运行期间的临时变化会被清除。</p>
       <p>层级、变换、资源选择和设置编辑都支持撤销、重做和恢复。编辑器会在内容变化后重新载入可用结果；如果载入失败，会保留当前编辑状态并显示诊断信息。</p>
       <p>资源浏览器支持按文件夹、名称、来源和类型查找内容，多个浏览器可以分别保留自己的位置、筛选条件和选择。单击文件夹只选择它并保持当前目录，双击文件夹才进入目录；文件夹图标和名称遵循相同规则。资源仍然是单击选择、双击打开。</p>
-      <p>主编辑器和顶层资产编辑器是两个不同的编辑器根：两者都有自己的菜单、工具栏和 Dock 布局。主编辑器负责当前 World；动画、UI 和 Prefab 会按资产打开独立顶层编辑器。顶层编辑器内部的 Preview、Timeline、Details 等普通窗口只能在所属编辑器根内停靠，也可以脱离为仍归原根所有的游离 Tab；它们不能停靠到主编辑器或另一个资产编辑器。关闭有未保存修改的顶层编辑器时会先要求保存、放弃或取消；关闭主编辑器也会依次检查所有打开的脏资产编辑器，任一取消都会阻止退出。</p>
+      <p>主编辑器和顶层资产编辑器是两个不同的编辑器根：两者都有自己的菜单、工具栏和 Dock 布局。主编辑器负责当前 World；动画、UI、Prefab、Mesh、Skeleton、Material、StyleSheet、Input 和项目 DataAsset 会按资产打开独立顶层编辑器。顶层编辑器内部的普通窗口只能在所属编辑器根内停靠，也可以脱离为仍归原根所有的游离 Tab；它们不能停靠到主编辑器或另一个资产编辑器。关闭有未保存修改的顶层编辑器时会先要求保存、放弃或取消；关闭主编辑器也会依次检查所有打开的脏资产编辑器，任一取消都会阻止退出。</p>
     </section>
     <section class="section-card" id="animation-editor">
       <h2>动画时间轴与 Notify</h2>
@@ -74,6 +74,8 @@
       <h2>世界与资源</h2>
       <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
       <p>World 是主编辑器当前文档。双击另一个 World 会先处理当前 World 的未保存修改，再替换主 Viewport、Hierarchy、Inspector 和 Play 上下文；World 不创建独立资产编辑器。Prefab 则始终打开自己的顶层资产编辑器，不替换主 World。</p>
+      <p>Mesh、StaticMesh 和 SkeletalMesh 编辑器提供真实 3D Preview、几何统计、Source 和 Diagnostics。项目 Mesh 只允许修改默认 Material；顶点、索引、骨骼和蒙皮权重保持只读。Skeleton 编辑器显示骨骼树与兼容 Preview Mesh，项目 Skeleton 只允许修改 <code>previewMeshId</code>。Material 编辑器提供预览球并编辑 shader、baseColor、metallic 和 roughness。引擎来源资产统一只读。</p>
+      <p>主 Viewport 会按共享网格顶点生成场景帧，并只对跨越相机视锥边界的三角形执行裁剪。包含高面数骨骼网格的场景不再为每个三角形重复分配裁剪集合；该优化不改变 World、Mesh 或动画资产内容。</p>
       <p>源资源是可编辑内容的唯一依据；运行和发布过程中产生的构建结果可以重新生成。无法识别的内容会被保留并提示问题，不会悄悄变成可运行对象。</p>
     </section>
     <section class="section-card" id="fbx-assets">
@@ -95,6 +97,7 @@
       <h2>输入与 UI</h2>
       <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做，F5 播放或暂停，F8 停止。文本输入框获得焦点时优先处理自身的编辑操作。</p>
       <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。Play 或 Pause 时，Viewport 的相机导航、选择和 Gizmo 不再接收游戏输入；输入只作用于运行时逻辑，Stop 后恢复编辑操作。</p>
+      <p>StyleSheet 编辑器直接维护 RCSS 文本权威源，显示规则预览、引用该样式的 RML 文档和语法诊断。InputAction 与 InputMappingContext 使用结构化表单；Context 编辑器支持 bindings 的增删以及 action、control、scale、modifier、route 和 priority 编辑。无效引用、非法 Control 或未知枚举不会进入 dirty 文档。</p>
     </section>
     <section class="section-card" id="settings-modules">
       <h2>设置与模块</h2>
@@ -114,11 +117,12 @@
     <section class="section-card" id="data-assets">
       <h2>数据资产</h2>
       <p>项目可以用 C# 数据类型定义独立的配置资产，将同一种配置类型保存为多个 <code>.sdataasset</code> 文本资源，并通过稳定资产 ID 加载。字段约束和直接资源引用会在加载时校验。抽象基类可以复用字段，具体派生类各自声明资产类型；<code>sealed</code> 不是必需的。</p>
-      <p>当前提供类型、Schema、强类型加载和显式文件保存基础；通用创建菜单、Inspector 文档和撤销事务仍待接入。Editor 项目代码重载会重新发现 Runtime Module 中的具体数据资产类型，并更新 <code>assets.describe</code> 与 <code>sharpengine://assets</code> 的 Schema。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
+      <p>DataAsset 使用一套通用反射编辑器，不要求每个派生类型实现专用 UI。编辑器从 <code>DataAssetTypeDescriptor.Properties</code> 和 JSON Schema 生成字符串、数值、布尔、枚举、资产引用及 JSON 复合字段控件，并执行 Required、Minimum、Maximum 和引用类型校验。所有修改拥有独立 revision、Undo/Redo、dirty 和原子 Save。Editor 项目代码重载会重新发现具体类型，并更新表单、<code>assets.describe</code> 与 <code>sharpengine://assets</code> 的 Schema。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>优化主 Viewport 的 CPU 场景帧生成：共享顶点每帧只变换一次，完全位于视锥内外的三角形使用无分配快速路径，改善高面数骨骼网格场景的编辑器帧率；渲染结果和资产 schema 不变。</li>
         <li>修正 mannequin Walk/Run 示例 Clip 的局部关节旋转轴和幅度，移动采样时四肢保持连续；Animator、Playable 和状态机契约不变。</li>
         <li>场景渲染增加基础环境光，骨骼模型背向方向光时仍保留可读的体积和关节轮廓；Sandbox 主相机调整为角色近景构图，便于检查蒙皮与动画姿态。</li>
         <li>新增可序列化的最小动画状态机，示例 mannequin 会根据移动速度在 Idle、Walk、Run 和 Jump 状态间切换。</li>
@@ -141,6 +145,9 @@
         <li>重建资产编辑器边界：动画、UI 和 Prefab 按 <code>AssetId</code> 创建独立顶层编辑器根，各自拥有 Menu、Toolbar 和内部 Dock；普通窗口不可跨根停靠，脱离后仍是所属根的游离 Tab。同一资产重复打开只聚焦原实例，脏实例关闭提供 Save、Discard、Cancel。</li>
         <li>动画编辑器默认同时显示真实网格 Preview、Timeline 和 Details；Preview 不再与 Timeline 互斥。UEFN Mannequin 预览验证使用 6009 顶点、9324 三角形的 Skeletal Mesh。</li>
         <li>Skeleton 资产升级到 schema v2，显式保存可空的 <code>previewMeshId</code>；schema v1 读取后迁移为空值。动画编辑器只使用 Skeleton 默认或当前会话临时覆盖，不再按资产注册顺序猜测 Mesh。</li>
+        <li>补齐 Mesh、StaticMesh、SkeletalMesh、Skeleton、Material、StyleSheet、InputAction 和 InputMappingContext 顶层资产编辑器；几何拓扑、骨骼和蒙皮权重保持只读，项目侧可写字段使用统一事务与原子保存。</li>
+        <li>增加通用 DataAsset 反射编辑器：按动态类型描述器生成属性表单，支持继承字段、约束、资产引用、Undo/Redo 和 Save，不增加派生类型专用编辑器。</li>
+        <li>新增共享 <code>JsonAssetAuthoringDocument</code> 与 <code>TextAssetAuthoringDocument</code>，提供外部修改冲突检测、整文档验证和临时文件替换。</li>
         <li>统一 FBX 导入来源校验和语义等价导出规则；导出不再要求保留原始 FBX 字节。</li>
         <li>增加显式骨骼动画 Retarget 验证：跨组动画必须生成目标 SkeletonId 的新资产，并通过目标蒙皮绑定检查后才能组合。</li>
         <li>修正编辑器修饰键位映射，并在 Play/运行时隔离 Viewport 编辑输入，避免游戏移动同时驱动编辑器相机。</li>

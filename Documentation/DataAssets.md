@@ -58,12 +58,16 @@ are rejected. `Serialize` writes every declared property, including defaults.
 `Save` validates first and replaces the registered file through a temporary file;
 read-only assets cannot be saved. Asset references serialize as stable ID strings.
 
-This first-stage API supplies type definitions, schemas, loading and explicit
-source-file persistence. Content creation menus, a generic Inspector document,
-Undo/Redo transactions, migration chains, recursive dependency discovery and a
-full Cook pipeline are not provided by this API yet. When the Editor applies a
-project Runtime Module reload, it discovers the concrete data-asset types again
-and atomically replaces the editor registry; a failed reload restores the prior
-registry. A source save is not an editor transaction, and these helpers must not
-be used to bypass an editor-owned authoritative document. Runtime consumers
-should keep mutable instance state separate from shared configuration assets.
+The Editor provides one generic reflection asset editor for every concrete type
+currently registered in `DataAssetTypeRegistry`. It builds controls from
+`DataAssetTypeDescriptor.Properties`: scalar strings and numbers, booleans,
+enums, direct asset references, and JSON-backed arrays or objects. Inherited and
+derived properties use the same form. Every candidate edit is deserialized through
+`DataAssetSerializer.Parse`, so Required, Minimum, Maximum, enum, unknown-field,
+and direct-reference validation runs before the editor commits a new document
+revision. The editor owns dirty state, Undo/Redo, external-file conflict detection,
+and atomic Save; `DataAssetSerializer.Save` remains the lower-level explicit
+persistence API. When a Runtime Module reload replaces the type registry, the
+editor resolves the current descriptor by stable type ID rather than retaining an
+old CLR type instance. Migration chains, recursive dependency discovery, content
+creation menus, and a full Cook pipeline are not provided yet.

@@ -35,6 +35,34 @@ public sealed partial class EditorRuntime
             EditorId: "prefab-editor"));
         AssetOpeners.Register(new EditorAssetOpener("engine.world-editor", "World",
             OpenWorldAsset, Priority: -100, EditorId: "main-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.mesh-editor", "Mesh",
+            Context => new MeshAssetEditorInstance(Context), Priority: -100,
+            EditorId: "mesh-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.static-mesh-editor", "StaticMesh",
+            Context => new MeshAssetEditorInstance(Context), Priority: -100,
+            EditorId: "mesh-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.skeletal-mesh-editor", "SkeletalMesh",
+            Context => new MeshAssetEditorInstance(Context), Priority: -100,
+            EditorId: "skeletal-mesh-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.skeleton-editor", "Skeleton",
+            Context => new SkeletonAssetEditorInstance(Context), Priority: -100,
+            EditorId: "skeleton-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.material-editor", "Material",
+            Context => new MaterialAssetEditorInstance(Context), Priority: -100,
+            EditorId: "material-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.stylesheet-editor", "StyleSheet",
+            Context => new StyleSheetAssetEditorInstance(Context), Priority: -100,
+            EditorId: "stylesheet-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.input-action-editor", "InputAction",
+            Context => new InputAssetEditorInstance(Context), Priority: -100,
+            EditorId: "input-action-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.input-context-editor",
+            "InputMappingContext", Context => new InputAssetEditorInstance(Context),
+            Priority: -100, EditorId: "input-context-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.data-asset-editor", "*",
+            Context => new DataAssetEditorInstance(Context), Priority: -1000,
+            EditorId: "data-asset-editor", CanOpen: Asset =>
+                RegisteredDataAssetTypes.TryGet(Asset.Type, out _)));
         _commands.Register(new EditorCommand("core.new-csharp", "New C# Class...",
             _ => OpenSourceWizard(), _ => _projectManifest is not null));
         _commands.Register(new EditorCommand("core.build-project-code", "Build Project Code",

@@ -505,79 +505,114 @@ internal sealed class InputRuntimeService : IInputRuntime
     private static InputActionDefinition LoadAction(AssetRegistry assets,
         AssetDescriptor asset)
     {
-        using var document = OpenAsset(assets, asset);
+        var Path = assets.ResolvePath(asset) ?? throw Error("SEINPUT_ASSET_MISSING",
+            asset.Id, "Input asset has no resolvable source path");
+        try
+        {
+            return ParseActionAsset(File.ReadAllText(Path), asset);
+        }
+        catch (Exception Exception) when (Exception is IOException or JsonException)
+        {
+            throw Error("SEINPUT_ASSET_INVALID", asset.Id, Exception.Message);
+        }
+    }
+
+    public static InputActionDefinition ParseActionAsset(string Json,
+        AssetDescriptor Asset)
+    {
+        using var document = JsonDocument.Parse(Json);
         var root = document.RootElement;
-        RequireProperties(root, asset.Id, "$schema", "schemaVersion", "actionId",
+        RequireProperties(root, Asset.Id, "$schema", "schemaVersion", "actionId",
             "valueType", "continuous");
-        var version = RequiredInt(root, "schemaVersion", asset.Id);
-        if (version != 1) throw Error("SEINPUT_SCHEMA_UNSUPPORTED", asset.Id,
-            $"InputAction schemaVersion must be 1, got {version}");
-        var id = RequiredString(root, "actionId", asset.Id);
-        ValidateAssetId(asset, id, "actions");
+        var version = RequiredInt(root, "schemaVersion", Asset.Id);
+        if (version != 1)
+        {
+            throw Error("SEINPUT_SCHEMA_UNSUPPORTED", Asset.Id,
+                $"InputAction schemaVersion must be 1, got {version}");
+        }
+        var id = RequiredString(root, "actionId", Asset.Id);
+        ValidateAssetId(Asset, id, "actions");
         var type = ParseEnum<InputActionValueType>(RequiredString(root, "valueType",
-            asset.Id), asset.Id, "valueType");
-        var continuous = RequiredBool(root, "continuous", asset.Id);
+            Asset.Id), Asset.Id, "valueType");
+        var continuous = RequiredBool(root, "continuous", Asset.Id);
         return new InputActionDefinition(version, id, type, continuous);
     }
 
     private static InputMappingContextDefinition LoadContext(AssetRegistry assets,
         AssetDescriptor asset, HashSet<string> actionIds)
     {
-        using var document = OpenAsset(assets, asset);
+        var Path = assets.ResolvePath(asset) ?? throw Error("SEINPUT_ASSET_MISSING",
+            asset.Id, "Input asset has no resolvable source path");
+        try
+        {
+            return ParseMappingContextAsset(File.ReadAllText(Path), asset, actionIds);
+        }
+        catch (Exception Exception) when (Exception is IOException or JsonException)
+        {
+            throw Error("SEINPUT_ASSET_INVALID", asset.Id, Exception.Message);
+        }
+    }
+
+    public static InputMappingContextDefinition ParseMappingContextAsset(string Json,
+        AssetDescriptor Asset, IReadOnlyCollection<string> ActionIds)
+    {
+        using var document = JsonDocument.Parse(Json);
         var root = document.RootElement;
-        RequireProperties(root, asset.Id, "$schema", "schemaVersion", "contextId",
+        RequireProperties(root, Asset.Id, "$schema", "schemaVersion", "contextId",
             "route", "priority", "activateByDefault", "bindings");
-        var version = RequiredInt(root, "schemaVersion", asset.Id);
-        if (version != 1) throw Error("SEINPUT_SCHEMA_UNSUPPORTED", asset.Id,
-            $"InputMappingContext schemaVersion must be 1, got {version}");
-        var id = RequiredString(root, "contextId", asset.Id);
-        ValidateAssetId(asset, id, "contexts");
-        var route = ParseEnum<InputRoute>(RequiredString(root, "route", asset.Id),
-            asset.Id, "route");
-        var priority = RequiredInt(root, "priority", asset.Id);
-        var activate = RequiredBool(root, "activateByDefault", asset.Id);
+        var version = RequiredInt(root, "schemaVersion", Asset.Id);
+        if (version != 1)
+        {
+            throw Error("SEINPUT_SCHEMA_UNSUPPORTED", Asset.Id,
+                $"InputMappingContext schemaVersion must be 1, got {version}");
+        }
+        var id = RequiredString(root, "contextId", Asset.Id);
+        ValidateAssetId(Asset, id, "contexts");
+        var route = ParseEnum<InputRoute>(RequiredString(root, "route", Asset.Id),
+            Asset.Id, "route");
+        var priority = RequiredInt(root, "priority", Asset.Id);
+        var activate = RequiredBool(root, "activateByDefault", Asset.Id);
         if (!root.TryGetProperty("bindings", out var bindingsNode) ||
             bindingsNode.ValueKind != JsonValueKind.Array)
-            throw Error("SEINPUT_FIELD_INVALID", asset.Id, "bindings must be an array");
+        {
+            throw Error("SEINPUT_FIELD_INVALID", Asset.Id, "bindings must be an array");
+        }
         var bindings = new List<InputBindingDefinition>();
         foreach (var binding in bindingsNode.EnumerateArray())
         {
-            RequireProperties(binding, asset.Id, "action", "control", "scaleX",
+            RequireProperties(binding, Asset.Id, "action", "control", "scaleX",
             "scaleY", "modifiers", "exactModifiers");
-            var action = RequiredString(binding, "action", asset.Id);
-            if (!actionIds.Contains(action)) throw Error("SEINPUT_ACTION_MISSING", asset.Id,
-                $"Binding references unknown InputAction '{action}'");
-            var control = RequiredString(binding, "control", asset.Id);
-            ValidateControl(control, asset.Id);
-            var scaleX = RequiredFloat(binding, "scaleX", asset.Id);
-            var scaleY = RequiredFloat(binding, "scaleY", asset.Id);
+            var action = RequiredString(binding, "action", Asset.Id);
+            if (!ActionIds.Contains(action))
+            {
+                throw Error("SEINPUT_ACTION_MISSING", Asset.Id,
+                    $"Binding references unknown InputAction '{action}'");
+            }
+            var control = RequiredString(binding, "control", Asset.Id);
+            ValidateControl(control, Asset.Id);
+            var scaleX = RequiredFloat(binding, "scaleX", Asset.Id);
+            var scaleY = RequiredFloat(binding, "scaleY", Asset.Id);
             if (!binding.TryGetProperty("modifiers", out var modifiersNode) ||
                 modifiersNode.ValueKind != JsonValueKind.Array)
-                throw Error("SEINPUT_FIELD_INVALID", asset.Id,
+            {
+                throw Error("SEINPUT_FIELD_INVALID", Asset.Id,
                     "'modifiers' requires an array");
+            }
             var modifiers = modifiersNode.EnumerateArray().Select(value =>
                 value.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(value.GetString()) ? value.GetString()! :
-                throw Error("SEINPUT_FIELD_INVALID", asset.Id,
+                throw Error("SEINPUT_FIELD_INVALID", Asset.Id,
                     "modifier controls must be non-empty strings")).ToArray();
-            foreach (var modifier in modifiers) ValidateControl(modifier, asset.Id);
-            var exactModifiers = RequiredBool(binding, "exactModifiers", asset.Id);
+            foreach (var modifier in modifiers)
+            {
+                ValidateControl(modifier, Asset.Id);
+            }
+            var exactModifiers = RequiredBool(binding, "exactModifiers", Asset.Id);
             bindings.Add(new InputBindingDefinition(action, control, scaleX, scaleY,
                 modifiers, exactModifiers));
         }
         return new InputMappingContextDefinition(version, id, route, priority,
             activate, bindings);
-    }
-
-    private static JsonDocument OpenAsset(AssetRegistry assets, AssetDescriptor asset)
-    {
-        var path = assets.ResolvePath(asset) ?? throw Error("SEINPUT_ASSET_MISSING",
-            asset.Id, "Input asset has no resolvable source path");
-        try { return JsonDocument.Parse(File.ReadAllText(path)); }
-        catch (Exception exception) when (exception is IOException or JsonException)
-        {
-            throw Error("SEINPUT_ASSET_INVALID", asset.Id, exception.Message);
-        }
     }
 
     private static void ValidateAssetId(AssetDescriptor asset, string id, string kind)
