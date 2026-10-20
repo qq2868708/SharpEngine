@@ -7,6 +7,21 @@ $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($EngineRoot)) {
     $EngineRoot = Split-Path $PSScriptRoot -Parent
 }
+$EngineRoot = [System.IO.Path]::GetFullPath($EngineRoot).TrimEnd('\', '/')
+$OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\', '/')
+$SavedValidationRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $EngineRoot 'Saved/Validation')).TrimEnd('\', '/')
+$CanonicalPattern = '^' + [regex]::Escape(
+    (Join-Path $EngineRoot 'Intermediate\Win64') + '\') +
+    '(Debug|Development|Shipping)\\(Editor|Game)\\Generated\\RenderShaders$'
+$IsSavedValidation = $OutputDirectory.StartsWith(
+    $SavedValidationRoot + [System.IO.Path]::DirectorySeparatorChar,
+    [System.StringComparison]::OrdinalIgnoreCase)
+$IsCanonicalBuild = [regex]::IsMatch($OutputDirectory, $CanonicalPattern,
+    [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+if (!$IsSavedValidation -and !$IsCanonicalBuild) {
+    throw "SEOUTPUT014: Render shader output must use a canonical target path or Saved/Validation: $OutputDirectory"
+}
 $Sdk = $env:VULKAN_SDK
 if ([string]::IsNullOrWhiteSpace($Sdk)) {
     throw 'VULKAN_SDK is required to compile RenderCore shaders'

@@ -160,6 +160,14 @@ publishes only Runtime Modules for Game, and Runtime plus Editor Modules for Edi
 Game does not need to compile Editor Modules. Tools and validation programs are not
 project Modules and do not require `ISharpEngineModule` entry classes.
 
+Engine source builds accept only `Win64`, the `Debug`/`Development`/`Shipping`
+configurations, and the `Editor`/`Game`/`Server`/`Tools` output targets. The build
+properties are project-local authority: command-line attempts to redirect binaries,
+intermediates, MSBuild extensions, or shader output fail with `SEOUTPUT001` through
+`SEOUTPUT014` before a noncanonical directory is created. Validation artifacts belong
+under `Saved/Validation`; `Intermediate/RenderCache` is the one explicitly named,
+shared derived-cache root outside the target tuple.
+
 ## Launch contract
 
 Editor starts `Binaries/Win64/<Configuration>/Editor/Engine.exe`. It can run without a

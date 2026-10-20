@@ -116,6 +116,7 @@
       <h2>验证边界</h2>
       <p>功能验证分为内容检查、编辑器检查、运行检查、构建检查和发布包检查。某一层通过，只能说明该层的行为符合预期，不能替代其他层的验证。</p>
       <p>每个功能页面都会说明适用的验证范围和已观察到的结果；遇到问题时，优先查看对应功能的诊断信息和验证记录。</p>
+      <p>引擎构建输出只允许 <code>Debug</code>、<code>Development</code>、<code>Shipping</code> 配置和 <code>Editor</code>、<code>Game</code>、<code>Server</code>、<code>Tools</code> target。验证截图、临时项目和隔离证据应写入 <code>Saved/Validation</code>；不得用 MSBuild 属性在 <code>Binaries</code> 或 <code>Intermediate</code> 中创建自定义验证目录。非法覆盖会在 restore/build 生成文件前以 <code>SEOUTPUT001</code>–<code>SEOUTPUT014</code> 拒绝。</p>
     </section>
     <section class="section-card" id="data-assets">
       <h2>数据资产</h2>
@@ -125,6 +126,7 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>构建系统增加生成前输出守卫：拒绝非标准 configuration/target 和 binaries/intermediate/shader 路径覆盖；验证产物统一进入 <code>Saved/Validation</code>，全量布局检查继续严格拒绝未知目录。</li>
         <li>UEFN Mannequin 从已保存的 Blender 源工程重新导入，骨骼、网格与四段动画统一为 Y-up、右手系、-Z 前方；保留原始最多 9 个蒙皮影响。源文件、四段 Action 与导入对照报告分别保存在 Resources/SourceAssets 和 Saved/Validation。走跑的前进与跳跃高度保留在 root 骨，本轮没有增加角色实体 Root Motion 开关。</li>
         <li>Editor 主 Viewport 与 standalone Game 增加 OpenGL/Vulkan retained GPU scene：持久 mesh buffer、静态实例化、GPU skinning、选择轮廓和可见 CPU fallback；OpenGL 仍为默认后端。</li>
         <li>骨骼网格保留每顶点最多 12 个蒙皮影响，并按每 section 最多 256 根实际使用骨骼自动切分；资产级骨骼数量不设该上限，CPU 蒙皮位置按需生成，静态 mesh 拾取使用派生 BVH。</li>

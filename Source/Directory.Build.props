@@ -1,6 +1,3 @@
 <Project>
-  <PropertyGroup>
-    <SharpEngineOutputTarget Condition="'$(SharpEngineRole)' == 'Tool' or '$(SharpEngineRole)' == 'Generator'">Tools</SharpEngineOutputTarget>
-  </PropertyGroup>
   <Import Project="$(MSBuildThisFileDirectory)..\Build\SharpEngine.Build.props" />
 </Project>

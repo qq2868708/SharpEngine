@@ -1,10 +1,26 @@
-<Project>
+<Project TreatAsLocalProperty="Configuration;SharpEnginePlatform;SharpEngineTarget;SharpEngineOutputTarget;SharpEngineBinariesDir;SharpEngineIntermediateDir;OutputPath;BaseIntermediateOutputPath;OutDir;IntDir;MSBuildProjectExtensionsPath;IntermediateOutputPath;SharpEngineRequestedConfiguration;SharpEngineRequestedPlatform;SharpEngineRequestedTarget;SharpEngineRequestedOutputTarget;SharpEngineRequestedBinariesDir;SharpEngineRequestedIntermediateDir;SharpEngineRequestedOutputPath;SharpEngineRequestedBaseIntermediateOutputPath;SharpEngineRequestedOutDir;SharpEngineRequestedIntDir;SharpEngineRequestedProjectExtensionsPath;SharpEngineRequestedIntermediateOutputPath;SharpEngineExpectedBinariesDir;SharpEngineExpectedIntermediateDir;SharpEngineExpectedProjectIntermediateDir">
   <PropertyGroup>
+    <SharpEngineRequestedConfiguration>$(Configuration)</SharpEngineRequestedConfiguration>
+    <SharpEngineRequestedPlatform>$(SharpEnginePlatform)</SharpEngineRequestedPlatform>
+    <SharpEngineRequestedTarget>$(SharpEngineTarget)</SharpEngineRequestedTarget>
+    <SharpEngineRequestedOutputTarget>$(SharpEngineOutputTarget)</SharpEngineRequestedOutputTarget>
+    <SharpEngineRequestedBinariesDir>$(SharpEngineBinariesDir)</SharpEngineRequestedBinariesDir>
+    <SharpEngineRequestedIntermediateDir>$(SharpEngineIntermediateDir)</SharpEngineRequestedIntermediateDir>
+    <SharpEngineRequestedOutputPath>$(OutputPath)</SharpEngineRequestedOutputPath>
+    <SharpEngineRequestedBaseIntermediateOutputPath>$(BaseIntermediateOutputPath)</SharpEngineRequestedBaseIntermediateOutputPath>
+    <SharpEngineRequestedOutDir>$(OutDir)</SharpEngineRequestedOutDir>
+    <SharpEngineRequestedIntDir>$(IntDir)</SharpEngineRequestedIntDir>
+    <SharpEngineRequestedProjectExtensionsPath>$(MSBuildProjectExtensionsPath)</SharpEngineRequestedProjectExtensionsPath>
+    <SharpEngineRequestedIntermediateOutputPath>$(IntermediateOutputPath)</SharpEngineRequestedIntermediateOutputPath>
     <SharpEngineRoot Condition="'$(SharpEngineRoot)' == ''">$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))))</SharpEngineRoot>
-    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
-    <SharpEnginePlatform Condition="'$(SharpEnginePlatform)' == ''">Win64</SharpEnginePlatform>
-    <SharpEngineTarget Condition="'$(SharpEngineTarget)' == ''">Editor</SharpEngineTarget>
-    <SharpEngineOutputTarget Condition="'$(SharpEngineOutputTarget)' == ''">$(SharpEngineTarget)</SharpEngineOutputTarget>
+    <Configuration>Debug</Configuration>
+    <Configuration Condition="'$(SharpEngineRequestedConfiguration)' == 'Debug' or '$(SharpEngineRequestedConfiguration)' == 'Development' or '$(SharpEngineRequestedConfiguration)' == 'Shipping'">$(SharpEngineRequestedConfiguration)</Configuration>
+    <SharpEnginePlatform>Win64</SharpEnginePlatform>
+    <SharpEngineTarget>Editor</SharpEngineTarget>
+    <SharpEngineTarget Condition="'$(SharpEngineRequestedTarget)' == 'Editor' or '$(SharpEngineRequestedTarget)' == 'Game' or '$(SharpEngineRequestedTarget)' == 'Server'">$(SharpEngineRequestedTarget)</SharpEngineTarget>
+    <SharpEngineOutputTarget Condition="'$(SharpEngineRole)' == 'Tool' or '$(SharpEngineRole)' == 'Generator'">Tools</SharpEngineOutputTarget>
+    <SharpEngineOutputTarget Condition="'$(SharpEngineRole)' != 'Tool' and '$(SharpEngineRole)' != 'Generator'">$(SharpEngineTarget)</SharpEngineOutputTarget>
+    <SharpEngineOutputTarget Condition="'$(SharpEngineRequestedOutputTarget)' == 'Editor' or '$(SharpEngineRequestedOutputTarget)' == 'Game' or '$(SharpEngineRequestedOutputTarget)' == 'Server' or '$(SharpEngineRequestedOutputTarget)' == 'Tools'">$(SharpEngineRequestedOutputTarget)</SharpEngineOutputTarget>
 
     <SharpEngineBinariesTemplate>Binaries/{platform}/{configuration}/{target}</SharpEngineBinariesTemplate>
     <SharpEngineIntermediateTemplate>Intermediate/{platform}/{configuration}/{target}</SharpEngineIntermediateTemplate>
@@ -15,6 +31,11 @@
     <IntDir>$(SharpEngineIntermediateDir)$(MSBuildProjectName)\</IntDir>
     <OutputPath>$(SharpEngineBinariesDir)</OutputPath>
     <BaseIntermediateOutputPath>$(SharpEngineIntermediateDir)$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <SharpEngineExpectedBinariesDir>$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('$(SharpEngineRoot)Binaries\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)'))))</SharpEngineExpectedBinariesDir>
+    <SharpEngineExpectedIntermediateDir>$([MSBuild]::EnsureTrailingSlash($([System.IO.Path]::GetFullPath('$(SharpEngineRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineOutputTarget)'))))</SharpEngineExpectedIntermediateDir>
+    <SharpEngineExpectedProjectIntermediateDir>$(SharpEngineExpectedIntermediateDir)$(MSBuildProjectName)\</SharpEngineExpectedProjectIntermediateDir>
+    <MSBuildProjectExtensionsPath>$(SharpEngineExpectedProjectIntermediateDir)</MSBuildProjectExtensionsPath>
+    <IntermediateOutputPath>$(SharpEngineExpectedProjectIntermediateDir)$(Configuration)\</IntermediateOutputPath>
     <Optimize Condition="'$(Configuration)' == 'Debug'">false</Optimize>
     <Optimize Condition="'$(Configuration)' != 'Debug'">true</Optimize>
     <DebugSymbols Condition="'$(Configuration)' == 'Shipping'">false</DebugSymbols>
@@ -22,4 +43,54 @@
     <DebugType Condition="'$(Configuration)' == 'Shipping'">none</DebugType>
     <DebugType Condition="'$(Configuration)' != 'Shipping'">portable</DebugType>
   </PropertyGroup>
+
+  <Target Name="ValidateSharpEngineOutputContract"
+          BeforeTargets="Restore;_GenerateRestoreProjectPathWalk;ResolvePackageAssets;PrepareForBuild">
+    <Error Condition="'$(SharpEnginePlatform)' != 'Win64'"
+           Text="SEOUTPUT001: SharpEnginePlatform must be Win64, not '$(SharpEnginePlatform)'." />
+    <Error Condition="'$(SharpEngineRequestedPlatform)' != '' and '$(SharpEngineRequestedPlatform)' != 'Win64'"
+           Text="SEOUTPUT001: SharpEnginePlatform override '$(SharpEngineRequestedPlatform)' is forbidden; this engine supports Win64." />
+    <Error Condition="'$(Configuration)' != 'Debug' and '$(Configuration)' != 'Development' and '$(Configuration)' != 'Shipping'"
+           Text="SEOUTPUT002: Configuration must be Debug, Development, or Shipping, not '$(Configuration)'." />
+    <Error Condition="'$(SharpEngineRequestedConfiguration)' != '' and '$(SharpEngineRequestedConfiguration)' != 'Debug' and '$(SharpEngineRequestedConfiguration)' != 'Development' and '$(SharpEngineRequestedConfiguration)' != 'Shipping'"
+           Text="SEOUTPUT002: Configuration override '$(SharpEngineRequestedConfiguration)' is forbidden; use Debug, Development, or Shipping." />
+    <Error Condition="'$(SharpEngineRequestedTarget)' != '' and '$(SharpEngineRequestedTarget)' != 'Editor' and '$(SharpEngineRequestedTarget)' != 'Game' and '$(SharpEngineRequestedTarget)' != 'Server'"
+           Text="SEOUTPUT013: SharpEngineTarget override '$(SharpEngineRequestedTarget)' is forbidden; use Editor, Game, or Server." />
+    <Error Condition="'$(SharpEngineOutputTarget)' != 'Editor' and '$(SharpEngineOutputTarget)' != 'Game' and '$(SharpEngineOutputTarget)' != 'Server' and '$(SharpEngineOutputTarget)' != 'Tools'"
+           Text="SEOUTPUT003: SharpEngineOutputTarget must be Editor, Game, Server, or Tools, not '$(SharpEngineOutputTarget)'. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(SharpEngineRequestedOutputTarget)' != '' and '$(SharpEngineRequestedOutputTarget)' != '$(SharpEngineOutputTarget)'"
+           Text="SEOUTPUT003: SharpEngineOutputTarget override '$(SharpEngineRequestedOutputTarget)' is forbidden; this project requires '$(SharpEngineOutputTarget)'. Validation outputs belong under Saved/Validation." />
+    <Error Condition="('$(SharpEngineRole)' == 'Tool' or '$(SharpEngineRole)' == 'Generator') and '$(SharpEngineOutputTarget)' != 'Tools'"
+           Text="SEOUTPUT004: $(SharpEngineRole) projects must use SharpEngineOutputTarget=Tools." />
+    <Error Condition="'$(SharpEngineBinariesDir)' != '$(SharpEngineExpectedBinariesDir)'"
+           Text="SEOUTPUT005: SharpEngineBinariesDir must be '$(SharpEngineExpectedBinariesDir)', not '$(SharpEngineBinariesDir)'. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(SharpEngineRequestedBinariesDir)' != '' and '$(SharpEngineRequestedBinariesDir)' != '$(SharpEngineExpectedBinariesDir)'"
+           Text="SEOUTPUT005: SharpEngineBinariesDir override '$(SharpEngineRequestedBinariesDir)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(SharpEngineIntermediateDir)' != '$(SharpEngineExpectedIntermediateDir)'"
+           Text="SEOUTPUT006: SharpEngineIntermediateDir must be '$(SharpEngineExpectedIntermediateDir)', not '$(SharpEngineIntermediateDir)'. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(SharpEngineRequestedIntermediateDir)' != '' and '$(SharpEngineRequestedIntermediateDir)' != '$(SharpEngineExpectedIntermediateDir)'"
+           Text="SEOUTPUT006: SharpEngineIntermediateDir override '$(SharpEngineRequestedIntermediateDir)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(OutputPath)' != '$(SharpEngineExpectedBinariesDir)'"
+           Text="SEOUTPUT007: OutputPath must be '$(SharpEngineExpectedBinariesDir)', not '$(OutputPath)'." />
+    <Error Condition="'$(SharpEngineRequestedOutputPath)' != '' and '$(SharpEngineRequestedOutputPath)' != '$(SharpEngineExpectedBinariesDir)'"
+           Text="SEOUTPUT007: OutputPath override '$(SharpEngineRequestedOutputPath)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(OutDir)' != '$(SharpEngineExpectedBinariesDir)'"
+           Text="SEOUTPUT008: OutDir must be '$(SharpEngineExpectedBinariesDir)', not '$(OutDir)'." />
+    <Error Condition="'$(SharpEngineRequestedOutDir)' != '' and '$(SharpEngineRequestedOutDir)' != '$(SharpEngineExpectedBinariesDir)'"
+           Text="SEOUTPUT008: OutDir override '$(SharpEngineRequestedOutDir)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(BaseIntermediateOutputPath)' != '$(SharpEngineExpectedProjectIntermediateDir)'"
+           Text="SEOUTPUT009: BaseIntermediateOutputPath must be '$(SharpEngineExpectedProjectIntermediateDir)', not '$(BaseIntermediateOutputPath)'." />
+    <Error Condition="'$(SharpEngineRequestedBaseIntermediateOutputPath)' != '' and '$(SharpEngineRequestedBaseIntermediateOutputPath)' != '$(SharpEngineExpectedProjectIntermediateDir)'"
+           Text="SEOUTPUT009: BaseIntermediateOutputPath override '$(SharpEngineRequestedBaseIntermediateOutputPath)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(IntDir)' != '$(SharpEngineExpectedProjectIntermediateDir)'"
+           Text="SEOUTPUT010: IntDir must be '$(SharpEngineExpectedProjectIntermediateDir)', not '$(IntDir)'." />
+    <Error Condition="'$(SharpEngineRequestedIntDir)' != '' and '$(SharpEngineRequestedIntDir)' != '$(SharpEngineExpectedProjectIntermediateDir)'"
+           Text="SEOUTPUT010: IntDir override '$(SharpEngineRequestedIntDir)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(MSBuildProjectExtensionsPath)' != '' and '$(MSBuildProjectExtensionsPath)' != '$(SharpEngineExpectedProjectIntermediateDir)'"
+           Text="SEOUTPUT011: MSBuildProjectExtensionsPath must be '$(SharpEngineExpectedProjectIntermediateDir)', not '$(MSBuildProjectExtensionsPath)'." />
+    <Error Condition="'$(SharpEngineRequestedProjectExtensionsPath)' != '' and '$(SharpEngineRequestedProjectExtensionsPath)' != '$(SharpEngineExpectedProjectIntermediateDir)'"
+           Text="SEOUTPUT011: MSBuildProjectExtensionsPath override '$(SharpEngineRequestedProjectExtensionsPath)' is forbidden. Validation outputs belong under Saved/Validation." />
+    <Error Condition="'$(SharpEngineRequestedIntermediateOutputPath)' != '' and '$(SharpEngineRequestedIntermediateOutputPath)' != '$(SharpEngineExpectedProjectIntermediateDir)$(Configuration)\'"
+           Text="SEOUTPUT012: IntermediateOutputPath override '$(SharpEngineRequestedIntermediateOutputPath)' is forbidden. Validation outputs belong under Saved/Validation." />
+  </Target>
 </Project>

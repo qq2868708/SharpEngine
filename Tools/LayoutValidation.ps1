@@ -70,6 +70,72 @@ function Test-Layout([string]$Root, [string]$Scope, [bool]$ExpectedSuccess,
     $script:Assertions++
 }
 
+function Test-RejectedBuildOutput([string[]]$Properties,
+    [string]$ExpectedDiagnostic, [string[]]$ForbiddenPaths)
+{
+    foreach ($ForbiddenPath in $ForbiddenPaths)
+    {
+        if (Test-Path -LiteralPath $ForbiddenPath)
+        {
+            throw "Rejected build fixture already exists: $ForbiddenPath"
+        }
+    }
+
+    $RuntimeProject = Join-Path $EngineRoot `
+        'Source/SharpEngine.Runtime/SharpEngine.Runtime.csproj'
+    $Arguments = [System.Collections.Generic.List[string]]::new()
+    $Arguments.AddRange([string[]]@('build', $RuntimeProject, '--no-restore',
+        '--nologo'))
+    foreach ($Property in $Properties)
+    {
+        $Arguments.Add("-p:$Property")
+    }
+
+    $Output = (& dotnet $Arguments 2>&1 | Out-String)
+    $ExitCode = $LASTEXITCODE
+    if ($ExitCode -eq 0 -or !$Output.Contains($ExpectedDiagnostic))
+    {
+        throw "Expected rejected build diagnostic '$ExpectedDiagnostic': $Output"
+    }
+
+    foreach ($ForbiddenPath in $ForbiddenPaths)
+    {
+        if (Test-Path -LiteralPath $ForbiddenPath)
+        {
+            throw "Rejected build generated an illegal output path: $ForbiddenPath"
+        }
+    }
+    $script:Assertions++
+}
+
+function Test-RejectedShaderOutput([string]$OutputDirectory)
+{
+    if (Test-Path -LiteralPath $OutputDirectory)
+    {
+        throw "Rejected shader fixture already exists: $OutputDirectory"
+    }
+    $Builder = Join-Path $EngineRoot 'Tools/BuildRenderShaders.ps1'
+    $Diagnostic = ''
+    try
+    {
+        $Diagnostic = (& $Builder -EngineRoot $EngineRoot `
+            -OutputDirectory $OutputDirectory 2>&1 | Out-String)
+    }
+    catch
+    {
+        $Diagnostic += $_.Exception.Message
+    }
+    if (!$Diagnostic.Contains('SEOUTPUT014'))
+    {
+        throw "Expected rejected shader output diagnostic SEOUTPUT014: $Diagnostic"
+    }
+    if (Test-Path -LiteralPath $OutputDirectory)
+    {
+        throw "Rejected shader build generated an illegal output path: $OutputDirectory"
+    }
+    $script:Assertions++
+}
+
 $Valid = New-EngineFixture 'Valid'
 Test-Layout $Valid '' $true
 Test-Layout $Valid 'Target' $true
@@ -84,6 +150,8 @@ Test-Layout $Valid '' $true
 Test-Layout $Valid 'Target' $true
 Test-Layout $Valid 'Target' $true -Target Game
 Test-Layout $Valid 'Target' $true -Target Server
+New-Directory (Join-Path $Valid 'Intermediate/RenderCache')
+Test-Layout $Valid '' $true
 
 $UnrelatedPaths = @(
     'Binaries/Win64/Debug/OtherValidation',
@@ -147,6 +215,35 @@ New-Directory (Join-Path $ProjectRoot 'Binaries/Win64/Debug')
 Set-Content -LiteralPath (Join-Path $ProjectRoot 'Binaries/Win64/Debug/Game') -Value 'Not a directory'
 Test-Layout $ProjectFile 'Target' $false 'Output path must be a directory' -Target Game -IsProject $true
 Test-Layout $ProjectFile 'Target' $false 'Projects support only these Targets' -Target Tools -IsProject $true
+
+$ForbiddenTarget = 'ForbiddenValidation'
+Test-RejectedBuildOutput @("SharpEngineOutputTarget=$ForbiddenTarget") 'SEOUTPUT003' @(
+    (Join-Path $EngineRoot "Binaries/Win64/Debug/$ForbiddenTarget"),
+    (Join-Path $EngineRoot "Intermediate/Win64/Debug/$ForbiddenTarget"))
+
+$RejectedRoot = Join-Path $FixtureRoot 'RejectedBuildOutput'
+$RejectedBinaries = Join-Path $RejectedRoot 'Binaries/TempValidation'
+$RejectedIntermediate = Join-Path $RejectedRoot 'Intermediate/TempValidation'
+Test-RejectedBuildOutput @(
+    "SharpEngineBinariesDir=$RejectedBinaries\",
+    "SharpEngineIntermediateDir=$RejectedIntermediate\") 'SEOUTPUT005' @(
+    $RejectedBinaries, $RejectedIntermediate)
+
+$RejectedOutput = Join-Path $RejectedRoot 'DirectOutput'
+Test-RejectedBuildOutput @("OutputPath=$RejectedOutput\") 'SEOUTPUT007' @(
+    $RejectedOutput)
+
+$RejectedBaseIntermediate = Join-Path $RejectedRoot 'DirectIntermediate'
+Test-RejectedBuildOutput @(
+    "BaseIntermediateOutputPath=$RejectedBaseIntermediate\") 'SEOUTPUT009' @(
+    $RejectedBaseIntermediate)
+
+Test-RejectedBuildOutput @('Configuration=Release') 'SEOUTPUT002' @(
+    (Join-Path $EngineRoot 'Binaries/Win64/Release'),
+    (Join-Path $EngineRoot 'Intermediate/Win64/Release'))
+
+$RejectedShaderOutput = Join-Path $EngineRoot 'Intermediate/ShaderGuardValidation'
+Test-RejectedShaderOutput $RejectedShaderOutput
 
 Write-Output "PASS: $Assertions layout assertions"
 Write-Output "Fixtures: $FixtureRoot"

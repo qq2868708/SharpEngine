@@ -179,7 +179,7 @@ function Assert-NoLegacyDirectories([string]$Root, [string[]]$RelativePaths) {
 }
 
 function Assert-OutputHierarchy([string]$Root, [string]$DirectoryName,
-    [string[]]$AllowedTargets, [bool]$AllowProjectFiles = $false) {
+    [string[]]$AllowedTargets, [bool]$AllowIntermediateRoots = $false) {
     $outputRoot = Join-Path $Root $DirectoryName
     if (!(Test-Path -LiteralPath $outputRoot)) { return }
     if (!(Test-Path -LiteralPath $outputRoot -PathType Container)) {
@@ -188,9 +188,9 @@ function Assert-OutputHierarchy([string]$Root, [string]$DirectoryName,
     Assert-NoReparsePoint $Root $outputRoot
 
     foreach ($platformDirectory in @(Get-ChildItem -LiteralPath $outputRoot -Force)) {
-        if ($AllowProjectFiles -and $DirectoryName -eq 'Intermediate' -and
+        if ($AllowIntermediateRoots -and $DirectoryName -eq 'Intermediate' -and
             $platformDirectory.PSIsContainer -and
-            $platformDirectory.Name -eq 'ProjectFiles') {
+            $platformDirectory.Name -in @('ProjectFiles', 'RenderCache')) {
             Assert-NoReparsePoint $Root $platformDirectory.FullName
             continue
         }
@@ -242,6 +242,9 @@ function Assert-EngineContract([string]$Root) {
     $intermediateRoot = Get-MsBuildProperty $propertyGroups 'SharpEngineIntermediateDir'
     $outputPath = Get-MsBuildProperty $propertyGroups 'OutputPath'
     $baseIntermediateOutputPath = Get-MsBuildProperty $propertyGroups 'BaseIntermediateOutputPath'
+    $expectedBinariesDir = Get-MsBuildProperty $propertyGroups 'SharpEngineExpectedBinariesDir'
+    $expectedIntermediateDir = Get-MsBuildProperty $propertyGroups 'SharpEngineExpectedIntermediateDir'
+    $expectedProjectIntermediateDir = Get-MsBuildProperty $propertyGroups 'SharpEngineExpectedProjectIntermediateDir'
     $binaryTemplate = Get-MsBuildProperty $propertyGroups 'SharpEngineBinariesTemplate'
     $intermediateTemplate = Get-MsBuildProperty $propertyGroups 'SharpEngineIntermediateTemplate'
     if ($platformDefault -ne 'Win64' -or $targetDefault -ne 'Editor') {
@@ -257,6 +260,20 @@ function Assert-EngineContract([string]$Root) {
     if ($outputPath -ne '$(SharpEngineBinariesDir)' -or
         $baseIntermediateOutputPath -ne '$(SharpEngineIntermediateDir)$(MSBuildProjectName)\') {
         throw 'Build props must keep final artifacts flat and isolate intermediates by Build Module.'
+    }
+    if ($expectedBinariesDir -notlike '*GetFullPath*' -or
+        $expectedIntermediateDir -notlike '*GetFullPath*' -or
+        $expectedProjectIntermediateDir -ne '$(SharpEngineExpectedIntermediateDir)$(MSBuildProjectName)\') {
+        throw 'Build props must reject noncanonical output paths before build generation.'
+    }
+    $guard = $props.Project.Target | Where-Object {
+        $_.Name -eq 'ValidateSharpEngineOutputContract'
+    } | Select-Object -First 1
+    if ($null -eq $guard -or
+        [string]$guard.BeforeTargets -notlike '*Restore*' -or
+        [string]$guard.BeforeTargets -notlike '*ResolvePackageAssets*' -or
+        [string]$guard.BeforeTargets -notlike '*PrepareForBuild*') {
+        throw 'Build props output guard must run before restore, dependency resolution, and build preparation.'
     }
     if ($binaryTemplate.Replace('\', '/') -ne $BinaryTemplate -or
         $intermediateTemplate.Replace('\', '/') -ne $IntermediateTemplate) {

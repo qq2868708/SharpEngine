@@ -50,6 +50,7 @@
         <thead><tr><th>领域</th><th>入口</th><th>版本/身份</th><th>参考</th></tr></thead>
         <tbody>
           <tr><td>引擎分发</td><td><code>engine.json</code></td><td>manifest schema 2；engine version 0.2.0-dev</td><td><a href="../../../../../README.md">README</a></td></tr>
+          <tr><td>构建布局</td><td><code>SharpEngine.Build.props</code> / <code>SharpEngineLayout.ps1</code></td><td><code>SEOUTPUT001</code>–<code>SEOUTPUT014</code>；标准 configuration/target</td><td><a href="../../../../ProjectOrganization.md">Project Organization</a></td></tr>
           <tr><td>项目</td><td><code>*.sharpproject</code></td><td>project schema 3</td><td><a href="../../../../ProjectOrganization.md">Project Organization</a></td></tr>
           <tr><td>资源文件</td><td>新增资源类型的源文件扩展名</td><td>语义类型小写化后加 <code>s</code> 前缀；旧裸后缀和 <code>.sharp...</code> 后缀仅作兼容</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
           <tr><td>世界</td><td><code>World</code> / <code>RuntimeWorld</code></td><td>World JSON v3；组件独立 schema</td><td><a href="../../../../InspectorComponentDesign.md">Component Design</a></td></tr>
@@ -73,6 +74,11 @@
         <h3><code>SharpEngine.Runtime</code></h3>
         <p>RuntimeWorld、World、组件注册、实体和序列化入口。Authoring 数据是权威状态，Runtime World 从最近提交快照重建。</p>
         <p>相关稳定身份包括 <code>engine.transform</code>、<code>engine.camera</code>、<code>engine.static-mesh</code> 和已注册的项目组件 typeId。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SharpEngine.Build.props</code> 输出契约</h3>
+        <p>引擎源码工程把 <code>Configuration</code>、<code>SharpEnginePlatform</code>、<code>SharpEngineTarget</code>、<code>SharpEngineOutputTarget</code> 及所有最终/中间输出路径作为 project-local 权威属性。调用方请求会先被记录，再恢复为规范路径；<code>ValidateSharpEngineOutputContract</code> 在 restore、依赖解析和 PrepareForBuild 前拒绝不一致请求，因此非法全局属性不能先创建目录再失败。</p>
+        <p>允许的 configuration 为 <code>Debug</code>、<code>Development</code>、<code>Shipping</code>，允许的 output target 为 <code>Editor</code>、<code>Game</code>、<code>Server</code>、<code>Tools</code>。最终输出位于 <code>Binaries/Win64/&lt;Configuration&gt;/&lt;Target&gt;</code>，中间输出位于对应 <code>Intermediate</code> 层级；<code>Intermediate/RenderCache</code> 是精确命名的共享派生缓存。验证输出使用 <code>Saved/Validation</code>。<code>BuildRenderShaders.ps1</code> 只接受规范 target shader 目录或 <code>Saved/Validation</code>。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
@@ -153,6 +159,7 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li><code>SharpEngine.Build.props</code> 增加生成前输出路径权威与 <code>SEOUTPUT001</code>–<code>SEOUTPUT014</code> 诊断；非法 configuration、target、MSBuild 输出属性和 shader 输出目录在创建非标准路径前失败，<code>LayoutValidation</code> 同时断言失败诊断与目录不存在。</li>
         <li><code>SkeletalMeshAsset</code> schema v2 明确支持每顶点 1–12 个影响；v1 仍按最多 4 个影响读取并迁移，未来 schema、重复非零骨骼影响和超限数据拒绝加载。<code>ImportUEFNMannequinSource.py</code> 从已保存的 Blender 工程分阶段生成现有稳定 ID 的资产；<code>SkeletalReimportValidation</code> 对照 Blender 独立求值的关节与蒙皮顶点，验证 CPU、12-lane GPU payload 和缓存回读。</li>
         <li>Native Host API 当前为 v16：v15 的 <code>GpuSceneFrame</code> 增加 <code>SkyRadiance</code>，v16 将 <code>GpuSceneVertex</code> 扩展为 12 个蒙皮影响；managed GPU scene bridge 只向 v16 host 提交当前布局，v14 的 <code>GetRenderStats</code> 保持原字段位置。</li>
         <li>新增 <code>GpuMeshPayload</code> v3 derived cache、每顶点最多 12 个蒙皮影响、每 section 256 used-bone 上限、自动 section 切分和 BVH；<code>SkeletonFrameState.Positions</code> 改为按需派生，不改变 frame JSON schema。</li>
