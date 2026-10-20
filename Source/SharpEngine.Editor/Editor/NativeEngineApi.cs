@@ -37,6 +37,20 @@ internal unsafe readonly struct NativeEngineApi
         byte*, uint, uint> _uiKey;
     private readonly delegate* unmanaged[Cdecl]<ulong, byte*, byte*, uint, uint*, uint*, uint>
         _readUiFrame;
+    private readonly delegate* unmanaged[Cdecl]<byte*, float*, float*, float*, float*, byte>
+        GetUiElementRectFunction;
+    private readonly delegate* unmanaged[Cdecl]<float*, uint, float*, uint, void>
+        SubmitTimelinePreviewFrameFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, nint>
+        CreateEditorWindowFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, byte*, nint>
+        CreateOwnedDockWindowFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte>
+        DestroyEditorWindowFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, float*, float*, float*,
+        float*, byte> GetHostUiElementRectFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, float*, uint, float*,
+        uint, void> SubmitHostViewportFrameFunction;
 
     public bool HasDocumentUi => _setUiText != null && _getViewportRect != null;
     public bool HasDockHosts => _createDockWindow != null && _destroyDockWindow != null &&
@@ -103,6 +117,19 @@ internal unsafe readonly struct NativeEngineApi
             _uiPointer = api->UiPointer;
             _uiKey = api->UiKey;
             _readUiFrame = api->ReadUiFrame;
+        }
+        if (api->Version >= 11)
+        {
+            GetUiElementRectFunction = api->GetUiElementRect;
+            SubmitTimelinePreviewFrameFunction = api->SubmitTimelinePreviewFrame;
+        }
+        if (api->Version >= 12)
+        {
+            CreateEditorWindowFunction = api->CreateEditorWindow;
+            CreateOwnedDockWindowFunction = api->CreateOwnedDockWindow;
+            DestroyEditorWindowFunction = api->DestroyEditorWindow;
+            GetHostUiElementRectFunction = api->GetHostUiElementRect;
+            SubmitHostViewportFrameFunction = api->SubmitHostViewportFrame;
         }
     }
 
@@ -227,6 +254,54 @@ internal unsafe readonly struct NativeEngineApi
         var hostUtf8 = Encoding.UTF8.GetBytes(hostId + "\0");
         fixed (byte* hostPointer = hostUtf8)
             return _destroyDockWindow(hostPointer) != 0;
+    }
+
+    public nint CreateEditorWindow(string HostId, string Title)
+    {
+        if (CreateEditorWindowFunction == null)
+        {
+            return 0;
+        }
+
+        var HostUtf8 = Encoding.UTF8.GetBytes(HostId + "\0");
+        var TitleUtf8 = Encoding.UTF8.GetBytes(Title + "\0");
+        fixed (byte* HostPointer = HostUtf8)
+        fixed (byte* TitlePointer = TitleUtf8)
+        {
+            return CreateEditorWindowFunction(HostPointer, TitlePointer);
+        }
+    }
+
+    public nint CreateOwnedDockWindow(string RootId, string HostId, string Title)
+    {
+        if (CreateOwnedDockWindowFunction == null)
+        {
+            return 0;
+        }
+
+        var RootUtf8 = Encoding.UTF8.GetBytes(RootId + "\0");
+        var HostUtf8 = Encoding.UTF8.GetBytes(HostId + "\0");
+        var TitleUtf8 = Encoding.UTF8.GetBytes(Title + "\0");
+        fixed (byte* RootPointer = RootUtf8)
+        fixed (byte* HostPointer = HostUtf8)
+        fixed (byte* TitlePointer = TitleUtf8)
+        {
+            return CreateOwnedDockWindowFunction(RootPointer, HostPointer, TitlePointer);
+        }
+    }
+
+    public bool DestroyEditorWindow(string RootId)
+    {
+        if (DestroyEditorWindowFunction == null)
+        {
+            return false;
+        }
+
+        var RootUtf8 = Encoding.UTF8.GetBytes(RootId + "\0");
+        fixed (byte* RootPointer = RootUtf8)
+        {
+            return DestroyEditorWindowFunction(RootPointer) != 0;
+        }
     }
 
     public bool SetHostMarkup(string hostId, string elementId, string markup)
@@ -418,6 +493,105 @@ internal unsafe readonly struct NativeEngineApi
         fixed (WorldViewportVertex* lines = frame.Lines)
             _submitViewportFrame((float*)triangles, (uint)frame.Triangles.Length,
                 (float*)lines, (uint)frame.Lines.Length);
+    }
+
+    public bool TryGetUiElementRect(string id, out UiRect bounds)
+    {
+        bounds = default;
+        if (GetUiElementRectFunction == null)
+        {
+            return false;
+        }
+
+        var idUtf8 = Encoding.UTF8.GetBytes(id + "\0");
+        float x = 0;
+        float y = 0;
+        float width = 0;
+        float height = 0;
+        fixed (byte* idPointer = idUtf8)
+        {
+            if (GetUiElementRectFunction(idPointer, &x, &y, &width, &height) == 0)
+            {
+                return false;
+            }
+        }
+        if (!float.IsFinite(width) || !float.IsFinite(height) || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        bounds = new UiRect(x, y, width, height);
+        return true;
+    }
+
+    public void SubmitTimelinePreviewFrame(WorldViewportFrame frame)
+    {
+        if (SubmitTimelinePreviewFrameFunction == null)
+        {
+            return;
+        }
+
+        fixed (WorldViewportVertex* triangles = frame.Triangles)
+        fixed (WorldViewportVertex* lines = frame.Lines)
+        {
+            SubmitTimelinePreviewFrameFunction((float*)triangles,
+                (uint)frame.Triangles.Length, (float*)lines,
+                (uint)frame.Lines.Length);
+        }
+    }
+
+    public bool TryGetHostUiElementRect(string HostId, string Id, out UiRect Bounds)
+    {
+        Bounds = default;
+        if (GetHostUiElementRectFunction == null)
+        {
+            return false;
+        }
+
+        var HostUtf8 = Encoding.UTF8.GetBytes(HostId + "\0");
+        var IdUtf8 = Encoding.UTF8.GetBytes(Id + "\0");
+        float X = 0;
+        float Y = 0;
+        float Width = 0;
+        float Height = 0;
+        fixed (byte* HostPointer = HostUtf8)
+        fixed (byte* IdPointer = IdUtf8)
+        {
+            if (GetHostUiElementRectFunction(HostPointer, IdPointer, &X, &Y,
+                    &Width, &Height) == 0)
+            {
+                return false;
+            }
+        }
+        if (!float.IsFinite(Width) || !float.IsFinite(Height) ||
+            Width <= 0 || Height <= 0)
+        {
+            return false;
+        }
+
+        Bounds = new UiRect(X, Y, Width, Height);
+        return true;
+    }
+
+    public void SubmitHostViewportFrame(string HostId, string Kind,
+        WorldViewportFrame Frame)
+    {
+        if (SubmitHostViewportFrameFunction == null)
+        {
+            return;
+        }
+
+        var HostUtf8 = Encoding.UTF8.GetBytes(HostId + "\0");
+        var KindUtf8 = Encoding.UTF8.GetBytes(Kind + "\0");
+        fixed (byte* HostPointer = HostUtf8)
+        fixed (byte* KindPointer = KindUtf8)
+        fixed (WorldViewportVertex* Triangles = Frame.Triangles)
+        fixed (WorldViewportVertex* Lines = Frame.Lines)
+        {
+            SubmitHostViewportFrameFunction(HostPointer, KindPointer,
+                (float*)Triangles, (uint)Frame.Triangles.Length,
+                (float*)Lines, (uint)Frame.Lines.Length);
+        }
     }
 
 }

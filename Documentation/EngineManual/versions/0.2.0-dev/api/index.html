@@ -75,7 +75,7 @@
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
-        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；Content Manager 条目使用 <code>editor.content.select-folder:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 选择文件夹，双击动作使用 <code>editor.content.open:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 进入文件夹；<code>EditorPaneIds.Timeline</code> 是引擎创建的 Animation Timeline 面板。</p>
+        <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；Content Manager 条目使用 <code>editor.content.select-folder:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 选择文件夹，双击动作使用 <code>editor.content.open:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 进入文件夹。Timeline、UI 和 Prefab 不再作为主编辑器 Pane；它们通过 <code>IAssetEditorInstance</code> 和 <code>AssetEditorHost</code> 建立独立顶层编辑器根。</p>
         <p><code>IMenuExtension</code>、<code>IToolBarExtension</code> 和 <code>ICustomBarExtension</code> 分别扩展固定 File 菜单、主 Toolbar 和引擎创建的 <code>viewport</code>/<code>timeline</code> CustomBar。CustomBar 的 <code>Append</code>/<code>Replace</code> 只影响显示，命令注册仍然保留；扩展不能创建或删除顶层 Surface。</p>
       </article>
       <article class="api-entry">
@@ -85,7 +85,7 @@
       <article class="api-entry">
         <h3><code>SharpEngine.Animation.AnimationStateMachineAsset</code></h3>
         <p>状态机资源使用 <code>.sanimationstatemachine</code> 和 schema v1，保存稳定的参数、状态、Clip 依赖和有序过渡。<code>AnimationStateMachineContent.Load</code> 先解析完整图并绑定所有骨骼动画；<code>AnimationStateMachineAsset.SelectTransition</code> 按资源顺序检查 exitTime 和数值条件。<code>engine://animation-state-machines/uefn-mannequin-locomotion</code> 在 engine manifest 中以 <code>readOnly=true</code>、<code>builtin</code> 和 <code>preset</code> 标签登记，并声明 mannequin skeleton 与四个 Clip 依赖。</p>
-        <p>Content Manager 的双击和语义打开都调用 <code>EditorRuntime.OpenAsset</code>；统一的 <code>EditorAssetOpenerRegistry</code> 通过 <code>engine.animation-state-machine-editor</code> 将该类型路由到 Animation Timeline 面板中的状态图视图。浮动面板关闭期间的 native host 会在当前窗口回调结束前完成延迟销毁，保证下一次打开复用 host ID 时不会误销毁新面板。</p>
+        <p>Content Manager 的双击和语义打开都调用 <code>EditorRuntime.OpenAsset</code>；统一的 <code>EditorAssetOpenerRegistry</code> 通过 <code>engine.animation-state-machine-editor</code> 将该类型路由到独立顶层动画资产编辑器。状态图、Preview 和 Details 都是该编辑器根拥有的普通 Pane。</p>
         <p><code>AnimatorComponent</code> schema v3 的 <code>Controller</code>、<code>StateId</code>、<code>Parameters</code>、<code>MovementSource</code> 和 <code>MovementSpeedParameter</code> 是权威字段；运行帧 schema v2 公开当前状态、过渡、参数和采样结果。旧 Animator v1/v2 只补齐控制器字段，不改变既有单 Clip 语义。</p>
       </article>
       <article class="api-entry">
@@ -100,7 +100,7 @@
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Timeline</code></h3>
-        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code>、<code>AnimationNotify</code> 和 MarkerPlayable。编辑器扩展通过 <code>timeline.play</code>、<code>timeline.pause</code>、<code>timeline.stop</code>、<code>timeline.add-notify</code>、<code>timeline.undo</code>、<code>timeline.redo</code>、<code>timeline.save</code> 和 <code>timeline.seek-start</code> 命令驱动预览与编辑。</p>
+        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code>、<code>AnimationNotify</code> 和 MarkerPlayable。每个 <code>TimelineAssetEditorInstance</code> 拥有独立播放、选择、Undo/Redo 和 dirty 状态；资产编辑器命令通过所属 <code>hostId</code> 路由。Preview 是不可游离的主 Pane，Timeline 与 Details 是同一 <code>EditorRootId</code> 下的普通 Pane。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Networking</code></h3>
@@ -111,7 +111,8 @@
       </article>
       <article class="api-entry">
         <h3><code>EditorAssetOpenerRegistry</code></h3>
-        <p><code>Register(EditorAssetOpener)</code> 注册按 <code>AssetType</code> 或具体 <code>AssetId</code> 匹配的打开器，并返回可释放句柄；具体资源优先于类型匹配，同级按 <code>Priority</code> 选择。<code>EditorRuntime.OpenAsset</code> 是 UI 双击和 MCP/语义调用共用的打开入口，<code>DescribeEditorJson().assetTools</code> 暴露注册器与工具状态。</p>
+        <p><code>Register(EditorAssetOpener)</code> 注册按 <code>AssetType</code> 或具体 <code>AssetId</code> 匹配的打开器，并返回可释放句柄；具体资源优先于类型匹配，同级按 <code>Priority</code> 选择。返回 <code>IAssetEditorInstance</code> 的打开器会按 <code>AssetId</code> 创建唯一 <code>AssetEditorHost</code>；不同资产即使共享 <code>EditorId</code> 也拥有不同 <code>EditorRootId</code>。<code>assetTools</code> schemaVersion 2 的 <code>editors</code> 数组公开 <code>editorId</code>、<code>openerId</code>、<code>rootId</code>、<code>assetId</code>、dirty、只读状态、主布局、游离布局和实例状态。同一资产重复打开返回 <code>ASSET_EDITOR_REUSED</code>。</p>
+        <p><code>AssetEditorPaneDefinition</code>、<code>AssetEditorCommandDefinition</code> 和 <code>IAssetEditorInstance</code> 定义顶层资产编辑器扩展契约。原生 UI host 快照公开 <code>rootId</code>，host <code>kind</code> 为 <code>main-editor</code>、<code>top-level-editor</code> 或 <code>floating-tab</code>。Dock 拖拽只接受相同 <code>rootId</code>；游离 Tab 保持原根所有权且没有独立 Menu/Toolbar。</p>
       </article>
       <article class="api-entry">
         <h3>版本化 JSON 与 MCP</h3>
@@ -125,6 +126,7 @@
       <article class="api-entry">
         <h3><code>SharpEngine.Animation.SkeletalAnimationCompatibility</code> 与 <code>SkeletalAnimationRetargeter</code></h3>
         <p><code>SkeletalAnimationCompatibility.Validate(Animation, Mesh)</code> 是普通组合的显式检查：比较 <code>SkeletonId</code>、骨骼身份、父子关系和绑定局部 TRS；失败时抛出输入错误，绝不隐式重定向。</p>
+        <p><code>SkeletonAsset</code> schema v2 增加显式可空 <code>previewMeshId</code>，作为 Editor-only 默认预览网格引用；schema v1 确定性迁移为 null。运行时动画组合仍只依赖 Skeleton 和显式 Mesh 组件，不读取该字段。</p>
         <p><code>SkeletalAnimationRetargeter.Retarget</code> 接收源动画、源/目标 Skeleton 和完整 <code>BoneMap</code>，创建新的 <code>SkeletalAnimationAsset</code> 并把 <code>SkeletonId</code> 指向目标 Skeleton。输出保留时长、采样率、Notify 和关键时刻，并通过绑定姿态 Delta 计算目标局部 TRS。当前没有 IK、比例补偿、自动命名匹配或独立 RetargetMap 资产；调用方应在输出后再次调用兼容性检查。</p>
       </article>
     </section>
@@ -143,8 +145,13 @@
         <li>增加数据资产类型声明与 .sdataasset 封套契约，类型 schema 从 v1 起显式声明；支持抽象基类、继承字段和基类多态加载；未引入已有资产格式迁移。</li>
         <li>Runtime Module 重载现在重新发现 DataAsset 类型并以原子注册表提交；失败回滚保留之前的类型发现结果，资产 MCP 查询使用同一快照。</li>
         <li>建立首版 API 索引，收录引擎 manifest、项目、World、输入、编辑器、Timeline、设置和日志契约。</li>
-        <li>Timeline 编辑器预览现在按骨骼父子层级从局部变换重建模型姿态，并按骨架范围自动取景；播放完成状态属于瞬态编辑器状态，Timeline 资产 schema 仍为 v1。</li>
-        <li>增加 <code>SkeletalAnimation</code> 双击打开路由、独立 Timeline 文档状态以及 <code>EditorAssetOpenerRegistry</code> 的项目覆写契约；明确浮动 Timeline 关闭后立即重开的 host 生命周期保证。</li>
+        <li>Timeline 编辑器预览现在采样姿态后通过 SkeletonInstance 计算 CPU 蒙皮顶点，并将带深度的网格三角形提交到独立 3D viewport；viewport 为预览区域主体，右侧信息栏承载时间和进度，相机按网格范围自动取景。播放完成状态属于瞬态编辑器状态，Timeline 资产 schema 仍为 v1。</li>
+        <li>修正 Timeline 播放期间的预览提交顺序，避免 UI 重建造成 viewport 矩形暂时不可用；播放时间推进时会持续提交当前蒙皮网格。</li>
+        <li>调整 Timeline 预览布局契约：独立 3D viewport 使用主要预览区域，资产信息、采样时间和进度位于侧栏。</li>
+        <li>增加 <code>SkeletalAnimation</code> 双击打开路由、独立 Timeline 资产编辑器状态以及 <code>EditorAssetOpenerRegistry</code> 的项目覆写契约。</li>
+        <li>增加 <code>AssetEditorHost</code>、<code>IAssetEditorInstance</code>、owner-scoped Dock 和 Native API v12；动画、UI、Prefab 使用独立顶层编辑器根，普通 Pane 不可跨根 Dock。</li>
+        <li><code>assetTools</code> schemaVersion 2 的 <code>editors</code> 改为按 <code>AssetId</code> 枚举实例，并公开稳定 <code>rootId</code>、主/游离布局和实例状态；同一资产重复打开返回 <code>ASSET_EDITOR_REUSED</code>。</li>
+        <li><code>SkeletonAsset</code> 升级到 schema v2 并增加显式 <code>previewMeshId</code>；schema v1 迁移为空值。Timeline Preview 只接受该默认值或会话覆盖，并使用按 Host 提交的真实蒙皮网格。</li>
         <li>规定新增或修改公共类型、稳定 ID、命令、MCP 能力和 schema 时必须同步更新本页。</li>
         <li>收录控制与移动组件的 typeId、schema 和 frame state 入口。</li>
         <li>增加 <code>SharpEngine.Networking</code> 的 C# UDP transport、Schema handshake、DedicatedServerNetworkHost 和客户端 Replica API 索引。</li>

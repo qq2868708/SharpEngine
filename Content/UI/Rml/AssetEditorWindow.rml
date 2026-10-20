@@ -1,0 +1,22 @@
+<rml>
+<head>
+<title>SharpEngine Asset Editor</title>
+<link type="text/rcss" href="Editor.rcss" />
+<link type="text/rcss" href="Inspector.rcss" />
+<link type="text/rcss" href="Timeline.rcss" />
+</head>
+<body>
+<div id="assetEditor" class="asset-editor-root">
+  <div id="menubar" class="asset-editor-menubar">
+    <div class="brand"><span class="brand-mark">S</span> SharpEngine</div>
+    <div id="assetEditorMenus" />
+    <div class="grow" /><span id="assetEditorTitle">Asset Editor</span>
+    <div id="windowControls"><button class="window-control" action="window.minimize" title="Minimize"><img class="icon" src="sharpengine-resource://engine/Resources/Editor/Icons/minimize.tga" /></button><button class="window-control" action="window.maximize" title="Maximize / Restore"><img class="icon" src="sharpengine-resource://engine/Resources/Editor/Icons/maximize.tga" /></button><button class="window-control close" action="window.close" title="Close"><img class="icon" src="sharpengine-resource://engine/Resources/Editor/Icons/close.tga" /></button></div>
+  </div>
+  <div id="assetEditorToolbar" class="asset-editor-toolbar" />
+  <div id="workspace" class="dock-host asset-editor-workspace" />
+  <div class="asset-editor-statusbar"><span class="status-dot" /><span id="assetEditorStatus">Ready</span></div>
+  <div id="contextMenu" class="menu-popup context-menu dynamic-popup" />
+</div>
+</body>
+</rml>

@@ -83,10 +83,27 @@ using ManagedReadUiFrameFn = uint32_t(__cdecl*)(uint64_t frameId,
 
 using ManagedReportStartupProgressFn = void(__cdecl*)(int32_t Percent,
     const char* ModuleUtf8, const char* DetailUtf8);
+using ManagedGetUiElementRectFn = uint8_t(__cdecl*)(const char* idUtf8,
+                                                    float* x, float* y,
+                                                    float* width, float* height);
+using ManagedSubmitTimelinePreviewFrameFn = void(__cdecl*)(
+    const float* triangles, uint32_t triangleVertices,
+    const float* lines, uint32_t lineVertices);
+using ManagedCreateEditorWindowFn = void*(__cdecl*)(const char* hostIdUtf8,
+                                                     const char* titleUtf8);
+using ManagedCreateOwnedDockWindowFn = void*(__cdecl*)(const char* rootIdUtf8,
+                                                        const char* hostIdUtf8,
+                                                        const char* titleUtf8);
+using ManagedDestroyEditorWindowFn = uint8_t(__cdecl*)(const char* rootIdUtf8);
+using ManagedGetHostUiElementRectFn = uint8_t(__cdecl*)(const char* hostIdUtf8,
+    const char* idUtf8, float* x, float* y, float* width, float* height);
+using ManagedSubmitHostViewportFrameFn = void(__cdecl*)(const char* hostIdUtf8,
+    const char* kindUtf8, const float* triangles, uint32_t triangleVertices,
+    const float* lines, uint32_t lineVertices);
 
 struct ManagedHostApi
 {
-    uint32_t Version = 10;
+    uint32_t Version = 12;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -116,6 +133,15 @@ struct ManagedHostApi
     // Version 10 appends an optional startup-only callback. Call synchronously
     // during Initialize; never retain it in project state or module contexts.
     ManagedReportStartupProgressFn ReportStartupProgress = nullptr;
+    // Version 11 appends the Timeline 3D preview viewport bridge.
+    ManagedGetUiElementRectFn GetUiElementRect = nullptr;
+    ManagedSubmitTimelinePreviewFrameFn SubmitTimelinePreviewFrame = nullptr;
+    // Version 12 appends editor-root ownership and per-host preview rendering.
+    ManagedCreateEditorWindowFn CreateEditorWindow = nullptr;
+    ManagedCreateOwnedDockWindowFn CreateOwnedDockWindow = nullptr;
+    ManagedDestroyEditorWindowFn DestroyEditorWindow = nullptr;
+    ManagedGetHostUiElementRectFn GetHostUiElementRect = nullptr;
+    ManagedSubmitHostViewportFrameFn SubmitHostViewportFrame = nullptr;
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

@@ -21,7 +21,11 @@ public:
     bool Render(bool ObserveUi = false);
     void ShowWindows();
     HWND CreateDockWindow(std::string_view hostId, const char* titleUtf8);
+    HWND CreateEditorWindow(std::string_view hostId, const char* titleUtf8);
+    HWND CreateOwnedDockWindow(std::string_view rootId, std::string_view hostId,
+                               const char* titleUtf8);
     bool DestroyDockWindow(std::string_view hostId);
+    bool DestroyEditorWindow(std::string_view rootId);
     bool SetHostMarkup(std::string_view hostId, const char* elementId,
                        const char* markup);
     HWND GetHostWindow(std::string_view hostId) const;
@@ -41,13 +45,22 @@ public:
     uint32_t ReadFrame(uint64_t frameId, std::string_view hostId,
                        unsigned char* pixels, uint32_t capacity,
                        uint32_t& width, uint32_t& height) const;
-    void RenderViewport(const UiViewportRect& rect);
+    void RenderViewport(const UiViewportRect& rect,
+                        std::string_view kind = "scene");
     void SetText(const char* id, const char* utf8);
     void SetMarkup(const char* id, const char* markup);
     void SetProperty(const char* id, const char* name, const char* value);
     bool GetViewport(UiViewportRect& rect) const;
+    bool GetUiElementRect(std::string_view id, UiViewportRect& rect) const;
+    bool GetHostUiElementRect(std::string_view hostId, std::string_view id,
+                              UiViewportRect& rect) const;
     void SubmitScene(const UiViewportRect& rect, const UiSceneVertex* triangles,
                      int triangleVertices, const UiSceneVertex* lines, int lineVertices);
+    void SubmitTimelineScene(const UiSceneVertex* triangles, int triangleVertices,
+                             const UiSceneVertex* lines, int lineVertices);
+    void SubmitHostScene(std::string_view hostId, std::string_view kind,
+                         const UiSceneVertex* triangles, int triangleVertices,
+                         const UiSceneVertex* lines, int lineVertices);
     void SetActionHandler(
         std::function<void(const char* hostId, const char* action)> handler);
     void SetPointerHandler(std::function<void(int, int)> handler);
@@ -60,6 +73,8 @@ public:
         int32_t, int32_t, float, float, uint32_t, uint32_t, bool, bool)> handler);
     bool IsInitialized() const;
 private:
+    HWND CreateEditorHostWindow(std::string_view rootId, std::string_view hostId,
+                                const char* titleUtf8, bool topLevelEditor);
     static LRESULT CALLBACK WindowProcedure(HWND window, UINT message,
                                             WPARAM wParam, LPARAM lParam);
     struct Impl;

@@ -9,16 +9,19 @@ namespace SharpEngine.Animation;
 /// <summary>Standalone, renderer-neutral skeleton asset.</summary>
 public sealed class SkeletonAsset
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public SkeletonAsset(string assetId, string name, IReadOnlyList<SkeletonBone> bones,
-        string? sourcePath = null, string? sourceSha256 = null)
+        string? sourcePath = null, string? sourceSha256 = null,
+        string? previewMeshId = null)
     {
         AssetId = RequireText(assetId, nameof(assetId));
         Name = RequireText(name, nameof(name));
         Bones = bones?.ToArray() ?? throw new ArgumentNullException(nameof(bones));
         SourcePath = string.IsNullOrWhiteSpace(sourcePath) ? null : sourcePath.Trim();
         SourceSha256 = string.IsNullOrWhiteSpace(sourceSha256) ? null : sourceSha256.Trim();
+        PreviewMeshId = string.IsNullOrWhiteSpace(previewMeshId) ? null :
+            previewMeshId.Trim();
         ValidateBones(Bones);
         SourceAssetContract.ValidateMetadata(SourcePath, SourceSha256, AssetId);
     }
@@ -28,6 +31,8 @@ public sealed class SkeletonAsset
     public IReadOnlyList<SkeletonBone> Bones { get; }
     public string? SourcePath { get; }
     public string? SourceSha256 { get; }
+    /// <summary>Editor-only default mesh used to preview animations for this skeleton.</summary>
+    public string? PreviewMeshId { get; }
 
     /// <summary>Export an FBX that is semantically equivalent to this skeleton.</summary>
     public string ExportFbx(AssetRegistry Registry, string Destination) =>
@@ -49,6 +54,7 @@ public sealed class SkeletonAsset
         ["kind"] = "skeleton",
         ["assetId"] = AssetId,
         ["name"] = Name,
+        ["previewMeshId"] = PreviewMeshId,
         ["bones"] = new JsonArray(Bones.Select(ToJson).ToArray()),
         };
         if (SourcePath is not null) root["sourcePath"] = SourcePath;
@@ -64,15 +70,32 @@ public sealed class SkeletonAsset
             EnsureNoDuplicateProperties(document.RootElement);
             var root = JsonNode.Parse(json) as JsonObject ??
                 throw new InvalidDataException("Skeleton root must be an object");
-            ExactWithOptional(root, ["schemaVersion", "kind", "assetId", "name", "bones"],
-                ["sourcePath", "sourceSha256"]);
-            if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion ||
-                root["kind"]!.GetValue<string>() != "skeleton")
+            var Version = root["schemaVersion"]?.GetValue<int>() ??
+                throw new InvalidDataException("Skeleton schemaVersion is required");
+            if (Version == 1)
+            {
+                ExactWithOptional(root,
+                    ["schemaVersion", "kind", "assetId", "name", "bones"],
+                    ["sourcePath", "sourceSha256"]);
+            }
+            else if (Version == CurrentSchemaVersion)
+            {
+                ExactWithOptional(root,
+                    ["schemaVersion", "kind", "assetId", "name", "previewMeshId", "bones"],
+                    ["sourcePath", "sourceSha256"]);
+            }
+            else
+            {
                 throw new InvalidDataException("Unsupported skeleton schema");
+            }
+            if (root["kind"]!.GetValue<string>() != "skeleton")
+            {
+                throw new InvalidDataException("Unsupported skeleton kind");
+            }
             var bones = root["bones"]!.AsArray().Select(ParseBone).ToArray();
             return new SkeletonAsset(RequiredString(root, "assetId"),
                 RequiredString(root, "name"), bones, OptionalString(root, "sourcePath"),
-                OptionalString(root, "sourceSha256"));
+                OptionalString(root, "sourceSha256"), OptionalString(root, "previewMeshId"));
         }
         catch (InvalidDataException) { throw; }
         catch (Exception exception) when (exception is JsonException or

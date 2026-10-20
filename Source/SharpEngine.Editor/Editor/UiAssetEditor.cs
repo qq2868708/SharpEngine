@@ -289,6 +289,39 @@ internal sealed class UiEditorDocument
             $"<button class=\"ui-delete-button\" action=\"editor.ui-delete\"{readOnly}>Delete element</button>";
     }
 
+    public string BuildSourceMarkup()
+    {
+        string source;
+        try
+        {
+            source = File.ReadAllText(Path);
+        }
+        catch (Exception exception) when (exception is IOException or
+            UnauthorizedAccessException)
+        {
+            source = $"Unable to read source: {exception.Message}";
+        }
+        return $"<pre class=\"ui-source-view\">{Escape(source)}</pre>";
+    }
+
+    public string BuildDiagnosticsMarkup()
+    {
+        if (_diagnostics.Count == 0)
+            return "<div class=\"ui-editor-empty\">No diagnostics</div>";
+        var markup = new StringBuilder();
+        foreach (var diagnostic in _diagnostics)
+        {
+            markup.Append("<div class=\"ui-diagnostic ui-diagnostic-")
+                .Append(Escape(diagnostic.Severity)).Append("\"><strong>")
+                .Append(Escape(diagnostic.Code)).Append("</strong><span>")
+                .Append(Escape(diagnostic.Message)).Append("</span></div>");
+        }
+        return markup.ToString();
+    }
+
+    public string BuildAssetSummaryMarkup() =>
+        $"<div class=\"ui-editor-asset-summary\"><div class=\"ui-inspector-heading\"><span class=\"ui-tag\">{Escape(Asset.Type)}</span><strong>{Escape(Asset.Name)}</strong></div><div class=\"ui-inspector-section\"><span class=\"ui-inspector-label\">Asset ID</span><span>{Escape(Asset.Id)}</span></div><div class=\"ui-inspector-section\"><span class=\"ui-inspector-label\">Path</span><span>{Escape(Asset.RelativePath)}</span></div><div class=\"ui-inspector-section\"><span class=\"ui-inspector-label\">State</span><span>{(IsDirty ? "Dirty" : "Saved")} · {(IsReadOnly ? "Read only" : "Editable")}</span></div></div>";
+
     private static string Field(string label, string value, string action,
         string readOnly) =>
         $"<div class=\"ui-inspector-section\"><label class=\"ui-inspector-label\">{Escape(label)}</label><input value=\"{EscapeAttribute(value)}\" data-change-action=\"editor.ui-change:{action}:\"{readOnly} /></div>";

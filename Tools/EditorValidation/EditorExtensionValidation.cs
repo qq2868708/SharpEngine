@@ -111,13 +111,24 @@ internal static unsafe class EditorExtensionValidation
                 RobotWalkOpen.OpenerId == "engine.skeletal-animation-editor" &&
                 runtime.DescribeEditorJson().Contains("engine://animations/robot-walk",
                     StringComparison.Ordinal) &&
+                runtime.DescribeEditorJson().Contains("\"editorId\": \"timeline-editor\"",
+                    StringComparison.Ordinal) &&
                 runtime.DescribeEditorJson().Contains("\"timeline\"", StringComparison.Ordinal),
                 "The built-in SkeletalAnimation opener must activate the Timeline pane and document");
             var UefnIdleOpen = runtime.OpenAsset("engine://animations/uefn-mannequin-idle");
             require(UefnIdleOpen.Success &&
-                runtime.DescribeEditorJson().Contains("engine://animations/uefn-mannequin-idle",
-                    StringComparison.Ordinal),
-                "Opening another SkeletalAnimation must preserve independent asset documents");
+                runtime.DescribeEditorJson().Contains(
+                    "engine://animations/uefn-mannequin-idle",
+                    StringComparison.Ordinal) &&
+                runtime.DescribeEditorJson().Contains(
+                    "engine://animations/robot-walk",
+                    StringComparison.Ordinal) &&
+                runtime.DescribeEditorJson().Split("\"editorId\": \"timeline-editor\"",
+                    StringSplitOptions.None).Length >= 3,
+                "Different SkeletalAnimation assets must own independent editor roots");
+            var RobotWalkReopen = runtime.OpenAsset("engine://animations/robot-walk");
+            require(RobotWalkReopen.Success && RobotWalkReopen.Code == "ASSET_EDITOR_REUSED",
+                "Opening the same SkeletalAnimation must reuse its existing editor root");
             var LocomotionOpen = runtime.OpenAsset(
                 "engine://animation-state-machines/uefn-mannequin-locomotion");
             var LocomotionEditor = runtime.DescribeEditorJson();
@@ -128,10 +139,8 @@ internal static unsafe class EditorExtensionValidation
                 LocomotionEditor.Contains("\"stateCount\"", StringComparison.Ordinal),
                 "AnimationStateMachine assets must use the unified opener flow and custom editor");
             require(runtime.CustomBars.RegisteredSurfaces.Any(surface =>
-                    surface.Id == EditorCustomBarRegistry.ViewportSurfaceId) &&
-                runtime.CustomBars.RegisteredSurfaces.Any(surface =>
-                    surface.Id == EditorCustomBarRegistry.TimelineSurfaceId),
-                "Engine must create fixed Viewport and Animation Timeline CustomBar surfaces");
+                    surface.Id == EditorCustomBarRegistry.ViewportSurfaceId),
+                "The main editor must retain its Viewport CustomBar surface");
             using var projectCategory = runtime.Menus.RegisterCategory(new EditorMenuCategory(
                 "file", "validation-tools", 350));
             using var projectItem = runtime.Menus.RegisterItem(new EditorMenuItem(

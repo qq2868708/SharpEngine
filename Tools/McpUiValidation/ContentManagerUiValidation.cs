@@ -316,20 +316,24 @@ internal static class ContentManagerUiValidation
         Click("content-4-view-list");
         SaveFrames("four-docked");
 
-        // Double-click through the native pointer path. Closing the Timeline
-        // tab first forces the shared asset opener to create its floating host,
-        // which is the lifecycle used by a hidden animation editor pane.
+        // Double-click through the native pointer path. The asset editor must
+        // create a separate top-level editor root rather than a main Dock pane.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
-        Invoke("editor.action", new() { ["action"] = "editor.dock-close:timeline" });
         DoubleClick("editor.content.select-folder:content:engine|Assets");
         DoubleClick("editor.content.select-folder:content:engine|Assets/AnimationControllers");
         const string StateMachineAction =
             "editor.content.select:content:engine://animation-state-machines/uefn-mannequin-locomotion";
         DoubleClick(StateMachineAction);
+        var EditorState = Invoke("editor.describe");
+        var EditorRoot = EditorState["assetTools"]!["editors"]!.AsArray()
+            .Select(Node => Node!.AsObject()).Single(Editor =>
+                Editor["assetId"]!.GetValue<string>() ==
+                "engine://animation-state-machines/uefn-mannequin-locomotion")
+            ["rootId"]!.GetValue<string>();
         var opened = Snapshot();
         Require(opened["hosts"]!.AsArray().Any(host =>
-                host!["hostId"]!.GetValue<string>().StartsWith("float.timeline", StringComparison.Ordinal)),
-            "Double-clicking an animation state machine must keep the floating Timeline host visible");
+                host!["hostId"]!.GetValue<string>() == EditorRoot),
+            "Double-clicking an animation state machine must create its top-level editor root");
         SaveFrames("animation-state-machine-open");
         Console.WriteLine($"PASS: {assertions} Content Manager rendered UI assertions; evidence: {output}");
     }

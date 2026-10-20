@@ -290,7 +290,8 @@ Each host contains:
 ```json
 {
   "hostId": "main",
-  "kind": "main",
+  "rootId": "main",
+  "kind": "main-editor",
   "bounds": { "x": 0, "y": 0, "width": 1440, "height": 900 },
   "contentScale": 1.0,
   "visible": true,
@@ -302,8 +303,11 @@ Each host contains:
 }
 ```
 
-Floating hosts use their stable layout `hostId`. No HWND or native window
-address is included.
+Top-level asset editors use `kind: "top-level-editor"` and set `rootId` equal
+to their own stable host ID. Owner-scoped detached panes use
+`kind: "floating-tab"`; their `rootId` remains the owning main or top-level
+editor root. Dock hit testing rejects targets whose `rootId` differs. No HWND
+or native window address is included.
 
 Each exposed element contains at least:
 

@@ -62,16 +62,18 @@
       <p>编辑器提供视口、层级、资源浏览、属性检查、界面编辑和日志查看等面板。播放会使用当前已保存的内容创建独立的运行副本；停止后，运行期间的临时变化会被清除。</p>
       <p>层级、变换、资源选择和设置编辑都支持撤销、重做和恢复。编辑器会在内容变化后重新载入可用结果；如果载入失败，会保留当前编辑状态并显示诊断信息。</p>
       <p>资源浏览器支持按文件夹、名称、来源和类型查找内容，多个浏览器可以分别保留自己的位置、筛选条件和选择。单击文件夹只选择它并保持当前目录，双击文件夹才进入目录；文件夹图标和名称遵循相同规则。资源仍然是单击选择、双击打开。</p>
+      <p>主编辑器和顶层资产编辑器是两个不同的编辑器根：两者都有自己的菜单、工具栏和 Dock 布局。主编辑器负责当前 World；动画、UI 和 Prefab 会按资产打开独立顶层编辑器。顶层编辑器内部的 Preview、Timeline、Details 等普通窗口只能在所属编辑器根内停靠，也可以脱离为仍归原根所有的游离 Tab；它们不能停靠到主编辑器或另一个资产编辑器。关闭有未保存修改的顶层编辑器时会先要求保存、放弃或取消；关闭主编辑器也会依次检查所有打开的脏资产编辑器，任一取消都会阻止退出。</p>
     </section>
     <section class="section-card" id="animation-editor">
       <h2>动画时间轴与 Notify</h2>
-      <p>编辑器的 Animation Timeline 面板提供骨骼采样预览、时间尺、轨道、播放头和预览控制。预览会按骨骼父子层级累积姿态，并根据整套骨架范围自动取景，避免关节越界或连线被拉到面板外；播放到末尾后会显示完成状态。打开 View 菜单中的 Animation Timeline 后，可以使用 Play、Pause、Stop 和时间尺按钮检查动画片段。</p>
-      <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation 资源会打开对应的 Animation Timeline 文档。Windows 原生鼠标双击和自动化指针双击都会走同一套资源打开流程。Notify 轨道显示 Footstep、Attack Window 等事件。点击 Clip 可以查看当前 Notify，使用 Add Notify 会在预览时间线上创建新的事件并立即刷新视图。每个打开的资源保留自己的播放头、Undo、Redo 和 dirty 状态；项目资产支持 Save，引擎来源资产保持只读。关闭浮动 Animation Timeline 后再次双击资源会重新创建并保留该面板，仍然沿用同一套资源打开流程。</p>
+      <p>动画资产编辑器提供自己的菜单和工具栏，并在一个窗口内同时显示 Preview、Timeline 与 Details。Preview 始终保留在顶层编辑器根中，Timeline 和 Details 可以在该根内重新停靠或变成游离 Tab。Preview 通过 SkeletonInstance 计算 CPU 蒙皮网格，把真实的带深度三角形提交到当前资产编辑器的 3D viewport，并根据网格范围自动取景；Timeline 播放不会隐藏 Preview。</p>
+      <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation、Timeline 或 AnimationStateMachine 会按 <code>AssetId</code> 打开顶层资产编辑器。不同资产各自拥有独立实例；再次双击同一资产只聚焦原实例。Notify、播放头、Undo/Redo 和 dirty 状态均属于该资产实例。项目资产支持 Save，引擎来源资产保持只读。动画从关联 Skeleton 的 <code>previewMeshId</code> 取得默认预览网格；Details 可以为当前编辑器会话临时选择其他兼容网格，而不会改写动画资产。</p>
       <p>Viewport 的 Transform 按钮和项目 Project Preview 按钮都通过引擎命令执行。项目可以扩展固定的 File 菜单、主 Toolbar 和 <code>viewport</code> CustomBar Surface，但不能创建新的顶层 Surface。</p>
     </section>
     <section class="section-card" id="world-assets">
       <h2>世界与资源</h2>
       <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
+      <p>World 是主编辑器当前文档。双击另一个 World 会先处理当前 World 的未保存修改，再替换主 Viewport、Hierarchy、Inspector 和 Play 上下文；World 不创建独立资产编辑器。Prefab 则始终打开自己的顶层资产编辑器，不替换主 World。</p>
       <p>源资源是可编辑内容的唯一依据；运行和发布过程中产生的构建结果可以重新生成。无法识别的内容会被保留并提示问题，不会悄悄变成可运行对象。</p>
     </section>
     <section class="section-card" id="fbx-assets">
@@ -86,7 +88,7 @@
       <p>让角色或其他对象接受玩家或 AI 的控制，并按照移动意图在场景中移动。控制来源和移动能力彼此独立，因此同一套移动行为可以服务不同的控制方式。</p>
       <p>当多个控制来源指向同一个对象时，引擎会按照优先级选择一个来源，保证结果稳定。对象不可用、控制冲突或控制暂时失效时，运行状态会显示相应诊断。</p>
       <p>引擎默认示例包含 <code>prefabs/capsule-character</code> 胶囊体角色 Prefab，并已实例化到引擎的 <code>Content/Worlds/Main.sworld</code>。在编辑器按 Play 后点击 Viewport 使其获得焦点，使用 WASD 移动角色；Stop 会丢弃运行时位置变化。</p>
-      <p>示例 Prefab 和主场景使用 UEFN mannequin 骨骼角色，状态机会根据移动速度在 Idle、Walk、Run 之间切换，并保留 Jump 状态入口；胶囊只作为不可见的 Trace 碰撞体，随角色移动。状态机和动画依赖加载失败时会保留诊断，不会静默回退到错误 Clip。Content Manager 双击引擎提供的 AnimationStateMachine 预设会沿用统一资源打开流程，在 Animation Timeline 面板显示状态与过渡图；该引擎预设保持只读。验证入口与范围见下方专题文档。</p>
+      <p>示例 Prefab 和主场景使用 UEFN mannequin 骨骼角色，状态机会根据移动速度在 Idle、Walk、Run 之间切换，并保留 Jump 状态入口；胶囊只作为不可见的 Trace 碰撞体，随角色移动。状态机和动画依赖加载失败时会保留诊断，不会静默回退到错误 Clip。Content Manager 双击引擎提供的 AnimationStateMachine 预设会打开独立顶层动画资产编辑器并显示状态与过渡图；该引擎预设保持只读。验证入口与范围见下方专题文档。</p>
       <p>功能边界、可观察状态和使用限制见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
     </section>
     <section class="section-card" id="input-ui">
@@ -120,7 +122,7 @@
         <li>修正 mannequin Walk/Run 示例 Clip 的局部关节旋转轴和幅度，移动采样时四肢保持连续；Animator、Playable 和状态机契约不变。</li>
         <li>场景渲染增加基础环境光，骨骼模型背向方向光时仍保留可读的体积和关节轮廓；Sandbox 主相机调整为角色近景构图，便于检查蒙皮与动画姿态。</li>
         <li>新增可序列化的最小动画状态机，示例 mannequin 会根据移动速度在 Idle、Walk、Run 和 Jump 状态间切换。</li>
-        <li>登记只读 builtin/preset locomotion 状态机，并通过统一资源打开器在 Animation Timeline 面板提供状态图编辑器视图。</li>
+        <li>登记只读 builtin/preset locomotion 状态机，并通过统一资源打开器在顶层动画资产编辑器中提供状态图视图。</li>
         <li>增加由 C# 类型声明的版本化数据资产基础，支持字段约束、直接资产引用校验、继承字段和基类多态加载。</li>
         <li>项目 Runtime Module 重载会重新发现具体 DataAsset 类型；资产 MCP 查询现在稳定返回继承字段和派生字段的 Schema。</li>
         <li>建立版本化 HTML 手册入口，拆分为用户手册和 API 索引。</li>
@@ -132,8 +134,13 @@
         <li>增加 C# UDP transport、Schema 握手、快照 ACK、Command 收发和客户端 Replica。</li>
         <li>增加 Server Target 与 <code>Examples/NetworkDedicatedServer</code> 示例，验证原生 Dedicated Server 加载 Runtime Module、双客户端位置同步和重复命令幂等。</li>
         <li>Server Target 改为项目级可选项；资源管理器右键 .sharpproject → Add Server Target 会更新项目 manifest 并自动生成工程文件，Remove Server Target 会清理对应生成文件。</li>
-        <li>修正 Animation Timeline 骨骼预览：按父子层级累积姿态并自动取景，播放结束时显示完成状态；Notify 编辑继续使用 revision/Undo/Redo/Save 流程。</li>
-        <li>增加按资产双击打开 Timeline 工具的路由；项目或插件可以按 AssetId、资产类型和优先级覆写默认打开器；浮动 Timeline 关闭后可立即再次打开并复用统一生命周期。</li>
+        <li>修正 Animation Timeline 预览：使用 CPU 蒙皮后的真实网格三角形渲染独立 3D viewport，按模型范围自动取景，播放结束时显示完成状态；Notify 编辑继续使用 revision/Undo/Redo/Save 流程。</li>
+        <li>修正 Animation Timeline 播放刷新顺序：播放期间先提交当前蒙皮姿态，再更新时间轴标记，确保 3D viewport 随播放时间变化。</li>
+        <li>调整 Animation Timeline 预览布局，让 3D viewport 成为预览区域主体，资产信息和进度移到右侧栏。</li>
+        <li>增加按资产双击打开顶层动画编辑器的路由；项目或插件可以按 AssetId、资产类型和优先级覆写默认打开器；相同 AssetId 会聚焦已有实例。</li>
+        <li>重建资产编辑器边界：动画、UI 和 Prefab 按 <code>AssetId</code> 创建独立顶层编辑器根，各自拥有 Menu、Toolbar 和内部 Dock；普通窗口不可跨根停靠，脱离后仍是所属根的游离 Tab。同一资产重复打开只聚焦原实例，脏实例关闭提供 Save、Discard、Cancel。</li>
+        <li>动画编辑器默认同时显示真实网格 Preview、Timeline 和 Details；Preview 不再与 Timeline 互斥。UEFN Mannequin 预览验证使用 6009 顶点、9324 三角形的 Skeletal Mesh。</li>
+        <li>Skeleton 资产升级到 schema v2，显式保存可空的 <code>previewMeshId</code>；schema v1 读取后迁移为空值。动画编辑器只使用 Skeleton 默认或当前会话临时覆盖，不再按资产注册顺序猜测 Mesh。</li>
         <li>统一 FBX 导入来源校验和语义等价导出规则；导出不再要求保留原始 FBX 字节。</li>
         <li>增加显式骨骼动画 Retarget 验证：跨组动画必须生成目标 SkeletonId 的新资产，并通过目标蒙皮绑定检查后才能组合。</li>
         <li>修正编辑器修饰键位映射，并在 Play/运行时隔离 Viewport 编辑输入，避免游戏移动同时驱动编辑器相机。</li>

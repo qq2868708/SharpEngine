@@ -257,10 +257,43 @@ public static class EditorLayoutJson
 
         if (version == 3)
         {
-            if (!AddTimelineToViewportGroup(root))
-                throw new JsonException("Schema v3 layout does not contain a Viewport tab group.");
+            EnsureLegacyAssetEditorPanes(root);
             root["schemaVersion"] = EditorLayoutDocument.CurrentSchemaVersion;
         }
+    }
+
+    private static void EnsureLegacyAssetEditorPanes(JsonObject Root)
+    {
+        if (Root["mainHost"] is not JsonObject MainHost ||
+            MainHost["root"] is not JsonObject Node ||
+            Root["hiddenPaneIds"] is not JsonArray Hidden)
+        {
+            throw new JsonException("Schema v3 layout is missing its Dock root or hidden panes.");
+        }
+
+        foreach (var PaneId in new[] { EditorPaneIds.Timeline, EditorPaneIds.UiEditor })
+        {
+            var Present = ContainsPane(Node, PaneId) || Hidden.Any(Value =>
+                string.Equals(Value?.GetValue<string>(), PaneId, StringComparison.Ordinal));
+            if (!Present)
+            {
+                Hidden.Add(PaneId);
+            }
+        }
+    }
+
+    private static bool ContainsPane(JsonObject Node, string PaneId)
+    {
+        if (Node["tabGroup"] is JsonObject TabGroup &&
+            TabGroup["panes"] is JsonArray Panes && Panes.Any(Pane =>
+                string.Equals((Pane as JsonObject)?["paneId"]?.GetValue<string>(),
+                    PaneId, StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        return Node["first"] is JsonObject First && ContainsPane(First, PaneId) ||
+            Node["second"] is JsonObject Second && ContainsPane(Second, PaneId);
     }
 
     private static bool AddTimelineToViewportGroup(JsonObject root)
@@ -376,9 +409,13 @@ public static class EditorLayoutValidator
     public const float MaximumStoredRatio = 0.95f;
 
     public static IReadOnlyList<EditorLayoutDiagnostic> Validate(EditorLayoutDocument? document,
-        bool requireAllPanesInMain = false)
+        bool requireAllPanesInMain = false,
+        IReadOnlyCollection<string>? AllowedPaneIds = null,
+        string? FixedMainPaneId = EditorPaneIds.Viewport,
+        bool ValidateContentManagerState = true)
     {
         var result = new List<EditorLayoutDiagnostic>();
+        var PaneIds = AllowedPaneIds ?? EditorPaneIds.BuiltIn;
         if (document is null)
         {
             result.Add(new("layout.root.required", "$", "The layout document is required."));
@@ -403,7 +440,8 @@ public static class EditorLayoutValidator
         var paneCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         var nodeIds = new HashSet<string>(StringComparer.Ordinal);
         var groupIds = new HashSet<string>(StringComparer.Ordinal);
-        ValidateNode(document.MainHost.Root, "$.mainHost.root", result, paneCounts, nodeIds, groupIds);
+        ValidateNode(document.MainHost.Root, "$.mainHost.root", result, paneCounts,
+            nodeIds, groupIds, PaneIds);
         var hidden = document.HiddenPaneIds ?? [];
         if (document.HiddenPaneIds is null)
             result.Add(new("layout.hidden.required", "$.hiddenPaneIds",
@@ -412,25 +450,27 @@ public static class EditorLayoutValidator
         {
             var paneId = hidden[index];
             var path = $"$.hiddenPaneIds[{index}]";
-            if (!EditorPaneIds.IsBuiltIn(paneId))
+            if (!PaneIds.Contains(paneId, StringComparer.Ordinal))
                 result.Add(new("layout.pane.unknown", path, $"Unknown pane ID '{paneId}'."));
             else Increment(paneCounts, paneId);
-            if (requireAllPanesInMain && !EditorPaneIds.IsContentManager(paneId))
+            if (requireAllPanesInMain && !EditorPaneIds.IsContentManager(paneId) &&
+                paneId is not (EditorPaneIds.Timeline or EditorPaneIds.UiEditor))
                 result.Add(new("layout.default.hidden", path,
                     "The engine default must dock every built-in pane in the main host."));
         }
 
-        foreach (var paneId in EditorPaneIds.BuiltIn)
+        foreach (var paneId in PaneIds)
         {
             paneCounts.TryGetValue(paneId, out var count);
             if (count != 1)
                 result.Add(new(count == 0 ? "layout.pane.missing" : "layout.pane.duplicate",
                     "$.mainHost", $"Pane '{paneId}' must occur exactly once; found {count}."));
         }
-        if (hidden.Contains(EditorPaneIds.Viewport, StringComparer.Ordinal))
+        if (FixedMainPaneId is not null &&
+            hidden.Contains(FixedMainPaneId, StringComparer.Ordinal))
             result.Add(new("layout.viewport.main-only", "$.hiddenPaneIds",
-                "The viewport cannot be hidden and must remain in the main host."));
-        if (requireAllPanesInMain)
+                $"Pane '{FixedMainPaneId}' cannot be hidden and must remain in the main host."));
+        if (requireAllPanesInMain && ValidateContentManagerState)
         {
             if (hidden.Contains(EditorPaneIds.Content, StringComparer.Ordinal))
                 result.Add(new("layout.default.content-primary", "$.hiddenPaneIds",
@@ -440,7 +480,10 @@ public static class EditorLayoutValidator
                     result.Add(new("layout.default.content-optional", "$.hiddenPaneIds",
                         $"'{paneId}' must start hidden in the engine default."));
         }
-        ValidateContentManagers(document, result);
+        if (ValidateContentManagerState)
+        {
+            ValidateContentManagers(document, result);
+        }
         return result;
     }
 
@@ -508,7 +551,10 @@ public static class EditorLayoutValidator
     }
 
     public static IReadOnlyList<EditorLayoutDiagnostic> ValidateSession(
-        EditorLayoutDocument document, IReadOnlyList<FloatingDockHostState> floatingHosts)
+        EditorLayoutDocument document, IReadOnlyList<FloatingDockHostState> floatingHosts,
+        IReadOnlyCollection<string>? AllowedPaneIds = null,
+        string? FixedMainPaneId = EditorPaneIds.Viewport,
+        bool ValidateContentManagerState = true)
     {
         var projection = EditorLayoutJson.Clone(document);
         var floatingPaneIds = new List<string>();
@@ -530,14 +576,18 @@ public static class EditorLayoutValidator
                 sessionDiagnostics.Add(new("layout.float.bounds", $"{path}.bounds",
                     "Floating host bounds must be finite and have positive size."));
             var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-            ValidateNode(host.Root, $"{path}.root", sessionDiagnostics, counts, nodeIds, groupIds);
-            if (EnumeratePanes(host.Root).Contains(EditorPaneIds.Viewport, StringComparer.Ordinal))
+            ValidateNode(host.Root, $"{path}.root", sessionDiagnostics, counts, nodeIds,
+                groupIds, AllowedPaneIds ?? EditorPaneIds.BuiltIn);
+            if (FixedMainPaneId is not null && EnumeratePanes(host.Root)
+                .Contains(FixedMainPaneId, StringComparer.Ordinal))
                 sessionDiagnostics.Add(new("layout.viewport.main-only", path,
-                    "The viewport cannot be placed in a floating host."));
+                    $"Pane '{FixedMainPaneId}' cannot be placed in a floating host."));
             floatingPaneIds.AddRange(EnumeratePanes(host.Root));
         }
         projection.HiddenPaneIds.AddRange(floatingPaneIds);
-        sessionDiagnostics.AddRange(Validate(projection));
+        sessionDiagnostics.AddRange(Validate(projection, AllowedPaneIds: AllowedPaneIds,
+            FixedMainPaneId: FixedMainPaneId,
+            ValidateContentManagerState: ValidateContentManagerState));
         return sessionDiagnostics;
     }
 
@@ -556,7 +606,8 @@ public static class EditorLayoutValidator
 
     private static void ValidateNode(DockNodeState node, string path,
         List<EditorLayoutDiagnostic> result, Dictionary<string, int> paneCounts,
-        HashSet<string> nodeIds, HashSet<string> groupIds)
+        HashSet<string> nodeIds, HashSet<string> groupIds,
+        IReadOnlyCollection<string> AllowedPaneIds)
     {
         if (string.IsNullOrWhiteSpace(node.NodeId) || !nodeIds.Add(node.NodeId))
             result.Add(new("layout.node.id", $"{path}.nodeId",
@@ -574,9 +625,11 @@ public static class EditorLayoutValidator
                 result.Add(new("layout.split.ratio", $"{path}.ratio",
                     $"Split ratio must be between {MinimumStoredRatio} and {MaximumStoredRatio}."));
             if (node.First is not null)
-                ValidateNode(node.First, $"{path}.first", result, paneCounts, nodeIds, groupIds);
+                ValidateNode(node.First, $"{path}.first", result, paneCounts, nodeIds,
+                    groupIds, AllowedPaneIds);
             if (node.Second is not null)
-                ValidateNode(node.Second, $"{path}.second", result, paneCounts, nodeIds, groupIds);
+                ValidateNode(node.Second, $"{path}.second", result, paneCounts, nodeIds,
+                    groupIds, AllowedPaneIds);
             return;
         }
 
@@ -603,7 +656,7 @@ public static class EditorLayoutValidator
         {
             var paneId = group.Panes[index]?.PaneId ?? string.Empty;
             var panePath = $"{path}.tabGroup.panes[{index}].paneId";
-            if (!EditorPaneIds.IsBuiltIn(paneId))
+            if (!AllowedPaneIds.Contains(paneId, StringComparer.Ordinal))
                 result.Add(new("layout.pane.unknown", panePath, $"Unknown pane ID '{paneId}'."));
             else Increment(paneCounts, paneId);
         }
@@ -825,13 +878,27 @@ public sealed class EditorLayoutSession
 
     private EditorLayoutDocument _document;
     private List<FloatingDockHostState> _floatingHosts = [];
+    private readonly HashSet<string> PaneIds;
+    private readonly string? FixedMainPaneId;
+    private readonly bool UsesBuiltInLayout;
 
-    public EditorLayoutSession(EditorLayoutDocument initialDocument)
+    public EditorLayoutSession(EditorLayoutDocument InitialDocument,
+        IReadOnlyCollection<string>? AllowedPaneIds = null,
+        string? FixedMainPaneId = EditorPaneIds.Viewport)
     {
-        var diagnostics = EditorLayoutValidator.Validate(initialDocument);
-        if (diagnostics.Count != 0)
-            throw new EditorLayoutException("Cannot start an editor layout session.", diagnostics);
-        _document = EditorLayoutJson.Clone(initialDocument);
+        PaneIds = new HashSet<string>(AllowedPaneIds ?? EditorPaneIds.BuiltIn,
+            StringComparer.Ordinal);
+        this.FixedMainPaneId = FixedMainPaneId;
+        UsesBuiltInLayout = AllowedPaneIds is null;
+        var Diagnostics = EditorLayoutValidator.Validate(InitialDocument,
+            AllowedPaneIds: PaneIds, FixedMainPaneId: FixedMainPaneId,
+            ValidateContentManagerState: UsesBuiltInLayout);
+        if (Diagnostics.Count != 0)
+        {
+            throw new EditorLayoutException("Cannot start an editor layout session.", Diagnostics);
+        }
+
+        _document = EditorLayoutJson.Clone(InitialDocument);
     }
 
     public EditorLayoutDocument Document => EditorLayoutJson.Clone(_document);
@@ -840,6 +907,12 @@ public sealed class EditorLayoutSession
     public long Revision { get; private set; }
     public bool IsDirty { get; private set; }
 
+    public void AdoptCurrentAsInitialState()
+    {
+        Revision = 0;
+        IsDirty = false;
+    }
+
     public void UpdateContentManagers(IReadOnlyList<ContentManagerLayoutState> states,
         string activePaneId)
     {
@@ -847,7 +920,8 @@ public sealed class EditorLayoutSession
         var candidate = EditorLayoutJson.Clone(_document);
         candidate.ActiveContentManagerId = activePaneId;
         candidate.ContentManagers = states.Select(CloneContentManager).ToList();
-        var diagnostics = EditorLayoutValidator.ValidateSession(candidate, _floatingHosts);
+        var diagnostics = EditorLayoutValidator.ValidateSession(candidate, _floatingHosts,
+            PaneIds, FixedMainPaneId, UsesBuiltInLayout);
         if (diagnostics.Count != 0)
             throw new EditorLayoutException("Cannot update content manager layout state.", diagnostics);
         if (candidate.ActiveContentManagerId == _document.ActiveContentManagerId &&
@@ -863,12 +937,13 @@ public sealed class EditorLayoutSession
         var beforeRevision = Revision;
         if (command.Kind is not (EditorLayoutCommandKind.CloseFloatingHost or
                 EditorLayoutCommandKind.ResizeSplit) &&
-            !EditorPaneIds.IsBuiltIn(command.PaneId))
+            !PaneIds.Contains(command.PaneId))
             return Failure("layout.command.unknown-pane", $"Unknown pane '{command.PaneId}'.", beforeRevision);
         var candidate = Capture();
         var error = ApplyCore(candidate, command);
         if (error is not null) return Failure(error.Value.Code, error.Value.Message, beforeRevision);
-        var diagnostics = EditorLayoutValidator.ValidateSession(candidate.Document, candidate.FloatingHosts);
+        var diagnostics = EditorLayoutValidator.ValidateSession(candidate.Document,
+            candidate.FloatingHosts, PaneIds, FixedMainPaneId, UsesBuiltInLayout);
         if (diagnostics.Count != 0)
             return new(false, "layout.command.invalid-result", "The layout command produced an invalid state.",
                 null, beforeRevision, beforeRevision, diagnostics);
@@ -879,7 +954,10 @@ public sealed class EditorLayoutSession
 
     public void ResetToEngineDefault(EditorLayoutDocument engineDefault)
     {
-        var diagnostics = EditorLayoutValidator.Validate(engineDefault, requireAllPanesInMain: true);
+        var diagnostics = EditorLayoutValidator.Validate(engineDefault,
+            requireAllPanesInMain: true, AllowedPaneIds: PaneIds,
+            FixedMainPaneId: FixedMainPaneId,
+            ValidateContentManagerState: UsesBuiltInLayout);
         if (diagnostics.Count != 0)
             throw new EditorLayoutException("Cannot reset to an invalid engine default layout.", diagnostics);
         _document = EditorLayoutJson.Clone(engineDefault);
@@ -895,7 +973,9 @@ public sealed class EditorLayoutSession
             EditorLayoutValidator.EnumeratePanes(host.Root)));
         snapshot.HiddenPaneIds = snapshot.HiddenPaneIds.Distinct(StringComparer.Ordinal)
             .OrderBy(id => id, StringComparer.Ordinal).ToList();
-        var diagnostics = EditorLayoutValidator.Validate(snapshot);
+        var diagnostics = EditorLayoutValidator.Validate(snapshot,
+            AllowedPaneIds: PaneIds, FixedMainPaneId: FixedMainPaneId,
+            ValidateContentManagerState: UsesBuiltInLayout);
         if (diagnostics.Count != 0)
             throw new EditorLayoutException("Cannot persist the current editor layout.", diagnostics);
         return snapshot;
@@ -909,11 +989,12 @@ public sealed class EditorLayoutSession
 
     private (string Code, string Message)? ApplyCore(Snapshot snapshot, EditorLayoutCommand command)
     {
-        if (command.PaneId == EditorPaneIds.Viewport &&
+        if (FixedMainPaneId is not null && command.PaneId == FixedMainPaneId &&
             command.Kind is EditorLayoutCommandKind.HidePane or
                 EditorLayoutCommandKind.ReopenAsFloating or
                 EditorLayoutCommandKind.DetachToFloating)
-            return ("layout.viewport.main-only", "The viewport must remain in the main host.");
+            return ("layout.viewport.main-only",
+                $"Pane '{FixedMainPaneId}' must remain in the main host.");
 
         return command.Kind switch
         {
@@ -954,13 +1035,17 @@ public sealed class EditorLayoutSession
         return null;
     }
 
-    private static (string, string)? MergeIntoCenter(Snapshot snapshot, EditorLayoutCommand command)
+    private (string, string)? MergeIntoCenter(Snapshot snapshot, EditorLayoutCommand command)
     {
         var targetHostId = FindGroupHostId(snapshot, command.TargetGroupId, command.TargetHostId);
         if (targetHostId is null)
             return ("layout.command.target", "The target tab group was not found.");
-        if (command.PaneId == EditorPaneIds.Viewport && targetHostId != "main")
-            return ("layout.viewport.main-only", "The viewport cannot move to a floating host.");
+        if (FixedMainPaneId is not null && command.PaneId == FixedMainPaneId &&
+            targetHostId != "main")
+        {
+            return ("layout.viewport.main-only",
+                $"Pane '{FixedMainPaneId}' cannot move to a floating host.");
+        }
         var target = FindGroup(snapshot, command.TargetGroupId, targetHostId);
         if (target is null) return ("layout.command.target", "The target tab group was not found.");
         RemovePane(snapshot, command.PaneId);
@@ -972,7 +1057,7 @@ public sealed class EditorLayoutSession
         return null;
     }
 
-    private static (string, string)? SplitAtEdge(Snapshot snapshot, EditorLayoutCommand command)
+    private (string, string)? SplitAtEdge(Snapshot snapshot, EditorLayoutCommand command)
     {
         if (string.IsNullOrWhiteSpace(command.TargetNodeId))
             return ("layout.command.target", "A target node ID is required.");
@@ -982,13 +1067,18 @@ public sealed class EditorLayoutSession
         var targetHostId = FindNodeHostId(snapshot, command.TargetNodeId, command.TargetHostId);
         if (targetHostId is null)
             return ("layout.command.target", "The target node was not found.");
-        if (command.PaneId == EditorPaneIds.Viewport && targetHostId != "main")
-            return ("layout.viewport.main-only", "The viewport cannot move to a floating host.");
+        if (FixedMainPaneId is not null && command.PaneId == FixedMainPaneId &&
+            targetHostId != "main")
+        {
+            return ("layout.viewport.main-only",
+                $"Pane '{FixedMainPaneId}' cannot move to a floating host.");
+        }
         RemovePane(snapshot, command.PaneId);
         var target = FindNode(snapshot, command.TargetNodeId, targetHostId);
         if (target is null) return ("layout.command.target", "The target node was not found after removing the source pane.");
-        if (command.PaneId != EditorPaneIds.Viewport &&
-            EditorLayoutValidator.EnumeratePanes(target).Contains(EditorPaneIds.Viewport, StringComparer.Ordinal) &&
+        if (command.PaneId != FixedMainPaneId && FixedMainPaneId is not null &&
+            EditorLayoutValidator.EnumeratePanes(target).Contains(FixedMainPaneId,
+                StringComparer.Ordinal) &&
             target.Kind == DockNodeKind.Tabs)
         {
             // Edge splitting is allowed around the viewport, while center merge is not.

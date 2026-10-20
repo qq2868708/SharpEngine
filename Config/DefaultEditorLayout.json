@@ -35,9 +35,7 @@
               "groupId": "main.viewport.tabs",
               "activePaneId": "viewport",
               "panes": [
-                { "paneId": "viewport" },
-                { "paneId": "ui-editor" },
-                { "paneId": "timeline" }
+                { "paneId": "viewport" }
               ]
             }
           }
@@ -86,6 +84,8 @@
     }
   },
   "hiddenPaneIds": [
+    "timeline",
+    "ui-editor",
     "content-2",
     "content-3",
     "content-4"

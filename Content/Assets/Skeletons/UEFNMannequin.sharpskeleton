@@ -1,8 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "skeleton",
   "assetId": "engine://skeletons/uefn-mannequin",
   "name": "UEFN Mannequin Skeleton",
+  "previewMeshId": "engine://meshes/uefn-mannequin",
   "bones": [
     {
       "boneId": "root",

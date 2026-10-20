@@ -26,6 +26,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -404,8 +405,9 @@ protected:
         if (!RenderTarget) return;
         const auto position = GetAbsoluteOffset();
         const auto size = GetBox().GetSize();
+        const auto kind = GetAttribute<Rml::String>("data-viewport-kind", "scene");
         RenderTarget->RenderViewport(
-            {position.x, position.y, size.x, size.y});
+            {position.x, position.y, size.x, size.y}, kind);
     }
 };
 thread_local RmlUiShell* ViewportElement::RenderTarget = nullptr;
@@ -417,6 +419,7 @@ struct RmlUiShell::Impl
     {
         Impl* Owner{};
         std::string Id;
+        std::string RootId;
         std::string ContextName;
         HWND Window{};
         std::unique_ptr<RenderBackend> Surface;
@@ -426,6 +429,7 @@ struct RmlUiShell::Impl
         TextInputMethodEditor_Win32 Ime;
         Rml::Element* OpenPopup{};
         bool OwnsWindow{};
+        bool TopLevelEditor{};
         bool Reported{};
         bool PendingDestroy{};
         std::string HierarchySource;
@@ -467,6 +471,16 @@ struct RmlUiShell::Impl
     std::vector<UiSceneVertex> Triangles;
     std::vector<UiSceneVertex> Lines;
     UiViewportRect SceneRect{};
+    std::vector<UiSceneVertex> TimelinePreviewTriangles;
+    std::vector<UiSceneVertex> TimelinePreviewLines;
+    UiViewportRect TimelinePreviewRect{};
+    struct HostedScene
+    {
+        std::vector<UiSceneVertex> Triangles;
+        std::vector<UiSceneVertex> Lines;
+    };
+    std::unordered_map<std::string, HostedScene> HostedScenes;
+    Host* RenderHost{};
     std::vector<std::pair<std::string, std::string>> DeferredActions;
     HWND DockGhostWindow{};
 
@@ -558,6 +572,11 @@ struct RmlUiShell::Impl
     }
 
     Host* FindMainHost() const { return FindHost("main"); }
+
+    static std::string SceneKey(std::string_view HostId, std::string_view Kind)
+    {
+        return std::string(HostId) + "\n" + std::string(Kind);
+    }
 
     static Rml::Element* FindAttributeElement(Rml::Element* element,
                                                const char* attribute)
@@ -929,7 +948,9 @@ struct RmlUiShell::Impl
             (!host.OwnsWindow || IsWindowVisible(host.Window));
         std::ostringstream result;
         result << "{\"hostId\":" << JsonString(host.Id)
-               << ",\"kind\":" << JsonString(host.OwnsWindow ? "floating" : "main")
+               << ",\"rootId\":" << JsonString(host.RootId)
+               << ",\"kind\":" << JsonString(!host.OwnsWindow ? "main-editor" :
+                    host.TopLevelEditor ? "top-level-editor" : "floating-tab")
                << ",\"bounds\":" << RectJson(0, 0,
                     static_cast<float>(client.right), static_cast<float>(client.bottom))
                << ",\"contentScale\":"
@@ -1624,7 +1645,7 @@ struct RmlUiShell::Impl
                     static_cast<int>(size.y), 160, 360);
             }
             for (const auto& host : Hosts)
-                if (host->Document &&
+                if (host->Document && host->RootId == DockDrag.SourceHost->RootId &&
                     (DockDrag.Pane != "viewport" || host->Id == "main"))
                     host->Document->SetClass("dock-dragging", true);
         }
@@ -1632,6 +1653,11 @@ struct RmlUiShell::Impl
 
         POINT client{};
         Host* targetHost = HostAtScreenPoint(screen, &client);
+        if (targetHost && DockDrag.SourceHost &&
+            targetHost->RootId != DockDrag.SourceHost->RootId)
+        {
+            targetHost = nullptr;
+        }
         DockDrag.InsideAnyHost = targetHost != nullptr;
         Rml::Element* group = nullptr;
         std::string zone;
@@ -2106,6 +2132,18 @@ struct RmlUiShell::Impl
             DestroyWindow(host.Window);
         }
         EngineLog::Info("RmlUi", "Dock host destroyed id=" + host.Id);
+        const std::string scenePrefix = host.Id + "\n";
+        for (auto scene = HostedScenes.begin(); scene != HostedScenes.end();)
+        {
+            if (scene->first.starts_with(scenePrefix))
+            {
+                scene = HostedScenes.erase(scene);
+            }
+            else
+            {
+                ++scene;
+            }
+        }
         Hosts.erase(found);
         return true;
     }
@@ -2141,6 +2179,8 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     auto host = std::make_unique<Impl::Host>();
     host->Owner = &state;
     host->Id = "main";
+    host->RootId = "main";
+    host->TopLevelEditor = true;
     host->ContextName = "editor.main";
     host->Window = window;
     RECT renderClient{};
@@ -2222,14 +2262,58 @@ void RmlUiShell::ShowWindows()
 HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
                                   const char* titleUtf8)
 {
+    return CreateEditorHostWindow("main", hostId, titleUtf8, false);
+}
+
+HWND RmlUiShell::CreateEditorWindow(std::string_view hostId,
+                                    const char* titleUtf8)
+{
+    return CreateEditorHostWindow(hostId, hostId, titleUtf8, true);
+}
+
+HWND RmlUiShell::CreateOwnedDockWindow(std::string_view rootId,
+                                       std::string_view hostId,
+                                       const char* titleUtf8)
+{
+    return CreateEditorHostWindow(rootId, hostId, titleUtf8, false);
+}
+
+HWND RmlUiShell::CreateEditorHostWindow(std::string_view rootId,
+                                        std::string_view hostId,
+                                        const char* titleUtf8,
+                                        bool topLevelEditor)
+{
     auto& state = *State;
-    if (!state.Ready || !IsValidHostId(hostId) || hostId == "main") return nullptr;
-    if (auto* existing = state.FindHost(hostId))
+    if (!state.Ready || !IsValidHostId(rootId) || !IsValidHostId(hostId) ||
+        hostId == "main")
     {
-        if (titleUtf8) SetWindowTextW(existing->Window, Utf8ToWide(titleUtf8).c_str());
+        return nullptr;
+    }
+    auto* root = rootId == "main" ? state.FindMainHost() : state.FindHost(rootId);
+    if (!topLevelEditor && (!root || root->RootId != rootId ||
+        (!root->TopLevelEditor && root->Id != "main")))
+    {
+        return nullptr;
+    }
+    if (topLevelEditor && rootId != hostId)
+    {
+        return nullptr;
+    }
+    auto* existing = state.FindHost(hostId);
+    if (existing)
+    {
+        if (existing->RootId != rootId || existing->TopLevelEditor != topLevelEditor)
+        {
+            return nullptr;
+        }
+        if (titleUtf8)
+        {
+            SetWindowTextW(existing->Window, Utf8ToWide(titleUtf8).c_str());
+        }
         if (!state.StartupPending)
         {
             ShowWindow(existing->Window, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
+            SetForegroundWindow(existing->Window);
         }
         return existing->Window;
     }
@@ -2243,22 +2327,34 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
         windowClass.hInstance, GetSystemMetrics(SM_CXICON),
         GetSystemMetrics(SM_CYICON));
     if (!RegisterClassW(&windowClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    {
         return nullptr;
+    }
 
     auto host = std::make_unique<Impl::Host>();
     host->Owner = &state;
     host->Id.assign(hostId);
-    host->ContextName = "editor.dock." + host->Id;
+    host->RootId.assign(rootId);
+    host->TopLevelEditor = topLevelEditor;
+    host->ContextName = topLevelEditor ? "editor.asset." + host->Id :
+        "editor.dock." + host->Id;
     host->OwnsWindow = true;
-    RECT mainBounds{};
-    GetWindowRect(state.MainWindow, &mainBounds);
+    HWND ownerWindow = root ? root->Window : state.MainWindow;
+    RECT ownerBounds{};
+    GetWindowRect(ownerWindow, &ownerBounds);
     const std::wstring title = Utf8ToWide(titleUtf8);
+    const DWORD extendedStyle = (topLevelEditor ? 0 : WS_EX_TOOLWINDOW) |
+        (IsWindowVisible(state.MainWindow) ? 0 : WS_EX_NOACTIVATE);
     host->Window = CreateWindowExW(
-        WS_EX_TOOLWINDOW | (IsWindowVisible(state.MainWindow) ? 0 : WS_EX_NOACTIVATE), DockWindowClass,
+        extendedStyle, DockWindowClass,
         title.empty() ? L"SharpEngine" : title.c_str(),
-        WS_OVERLAPPEDWINDOW, mainBounds.left + 64, mainBounds.top + 64,
-        720, 520, state.MainWindow, nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (!host->Window) return nullptr;
+        WS_OVERLAPPEDWINDOW, ownerBounds.left + 64, ownerBounds.top + 64,
+        topLevelEditor ? 1180 : 720, topLevelEditor ? 760 : 520,
+        ownerWindow, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!host->Window)
+    {
+        return nullptr;
+    }
     SharpEngine::Windows::ApplyBrandIcon(host->Window, windowClass.hInstance);
     const COLORREF noBorder = DWMWA_COLOR_NONE;
     DwmSetWindowAttribute(host->Window, DWMWA_BORDER_COLOR,
@@ -2273,7 +2369,8 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     if (!host->Surface)
     {
         DestroyWindow(host->Window);
-        if (auto* main = state.FindMainHost())
+        auto* main = state.FindMainHost();
+        if (main)
         {
             state.SetCurrentHost(*main);
         }
@@ -2285,22 +2382,24 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
     {
         Rml::ReleaseRenderManagers();
         host->Surface.reset();
-        if (auto* main = state.FindMainHost())
+        auto* main = state.FindMainHost();
+        if (main)
         {
             state.SetCurrentHost(*main);
         }
         DestroyWindow(host->Window);
         return nullptr;
     }
-    const auto documentPath = Utf8File(
-        state.EngineRoot / "Content/UI/Rml/DockWindow.rml");
+    const auto documentPath = Utf8File(state.EngineRoot / "Content/UI/Rml" /
+        (topLevelEditor ? "AssetEditorWindow.rml" : "DockWindow.rml"));
     host->Document = host->Context->LoadDocument(documentPath);
     if (!host->Document)
     {
         Rml::RemoveContext(host->ContextName);
         Rml::ReleaseRenderManagers();
         host->Surface.reset();
-        if (auto* main = state.FindMainHost())
+        auto* main = state.FindMainHost();
+        if (main)
         {
             state.SetCurrentHost(*main);
         }
@@ -2333,8 +2432,8 @@ HWND RmlUiShell::CreateDockWindow(std::string_view hostId,
         ShowWindow(result, IsWindowVisible(state.MainWindow) ? SW_SHOW : SW_SHOWNOACTIVATE);
         UpdateWindow(result);
     }
-    EngineLog::Info("RmlUi", "Dock host created id=" + std::string(hostId) +
-        " document=" + documentPath);
+    EngineLog::Info("RmlUi", "Editor host created id=" + std::string(hostId) +
+        " root=" + std::string(rootId) + " document=" + documentPath);
     return result;
 }
 
@@ -2342,7 +2441,10 @@ bool RmlUiShell::DestroyDockWindow(std::string_view hostId)
 {
     auto& state = *State;
     auto* host = state.FindHost(hostId);
-    if (!host || !host->OwnsWindow) return false;
+    if (!host || !host->OwnsWindow)
+    {
+        return false;
+    }
     if (state.CallbackDepth)
     {
         host->PendingDestroy = true;
@@ -2350,6 +2452,39 @@ bool RmlUiShell::DestroyDockWindow(std::string_view hostId)
         return true;
     }
     return state.DestroyHostNow(hostId);
+}
+
+bool RmlUiShell::DestroyEditorWindow(std::string_view rootId)
+{
+    auto& state = *State;
+    auto* root = state.FindHost(rootId);
+    if (!root || !root->OwnsWindow || !root->TopLevelEditor ||
+        root->RootId != rootId)
+    {
+        return false;
+    }
+    std::vector<std::string> owned;
+    for (const auto& host : state.Hosts)
+    {
+        if (host->OwnsWindow && host->RootId == rootId && host->Id != rootId)
+        {
+            owned.push_back(host->Id);
+        }
+    }
+    for (const auto& hostId : owned)
+    {
+        if (state.CallbackDepth)
+        {
+            auto* host = state.FindHost(hostId);
+            host->PendingDestroy = true;
+            ShowWindow(host->Window, SW_HIDE);
+        }
+        else
+        {
+            state.DestroyHostNow(hostId);
+        }
+    }
+    return DestroyDockWindow(rootId);
 }
 
 void RmlUiShell::Shutdown()
@@ -2434,8 +2569,15 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
 
     if (host->OwnsWindow && message == WM_CLOSE)
     {
-        ShowWindow(window, SW_HIDE);
-        state.EmitAction(*host, "window.closed");
+        if (host->TopLevelEditor)
+        {
+            state.EmitAction(*host, "window.close-requested");
+        }
+        else
+        {
+            ShowWindow(window, SW_HIDE);
+            state.EmitAction(*host, "window.closed");
+        }
         return 0;
     }
     if (!host->OwnsWindow && message == WM_CLOSE)
@@ -2715,9 +2857,11 @@ bool RmlUiShell::Render(bool ObserveUi)
         RmlControlTooltip::Update(*host.Context, *host.Document);
         host.Surface->Resize(static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom));
         host.Surface->BeginFrame();
-        ViewportElement::RenderTarget = host.Id == "main" ? this : nullptr;
+        state.RenderHost = &host;
+        ViewportElement::RenderTarget = this;
         host.Context->Render();
         ViewportElement::RenderTarget = nullptr;
+        state.RenderHost = nullptr;
         host.Surface->EndFrame();
         const bool hostPresented = host.Surface->WasPresented();
         presented = presented && hostPresented;
@@ -2757,21 +2901,44 @@ bool RmlUiShell::Render(bool ObserveUi)
     return presented;
 }
 
-void RmlUiShell::RenderViewport(const UiViewportRect& viewport)
+void RmlUiShell::RenderViewport(const UiViewportRect& viewport,
+                                std::string_view kind)
 {
     auto& state = *State;
-    auto* host = state.FindMainHost();
+    auto* host = state.RenderHost;
     if (!host) return;
     RECT client{};
     GetClientRect(host->Window, &client);
+    const std::vector<UiSceneVertex>* triangles = nullptr;
+    const std::vector<UiSceneVertex>* lines = nullptr;
+    if (host->Id == "main" && kind == "scene")
+    {
+        triangles = &state.Triangles;
+        lines = &state.Lines;
+    }
+    else if (host->Id == "main" && kind == "timeline-preview")
+    {
+        triangles = &state.TimelinePreviewTriangles;
+        lines = &state.TimelinePreviewLines;
+    }
+    else
+    {
+        const auto found = state.HostedScenes.find(Impl::SceneKey(host->Id, kind));
+        if (found == state.HostedScenes.end())
+        {
+            return;
+        }
+        triangles = &found->second.Triangles;
+        lines = &found->second.Lines;
+    }
     const RenderFrame frame
     {
         viewport.X, viewport.Y, viewport.Width, viewport.Height, static_cast<float>(client.bottom),
         {
-            state.Triangles.data(), static_cast<uint32_t>(state.Triangles.size())
+            triangles->data(), static_cast<uint32_t>(triangles->size())
         },
         {
-            state.Lines.data(), static_cast<uint32_t>(state.Lines.size())
+            lines->data(), static_cast<uint32_t>(lines->size())
         }
     };
     host->Surface->SubmitFrame(&frame);
@@ -2810,6 +2977,11 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
     if (!host || !host->Document) return false;
     auto* element = host->Document->GetElementById(elementId);
     if (!element) return false;
+    if (strcmp(elementId, "assetEditorMenus") == 0 ||
+        strcmp(elementId, "assetEditorToolbar") == 0)
+    {
+        host->OpenPopup = nullptr;
+    }
     ++host->MarkupDepth;
     // Dock resize rebuilds the workspace. Retain the Inspector subtree so its
     // uncommitted inputs, picker draft and scroll position survive the rebuild.
@@ -2859,6 +3031,31 @@ bool RmlUiShell::GetViewport(UiViewportRect& rect) const
     return false;
 }
 
+bool RmlUiShell::GetUiElementRect(std::string_view id, UiViewportRect& rect) const
+{
+    return GetHostUiElementRect("main", id, rect);
+}
+
+bool RmlUiShell::GetHostUiElementRect(std::string_view hostId,
+                                      std::string_view id,
+                                      UiViewportRect& rect) const
+{
+    const auto* host = State->FindHost(hostId);
+    if (!host || !host->Document || id.empty())
+    {
+        return false;
+    }
+    auto* element = host->Document->GetElementById(std::string(id));
+    if (!element)
+    {
+        return false;
+    }
+    const auto position = element->GetAbsoluteOffset();
+    const auto size = element->GetBox().GetSize();
+    rect = {position.x, position.y, size.x, size.y};
+    return size.x > 0 && size.y > 0;
+}
+
 void RmlUiShell::SubmitScene(const UiViewportRect& rect,
                              const UiSceneVertex* triangles,
                              int triangleVertices,
@@ -2873,6 +3070,42 @@ void RmlUiShell::SubmitScene(const UiViewportRect& rect,
     if (lines && lineVertices > 0)
         state.Lines.assign(lines, lines + lineVertices);
     else state.Lines.clear();
+}
+
+void RmlUiShell::SubmitTimelineScene(const UiSceneVertex* triangles,
+                                     int triangleVertices,
+                                     const UiSceneVertex* lines,
+                                     int lineVertices)
+{
+    auto& state = *State;
+    GetUiElementRect("timelinePreviewViewport", state.TimelinePreviewRect);
+    if (triangles && triangleVertices > 0)
+        state.TimelinePreviewTriangles.assign(triangles, triangles + triangleVertices);
+    else state.TimelinePreviewTriangles.clear();
+    if (lines && lineVertices > 0)
+        state.TimelinePreviewLines.assign(lines, lines + lineVertices);
+    else state.TimelinePreviewLines.clear();
+}
+
+void RmlUiShell::SubmitHostScene(std::string_view hostId,
+                                 std::string_view kind,
+                                 const UiSceneVertex* triangles,
+                                 int triangleVertices,
+                                 const UiSceneVertex* lines,
+                                 int lineVertices)
+{
+    auto& state = *State;
+    if (!state.FindHost(hostId) || kind.empty())
+    {
+        return;
+    }
+    auto& scene = state.HostedScenes[Impl::SceneKey(hostId, kind)];
+    if (triangles && triangleVertices > 0)
+        scene.Triangles.assign(triangles, triangles + triangleVertices);
+    else scene.Triangles.clear();
+    if (lines && lineVertices > 0)
+        scene.Lines.assign(lines, lines + lineVertices);
+    else scene.Lines.clear();
 }
 
 void RmlUiShell::SetActionHandler(

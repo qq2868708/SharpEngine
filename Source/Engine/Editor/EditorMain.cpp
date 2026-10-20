@@ -114,6 +114,20 @@ namespace
     {
         return GUi && hostId && GUi->DestroyDockWindow(hostId) ? 1 : 0;
     }
+    void* __cdecl CreateEditorWindow(const char* hostId, const char* title)
+    {
+        return GUi && hostId && title ? GUi->CreateEditorWindow(hostId, title) : nullptr;
+    }
+    void* __cdecl CreateOwnedDockWindow(const char* rootId, const char* hostId,
+                                        const char* title)
+    {
+        return GUi && rootId && hostId && title ?
+            GUi->CreateOwnedDockWindow(rootId, hostId, title) : nullptr;
+    }
+    uint8_t __cdecl DestroyEditorWindow(const char* rootId)
+    {
+        return GUi && rootId && GUi->DestroyEditorWindow(rootId) ? 1 : 0;
+    }
     uint8_t __cdecl SetHostMarkup(const char* hostId, const char* id,
                                   const char* markup)
     {
@@ -126,10 +140,60 @@ namespace
         if (!GUi || !x || !y || !w || !h || !GUi->GetViewport(r)) return 0;
         *x=r.X; *y=r.Y; *w=r.Width; *h=r.Height; return 1;
     }
+    uint8_t __cdecl GetUiElementRect(const char* id, float* x, float* y,
+                                     float* w, float* h)
+    {
+        UiViewportRect r{};
+        if (!GUi || !id || !x || !y || !w || !h ||
+            !GUi->GetUiElementRect(id, r)) return 0;
+        *x=r.X; *y=r.Y; *w=r.Width; *h=r.Height; return 1;
+    }
+    uint8_t __cdecl GetHostUiElementRect(const char* hostId, const char* id,
+                                         float* x, float* y, float* w, float* h)
+    {
+        UiViewportRect r{};
+        if (!GUi || !hostId || !id || !x || !y || !w || !h ||
+            !GUi->GetHostUiElementRect(hostId, id, r))
+        {
+            return 0;
+        }
+        *x = r.X;
+        *y = r.Y;
+        *w = r.Width;
+        *h = r.Height;
+        return 1;
+    }
     void __cdecl SubmitViewportFrame(const float* triangles,uint32_t triangleVertices,const float* lines,uint32_t lineVertices)
     {
         UiViewportRect r{}; if (!GUi || !GUi->GetViewport(r)) return;
         GUi->SubmitScene(r,reinterpret_cast<const UiSceneVertex*>(triangles),static_cast<int>(triangleVertices),reinterpret_cast<const UiSceneVertex*>(lines),static_cast<int>(lineVertices));
+    }
+    void __cdecl SubmitTimelinePreviewFrame(const float* triangles,
+                                            uint32_t triangleVertices,
+                                            const float* lines,
+                                            uint32_t lineVertices)
+    {
+        if (!GUi) return;
+        GUi->SubmitTimelineScene(reinterpret_cast<const UiSceneVertex*>(triangles),
+            static_cast<int>(triangleVertices),
+            reinterpret_cast<const UiSceneVertex*>(lines),
+            static_cast<int>(lineVertices));
+    }
+    void __cdecl SubmitHostViewportFrame(const char* hostId, const char* kind,
+                                         const float* triangles,
+                                         uint32_t triangleVertices,
+                                         const float* lines,
+                                         uint32_t lineVertices)
+    {
+        if (!GUi || !hostId || !kind)
+        {
+            return;
+        }
+        GUi->SubmitHostScene(hostId, kind,
+            reinterpret_cast<const UiSceneVertex*>(triangles),
+            static_cast<int>(triangleVertices),
+            reinterpret_cast<const UiSceneVertex*>(lines),
+            static_cast<int>(lineVertices));
     }
     void __cdecl ViewportInput(void* windowHandle, int32_t x, int32_t y,
                                uint32_t inputEvent, uint32_t buttons,
@@ -291,7 +355,7 @@ int wmain(int argc,wchar_t** argv)
     GUi=&ui;
     ManagedHost managed;
     GManaged=&managed;
-    const ManagedHostApi api{10,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput,&CreateDockWindow,&DestroyDockWindow,&SetHostMarkup,&ChooseWorldSavePath,&GetUiSnapshot,&UiPointer,&UiKey,&ReadUiFrame,&ReportStartupProgress};
+    const ManagedHostApi api{12,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput,&CreateDockWindow,&DestroyDockWindow,&SetHostMarkup,&ChooseWorldSavePath,&GetUiSnapshot,&UiPointer,&UiKey,&ReadUiFrame,&ReportStartupProgress,&GetUiElementRect,&SubmitTimelinePreviewFrame,&CreateEditorWindow,&CreateOwnedDockWindow,&DestroyEditorWindow,&GetHostUiElementRect,&SubmitHostViewportFrame};
     Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
     const bool loaded=managed.Initialize(
         (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),

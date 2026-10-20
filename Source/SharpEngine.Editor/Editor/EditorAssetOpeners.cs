@@ -6,35 +6,55 @@ using SharpEngine.Modules;
 
 namespace SharpEngine.Editor;
 
+internal sealed class EditorAssetOpenCanceledException(string Message) : Exception(Message);
+
 public sealed record EditorAssetOpenResult(bool Success, string Code, string AssetId,
     string? OpenerId, string Message);
 
 public sealed class EditorAssetOpenContext
 {
-    internal EditorAssetOpenContext(EditorRuntime Runtime, AssetDescriptor Asset, string Path)
+    internal EditorAssetOpenContext(EditorRuntime Runtime, AssetDescriptor Asset, string Path,
+        string EditorId, string EditorRootId)
     {
         this.Runtime = Runtime;
         this.Asset = Asset;
         this.Path = Path;
+        this.EditorId = EditorId;
+        this.EditorRootId = EditorRootId;
     }
 
     public EditorRuntime Runtime { get; }
     public AssetDescriptor Asset { get; }
     public string Path { get; }
+    public string EditorId { get; }
+    public string EditorRootId { get; }
     public void ShowPane(string PaneId) => Runtime.ShowPane(PaneId);
+    public bool TryGetElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds) =>
+        Runtime.TryGetAssetEditorElementRect(EditorRootId, ElementId, out Bounds);
+    public void SubmitViewportFrame(string Kind, SharpEngine.World.WorldViewportFrame Frame) =>
+        Runtime.SubmitAssetEditorViewportFrame(EditorRootId, Kind, Frame);
+    public void SetStatus(string Message) => Runtime.SetStatusFromExtension(Message);
 }
 
 /// <summary>One type-wide default or asset-specific override. Higher priority wins;
 /// equal priorities use the most recent registration. Asset-specific handlers win first.</summary>
 public sealed class EditorAssetOpener
 {
-    public EditorAssetOpener(string Id, string AssetType, Action<EditorAssetOpenContext> Open,
-        int Priority = 0, string? AssetId = null, Func<JsonObject>? GetState = null)
+    private EditorAssetOpener(string Id, string AssetType, int Priority,
+        string? AssetId, Func<JsonObject>? GetState, string? EditorId)
     {
         this.Id = EditorExtensionIds.Validate(Id, nameof(Id));
         this.AssetType = EditorExtensionIds.RequireLabel(AssetType, nameof(AssetType));
         this.AssetId = AssetId is null ? null : EditorExtensionIds.Validate(AssetId, nameof(AssetId));
+        this.EditorId = EditorExtensionIds.Validate(EditorId ?? Id, nameof(EditorId));
         this.Priority = Priority;
+        this.GetState = GetState;
+    }
+
+    public EditorAssetOpener(string Id, string AssetType, Action<EditorAssetOpenContext> Open,
+        int Priority = 0, string? AssetId = null, Func<JsonObject>? GetState = null,
+        string? EditorId = null) : this(Id, AssetType, Priority, AssetId, GetState, EditorId)
+    {
         ArgumentNullException.ThrowIfNull(Open);
         var Owner = ModuleRegistrationScope.Current;
         this.Open = Context =>
@@ -42,14 +62,29 @@ public sealed class EditorAssetOpener
             using var Scope = Owner?.Enter();
             Open(Context);
         };
-        this.GetState = GetState;
+    }
+
+    public EditorAssetOpener(string Id, string AssetType,
+        Func<EditorAssetOpenContext, IAssetEditorInstance> Create,
+        int Priority = 0, string? AssetId = null, string? EditorId = null)
+        : this(Id, AssetType, Priority, AssetId, null, EditorId)
+    {
+        ArgumentNullException.ThrowIfNull(Create);
+        var Owner = ModuleRegistrationScope.Current;
+        this.Create = Context =>
+        {
+            using var Scope = Owner?.Enter();
+            return Create(Context);
+        };
     }
 
     public string Id { get; }
     public string AssetType { get; }
     public string? AssetId { get; }
+    public string EditorId { get; }
     public int Priority { get; }
-    internal Action<EditorAssetOpenContext> Open { get; }
+    internal Action<EditorAssetOpenContext>? Open { get; }
+    internal Func<EditorAssetOpenContext, IAssetEditorInstance>? Create { get; }
     internal Func<JsonObject>? GetState { get; }
 }
 
@@ -57,6 +92,8 @@ public sealed class EditorAssetOpenerRegistry
 {
     private readonly EditorRuntime Runtime;
     private readonly List<EditorAssetOpener> Entries = new();
+    private readonly Dictionary<string, AssetEditorHost> Editors =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly int OwnerThreadId = Environment.CurrentManagedThreadId;
 
     internal EditorAssetOpenerRegistry(EditorRuntime Runtime)
@@ -81,6 +118,12 @@ public sealed class EditorAssetOpenerRegistry
         {
             EnsureOwnerThread();
             Entries.Remove(Opener);
+            foreach (var Editor in Editors.Values.Where(Editor =>
+                Editor.OpenerId.Equals(Opener.Id,
+                    StringComparison.OrdinalIgnoreCase)).ToArray())
+            {
+                Close(Editor);
+            }
         });
     }
 
@@ -116,8 +159,51 @@ public sealed class EditorAssetOpenerRegistry
                 return Complete(false, "ASSET_FILE_MISSING", Asset.Id, Opener.Id, "Asset file is missing");
             }
 
-            Opener.Open(new EditorAssetOpenContext(Runtime, Asset, Path));
-            return Complete(true, "ASSET_OPENED", Asset.Id, Opener.Id, $"Opened {Asset.Name}");
+            if (Editors.TryGetValue(Asset.Id, out var Existing))
+            {
+                Existing.Focus();
+                return Complete(true, "ASSET_EDITOR_REUSED", Asset.Id, Opener.Id,
+                    $"Focused {Asset.Name}");
+            }
+
+            var RootId = AssetEditorHost.CreateRootId(Asset.Id);
+            var Context = new EditorAssetOpenContext(Runtime, Asset, Path, Opener.EditorId,
+                RootId);
+            if (Opener.Create is not null)
+            {
+                var Instance = Opener.Create(Context);
+                if (!Instance.Asset.Id.Equals(Asset.Id, StringComparison.OrdinalIgnoreCase) ||
+                    !Instance.EditorId.Equals(Opener.EditorId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Instance.Dispose();
+                    throw new InvalidOperationException(
+                        "Asset editor instance identity does not match its opener context");
+                }
+
+                var Host = new AssetEditorHost(Runtime, Opener, Instance, RootId, Close);
+                Editors.Add(Asset.Id, Host);
+                try
+                {
+                    Host.Open();
+                }
+                catch
+                {
+                    Editors.Remove(Asset.Id);
+                    Host.Dispose();
+                    throw;
+                }
+            }
+            else
+            {
+                Opener.Open!(Context);
+            }
+            return Complete(true, "ASSET_OPENED", Asset.Id, Opener.Id,
+                $"Opened {Asset.Name}");
+        }
+        catch (EditorAssetOpenCanceledException Error)
+        {
+            return Complete(false, "ASSET_OPEN_CANCELLED", Asset.Id, Opener.Id,
+                Error.Message);
         }
         catch (Exception Error)
         {
@@ -131,20 +217,85 @@ public sealed class EditorAssetOpenerRegistry
     {
         return new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
             lastResult = LastResult,
             openers = Entries.Select(Entry => new
             {
                 id = Entry.Id,
+                editorId = Entry.EditorId,
                 assetType = Entry.AssetType,
                 assetId = Entry.AssetId,
                 priority = Entry.Priority,
                 state = ReadState(Entry),
             }).ToArray(),
+            editors = Editors.Values.OrderBy(Editor => Editor.AssetId,
+                StringComparer.OrdinalIgnoreCase).Select(Editor => Editor.Describe()).ToArray(),
         };
     }
 
-    internal void Clear() => Entries.Clear();
+    internal bool TryHandleHostAction(string HostId, string Action)
+    {
+        EnsureOwnerThread();
+        foreach (var Editor in Editors.Values.ToArray())
+        {
+            if (Editor.TryHandleAction(HostId, Action))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal void Update(float DeltaSeconds)
+    {
+        EnsureOwnerThread();
+        foreach (var Editor in Editors.Values.ToArray())
+        {
+            Editor.Update(DeltaSeconds);
+        }
+    }
+
+    internal bool ConfirmCloseAll()
+    {
+        EnsureOwnerThread();
+        foreach (var Editor in Editors.Values.OrderBy(Editor => Editor.AssetId,
+            StringComparer.OrdinalIgnoreCase))
+        {
+            if (!Editor.ConfirmClose())
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    internal IReadOnlyList<JsonObject> DescribeEditors(string EditorId)
+    {
+        EnsureOwnerThread();
+        return Editors.Values.Where(Editor => Editor.Instance.EditorId.Equals(EditorId,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderBy(Editor => Editor.AssetId, StringComparer.OrdinalIgnoreCase)
+            .Select(Editor => Editor.Describe().DeepClone().AsObject()).ToArray();
+    }
+
+    internal void Clear()
+    {
+        foreach (var Editor in Editors.Values.ToArray())
+        {
+            Editor.Dispose();
+        }
+
+        Entries.Clear();
+        Editors.Clear();
+    }
+
+    private void Close(AssetEditorHost Editor)
+    {
+        Editors.Remove(Editor.AssetId);
+        Editor.Dispose();
+    }
 
     private static JsonObject? ReadState(EditorAssetOpener Entry)
     {

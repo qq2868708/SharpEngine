@@ -44,18 +44,28 @@ public sealed partial class EditorRuntime
     }
     public void OpenPrefab(string path)
     {
-        if (PlayState != EditorPlayState.Stopped) throw new InvalidOperationException("Stop Play before editing a Prefab");
-        path = Path.GetFullPath(path);
-        if (!_prefabTabs.TryGetValue(path, out var tab))
+        if (PlayState != EditorPlayState.Stopped)
         {
-            var world = WorldDocument.Load(path, Components);
-            if (!world.Data.IsPrefab) throw new InvalidDataException("Expected Prefab document");
-            tab = new(world, new WorldAuthoringSession(world), new(EditorSelectionKind.Entity, world.Entities[0].Id), false, null, false);
-            _prefabTabs.Add(path, tab);
+            throw new InvalidOperationException("Stop Play before editing a Prefab");
         }
-        RememberDocumentTab(); _activePrefabPath = path;
-        if (!_prefabWindowOpen) _prefabWindowOpen = _nativeApi.CreateDockWindow("prefab-editor", "Prefab Editor") != 0;
-        RestoreDocumentTab(tab);
+
+        var FullPath = Path.GetFullPath(path);
+        var Asset = _assets?.Assets.FirstOrDefault(Candidate =>
+            Candidate.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase) &&
+            _assets.ResolvePath(Candidate) is { } CandidatePath &&
+            Path.GetFullPath(CandidatePath).Equals(FullPath,
+                StringComparison.OrdinalIgnoreCase));
+        if (Asset is null)
+        {
+            throw new InvalidOperationException(
+                $"Prefab is not registered as an asset: {FullPath}");
+        }
+
+        var Result = OpenAsset(Asset.Id);
+        if (!Result.Success)
+        {
+            throw new InvalidOperationException(Result.Message);
+        }
     }
     private bool SaveActivePrefab()
     {
@@ -113,15 +123,21 @@ public sealed partial class EditorRuntime
                 var path = Path.Combine(directory, name + ".sprefab");
                 for (int suffix = 1; File.Exists(path); suffix++) path = Path.Combine(directory, name + suffix + ".sprefab");
                 new WorldDocument(data, Components!, path).Save(path);
-                try { RegisterPrefabAsset(path, data.Name); }
+                string AssetId;
+                try { AssetId = RegisterPrefabAsset(path, data.Name); }
                 catch { File.Delete(path); throw; }
-                OpenPrefab(path); return true;
+                var Opened = OpenAsset(AssetId);
+                if (!Opened.Success)
+                {
+                    throw new InvalidOperationException(Opened.Message);
+                }
+                return true;
             }
         }
         catch (Exception error) { SetStatus("Prefab: " + error.Message); SetText("componentError", error.Message); }
         return true;
     }
-    private void RegisterPrefabAsset(string path, string name)
+    private string RegisterPrefabAsset(string path, string name)
     {
         var root = _projectRoot ?? _engineRoot;
         var ownerManifest = JsonNode.Parse(File.ReadAllText(_projectManifest ?? Path.Combine(_engineRoot, "engine.json")))!;
@@ -141,6 +157,7 @@ public sealed partial class EditorRuntime
         var activeContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
         _contentManagers = new ContentManagerCoordinator(_assets, contentStates, activeContent);
         RefreshAssets();
+        return (_projectRoot is null ? "engine://" : "project://") + id;
     }
     private void RefreshPrefabEditor()
     {

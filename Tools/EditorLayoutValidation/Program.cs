@@ -23,7 +23,9 @@ var defaults = store.LoadDefault(engineRoot);
 Require(EditorLayoutValidator.Validate(defaults, requireAllPanesInMain: true).Count == 0,
     "The engine default must expose Content Manager 1 and hide Content Managers 2-4.");
 Require(defaults.HiddenPaneIds.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(
-        new[] { EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4 }) &&
+        new[] { EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4,
+            EditorPaneIds.Timeline, EditorPaneIds.UiEditor }.OrderBy(id => id,
+                StringComparer.Ordinal)) &&
     defaults.ContentManagers.Count == 4 &&
     defaults.ContentManagers.All(state => state.ViewMode == ContentViewMode.Tile),
     "The default layout must own four tile-mode content manager states.");
@@ -57,9 +59,11 @@ legacyHidden.Clear();
 var migrated = EditorLayoutJson.Parse(legacy.ToJsonString());
 Require(migrated.SchemaVersion == EditorLayoutDocument.CurrentSchemaVersion &&
     migrated.HiddenPaneIds.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(
-        new[] { EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4 }) &&
+        new[] { EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4,
+            EditorPaneIds.Timeline, EditorPaneIds.UiEditor }.OrderBy(id => id,
+                StringComparer.Ordinal)) &&
     migrated.ContentManagers.Count == 4,
-    "Schema v1 layouts must migrate with Content Managers 2-4 hidden.");
+    "Schema v1 layouts must migrate with optional Content Managers and legacy asset panes hidden.");
 
 try
 {
@@ -109,9 +113,11 @@ Require(session.Apply(new(EditorLayoutCommandKind.ReopenAsFloating,
     EditorPaneIds.Inspector)).Success && session.FloatingHosts.Count == 1,
     "A hidden non-viewport pane must reopen as a session-only floating host.");
 var persistentWhileFloating = session.CreatePersistentSnapshot();
-Require(persistentWhileFloating.HiddenPaneIds.SequenceEqual([
+Require(persistentWhileFloating.HiddenPaneIds.SequenceEqual(new[]
+    {
         EditorPaneIds.Content2, EditorPaneIds.Content3, EditorPaneIds.Content4,
-        EditorPaneIds.Inspector]) &&
+        EditorPaneIds.Inspector, EditorPaneIds.Timeline, EditorPaneIds.UiEditor,
+    }.OrderBy(Id => Id, StringComparer.Ordinal)) &&
     !EditorLayoutJson.Serialize(persistentWhileFloating).Contains("floating", StringComparison.OrdinalIgnoreCase),
     "Floating host state must project to hidden state and never serialize.");
 
@@ -172,7 +178,8 @@ Require(multiHost.Apply(new(EditorLayoutCommandKind.CloseFloatingHost,
     multiHost.Document.HiddenPaneIds.OrderBy(id => id, StringComparer.Ordinal).SequenceEqual(
         new[] { EditorPaneIds.Console, EditorPaneIds.Content, EditorPaneIds.Content2,
             EditorPaneIds.Content3, EditorPaneIds.Content4, EditorPaneIds.Hierarchy,
-            EditorPaneIds.Inspector }.OrderBy(id => id, StringComparer.Ordinal)),
+            EditorPaneIds.Inspector, EditorPaneIds.Timeline,
+            EditorPaneIds.UiEditor }.OrderBy(id => id, StringComparer.Ordinal)),
     "Closing a floating host must hide every pane in its complete dock tree.");
 Require(EditorLayoutValidator.ValidateSession(multiHost.Document,
     multiHost.FloatingHosts).Count == 0,
@@ -238,6 +245,44 @@ var arrangement = DockLayoutCalculator.Arrange(defaults.MainHost.Root,
 Require(arrangement.MinimumSize.Width > 500 && arrangement.MinimumSize.Height > 300 &&
     arrangement.Nodes.Any(node => node.RatioWasClamped),
     "Derived layout must report minimum size pressure and clamp effective ratios.");
+
+var AssetLayout = new EditorLayoutDocument
+{
+    MainHost = new DockHostState
+    {
+        HostId = "main",
+        Root = new DockNodeState
+        {
+            NodeId = "asset.root",
+            Kind = DockNodeKind.Tabs,
+            TabGroup = new DockTabGroupState
+            {
+                GroupId = "asset.tabs",
+                ActivePaneId = "preview",
+                Panes =
+                [
+                    new DockPaneState { PaneId = "preview" },
+                    new DockPaneState { PaneId = "timeline" },
+                    new DockPaneState { PaneId = "details" },
+                ],
+            },
+        },
+    },
+    HiddenPaneIds = [],
+    ActiveContentManagerId = string.Empty,
+    ContentManagers = [],
+};
+var AssetSession = new EditorLayoutSession(AssetLayout,
+    ["preview", "timeline", "details"], "preview");
+Require(!AssetSession.Apply(new(EditorLayoutCommandKind.DetachToFloating,
+        "preview")).Success,
+    "An asset editor primary pane must remain in its top-level editor root.");
+Require(AssetSession.Apply(new(EditorLayoutCommandKind.DetachToFloating,
+        "details")).Success && AssetSession.FloatingHosts.Count == 1 &&
+    EditorLayoutValidator.ValidateSession(AssetSession.Document,
+        AssetSession.FloatingHosts, ["preview", "timeline", "details"],
+        "preview", false).Count == 0,
+    "An ordinary asset-editor pane may become an owner-scoped floating tab.");
 
 var temporary = Directory.CreateTempSubdirectory("SharpEngine-EditorLayoutValidation-");
 try

@@ -82,29 +82,33 @@ input:focus { border-color: #5d94d2; }
 .timeline-custom-bar .custom-bar-surface { width: 100%; }
 .timeline-custom-bar .custom-bar-group { width: 100%; border-width: 0px; padding: 0px; background-color: transparent; }
 .timeline-custom-bar .custom-bar-group-label { display: none; }
-.timeline-preview-host { display: block; height: 150px; flex-shrink: 0; overflow: hidden; border-bottom: 1px #101318; background-color: #11161d; }
+.timeline-preview-host { display: block; height: 360px; min-height: 280px; flex-shrink: 0; overflow: hidden; border-bottom: 1px #101318; background-color: #11161d; }
 .timeline-preview { display: flex; width: 100%; height: 100%; align-items: stretch; }
-.timeline-preview-stage { position: relative; width: 220px; flex-shrink: 0; overflow: hidden; background-color: #0d1218; border-right: 1px #2b3542; }
+.timeline-preview-stage { position: relative; flex: 1 1 auto; width: auto; min-width: 0px; overflow: hidden; background-color: #0d1218; border-right: 1px #2b3542; }
+.timeline-preview-viewport { display: block; width: 100%; height: 100%; background-color: #0d1218; }
 .timeline-preview-grid { position: absolute; left: 0px; right: 0px; bottom: 28px; height: 1px; background-color: #3b4a5c; }
 .timeline-preview-link { position: absolute; height: 2px; transform-origin: 0px 50%; background-color: #5e9bc5; }
 .timeline-preview-bone { position: absolute; width: 9px; height: 9px; margin-left: -4px; margin-top: -4px; border: 2px #e5b870; border-radius: 50%; background-color: #8d5d37; }
-.timeline-preview-info { display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; padding: 12px 14px; }
+.timeline-preview-info { display: flex; flex: 0 0 280px; flex-direction: column; min-width: 280px; padding: 16px 18px; }
 .timeline-preview-title { color: #dce6f2; font-size: 12px; }
 .timeline-preview-subtitle { margin-top: 4px; color: #8798ad; font-size: 10px; }
 .timeline-preview-progress { height: 4px; margin-top: 12px; background-color: #293442; }
 .timeline-preview-progress-value { height: 100%; background-color: #50a891; }
 .timeline-preview-pose { margin-top: 10px; color: #9eafc3; font-family: monospace; font-size: 10px; white-space: pre; }
+.timeline-preview-mesh { margin-top: 10px; color: #87a4c1; font-size: 10px; }
 .viewport-projection { position: absolute; top: 10px; right: 14px; padding: 4px 9px; color: #d5deeb; background-color: #202731; border-color: #4a586a; font-size: 11px; }
 .viewport-footer { display: flex; align-items: center; height: 24px; flex-shrink: 0; padding: 0px 12px; color: #64758b; font-size: 10px; background-color: #151b23; border-top: 1px #252e3b; }
 .timeline-pane { display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; background-color: #171b22; }
-.timeline-documents { display: flex; flex-shrink: 0; min-height: 28px; overflow-x: auto; background-color: #1b2028; border-bottom: 1px #101318; }
-.timeline-document-tab { flex-shrink: 0; height: 28px; padding: 4px 12px; margin-right: 1px; border-width: 0px; border-bottom: 2px transparent; background-color: #252c36; color: #9eafc3; }
-.timeline-document-tab.active { border-bottom-color: #5c9ad2; background-color: #303b49; color: #e0ecf8; }
+.timeline-editor-tabs { display: flex; align-items: center; height: 32px; flex-shrink: 0; padding-left: 6px; background-color: #1b2028; border-bottom: 1px #101318; }
+.timeline-editor-tab { flex-shrink: 0; height: 30px; padding: 4px 12px; margin-right: 1px; border-width: 0px; border-bottom: 2px transparent; background-color: transparent; color: #9eafc3; }
+.timeline-editor-tab.active { border-bottom-color: #5c9ad2; background-color: #303b49; color: #e0ecf8; }
+.timeline-editor-asset-title { margin-left: 10px; color: #708198; font-size: 10px; }
 .timeline-toolbar { display: flex; align-items: center; height: 38px; flex-shrink: 0; padding: 5px 8px; background-color: #242a32; border-bottom: 1px #101318; }
 .timeline-toolbar button { height: 28px; margin-right: 5px; padding: 4px 8px; }
 .timeline-toolbar .icon { width: 14px; height: 14px; }
 .timeline-toolbar-separator { width: 1px; height: 22px; margin: 0px 8px 0px 3px; background-color: #434c58; }
 .timeline-time { padding-right: 5px; color: #bdcce0; font-family: monospace; font-size: 11px; }
+.timeline-details { flex-grow: 1; min-width: 0px; min-height: 0px; margin: 0px; padding: 14px; overflow: auto; color: #bdc9d8; background-color: #11161c; font-family: monospace; font-size: 10px; white-space: pre-wrap; }
 .timeline-view-host { position: relative; flex-grow: 1; min-width: 0px; min-height: 0px; overflow: hidden; }
 .timeline-empty { padding: 20px; color: #77869a; }
 .timeline-notify-inspector { display: flex; align-items: center; min-height: 30px; padding: 0px 10px; border-top: 1px #303744; background-color: #202630; color: #b8c6d7; font-size: 11px; }
@@ -249,13 +253,12 @@ viewport { display: block; }
 .viewport-pane { position: relative; display: flex; flex-direction: column; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; }
 .viewport-pane #viewportCanvas { flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 100px; }
 .ui-editor-pane { display: flex; flex-direction: column; flex-grow: 1; min-width: 640px; min-height: 360px; background-color: #15191f; }
-.ui-document-tabs { display: flex; height: 34px; flex-shrink: 0; align-items: stretch; padding-left: 6px; background-color: #181c22; border-bottom: 1px #303844; overflow: hidden; }
-.ui-document-tab { display: flex; align-items: center; min-width: 120px; max-width: 240px; height: 34px; padding: 0px 8px; margin-right: 2px; color: #8995a6; background-color: transparent; border-width: 0px; border-bottom: 2px transparent; border-radius: 0px; }
-.ui-document-tab.active { color: #edf3fb; background-color: #252c35; border-bottom-color: #3aa78f; }
-.ui-document-tab .icon { margin-right: 6px; }
-.ui-document-tab span { overflow: hidden; white-space: nowrap; }
-.ui-document-close { width: 18px; flex-shrink: 0; margin-left: 7px; color: #7c8796; text-align: center; }
-.ui-document-close:hover { color: #ffffff; background-color: #ad4352; }
+.ui-editor-tabs { display: flex; height: 34px; flex-shrink: 0; align-items: stretch; padding-left: 6px; background-color: #181c22; border-bottom: 1px #303844; overflow: hidden; }
+.ui-editor-tab { display: flex; align-items: center; min-width: 90px; height: 34px; padding: 0px 10px; margin-right: 2px; color: #8995a6; background-color: transparent; border-width: 0px; border-bottom: 2px transparent; border-radius: 0px; }
+.ui-editor-tab.active { color: #edf3fb; background-color: #252c35; border-bottom-color: #3aa78f; }
+.ui-editor-asset-title { flex-grow: 1; min-width: 0px; padding: 9px 10px; color: #aab7c8; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ui-editor-close { height: 24px; margin: 5px 8px 0px 0px; padding: 2px 8px; color: #9aa7b8; background-color: transparent; border-color: #414b59; font-size: 10px; }
+.ui-editor-close:hover { color: #ffffff; background-color: #ad4352; }
 .ui-editor-empty-tab { padding: 9px 12px; color: #68778a; font-size: 11px; }
 .ui-editor-toolbar { display: flex; align-items: center; height: 42px; flex-shrink: 0; padding: 6px 8px; background-color: #242a32; border-bottom: 1px #101318; }
 .ui-editor-toolbar button { height: 28px; margin-right: 5px; padding: 4px 8px; }
@@ -281,6 +284,11 @@ viewport { display: block; }
 .ui-empty-icon { width: 54px; height: 54px; padding: 17px 0px; margin-bottom: 10px; text-align: center; color: #79ccb8; border: 1px #3c7f70; border-radius: 4px; font-weight: bold; }
 .ui-editor-diagnostics { height: 25px; flex-shrink: 0; padding: 6px 10px; color: #8090a5; background-color: #171c22; border-top: 1px #29313b; font-size: 9px; overflow: hidden; white-space: nowrap; }
 .ui-editor-empty { padding: 12px 8px; color: #6c7b8e; font-size: 11px; }
+.ui-source-view { flex-grow: 1; min-width: 0px; min-height: 0px; margin: 0px; padding: 12px; overflow: auto; color: #c1d2e4; background-color: #11161c; font-family: monospace; font-size: 10px; white-space: pre-wrap; }
+.ui-diagnostic { display: flex; flex-direction: column; margin: 6px; padding: 8px; border: 1px #384353; color: #bdc9d8; font-size: 10px; }
+.ui-diagnostic-error { border-color: #8c4650; color: #efb2b2; }
+.ui-diagnostic-warning { border-color: #806b3b; color: #e4c98a; }
+.ui-editor-asset-summary { padding: 8px; color: #b8c5d5; font-size: 10px; }
 .ui-inspector-heading { display: flex; align-items: center; padding: 8px; margin-bottom: 8px; color: #e2eaf4; background-color: #29313a; border: 1px #3b4653; }
 .ui-inspector-heading .ui-tag { margin-right: 8px; color: #5dc0a8; }
 .ui-inspector-section { margin-bottom: 10px; }
@@ -322,6 +330,29 @@ viewport { display: block; }
 #dockWindow { width: 100%; height: 100%; display: flex; flex-direction: column; background-color: #171a20; }
 .dock-window-titlebar { flex-shrink: 0; }
 .floating-dock-host { flex-grow: 1; }
+.asset-editor-root { width: 100%; height: 100%; display: flex; flex-direction: column; background-color: #171a20; }
+.asset-editor-menubar { flex-shrink: 0; }
+#assetEditorMenus { display: flex; align-items: center; height: 32px; }
+#assetEditorTitle { min-width: 0px; color: #aeb8c7; font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.asset-editor-toolbar { display: flex; align-items: center; height: 42px; flex-shrink: 0; padding: 6px 10px; background-color: #252a32; border-bottom: 1px #111419; }
+.asset-editor-toolbar .toolbar-button { margin-right: 5px; }
+.asset-editor-workspace { flex-grow: 1; }
+.asset-editor-statusbar { display: flex; align-items: center; height: 24px; flex-shrink: 0; padding: 0px 10px; color: #77869a; background-color: #1b2027; border-top: 1px #101318; font-size: 10px; }
+.asset-editor-statusbar .status-dot { margin-right: 7px; }
+.asset-editor-dock-group { min-width: 0px; min-height: 0px; }
+.asset-preview { width: 100%; height: 100%; min-height: 0px; }
+.asset-preview .timeline-preview-stage { min-width: 0px; }
+.asset-timeline-pane { width: 100%; height: 100%; }
+.asset-details-pane { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0px; }
+.asset-preview-mesh-picker { display: flex; flex-direction: column; flex-shrink: 0; padding: 10px; border-bottom: 1px #303744; }
+.asset-preview-mesh-picker strong, .asset-preview-mesh-picker span, .asset-preview-mesh-picker button { margin-bottom: 6px; }
+.asset-ui-design { width: 100%; height: 100%; }
+.ui-diagnostics-pane { width: 100%; height: 100%; overflow: auto; }
+.asset-prefab-viewport { width: 100%; height: 100%; }
+.asset-prefab-viewport viewport { flex-grow: 1; min-width: 0px; min-height: 0px; }
+.prefab-asset-hierarchy { display: flex; flex-direction: column; width: 100%; height: 100%; padding: 6px; overflow: auto; }
+.prefab-entity.selected { color: #ffffff; background-color: #31506c; border-color: #5d94d2; }
+.asset-prefab-details { width: 100%; height: 100%; }
 .menu-path { padding: 6px 12px 4px; color: #65758a; font-size: 9px; overflow: hidden; }
 /* GL2 has no offscreen layer/filter support; box-shadow produces an untextured white quad. */
 .menu-popup { display: none; position: absolute; top: 32px; left: 0px; z-index: 300; width: 236px; padding: 5px; background-color: #22262e; color: #d4dae4; border: 1px #4a5566; border-radius: 4px; }

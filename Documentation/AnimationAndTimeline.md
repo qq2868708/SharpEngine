@@ -19,20 +19,30 @@ Timeline 是 Engine 内置功能，由 `Source/SharpEngine.Timeline.Runtime/Shar
 
 `TimelineView` 是 renderer-neutral 的视图层。`BuildSnapshot(width, height)` 返回轨道、片段矩形、标尺刻度和 playhead 的语义快照；`BuildMarkup` 返回可嵌入 RmlUi 的标记。`TimelineViewState` 只保存缩放、滚动、当前时间和选择，是瞬态编辑器状态，不会写入时间轴资产。
 
-编辑器的 Animation Timeline 由引擎创建，Timeline Editor Module 在固定的
-`EditorCustomBarRegistry.TimelineSurfaceId` CustomBar 中提供 Play、Pause、Stop、定位、
-Add Notify、Undo、Redo 和 Save。它会从当前 skeletal-animation Clip 采样骨骼姿态，
-按父子层级累积局部变换，并在预览区按整套骨架范围自动取景后显示骨骼连线、骨骼点、
-采样时间和进度；预览结束时会明确显示完成状态。时间轴修改由
+动画资产编辑器是按 `AssetId` 创建的顶层编辑器根，拥有自己的 Menu、Toolbar 和 Dock 布局。
+Toolbar 提供 Play、Pause、Stop、定位、Add Notify、Undo、Redo 和 Save。它会从当前
+skeletal-animation Clip 采样骨骼姿态，通过 `SkeletonInstance` 计算 CPU 蒙皮顶点，并把带深度的
+三角形提交到该资产编辑器 Host 的 3D viewport；Preview 与 Timeline 默认同时可见，采样时间和
+进度显示在 Preview 侧栏。
+预览结束时会明确显示完成状态。时间轴修改由
 `TimelineAuthoringSession` 管理，使用递增 `DocumentRevision`、dirty 状态和可逆历史；
 Save 先重新解析序列化内容，再用临时文件原子替换项目源资产。引擎来源资产保持只读，
 因此 Save 在项目 Timeline 资产上才可用。
 
 在 Content Manager 中单击资源只改变选择状态；双击 `SkeletalAnimation` 资源会通过
-`EditorRuntime.OpenAsset` 打开对应的 Animation Timeline 文档。每个资源拥有独立的
-播放头、Notify 轨道、Undo/Redo 历史和 dirty 状态，多个已打开资源会以文档标签切换。
+`EditorRuntime.OpenAsset` 打开顶层动画资产编辑器。同一 `AssetId` 重复打开时聚焦原实例；不同
+资产各自拥有独立实例，即使它们共享 `timeline-editor` 的 `EditorId`。Preview 是不可游离的主
+Pane，Timeline 与 Details 是同一 `EditorRootId` 下的普通 Pane，可以在该根内停靠或成为游离
+Tab，但不能跨到主编辑器或另一个资产编辑器。每个实例拥有自己的播放头、Notify 轨道、
+Undo/Redo 历史和 dirty 状态。
 `EditorAssetOpenerRegistry` 先匹配具体 `AssetId`，再匹配 `AssetType`，并按优先级解析；
-项目或插件可注册高优先级打开器覆写引擎默认工具，释放注册句柄后恢复原打开器。
+项目或插件可注册高优先级打开器覆写引擎默认打开器，释放注册句柄后恢复原打开器。
+
+`SkeletonAsset` schema v2 的显式可空 `previewMeshId` 是动画编辑器的默认 Preview Mesh。
+schema v1 读取后迁移为 null。一个 Skeleton 可以被多个 Skeletal Mesh 共享，因此编辑器不再
+遍历资产注册表并选择第一个匹配项。Details 中的临时 Mesh 选择只改变当前编辑器实例的瞬态
+预览状态，不修改动画或 Skeleton；候选 Mesh 仍必须通过
+`SkeletalAnimationCompatibility.Validate`。
 
 骨骼动画只位于 `SharpEngine.Animation`：`SkeletalAnimationAsset` 是骨骼关键帧资产，`SkeletalAnimationPlayable` 是把该资产适配到通用 Playable 协议的领域实现。它输出 `skeleton.pose`，并不改变 Playable 或 Timeline 的通用契约。
 
@@ -100,7 +110,7 @@ Animator 帧观察，图资产和组件状态均可从最新提交快照重建�
 builtin/preset 资产，依赖 UEFN mannequin 骨骼和四个 Clip。Content Manager 双击
 `AnimationStateMachine` 资产时沿用 `EditorAssetOpenerRegistry` 与
 `EditorRuntime.OpenAsset` 的统一打开入口，由 `engine.animation-state-machine-editor`
-在现有 Animation Timeline 面板中显示状态和过渡图；它不会创建另一套资产打开或文档路由。
+在独立顶层动画资产编辑器中显示状态和过渡图；它复用同一套资产打开和 editor-root 路由。
 
 验证入口：
 

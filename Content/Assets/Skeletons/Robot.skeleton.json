@@ -1,8 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "skeleton",
   "assetId": "engine://skeletons/robot",
   "name": "Robot Skeleton",
+  "previewMeshId": "engine://meshes/robot-skeletal",
   "bones": [
     { "boneId": "root", "name": "Root", "parentBoneId": null, "bindPosition": [0, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] },
     { "boneId": "left-foot", "name": "Left Foot", "parentBoneId": "root", "bindPosition": [-0.18, 0, 0], "bindRotation": [0, 0, 0, 1], "bindScale": [1, 1, 1] },

@@ -5,7 +5,7 @@
   "name": "Robot Walk",
   "duration": 1.0,
   "sampleRate": 30.0,
-  "skeletonId": null,
+  "skeletonId": "engine://skeletons/robot",
   "bones": [
     {
       "boneId": "root",

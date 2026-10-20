@@ -34,4 +34,13 @@ namespace SharpEngine.Interop;
         public delegate* unmanaged[Cdecl]<ulong, byte*, byte*, uint, uint*, uint*, uint>
             ReadUiFrame;
         public delegate* unmanaged[Cdecl]<int, byte*, byte*, void> ReportStartupProgress;
+        public delegate* unmanaged[Cdecl]<byte*, float*, float*, float*, float*, byte> GetUiElementRect;
+        public delegate* unmanaged[Cdecl]<float*, uint, float*, uint, void> SubmitTimelinePreviewFrame;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, nint> CreateEditorWindow;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, byte*, nint> CreateOwnedDockWindow;
+        public delegate* unmanaged[Cdecl]<byte*, byte> DestroyEditorWindow;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, float*, float*, float*, float*, byte>
+            GetHostUiElementRect;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, float*, uint, float*, uint, void>
+            SubmitHostViewportFrame;
     }

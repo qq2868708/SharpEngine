@@ -478,6 +478,7 @@ public sealed partial class EditorRuntime
         contentLayout.ContentManagers = _contentManagers.Capture().ToList();
         contentLayout.ActiveContentManagerId = _contentManagers.ActivePaneId;
         _layout = new EditorLayoutSession(contentLayout);
+        HideLegacyAssetEditorPanes();
         ReportProgress?.Invoke(57, "World", "Loading the initial world");
         var loadedWorld = WorldAssetWorkflow.LoadInitial(_engineRoot, _projectRoot,
             _projectManifest, _assets);
@@ -528,9 +529,43 @@ public sealed partial class EditorRuntime
         InitializeMcp();
     }
 
+    private void HideLegacyAssetEditorPanes()
+    {
+        if (_layout is null)
+        {
+            return;
+        }
+
+        var Changed = false;
+        foreach (var PaneId in new[] { EditorPaneIds.Timeline, EditorPaneIds.UiEditor })
+        {
+            if (!IsPaneVisible(PaneId))
+            {
+                continue;
+            }
+
+            var Result = _layout.Apply(new EditorLayoutCommand(
+                EditorLayoutCommandKind.HidePane, PaneId));
+            if (!Result.Success)
+            {
+                SharpLog.Warning("EditorLayout",
+                    $"Could not hide legacy asset pane '{PaneId}': {Result.Message}");
+            }
+            else
+            {
+                Changed = true;
+            }
+        }
+        if (Changed)
+        {
+            _layout.AdoptCurrentAsInitialState();
+        }
+    }
+
     public void Update(float DeltaSeconds)
     {
         SubsystemLifetime.Update(DeltaSeconds);
+        AssetOpeners.Update(DeltaSeconds);
         DrainLogs();
         PollDevelopmentSettings();
         PollMcpConfiguration();
@@ -591,6 +626,16 @@ public sealed partial class EditorRuntime
             }
         }
         _mcpSession?.Pump();
+    }
+
+    internal bool TryGetUiElementRect(string Id, out UiRect Bounds)
+    {
+        return _nativeApi.TryGetUiElementRect(Id, out Bounds);
+    }
+
+    internal void SubmitTimelinePreviewFrame(WorldViewportFrame Frame)
+    {
+        _nativeApi.SubmitTimelinePreviewFrame(Frame);
     }
 
     public void PointerDown(nint windowHandle, int x, int y, uint button)
@@ -770,6 +815,7 @@ public sealed partial class EditorRuntime
             action = action[(separator + 1)..];
         }
         if (HandleSourceAction(actionHostId, action)) return;
+        if (AssetOpeners.TryHandleHostAction(actionHostId, action)) return;
         if (HandleMcpAction(actionHostId, action))
         {
             return;
@@ -1791,21 +1837,27 @@ public sealed partial class EditorRuntime
 
     private void HandleMainWindowClose()
     {
-        if (!ConfirmDevelopmentSettingsClose()) return;
-        if (!IsDirty)
+        if (!ConfirmDevelopmentSettingsClose())
         {
-            NativeEngineApi.ExitMessageLoop();
             return;
         }
-        switch (NativeEngineApi.PromptUnsavedWorld(_windowHandle, WorldTabTitle()))
+        if (IsDirty)
         {
-            case UnsavedWorldChoice.Save:
-                if (SaveWorld() && !IsDirty) NativeEngineApi.ExitMessageLoop();
-                break;
-            case UnsavedWorldChoice.DontSave:
-                NativeEngineApi.ExitMessageLoop();
-                break;
+            var Choice = NativeEngineApi.PromptUnsavedWorld(_windowHandle, WorldTabTitle());
+            if (Choice == UnsavedWorldChoice.Cancel)
+            {
+                return;
+            }
+            if (Choice == UnsavedWorldChoice.Save && (!SaveWorld() || IsDirty))
+            {
+                return;
+            }
         }
+        if (!AssetOpeners.ConfirmCloseAll())
+        {
+            return;
+        }
+        NativeEngineApi.ExitMessageLoop();
     }
 
     private void SaveSceneDescription()

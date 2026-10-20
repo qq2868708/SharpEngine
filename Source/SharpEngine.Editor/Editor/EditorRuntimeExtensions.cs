@@ -28,9 +28,13 @@ public sealed partial class EditorRuntime
     private void RegisterBuiltInEditorUi()
     {
         AssetOpeners.Register(new EditorAssetOpener("engine.ui-editor", "RmlDocument",
-            Context => OpenUiAsset(Context.Asset), Priority: -100));
+            Context => new UiAssetEditorInstance(Context), Priority: -100,
+            EditorId: "ui-editor"));
         AssetOpeners.Register(new EditorAssetOpener("engine.prefab-editor", "Prefab",
-            Context => OpenPrefab(Context.Path), Priority: -100));
+            Context => new PrefabAssetEditorInstance(Context), Priority: -100,
+            EditorId: "prefab-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.world-editor", "World",
+            OpenWorldAsset, Priority: -100, EditorId: "main-editor"));
         _commands.Register(new EditorCommand("core.new-csharp", "New C# Class...",
             _ => OpenSourceWizard(), _ => _projectManifest is not null));
         _commands.Register(new EditorCommand("core.build-project-code", "Build Project Code",
@@ -84,8 +88,6 @@ public sealed partial class EditorRuntime
         _commands.Register(new EditorCommand("core.show-project-content", "Show Project Content",
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
-        RegisterPaneVisibilityCommand("view.timeline", "Animation Timeline", EditorPaneIds.Timeline);
-        RegisterPaneVisibilityCommand("view.ui-editor", "UI Editor", EditorPaneIds.UiEditor);
         RegisterPaneVisibilityCommand("view.content", "Content Manager 1", EditorPaneIds.Content);
         RegisterPaneVisibilityCommand("view.content-2", "Content Manager 2", EditorPaneIds.Content2);
         RegisterPaneVisibilityCommand("view.content-3", "Content Manager 3", EditorPaneIds.Content3);
@@ -149,8 +151,6 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.new-entity", 300));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.step", 400));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.hierarchy", 100));
-        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.timeline", 150));
-        _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.ui-editor", 200));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content", 300));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-2", 310));
         _menus.RegisterItem(new EditorMenuItem("view", "panes", "view.content-3", 320));

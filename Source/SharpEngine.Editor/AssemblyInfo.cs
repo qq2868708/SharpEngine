@@ -5,3 +5,4 @@ using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("SharpEngine.Host")]
 [assembly: InternalsVisibleTo("SharpEngine.EditorValidation")]
+[assembly: InternalsVisibleTo("SharpEngine.Timeline.Editor")]

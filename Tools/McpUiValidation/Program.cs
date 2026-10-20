@@ -147,6 +147,12 @@ try
         Console.WriteLine($"PASS: {assertions} Settings UI integration assertions");
         return;
     }
+    if (args.Contains("--timeline-only", StringComparer.Ordinal))
+    {
+        TimelinePreviewValidation.Run(Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} Timeline preview integration assertions");
+        return;
+    }
     var tools = Call(5, "tools/list")["result"]?["tools"]?.AsArray() ?? [];
     var pointerTool = tools.Select(node => node?.AsObject()).First(tool =>
         tool?["name"]?.GetValue<string>() == "ui.pointer")!;

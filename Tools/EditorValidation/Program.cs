@@ -110,9 +110,10 @@ try
         dockMarkup.Contains("data-dock-split-part=\"first\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("data-dock-split-part=\"second\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("data-dock-split-ratio=\"0.76\"", StringComparison.Ordinal) &&
-        dockMarkup.Contains("data-pane-id=\"ui-editor\"", StringComparison.Ordinal) &&
+        !dockMarkup.Contains("data-pane-id=\"ui-editor\"", StringComparison.Ordinal) &&
+        !dockMarkup.Contains("data-pane-id=\"timeline\"", StringComparison.Ordinal) &&
         !dockMarkup.Contains("UI Canvas", StringComparison.Ordinal),
-        "Dock markup must expose recursive split containers for transient resize preview");
+        "Main Dock markup must expose recursive splits without asset-editor panes");
     Require(dockMarkup.Contains("Content Manager 1", StringComparison.Ordinal) &&
         dockMarkup.Contains("id=\"content-search\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("editor.content.view:content:tile", StringComparison.Ordinal) &&
@@ -123,12 +124,6 @@ try
         dockMarkup.Contains("id=\"logs-main\"", StringComparison.Ordinal) &&
         dockMarkup.Contains("Unified Log", StringComparison.Ordinal),
         "Console and Logs must be separate dock panes with distinct markup");
-    Require(dockMarkup.Contains("data-pane-id=\"timeline\"", StringComparison.Ordinal) &&
-        dockMarkup.Contains("id=\"timelinePreview\"", StringComparison.Ordinal) &&
-        dockMarkup.Contains("id=\"timelineCustomBar\"", StringComparison.Ordinal) &&
-        dockMarkup.Contains("id=\"timelineView\"", StringComparison.Ordinal) &&
-        dockMarkup.Contains("id=\"timelineSelectedNotify\"", StringComparison.Ordinal),
-        "Animation Timeline markup must expose the preview, CustomBar, timeline view, and Notify inspector slots");
     Require(runtime.CustomBars.RegisteredSurfaces.Any(surface =>
             surface.Id == EditorCustomBarRegistry.ViewportSurfaceId) &&
         runtime.CustomBars.BuildMarkup(EditorCustomBarRegistry.ViewportSurfaceId)
@@ -355,26 +350,50 @@ try
             StringComparison.Ordinal),
         "The viewport must remain a dedicated 3D scene surface");
     runtime.InvokeUiAction("editor.select-asset:project://ui/main");
-    Require(runtime.OpenUiDocumentCount == 0,
+    Require(!runtime.DescribeEditorJson().Contains("\"assetId\": \"project://ui/main\"",
+            StringComparison.Ordinal),
         "Selecting an RML asset must only select it, without opening an editor tool");
     runtime.InvokeUiAction("editor.open-asset:project://ui/main");
-    Require(runtime.ActiveUiDocumentId == "project://ui/main" &&
-        runtime.OpenUiDocumentCount == 1 &&
-        runtime.DescribeUiEditorJson().Contains("validation.main@1", StringComparison.Ordinal) &&
-        runtime.DescribeUiEditorJson().Contains("\"viewModelContractAvailable\": true",
+    string AssetEditorRoot(string AssetId)
+    {
+        using var Snapshot = System.Text.Json.JsonDocument.Parse(runtime.DescribeEditorJson());
+        return Snapshot.RootElement.GetProperty("assetTools").GetProperty("editors")
+            .EnumerateArray().Single(Editor =>
+                Editor.GetProperty("assetId").GetString() == AssetId)
+            .GetProperty("rootId").GetString()!;
+    }
+    bool AssetEditorDirty(string AssetId)
+    {
+        using var Snapshot = System.Text.Json.JsonDocument.Parse(runtime.DescribeEditorJson());
+        return Snapshot.RootElement.GetProperty("assetTools").GetProperty("editors")
+            .EnumerateArray().Single(Editor =>
+                Editor.GetProperty("assetId").GetString() == AssetId)
+            .GetProperty("dirty").GetBoolean();
+    }
+    var ProjectUiRoot = AssetEditorRoot("project://ui/main");
+    Require(runtime.DescribeEditorJson().Contains("validation.main@1", StringComparison.Ordinal) &&
+        runtime.DescribeEditorJson().Contains("\"viewModelContractAvailable\": true",
             StringComparison.Ordinal),
-        "Opening an RML asset must route to the dedicated multi-document UI Editor");
-    runtime.InvokeUiAction("editor.ui-select:headline");
-    runtime.InvokeUiAction("editor.ui-change:text:Edited through UI Editor");
-    Require(runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
+        "Opening an RML asset must create an independent UI editor root");
+    runtime.OpenAsset("engine://ui/editor");
+    var EngineUiRoot = AssetEditorRoot("engine://ui/editor");
+    Require(ProjectUiRoot != EngineUiRoot,
+        "Different RML assets must own different top-level editor roots");
+    var ReusedUi = runtime.OpenAsset("project://ui/main");
+    Require(ReusedUi.Success && ReusedUi.Code == "ASSET_EDITOR_REUSED" &&
+        AssetEditorRoot("project://ui/main") == ProjectUiRoot,
+        "Opening the same RML asset must focus and reuse its editor root");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectUiRoot}:editor.ui-select:headline");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectUiRoot}:editor.ui-change:text:Edited through UI Editor");
+    Require(AssetEditorDirty("project://ui/main"),
         "UI property changes must dirty only the open UI document");
-    runtime.InvokeUiAction("editor.ui-undo");
-    Require(!runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
+    runtime.InvokeUiAction($"editor.host-action:{ProjectUiRoot}:editor.asset-command:undo");
+    Require(!AssetEditorDirty("project://ui/main"),
         "UI edits must participate in document-local Undo");
-    runtime.InvokeUiAction("editor.ui-change:text:Saved UI headline");
-    runtime.InvokeUiAction("editor.ui-save");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectUiRoot}:editor.ui-change:text:Saved UI headline");
+    runtime.InvokeUiAction($"editor.host-action:{ProjectUiRoot}:editor.asset-save");
     Require(File.ReadAllText(uiPath).Contains("Saved UI headline", StringComparison.Ordinal) &&
-        !runtime.DescribeUiEditorJson().Contains("\"dirty\": true", StringComparison.Ordinal),
+        !AssetEditorDirty("project://ui/main"),
         "UI Save must validate and atomically replace the authoritative RML source");
     var initialCameraPosition = runtime.World!.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);
@@ -425,30 +444,30 @@ try
     var mainWorldBeforePrefab = runtime.World;
     var mainStateBeforePrefab = runtime.World!.Serialize();
     runtime.InvokeUiAction("editor.prefab-export");
-    Require(runtime.World!.Data.IsPrefab && runtime.World.Entities.Count == 1, "Export opens an independent Prefab document");
-    var prefabPath = runtime.World.SourcePath;
-    var prefabTransform = runtime.World.Entities[0].Components.Single(c => c.TypeId == "engine.transform");
-    var prefabDescribe = System.Text.Json.Nodes.JsonNode.Parse(runtime.DescribeComponentsJson())!;
-    var prefabEdit = runtime.EditComponent(new() { ["operation"] = "patch", ["context"] = "authoring",
-        ["expectedRevision"] = prefabDescribe["revision"]!.GetValue<ulong>(), ["entityId"] = "player", ["componentId"] = prefabTransform.ComponentId,
-        ["state"] = new System.Text.Json.Nodes.JsonObject { ["Position"] = new System.Text.Json.Nodes.JsonArray(11, 12, 13) } });
-    Require(prefabEdit["success"]!.GetValue<bool>() && mainWorldBeforePrefab.Serialize() == mainStateBeforePrefab,
-        "Prefab edits are isolated from World data and history");
-    runtime.InvokeUiAction("editor.undo");
-    Require(runtime.World.Entities[0].Position != new WorldVector3(11, 12, 13), "Prefab Undo uses its own history");
-    runtime.InvokeUiAction("editor.redo"); runtime.InvokeUiAction("editor.save");
-    Require(WorldDocument.Load(prefabPath).Entities[0].Position == new WorldVector3(11, 12, 13), "Save targets the active Prefab");
-    runtime.InvokeUiAction("editor.prefab-world");
-    Require(ReferenceEquals(mainWorldBeforePrefab, runtime.World) && runtime.World.Serialize() == mainStateBeforePrefab, "Switching documents restores the same World state");
     var exportedPrefabAsset = runtime.Assets.ProjectAssets.Single(asset =>
         string.Equals(asset.Type, "Prefab", StringComparison.OrdinalIgnoreCase));
+    var prefabPath = runtime.Assets.ResolvePath(exportedPrefabAsset)!;
+    var PrefabRoot = AssetEditorRoot(exportedPrefabAsset.Id);
+    Require(ReferenceEquals(mainWorldBeforePrefab, runtime.World) &&
+        runtime.World.Serialize() == mainStateBeforePrefab,
+        "Export opens an independent Prefab editor without replacing the main World");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{PrefabRoot}:editor.asset-command:add-entity");
+    Require(AssetEditorDirty(exportedPrefabAsset.Id) &&
+        runtime.World.Serialize() == mainStateBeforePrefab,
+        "Prefab edits are isolated from the main World data and history");
+    runtime.InvokeUiAction($"editor.host-action:{PrefabRoot}:editor.asset-command:undo");
+    Require(!AssetEditorDirty(exportedPrefabAsset.Id),
+        "Prefab Undo uses its own document-local history");
     runtime.InvokeUiAction($"editor.prefab-instantiate:{exportedPrefabAsset.Id}|");
     Require(runtime.World.Entities.Count == mainWorldBeforePrefab.Data.Entities.Count && runtime.World.Entities.Count == 6 &&
-        runtime.World.Entities.Last().Id != "player" && runtime.World.Entities.Last().Position == new WorldVector3(11, 12, 13), "Prefab instantiation creates an independent World subtree with new IDs");
+        runtime.World.Entities.Last().Id != "player" && runtime.World.Entities.Last().Position == editedPosition,
+        "Prefab instantiation creates an independent World subtree with new IDs");
     runtime.InvokeUiAction("editor.undo");
     Require(runtime.World.Entities.Count == 5, "Prefab instantiation is one undoable transaction");
     runtime.OpenPrefab(prefabPath); runtime.InvokeUiAction("editor.play");
-    Require(runtime.World.Entities.Count == 5 && !runtime.World.Data.IsPrefab, "Play from Prefab editing runs the main World");
+    Require(runtime.World.Entities.Count == 5 && !runtime.World.Data.IsPrefab,
+        "Play while a Prefab editor is open still runs the main World");
     runtime.InvokeUiAction("editor.stop");
     EditorExtensionValidation.Run(Require);
     runtime.Shutdown();

@@ -27,6 +27,14 @@ Check(SkeletalMeshAsset.Parse(skeletalMesh.Serialize(false)).Serialize(false) ==
     "Skeletal mesh JSON round trip is deterministic");
 Check(SkeletonAsset.Parse(skeleton.Serialize(false)).Serialize(false) == skeleton.Serialize(false),
     "Skeleton JSON round trip is deterministic");
+Check(skeleton.PreviewMeshId == "engine://meshes/robot-skeletal",
+    "Skeleton owns an explicit default preview mesh");
+var LegacySkeleton = SkeletonAsset.Parse("""
+{"schemaVersion":1,"kind":"skeleton","assetId":"legacy://skeleton","name":"Legacy","bones":[{"boneId":"root","name":"Root","parentBoneId":null,"bindPosition":[0,0,0],"bindRotation":[0,0,0,1],"bindScale":[1,1,1]}]}
+""");
+Check(LegacySkeleton.PreviewMeshId is null &&
+    LegacySkeleton.Serialize(false).Contains("\"previewMeshId\":null", StringComparison.Ordinal),
+    "Skeleton schema v1 migrates to an explicit null preview mesh in schema v2");
 
 var world = WorldDocument.Parse("""
 {"schemaVersion":3,"kind":"world","worldId":"mesh-fixture","name":"Mesh Fixture","activeCameraId":"camera","entities":[
