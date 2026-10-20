@@ -16,7 +16,9 @@ class RmlUiShell
 public:
     RmlUiShell();
     ~RmlUiShell();
-    bool Initialize(HWND window, const std::filesystem::path& engineRoot, RenderBackendType backend = RenderBackendType::OpenGL);
+    bool Initialize(HWND window, const std::filesystem::path& engineRoot,
+                    RenderBackendType backend = RenderBackendType::OpenGL,
+                    bool enableVSync = true, bool enableValidation = false);
     void Shutdown();
     bool Render(bool ObserveUi = false);
     void ShowWindows();
@@ -56,6 +58,9 @@ public:
                               UiViewportRect& rect) const;
     void SubmitScene(const UiViewportRect& rect, const UiSceneVertex* triangles,
                      int triangleVertices, const UiSceneVertex* lines, int lineVertices);
+    bool EnsureGpuMesh(const GpuMeshUpload* upload);
+    bool SubmitGpuScene(const GpuSceneFrame* frame);
+    bool GetRenderStats(RenderStats& stats) const;
     void SubmitTimelineScene(const UiSceneVertex* triangles, int triangleVertices,
                              const UiSceneVertex* lines, int lineVertices);
     void SubmitHostScene(std::string_view hostId, std::string_view kind,

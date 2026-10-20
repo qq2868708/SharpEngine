@@ -6,6 +6,7 @@
 #include "RenderBackend_NullRHI.h"
 
 static std::unique_ptr<RenderBackend> GBackend;
+static RenderBackendType GBackendType = RenderBackendType::OpenGL;
 
 std::unique_ptr<RenderBackend> CreateRenderBackend(const RenderInitDesc& desc)
 {
@@ -44,6 +45,7 @@ bool RC_Initialize(const RenderInitDesc* desc)
         return false;
     }
     GBackend = CreateRenderBackend(*desc);
+    GBackendType = desc->Backend;
     return GBackend != nullptr;
 }
 
@@ -63,6 +65,16 @@ void RC_SubmitFrame(const RenderFrame* frame)
     {
         GBackend->SubmitFrame(frame);
     }
+}
+
+bool RC_EnsureGpuMesh(const GpuMeshUpload* upload)
+{
+    return GBackend && GBackend->EnsureGpuMesh(upload);
+}
+
+bool RC_SubmitGpuScene(const GpuSceneFrame* frame)
+{
+    return GBackend && GBackend->SubmitGpuScene(frame);
 }
 
 void RC_EndFrame()
@@ -96,4 +108,6 @@ void RC_GetStats(RenderStats* stats)
         return;
     }
     *stats = GBackend ? GBackend->GetStats().Public() : RenderStats{};
+    stats->Backend = static_cast<uint32_t>(GBackendType);
+    stats->SupportsGpuScene = GBackend && GBackend->SupportsGpuScene() ? 1 : 0;
 }

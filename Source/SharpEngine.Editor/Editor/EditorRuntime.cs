@@ -27,6 +27,9 @@ public sealed partial class EditorRuntime
     private readonly uint _windowWidth;
     private readonly uint _windowHeight;
     private readonly NativeEngineApi _nativeApi;
+    private readonly NativeGpuSceneBridge GpuSceneBridge;
+    private readonly RenderTelemetry RenderTelemetryService;
+    private bool GpuFallbackReported;
     private readonly EditorCommandRegistry _commands;
     private readonly EditorMenuRegistry _menus;
     private readonly EditorToolbarRegistry _toolbar;
@@ -113,6 +116,8 @@ public sealed partial class EditorRuntime
         _windowWidth = width;
         _windowHeight = height;
         _nativeApi = new NativeEngineApi(nativeApi);
+        GpuSceneBridge = new NativeGpuSceneBridge(nativeApi);
+        RenderTelemetryService = new RenderTelemetry(nativeApi);
         _commands = new EditorCommandRegistry(MarkExtensionUiDirty);
         _menus = new EditorMenuRegistry(_commands, MarkExtensionUiDirty);
         _toolbar = new EditorToolbarRegistry(_commands, MarkExtensionUiDirty);
@@ -599,16 +604,54 @@ public sealed partial class EditorRuntime
         }
         if (_nativeApi.TryGetViewportRect(out var viewport))
         {
+            var SceneStart = Stopwatch.GetTimestamp();
             _lastViewport = viewport;
             SceneRenderPreparation.Prepare(_world, _assets);
-            var frame = WorldViewportRenderer.BuildFrame(_world, viewport, SelectedEntityId,
-                _assets, _viewportTool);
+            WorldViewportFrame frame;
+            var GpuSubmitted = false;
+            GpuSceneFrame? GpuFrame = null;
+            var TriangleCount = 0;
+            if (GpuSceneBridge.Available)
+            {
+                GpuFrame = GpuSceneBuilder.BuildFrame(_world, viewport, _assets,
+                    SelectedEntityId);
+                GpuSubmitted = GpuSceneBridge.Submit(GpuFrame, _windowHeight);
+                if (GpuSubmitted)
+                {
+                    TriangleCount = GpuFrame.Instances.Sum(Instance =>
+                        Instance.Mesh.Vertices.Count / 3);
+                }
+                else if (!GpuFallbackReported)
+                {
+                    GpuFallbackReported = true;
+                    SharpLog.Warning("Render",
+                        "GPU scene submission failed; using visible CPU fallback");
+                }
+            }
+            if (GpuSubmitted)
+            {
+                frame = WorldViewportRenderer.BuildOverlayFrame(_world, viewport,
+                    SelectedEntityId, _viewportTool) with
+                {
+                    Diagnostics = GpuFrame!.Diagnostics,
+                };
+            }
+            else
+            {
+                frame = WorldViewportRenderer.BuildFrame(_world, viewport,
+                    SelectedEntityId, _assets, _viewportTool);
+                TriangleCount = frame.TriangleCount;
+            }
             _nativeApi.SubmitViewportFrame(frame);
+            var SceneMilliseconds = Stopwatch.GetElapsedTime(SceneStart)
+                .TotalMilliseconds;
+            RenderTelemetryService.Record(DeltaSeconds, SceneMilliseconds,
+                GpuSceneBridge.Available, GpuSubmitted);
             if (_frameCount == 1)
             {
                 SharpLog.Info("Viewport", $"First frame bounds={viewport}", new Dictionary<string, string>
                 {
-                    ["triangles"] = frame.TriangleCount.ToString(),
+                    ["triangles"] = TriangleCount.ToString(),
                     ["lines"] = frame.LineCount.ToString(),
                     ["camera"] = frame.CameraId ?? string.Empty,
                 });
@@ -619,7 +662,7 @@ public sealed partial class EditorRuntime
             {
                 SetText("fps", DeltaSeconds > 0 ? $"{1 / DeltaSeconds:0} FPS" : "— FPS");
                 SetText("viewportStats",
-                    $"{frame.EntityCount} entities · {frame.TriangleCount} triangles · " +
+                    $"{frame.EntityCount} entities · {TriangleCount} triangles · " +
                     $"{_world.Entities.Count(entity => entity.Kind == WorldEntityKind.Light)} scene lights · {PlayState}");
                 SetText("assetSource", $"{PlayState} · {_seconds:0.0}s");
                 if (PlayState == EditorPlayState.Playing) RefreshInspector();
@@ -627,6 +670,11 @@ public sealed partial class EditorRuntime
             }
         }
         _mcpSession?.Pump();
+    }
+
+    internal string DescribeRenderJson()
+    {
+        return RenderTelemetryService.Describe(_assets).ToJsonString();
     }
 
     internal bool TryGetUiElementRect(string Id, out UiRect Bounds)

@@ -43,4 +43,7 @@ namespace SharpEngine.Interop;
             GetHostUiElementRect;
         public delegate* unmanaged[Cdecl]<byte*, byte*, float*, uint, float*, uint, void>
             SubmitHostViewportFrame;
+        public delegate* unmanaged[Cdecl]<NativeGpuMeshUpload*, byte> EnsureGpuMesh;
+        public delegate* unmanaged[Cdecl]<NativeGpuSceneFrame*, byte> SubmitGpuScene;
+        public delegate* unmanaged[Cdecl]<NativeRenderStats*, byte> GetRenderStats;
     }

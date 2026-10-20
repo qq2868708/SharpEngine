@@ -31,6 +31,12 @@ public static class SceneRenderer
 {
     private sealed record MeshGeometry(Vector3[] Positions, int[] Indices,
         Vector4 BaseColor, string? Error = null);
+    private enum TriangleClipState
+    {
+        Outside,
+        Inside,
+        Intersecting,
+    }
     private static readonly ConditionalWeakTable<AssetRegistry,
         ConcurrentDictionary<string, MeshGeometry>> AssetCaches = new();
     private static readonly Vector3[] CubeVertices =
@@ -57,94 +63,121 @@ public static class SceneRenderer
         UiRect bounds, AssetRegistry? assets = null, string? selectedEntityId = null)
     {
         ArgumentNullException.ThrowIfNull(world);
-        var triangles = new List<WorldViewportVertex>();
-        var lines = new List<WorldViewportVertex>();
-        var diagnostics = new List<string>();
-        var camera = world.ActiveCamera;
-        if (camera is null || bounds.Width <= 0 || bounds.Height <= 0 ||
+        var Triangles = new List<WorldViewportVertex>();
+        var Lines = new List<WorldViewportVertex>();
+        var Diagnostics = new List<string>();
+        var Camera = world.ActiveCamera;
+        if (Camera is null || bounds.Width <= 0 || bounds.Height <= 0 ||
             !float.IsFinite(bounds.Width) || !float.IsFinite(bounds.Height))
             return new WorldViewportFrame(bounds, [], [], world.Entities.Count,
-                world.MeshCount, camera?.Id ?? string.Empty);
+                world.MeshCount, Camera?.Id ?? string.Empty);
 
-        var viewProjection = CameraMatrix(world, camera, bounds.Width / bounds.Height);
-        var lights = world.Entities.SelectMany(e => e.RenderViews("engine.directional-light"))
-            .Where(entity => entity.HasEnabledComponent("engine.directional-light") && entity.Intensity > 0)
-            .Select(light =>
+        var ViewProjection = CameraMatrix(world, Camera, bounds.Width / bounds.Height);
+        var Lights = world.Entities.SelectMany(Entity => Entity.RenderViews("engine.directional-light"))
+            .Where(Entity => Entity.HasEnabledComponent("engine.directional-light") && Entity.Intensity > 0)
+            .Select(Light =>
             {
-                var color = new Vector3(light.Color.R, light.Color.G, light.Color.B) / 255f;
-                return (Direction: WorldDirection(world, light, -Vector3.UnitZ),
-                    Radiance: color * light.Intensity);
+                return (Direction: WorldDirection(world, Light, -Vector3.UnitZ),
+                    Radiance: Light.LinearColor("engine.directional-light") *
+                        Light.Intensity);
             })
             .ToArray();
+        var SkyRadiance = ResolveSkyRadiance(world);
+        Span<Vector4> ClippedPolygon = stackalloc Vector4[12];
+        Span<Vector4> ClipScratch = stackalloc Vector4[12];
 
-        foreach (var (entity, componentType) in Renderables(world))
+        foreach (var (Entity, ComponentType) in Renderables(world))
         {
-            var ComponentId = entity.Components.First(Component => Component.TypeId == componentType).ComponentId;
+            var ComponentId = Entity.Components.First(Component => Component.TypeId == ComponentType).ComponentId;
             var SkeletonState = world.RenderStates.GetValueOrDefault(ComponentId) as SkeletonFrameState;
             if (SkeletonState is not null && SkeletonState.Code != "SKELETON_READY")
             {
-                diagnostics.Add($"{entity.Id}: {SkeletonState.Code}: {SkeletonState.Message}");
+                Diagnostics.Add($"{Entity.Id}: {SkeletonState.Code}: {SkeletonState.Message}");
             }
-            var geometry = ResolveGeometry(entity, componentType, assets);
-            if (geometry.Error is not null)
+            var Geometry = ResolveGeometry(Entity, ComponentType, assets);
+            if (Geometry.Error is not null)
             {
-                diagnostics.Add($"{entity.Id}: {geometry.Error}");
+                Diagnostics.Add($"{Entity.Id}: {Geometry.Error}");
                 continue;
             }
-            var vertices = PreparedPositions(world, geometry, entity, componentType);
-            var indices = geometry.Indices;
-            var model = world.WorldMatrix(entity);
-            var mvp = model * viewProjection;
-            for (var index = 0; index < indices.Length; index += 3)
+            var Vertices = PreparedPositions(world, Geometry, Entity, ComponentType);
+            var Indices = Geometry.Indices;
+            var Model = world.WorldMatrix(Entity);
+            var ModelViewProjection = Model * ViewProjection;
+            var WorldPositions = new Vector3[Vertices.Count];
+            var ClipPositions = new Vector4[Vertices.Count];
+            for (var Index = 0; Index < Vertices.Count; Index++)
             {
-                var p0 = vertices[indices[index]];
-                var p1 = vertices[indices[index + 1]];
-                var p2 = vertices[indices[index + 2]];
-                var world0 = Vector3.Transform(p0, model);
-                var world1 = Vector3.Transform(p1, model);
-                var world2 = Vector3.Transform(p2, model);
-                var normal = Vector3.Normalize(Vector3.Cross(world1 - world0,
-                    world2 - world0));
-                if (!IsFinite(normal)) continue;
-                var lighting = new Vector3(0.24f);
-                foreach (var light in lights)
+                var Position = Vertices[Index];
+                WorldPositions[Index] = Vector3.Transform(Position, Model);
+                ClipPositions[Index] = Vector4.Transform(new Vector4(Position, 1),
+                    ModelViewProjection);
+            }
+            Triangles.EnsureCapacity(Triangles.Count + Indices.Length);
+            var SurfaceColor = new Vector3(Entity.Color.R / 255f * Geometry.BaseColor.X,
+                Entity.Color.G / 255f * Geometry.BaseColor.Y,
+                Entity.Color.B / 255f * Geometry.BaseColor.Z);
+            for (var Index = 0; Index < Indices.Length; Index += 3)
+            {
+                var FirstIndex = Indices[Index];
+                var SecondIndex = Indices[Index + 1];
+                var ThirdIndex = Indices[Index + 2];
+                var WorldFirst = WorldPositions[FirstIndex];
+                var WorldSecond = WorldPositions[SecondIndex];
+                var WorldThird = WorldPositions[ThirdIndex];
+                var Normal = Vector3.Normalize(Vector3.Cross(WorldSecond - WorldFirst,
+                    WorldThird - WorldFirst));
+                if (!IsFinite(Normal)) continue;
+                var Lighting = SkyRadiance;
+                foreach (var Light in Lights)
                 {
-                    var diffuse = MathF.Max(0, Vector3.Dot(normal, -light.Direction));
-                    lighting += light.Radiance * diffuse;
+                    var Diffuse = MathF.Max(0, Vector3.Dot(Normal, -Light.Direction));
+                    Lighting += Light.Radiance * Diffuse;
                 }
-                var color = new Vector4(
-                    Math.Clamp(entity.Color.R / 255f * geometry.BaseColor.X * lighting.X, 0, 1),
-                    Math.Clamp(entity.Color.G / 255f * geometry.BaseColor.Y * lighting.Y, 0, 1),
-                    Math.Clamp(entity.Color.B / 255f * geometry.BaseColor.Z * lighting.Z, 0, 1),
-                    geometry.BaseColor.W);
-                var polygon = ClipPolygon(new[]
+                var Color = new Vector4(
+                    Math.Clamp(SurfaceColor.X * Lighting.X, 0, 1),
+                    Math.Clamp(SurfaceColor.Y * Lighting.Y, 0, 1),
+                    Math.Clamp(SurfaceColor.Z * Lighting.Z, 0, 1),
+                    Geometry.BaseColor.W);
+                var ClipFirst = ClipPositions[FirstIndex];
+                var ClipSecond = ClipPositions[SecondIndex];
+                var ClipThird = ClipPositions[ThirdIndex];
+                var ClipState = ClassifyTriangle(ClipFirst, ClipSecond, ClipThird);
+                if (ClipState == TriangleClipState.Outside)
                 {
-                    Vector4.Transform(new Vector4(p0, 1), mvp),
-                    Vector4.Transform(new Vector4(p1, 1), mvp),
-                    Vector4.Transform(new Vector4(p2, 1), mvp),
-                });
-                for (var fan = 1; fan + 1 < polygon.Count; fan++)
+                    continue;
+                }
+                if (ClipState == TriangleClipState.Inside)
                 {
-                    triangles.Add(ToVertex(polygon[0], bounds, color));
-                    triangles.Add(ToVertex(polygon[fan], bounds, color));
-                    triangles.Add(ToVertex(polygon[fan + 1], bounds, color));
+                    Triangles.Add(ToVertex(ClipFirst, bounds, Color));
+                    Triangles.Add(ToVertex(ClipSecond, bounds, Color));
+                    Triangles.Add(ToVertex(ClipThird, bounds, Color));
+                    continue;
+                }
+                var ClippedCount = ClipTriangle(ClipFirst, ClipSecond, ClipThird,
+                    ClippedPolygon, ClipScratch);
+                for (var Fan = 1; Fan + 1 < ClippedCount; Fan++)
+                {
+                    Triangles.Add(ToVertex(ClippedPolygon[0], bounds, Color));
+                    Triangles.Add(ToVertex(ClippedPolygon[Fan], bounds, Color));
+                    Triangles.Add(ToVertex(ClippedPolygon[Fan + 1], bounds, Color));
                 }
             }
 
-            if (string.Equals(entity.Id, selectedEntityId,
+            if (string.Equals(Entity.Id, selectedEntityId,
                 StringComparison.OrdinalIgnoreCase))
             {
-                for (var index = 0; index < indices.Length; index += 3)
-                    for (var edge = 0; edge < 3; edge++)
-                        AddLine(lines, vertices[indices[index + edge]],
-                            vertices[indices[index + (edge + 1) % 3]], mvp,
+                for (var Index = 0; Index < Indices.Length; Index += 3)
+                    for (var Edge = 0; Edge < 3; Edge++)
+                        AddLine(Lines, Vertices[Indices[Index + Edge]],
+                            Vertices[Indices[Index + (Edge + 1) % 3]], ModelViewProjection,
                             bounds, new Vector4(1, 0.68f, 0.18f, 1));
             }
         }
 
-        return new WorldViewportFrame(bounds, triangles.ToArray(), lines.ToArray(),
-            world.Entities.Count, world.MeshCount, camera.Id)
-        { Diagnostics = diagnostics.AsReadOnly() };
+        return new WorldViewportFrame(bounds, Triangles.ToArray(), Lines.ToArray(),
+            world.Entities.Count, world.MeshCount, Camera.Id)
+        { Diagnostics = Diagnostics.AsReadOnly() };
     }
 
     public static bool TryPick(WorldDocument world, UiRect bounds, float x,
@@ -170,10 +203,40 @@ public static class SceneRenderer
         {
             var geometry = ResolveGeometry(candidate, componentType, assets);
             if (geometry.Error is not null) continue;
-            var vertices = PreparedPositions(world, geometry, candidate, componentType);
             if (!Matrix4x4.Invert(world.WorldMatrix(candidate), out var modelInverse)) continue;
             var localOrigin = Vector3.Transform(origin, modelInverse);
             var localDirection = Vector3.TransformNormal(direction, modelInverse);
+            if (assets is not null && componentType == "engine.static-mesh")
+            {
+                var AssetId = StateString(ComponentState(candidate, componentType),
+                    "Mesh");
+                if (AssetId.Length == 0)
+                {
+                    AssetId = candidate.Asset;
+                }
+                GpuMeshPayload? Payload = null;
+                try
+                {
+                    Payload = GpuSceneBuilder.ResolvePayload(assets, AssetId,
+                        false);
+                }
+                catch (Exception Exception) when (Exception is IOException or
+                    InvalidDataException or KeyNotFoundException or
+                    UnauthorizedAccessException)
+                {
+                }
+                if (Payload is not null)
+                {
+                    if (RayBvh(localOrigin, localDirection, Payload, nearest,
+                        farDistance, out var BvhDistance))
+                    {
+                        nearest = BvhDistance;
+                        entity = candidate;
+                    }
+                    continue;
+                }
+            }
+            var vertices = PreparedPositions(world, geometry, candidate, componentType);
             for (var index = 0; index < geometry.Indices.Length; index += 3)
             {
                 if (RayTriangle(localOrigin, localDirection,
@@ -188,6 +251,134 @@ public static class SceneRenderer
             }
         }
         return entity is not null;
+    }
+
+    internal static Vector3 ResolveSkyRadiance(WorldDocument World)
+    {
+        var Radiance = Vector3.Zero;
+        foreach (var Light in World.Entities.SelectMany(Entity =>
+                     Entity.RenderViews("engine.sky-light")))
+        {
+            if (!Light.HasEnabledComponent("engine.sky-light") || Light.Intensity <= 0)
+            {
+                continue;
+            }
+            Radiance += Light.LinearColor("engine.sky-light") * Light.Intensity;
+        }
+        return Radiance;
+    }
+
+    private static bool RayBvh(Vector3 Origin, Vector3 Direction,
+        GpuMeshPayload Payload, float Nearest, float FarDistance,
+        out float Distance)
+    {
+        Distance = Nearest;
+        if (Payload.BvhNodes.Count == 0)
+        {
+            return false;
+        }
+        var Hit = false;
+        var LocalStack = new int[64];
+        var OverflowStack = new Stack<int>();
+        var StackCount = 1;
+        LocalStack[0] = 0;
+        while (StackCount > 0 || OverflowStack.Count > 0)
+        {
+            int NodeIndex;
+            if (StackCount > 0)
+            {
+                NodeIndex = LocalStack[--StackCount];
+            }
+            else
+            {
+                NodeIndex = OverflowStack.Pop();
+            }
+            var Node = Payload.BvhNodes[NodeIndex];
+            if (!RayBounds(Origin, Direction, Node.Minimum, Node.Maximum,
+                Math.Min(Distance, FarDistance)))
+            {
+                continue;
+            }
+            if (Node.TriangleCount > 0)
+            {
+                for (var Item = Node.FirstTriangle;
+                     Item < Node.FirstTriangle + Node.TriangleCount; Item++)
+                {
+                    var Triangle = Payload.BvhTriangles[Item];
+                    var First = Payload.Vertices[Triangle * 3].Position;
+                    var Second = Payload.Vertices[Triangle * 3 + 1].Position;
+                    var Third = Payload.Vertices[Triangle * 3 + 2].Position;
+                    if (RayTriangle(Origin, Direction, First, Second, Third,
+                        out var CandidateDistance) &&
+                        CandidateDistance < Distance &&
+                        CandidateDistance <= FarDistance)
+                    {
+                        Distance = CandidateDistance;
+                        Hit = true;
+                    }
+                }
+                continue;
+            }
+            PushNode(Node.Left);
+            PushNode(Node.Right);
+        }
+        return Hit;
+
+        void PushNode(int NodeIndex)
+        {
+            if (NodeIndex < 0)
+            {
+                return;
+            }
+            if (StackCount < LocalStack.Length)
+            {
+                LocalStack[StackCount++] = NodeIndex;
+            }
+            else
+            {
+                OverflowStack.Push(NodeIndex);
+            }
+        }
+    }
+
+    private static bool RayBounds(Vector3 Origin, Vector3 Direction,
+        Vector3 Minimum, Vector3 Maximum, float MaximumDistance)
+    {
+        var Near = 0f;
+        var Far = MaximumDistance;
+        for (var Axis = 0; Axis < 3; Axis++)
+        {
+            var AxisOrigin = Axis == 0 ? Origin.X : Axis == 1 ? Origin.Y :
+                Origin.Z;
+            var AxisDirection = Axis == 0 ? Direction.X : Axis == 1 ?
+                Direction.Y : Direction.Z;
+            var AxisMinimum = Axis == 0 ? Minimum.X : Axis == 1 ? Minimum.Y :
+                Minimum.Z;
+            var AxisMaximum = Axis == 0 ? Maximum.X : Axis == 1 ? Maximum.Y :
+                Maximum.Z;
+            if (Math.Abs(AxisDirection) < 1e-8f)
+            {
+                if (AxisOrigin < AxisMinimum || AxisOrigin > AxisMaximum)
+                {
+                    return false;
+                }
+                continue;
+            }
+            var Inverse = 1f / AxisDirection;
+            var First = (AxisMinimum - AxisOrigin) * Inverse;
+            var Second = (AxisMaximum - AxisOrigin) * Inverse;
+            if (First > Second)
+            {
+                (First, Second) = (Second, First);
+            }
+            Near = Math.Max(Near, First);
+            Far = Math.Min(Far, Second);
+            if (Near > Far)
+            {
+                return false;
+            }
+        }
+        return Far >= 0;
     }
 
     private static bool RayTriangle(Vector3 origin, Vector3 direction,
@@ -386,31 +577,73 @@ public static class SceneRenderer
         _ => v.W - v.Z,
     };
 
-    private static List<Vector4> ClipPolygon(IEnumerable<Vector4> vertices)
+    private static TriangleClipState ClassifyTriangle(Vector4 First, Vector4 Second,
+        Vector4 Third)
     {
-        var result = vertices.ToList();
-        if (result.Any(v => !IsFinite(v))) return new List<Vector4>();
-        for (var plane = 0; plane < 6 && result.Count > 0; plane++)
+        if (!IsFinite(First) || !IsFinite(Second) || !IsFinite(Third))
         {
-            var input = result;
-            result = new List<Vector4>();
-            var previous = input[^1];
-            var previousDistance = ClipDistance(previous, plane);
-            foreach (var vertex in input)
+            return TriangleClipState.Outside;
+        }
+        var Intersecting = First.W < 1e-6f || Second.W < 1e-6f || Third.W < 1e-6f;
+        for (var Plane = 0; Plane < 6; Plane++)
+        {
+            var FirstInside = ClipDistance(First, Plane) >= 0;
+            var SecondInside = ClipDistance(Second, Plane) >= 0;
+            var ThirdInside = ClipDistance(Third, Plane) >= 0;
+            if (!FirstInside && !SecondInside && !ThirdInside)
             {
-                var distance = ClipDistance(vertex, plane);
-                if ((distance >= 0) != (previousDistance >= 0))
+                return TriangleClipState.Outside;
+            }
+            Intersecting |= !FirstInside || !SecondInside || !ThirdInside;
+        }
+        return Intersecting ? TriangleClipState.Intersecting : TriangleClipState.Inside;
+    }
+
+    private static int ClipTriangle(Vector4 First, Vector4 Second, Vector4 Third,
+        Span<Vector4> Result, Span<Vector4> Scratch)
+    {
+        Result[0] = First;
+        Result[1] = Second;
+        Result[2] = Third;
+        var InputCount = 3;
+        var InputIsResult = true;
+        for (var Plane = 0; Plane < 6 && InputCount > 0; Plane++)
+        {
+            var Input = InputIsResult ? Result : Scratch;
+            var Output = InputIsResult ? Scratch : Result;
+            var OutputCount = 0;
+            var Previous = Input[InputCount - 1];
+            var PreviousDistance = ClipDistance(Previous, Plane);
+            for (var Index = 0; Index < InputCount; Index++)
+            {
+                var Vertex = Input[Index];
+                var Distance = ClipDistance(Vertex, Plane);
+                if ((Distance >= 0) != (PreviousDistance >= 0))
                 {
-                    var t = previousDistance / (previousDistance - distance);
-                    result.Add(Vector4.Lerp(previous, vertex, t));
+                    var Interpolation = PreviousDistance / (PreviousDistance - Distance);
+                    Output[OutputCount++] = Vector4.Lerp(Previous, Vertex, Interpolation);
                 }
-                if (distance >= 0) result.Add(vertex);
-                previous = vertex;
-                previousDistance = distance;
+                if (Distance >= 0)
+                {
+                    Output[OutputCount++] = Vertex;
+                }
+                Previous = Vertex;
+                PreviousDistance = Distance;
+            }
+            InputCount = OutputCount;
+            InputIsResult = !InputIsResult;
+        }
+        var Final = InputIsResult ? Result : Scratch;
+        var ResultCount = 0;
+        for (var Index = 0; Index < InputCount; Index++)
+        {
+            var Vertex = Final[Index];
+            if (IsFinite(Vertex) && Vertex.W >= 1e-6f)
+            {
+                Result[ResultCount++] = Vertex;
             }
         }
-        result.RemoveAll(v => !IsFinite(v) || v.W < 1e-6f);
-        return result;
+        return ResultCount;
     }
 
     internal static void AddLine(List<WorldViewportVertex> lines, Vector3 a,

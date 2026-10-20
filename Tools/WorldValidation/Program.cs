@@ -20,7 +20,7 @@ void Reject(string xml, string label)
     throw new InvalidOperationException($"Expected rejection: {label}");
 }
 
-Check(world.Entities.Count == 5 && world.MeshCount == 3, "Sample entity counts");
+Check(world.Entities.Count == 6 && world.MeshCount == 3, "Sample entity counts");
 Check(world.ActiveCamera?.Id == "mainCamera", "Scene active camera");
 world.Entities[1].Position = new WorldVector3(0.12345678f, 0.75f, 0);
 var roundTrip = WorldDocument.Parse(world.Serialize());
@@ -81,6 +81,7 @@ Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\"
 Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"a\",\"name\":\"a\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"a-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"a-camera\",\"typeId\":\"engine.camera\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"FieldOfView\":180,\"NearPlane\":0.1,\"FarPlane\":1000}}]}]}", "invalid FOV");
 Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"a\",\"name\":\"a\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"a-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"a-camera\",\"typeId\":\"engine.camera\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"FieldOfView\":60,\"NearPlane\":5,\"FarPlane\":1}}]}]}", "invalid clip range");
 Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"a\",\"name\":\"a\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"a-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"a-directional-light\",\"typeId\":\"engine.directional-light\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Intensity\":1}}]}]}", "light without color");
+Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":null,\"entities\":[{\"entityId\":\"a\",\"name\":\"a\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"a-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"a-sky-light\",\"typeId\":\"engine.sky-light\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Intensity\":1}}]}]}", "light without color");
 Reject("{\"schemaVersion\":3,\"kind\":\"world\",\"worldId\":\"fixture\",\"name\":\"Fixture\",\"activeCameraId\":\"missing\",\"entities\":[]}", "missing active camera");
 var rejectedRuntimeTransform = false;
 try { world.Entities[0].Rotation = new WorldVector3(float.NaN, 0, 0); }
@@ -177,6 +178,32 @@ Check(noLightFrame.TriangleCount == 12 && IsBlack(noLightFrame),
 var zeroLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld(
     "{\"entityId\":\"light\",\"name\":\"light\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"light-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"light-directional-light\",\"typeId\":\"engine.directional-light\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Intensity\":0,\"Color\":[1,1,1,1]}}]}"), lightingBounds);
 Check(IsBlack(zeroLightFrame), "Zero-intensity lights must not inject illumination");
+string SkyLight(string EntityId, string Color, string Intensity,
+    bool Enabled = true, bool Active = true)
+{
+    return $"{{\"entityId\":\"{EntityId}\",\"name\":\"{EntityId}\",\"parentId\":null," +
+        $"\"activeSelf\":{Active.ToString().ToLowerInvariant()},\"components\":[" +
+        $"{{\"componentId\":\"{EntityId}-transform\",\"typeId\":\"engine.transform\"," +
+        "\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0]," +
+        "\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}}," +
+        $"{{\"componentId\":\"{EntityId}-sky-light\",\"typeId\":\"engine.sky-light\"," +
+        $"\"schemaVersion\":1,\"enabled\":{Enabled.ToString().ToLowerInvariant()}," +
+        $"\"state\":{{\"Color\":{Color},\"Intensity\":{Intensity}}}}}]}}";
+}
+var SkyLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld(
+    SkyLight("skyA", "[0.25,0.5,0.75,1]", "0.4") + "," +
+    SkyLight("skyB", "[0.5,0,0.25,1]", "0.2")), lightingBounds);
+Check(SkyLightFrame.Triangles.All(Vertex =>
+        Math.Abs(Vertex.R - 0.2f) < 0.0001f &&
+        Math.Abs(Vertex.G - 0.2f) < 0.0001f &&
+        Math.Abs(Vertex.B - 0.35f) < 0.0001f),
+    "Enabled Sky Lights must accumulate full-precision linear RGB and intensity");
+var InactiveSkyLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld(
+    SkyLight("disabled", "[1,1,1,1]", "1", Enabled: false) + "," +
+    SkyLight("inactive", "[1,1,1,1]", "1", Active: false) + "," +
+    SkyLight("zero", "[1,1,1,1]", "0")), lightingBounds);
+Check(IsBlack(InactiveSkyLightFrame),
+    "Disabled, inactive, and zero-intensity Sky Lights must not illuminate");
 var coloredLightFrame = WorldViewportRenderer.BuildFrame(LightingWorld("{\"entityId\":\"red\",\"name\":\"red\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"red-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"red-directional-light\",\"typeId\":\"engine.directional-light\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Intensity\":0.5,\"Color\":[1,0,0,1]}}]},{\"entityId\":\"green\",\"name\":\"green\",\"parentId\":null,\"activeSelf\":true,\"components\":[{\"componentId\":\"green-transform\",\"typeId\":\"engine.transform\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Position\":[0,0,0],\"Rotation\":[0,0,0],\"Scale\":[1,1,1]}},{\"componentId\":\"green-directional-light\",\"typeId\":\"engine.directional-light\",\"schemaVersion\":1,\"enabled\":true,\"state\":{\"Intensity\":0.25,\"Color\":[0,1,0,1]}}]}"), lightingBounds);
 Check(Math.Abs(coloredLightFrame.Triangles.Max(vertex => vertex.R) - 0.5f) < 0.0001f &&
     Math.Abs(coloredLightFrame.Triangles.Max(vertex => vertex.G) - 0.25f) < 0.0001f &&

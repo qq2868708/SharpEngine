@@ -1,15 +1,28 @@
 #include "RenderBackend_OpenGL.h"
+#include "GpuSceneRenderer_OpenGL.h"
 
 #include "../../../Logging/EngineLog.h"
 #include "../../Public/RenderCore.h"
 
 #include <Windows.h>
 #include <GL/gl.h>
-#include <RmlUi_Renderer_GL2.h>
+#include <RmlUi_Renderer_GL3.h>
 #include "../RenderCapture.h"
 
 namespace
 {
+    uint32_t GOpenGL3SurfaceCount = 0;
+    using UseProgramFunction = void(APIENTRY*)(GLuint);
+    using BindVertexArrayFunction = void(APIENTRY*)(GLuint);
+    using BindBufferFunction = void(APIENTRY*)(GLenum, GLuint);
+    using SwapIntervalFunction = BOOL(WINAPI*)(int);
+    using GetSwapIntervalFunction = int(WINAPI*)();
+    UseProgramFunction GUseProgram = nullptr;
+    BindVertexArrayFunction GBindVertexArray = nullptr;
+    BindBufferFunction GBindBuffer = nullptr;
+    constexpr GLenum ArrayBuffer = 0x8892;
+    constexpr GLenum ElementArrayBuffer = 0x8893;
+
     void DrawVertices(GLenum primitive, const RenderDrawList& list)
     {
         if (!list.Vertices || list.VertexCount == 0)
@@ -30,7 +43,7 @@ namespace
 
 struct RenderBackend_OpenGL::Surface
 {
-    struct UiRenderer : RenderInterface_GL2
+    struct UiRenderer : RenderInterface_GL3
     {
         HDC Dc = nullptr;
         HGLRC Context = nullptr;
@@ -38,7 +51,7 @@ struct RenderBackend_OpenGL::Surface
         void RenderGeometry(Rml::CompiledGeometryHandle handle, Rml::Vector2f translation, Rml::TextureHandle texture) override
         {
             ++DrawCalls;
-            RenderInterface_GL2::RenderGeometry(handle, translation, texture);
+            RenderInterface_GL3::RenderGeometry(handle, translation, texture);
         }
         void ReleaseTexture(Rml::TextureHandle texture) override
         {
@@ -50,21 +63,31 @@ struct RenderBackend_OpenGL::Surface
             {
                 wglMakeCurrent(Dc, Context);
             }
-            RenderInterface_GL2::ReleaseTexture(texture);
+            RenderInterface_GL3::ReleaseTexture(texture);
             if (previousContext != Context)
             {
                 wglMakeCurrent(previousDc, previousContext);
             }
         }
-    } Renderer;
+    };
+    std::unique_ptr<UiRenderer> Renderer;
+    GpuSceneRenderer_OpenGL SceneRenderer;
     HWND Window = nullptr;
     HDC Dc = nullptr;
     HGLRC Context = nullptr;
     bool Presented = false;
+    bool GpuSceneRendered = false;
     ~Surface()
     {
         if (Context)
         {
+            wglMakeCurrent(Dc, Context);
+            SceneRenderer.Shutdown();
+            Renderer.reset();
+            if (GOpenGL3SurfaceCount > 0 && --GOpenGL3SurfaceCount == 0)
+            {
+                RmlGL3::Shutdown();
+            }
             if (wglGetCurrentContext() == Context)
             {
                 wglMakeCurrent(nullptr, nullptr);
@@ -85,6 +108,12 @@ bool RenderBackend_OpenGL::Initialize(const RenderInitDesc* desc)
 {
     if (!desc || !desc->WindowHandle || !desc->Width || !desc->Height)
     {
+        return false;
+    }
+    if (desc->EnableValidation)
+    {
+        EngineLog::Error("RenderCore",
+            "Render validation is only available for Vulkan Debug builds");
         return false;
     }
     State = std::make_unique<Surface>();
@@ -112,15 +141,76 @@ bool RenderBackend_OpenGL::Initialize(const RenderInitDesc* desc)
     {
         return false;
     }
-    State->Renderer.Dc = State->Dc;
-    State->Renderer.Context = State->Context;
+    Rml::String LoaderMessage;
+    if (GOpenGL3SurfaceCount == 0 && !RmlGL3::Initialize(&LoaderMessage))
+    {
+        EngineLog::Error("RenderCore", "OpenGL 3 initialization failed: " +
+            std::string(LoaderMessage.c_str()));
+        return false;
+    }
+    ++GOpenGL3SurfaceCount;
+    GUseProgram = reinterpret_cast<UseProgramFunction>(wglGetProcAddress("glUseProgram"));
+    GBindVertexArray = reinterpret_cast<BindVertexArrayFunction>(wglGetProcAddress("glBindVertexArray"));
+    GBindBuffer = reinterpret_cast<BindBufferFunction>(wglGetProcAddress("glBindBuffer"));
+    if (!GUseProgram || !GBindVertexArray || !GBindBuffer)
+    {
+        EngineLog::Error("RenderCore", "OpenGL 3 state functions are unavailable");
+        return false;
+    }
+    const auto SwapInterval = reinterpret_cast<SwapIntervalFunction>(
+        wglGetProcAddress("wglSwapIntervalEXT"));
+    const auto GetSwapInterval = reinterpret_cast<GetSwapIntervalFunction>(
+        wglGetProcAddress("wglGetSwapIntervalEXT"));
+    if (!SwapInterval)
+    {
+        if (!desc->EnableVSync)
+        {
+            EngineLog::Error("RenderCore",
+                "OpenGL cannot disable VSync: WGL_EXT_swap_control is unavailable");
+            return false;
+        }
+        Stats.VSyncEnabled = true;
+    }
+    else
+    {
+        const int RequestedInterval = desc->EnableVSync ? 1 : 0;
+        if (SwapInterval(RequestedInterval) == FALSE)
+        {
+            EngineLog::Error("RenderCore", "OpenGL swap interval update failed");
+            return false;
+        }
+        const int EffectiveInterval = GetSwapInterval ? GetSwapInterval() :
+            RequestedInterval;
+        Stats.VSyncEnabled = EffectiveInterval != 0;
+        if (!desc->EnableVSync && Stats.VSyncEnabled)
+        {
+            EngineLog::Error("RenderCore",
+                "OpenGL driver kept VSync enabled after an explicit off request");
+            return false;
+        }
+    }
+    State->Renderer = std::make_unique<Surface::UiRenderer>();
+    if (!*State->Renderer)
+    {
+        EngineLog::Error("RenderCore", "RmlUi OpenGL 3 renderer initialization failed");
+        return false;
+    }
+    State->Renderer->Dc = State->Dc;
+    State->Renderer->Context = State->Context;
+    if (!State->SceneRenderer.Initialize())
+    {
+        EngineLog::Warning("RenderCore",
+            "OpenGL GPU scene renderer is unavailable; CPU fallback remains active");
+    }
 
     Width = desc->Width;
     Height = desc->Height;
     Initialized = true;
     Resize(Width, Height);
     Stats.HasFramebuffer = true;
-    EngineLog::Info("RenderCore", "Graphics backend initialized: opengl");
+    EngineLog::Info("RenderCore", std::string(
+        "Graphics backend initialized: opengl; vsync=") +
+        (Stats.VSyncEnabled ? "on" : "off"));
     return true;
 }
 
@@ -140,9 +230,10 @@ void RenderBackend_OpenGL::BeginFrame()
     }
     ++Stats.FramesBegun;
     State->Presented = false;
-    State->Renderer.DrawCalls = 0;
-    State->Renderer.BeginFrame();
-    State->Renderer.Clear();
+    State->GpuSceneRendered = false;
+    State->Renderer->DrawCalls = 0;
+    State->Renderer->BeginFrame();
+    State->Renderer->Clear();
 }
 
 void RenderBackend_OpenGL::SubmitFrame(const RenderFrame* frame)
@@ -164,6 +255,10 @@ void RenderBackend_OpenGL::SubmitFrame(const RenderFrame* frame)
     Stats.TriangleVertices += frame->Triangles.VertexCount;
     Stats.LineVertices += frame->Lines.VertexCount;
 
+    GUseProgram(0);
+    GBindVertexArray(0);
+    GBindBuffer(ArrayBuffer, 0);
+    GBindBuffer(ElementArrayBuffer, 0);
     glPushAttrib(GL_ALL_ATTRIB_BITS);
     glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
     glMatrixMode(GL_PROJECTION);
@@ -180,8 +275,11 @@ void RenderBackend_OpenGL::SubmitFrame(const RenderFrame* frame)
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_BLEND);
     glDisable(GL_STENCIL_TEST);
-    glClearColor(0.055f, 0.065f, 0.08f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (!State->GpuSceneRendered || frame->Triangles.VertexCount > 0)
+    {
+        glClearColor(0.055f, 0.065f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glEnable(GL_POLYGON_OFFSET_FILL);
@@ -197,6 +295,25 @@ void RenderBackend_OpenGL::SubmitFrame(const RenderFrame* frame)
     glPopMatrix();
     glPopClientAttrib();
     glPopAttrib();
+    State->Renderer->ResetProgram();
+}
+
+bool RenderBackend_OpenGL::EnsureGpuMesh(const GpuMeshUpload* Upload)
+{
+    return Initialized && MakeCurrent() &&
+        State->SceneRenderer.EnsureMesh(Upload);
+}
+
+bool RenderBackend_OpenGL::SubmitGpuScene(const GpuSceneFrame* Frame)
+{
+    State->GpuSceneRendered = Initialized && MakeCurrent() &&
+        State->SceneRenderer.Render(Frame);
+    return State->GpuSceneRendered;
+}
+
+bool RenderBackend_OpenGL::SupportsGpuScene() const
+{
+    return Initialized && State && State->SceneRenderer.IsReady();
 }
 
 void RenderBackend_OpenGL::EndFrame()
@@ -205,7 +322,7 @@ void RenderBackend_OpenGL::EndFrame()
     {
         return;
     }
-    State->Renderer.EndFrame();
+    State->Renderer->EndFrame();
     State->Presented = SwapBuffers(State->Dc) != FALSE;
 }
 
@@ -217,7 +334,7 @@ void RenderBackend_OpenGL::Resize(uint32_t width, uint32_t height)
     Stats.Height = height;
     if (State)
     {
-        State->Renderer.SetViewport(static_cast<int>(width), static_cast<int>(height));
+        State->Renderer->SetViewport(static_cast<int>(width), static_cast<int>(height));
     }
 }
 
@@ -232,12 +349,12 @@ void RenderBackend_OpenGL::RequestScreenshot(const wchar_t* path)
     EngineLog::Error("RenderCore", "OpenGL screenshot failed");
 }
 
-Rml::RenderInterface* RenderBackend_OpenGL::GetUiRenderer() { return State ? &State->Renderer : nullptr; }
+Rml::RenderInterface* RenderBackend_OpenGL::GetUiRenderer() { return State ? State->Renderer.get() : nullptr; }
 bool RenderBackend_OpenGL::MakeCurrent()
 {
     return State && State->Dc && State->Context && wglMakeCurrent(State->Dc, State->Context) != FALSE;
 }
-uint32_t RenderBackend_OpenGL::GetUiDrawCalls() const { return State ? State->Renderer.DrawCalls : 0; }
+uint32_t RenderBackend_OpenGL::GetUiDrawCalls() const { return State && State->Renderer ? State->Renderer->DrawCalls : 0; }
 bool RenderBackend_OpenGL::WasPresented() const { return State && State->Presented; }
 
 bool RenderBackend_OpenGL::ReadPixels(std::vector<unsigned char>& pixels, uint32_t& width, uint32_t& height)

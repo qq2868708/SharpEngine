@@ -244,7 +244,8 @@ public readonly record struct BoneInfluences(
 /// <summary>Runtime skeletal mesh geometry and its bind-pose skinning data.</summary>
 public sealed class SkeletalMeshAsset
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
+    public const int MaximumInfluences = 12;
 
     public SkeletalMeshAsset(string assetId, string name, string skeletonId,
         IReadOnlyList<SkeletonBone> bones, IReadOnlyList<AssetVector3> positions,
@@ -336,15 +337,22 @@ public sealed class SkeletalMeshAsset
             if (required.Any(field => !root.ContainsKey(field)) || root.Select(property => property.Key).Any(field =>
                 !required.Contains(field, StringComparer.Ordinal) && !optional.Contains(field, StringComparer.Ordinal)))
                 throw new InvalidDataException("Unexpected or missing fields in skeletal mesh asset");
-            if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion ||
+            var Version = root["schemaVersion"]!.GetValue<int>();
+            if ((Version != 1 && Version != CurrentSchemaVersion) ||
                 root["kind"]!.GetValue<string>() != "skeletal-mesh")
+            {
                 throw new InvalidDataException("Unsupported skeletal mesh schema");
+            }
             var bones = root["bones"]!.AsArray().Select(SkeletonAsset.ParseBone).ToArray();
             var positions = root["positions"]!.AsArray().Select((node, index) =>
                 ParseVector3(node, $"positions[{index}]")).ToArray();
             var indices = root["indices"]!.AsArray().Select((node, index) =>
                 ParseInt(node, $"indices[{index}]")).ToArray();
             var influences = root["influences"]!.AsArray().Select(ParseInfluences).ToArray();
+            if (Version == 1 && influences.Any(Influence => Influence.BoneIndices.Count > 4))
+            {
+                throw new InvalidDataException("Legacy skeletal mesh schema 1 supports at most four influences");
+            }
             return new SkeletalMeshAsset(RequiredString(root, "assetId"),
                 RequiredString(root, "name"), RequiredString(root, "skeletonId"), bones,
                 positions, indices, influences, OptionalString(root, "defaultMaterial"),
@@ -373,8 +381,17 @@ public sealed class SkeletalMeshAsset
         for (var vertex = 0; vertex < Influences.Count; vertex++)
         {
             var influence = Influences[vertex];
-            if (influence.BoneIndices.Count is < 1 or > 4 || influence.Weights.Count != influence.BoneIndices.Count)
-                throw new InvalidDataException($"Skeletal mesh '{AssetId}' vertex {vertex} must have one to four influences");
+            if (influence.BoneIndices.Count is < 1 or > MaximumInfluences ||
+                influence.Weights.Count != influence.BoneIndices.Count)
+            {
+                throw new InvalidDataException($"Skeletal mesh '{AssetId}' vertex {vertex} must have one to {MaximumInfluences} influences");
+            }
+            var WeightedBones = influence.BoneIndices.Zip(influence.Weights)
+                .Where(Pair => Pair.Second > 0).Select(Pair => Pair.First).ToArray();
+            if (WeightedBones.Distinct().Count() != WeightedBones.Length)
+            {
+                throw new InvalidDataException($"Skeletal mesh '{AssetId}' vertex {vertex} has duplicate bone influences");
+            }
             var sum = 0f;
             for (var index = 0; index < influence.BoneIndices.Count; index++)
             {

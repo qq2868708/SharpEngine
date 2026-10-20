@@ -312,6 +312,52 @@
           }
         }
       ]
+    },
+    {
+      "entityId": "skyLight",
+      "name": "Sky Light",
+      "parentId": null,
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "skyLight-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              0,
+              0
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "skyLight-sky-light",
+          "typeId": "engine.sky-light",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Color": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "Intensity": 0.24
+          }
+        }
+      ]
     }
   ]
 }

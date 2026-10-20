@@ -90,9 +90,21 @@ public static class WorldViewportRenderer
         string? selectedEntityId = null, AssetRegistry? assets = null, string transformTool = "move")
     {
         var frame = SceneRenderer.BuildFrame(world, bounds, assets, selectedEntityId);
+        var Overlay = BuildOverlayFrame(world, bounds, selectedEntityId,
+            transformTool);
+        return frame with { Lines = frame.Lines.Concat(Overlay.Lines).ToArray() };
+    }
+
+    public static WorldViewportFrame BuildOverlayFrame(WorldDocument world,
+        UiRect bounds, string? selectedEntityId = null, string transformTool = "move")
+    {
         var camera = world.ActiveCamera;
-        if (camera is null || bounds.Width <= 0 || bounds.Height <= 0) return frame;
-        var lines = frame.Lines.ToList();
+        if (camera is null || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return new(bounds, [], [], world.Entities.Count, world.MeshCount,
+                camera?.Id ?? string.Empty);
+        }
+        var lines = new List<WorldViewportVertex>();
         var viewProjection = CameraMatrix(world, camera, bounds.Width / bounds.Height);
         var selected = selectedEntityId is null ? null : world.Entities.FirstOrDefault(e =>
             string.Equals(e.Id, selectedEntityId, StringComparison.OrdinalIgnoreCase));
@@ -114,7 +126,8 @@ public static class WorldViewportRenderer
         // Its arms use the camera basis, so they rotate as the viewport orbits
         // while staying readable and independent of scene scale.
         AddCornerGizmo(lines, world, camera, bounds);
-        return frame with { Lines = lines.ToArray() };
+        return new(bounds, [], lines.ToArray(), world.Entities.Count,
+            world.MeshCount, camera.Id);
     }
     public static bool TryPick(WorldDocument world, UiRect bounds, float x, float y,
         out WorldEntity? entity, AssetRegistry? assets = null) =>

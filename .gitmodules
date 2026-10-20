@@ -3,4 +3,4 @@
 	url = https://github.com/freetype/freetype.git
 [submodule "External/RmlUi"]
 	path = External/RmlUi
-	url = https://github.com/mikke89/RmlUi.git
+	url = https://github.com/qq2868708/RmlUi.git

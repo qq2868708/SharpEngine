@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include "RenderBackend_Stats.h"
+#include "../Public/GpuScene.h"
 
 namespace Rml
 {
@@ -22,6 +23,9 @@ public:
 
     virtual void BeginFrame() = 0;
     virtual void SubmitFrame(const RenderFrame* frame) = 0;
+    virtual bool EnsureGpuMesh(const GpuMeshUpload*) { return false; }
+    virtual bool SubmitGpuScene(const GpuSceneFrame*) { return false; }
+    virtual bool SupportsGpuScene() const { return false; }
     virtual void EndFrame() = 0;
 
     virtual void Resize(uint32_t width, uint32_t height) = 0;
@@ -33,6 +37,7 @@ public:
     virtual bool MakeCurrent() { return true; }
     virtual uint32_t GetUiDrawCalls() const { return 0; }
     virtual bool WasPresented() const { return true; }
+    virtual void RequestReadback() {}
     // BGRA8 rows, bottom to top, matching the native UI frame contract.
     virtual bool ReadPixels(std::vector<unsigned char>&, uint32_t&, uint32_t&) { return false; }
 };

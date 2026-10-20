@@ -27,6 +27,7 @@ namespace
     POINT LastPointer{};
     bool PointerKnown{};
     std::vector<UiSceneVertex> Triangles, Lines;
+    GpuSceneFrameStorage GpuScene;
     uint8_t __cdecl Viewport(float* x, float* y, float* w, float* h)
     {
         uint32_t width = RenderWidth;
@@ -60,6 +61,23 @@ namespace
             auto* p = reinterpret_cast<const UiSceneVertex*>(l);
             Lines.assign(p, p + nl);
         }
+    }
+    uint8_t __cdecl EnsureGpuMesh(const GpuMeshUpload* upload)
+    {
+        return RC_EnsureGpuMesh(upload) ? 1 : 0;
+    }
+    uint8_t __cdecl SubmitGpuScene(const GpuSceneFrame* frame)
+    {
+        return GpuScene.Assign(frame) ? 1 : 0;
+    }
+    uint8_t __cdecl GetRenderStats(RenderStats* stats)
+    {
+        if (!stats)
+        {
+            return 0;
+        }
+        RC_GetStats(stats);
+        return 1;
     }
     uint32_t CopyUtf8Result(const std::string& value, char* result, uint32_t capacity)
     {
@@ -128,11 +146,13 @@ namespace
         }
         RC_Resize(width, height);
         RC_BeginFrame();
+        const bool gpuSceneSubmitted = RC_SubmitGpuScene(GpuScene.Get());
         const RenderFrame frame
         {
             0, 0, static_cast<float>(width), static_cast<float>(height), static_cast<float>(height),
             {
-                Triangles.data(), static_cast<uint32_t>(Triangles.size())
+                gpuSceneSubmitted ? nullptr : Triangles.data(),
+                gpuSceneSubmitted ? 0 : static_cast<uint32_t>(Triangles.size())
             },
             {
                 Lines.data(), static_cast<uint32_t>(Lines.size())
@@ -318,7 +338,7 @@ int wmain(int argc, wchar_t** argv)
         EngineLog::Error("Game", renderError);
         return 2;
     }
-    if (renderOptions.Explicit && (renderOffscreen || nullRhi))
+    if (renderOptions.BackendExplicit && (renderOffscreen || nullRhi))
     {
         EngineLog::Error("Game", "RENDER_BACKEND_CONFLICT: graphics and headless modes cannot be combined");
         return 2;
@@ -410,7 +430,9 @@ int wmain(int argc, wchar_t** argv)
     }
     const RenderInitDesc renderDesc
     {
-        Window, RenderWidth, RenderHeight, false, backendType
+        Window, RenderWidth, RenderHeight, renderOptions.EnableValidation,
+        backendType,
+        renderOptions.EnableVSync
     };
     if (!RC_Initialize(&renderDesc))
     {
@@ -433,6 +455,9 @@ int wmain(int argc, wchar_t** argv)
     ManagedHostApi api{};
     api.GetViewportRect = Viewport;
     api.SubmitViewportFrame = Submit;
+    api.EnsureGpuMesh = EnsureGpuMesh;
+    api.SubmitGpuScene = SubmitGpuScene;
+    api.GetRenderStats = GetRenderStats;
     api.GetUiSnapshot = Ui ? GetUiSnapshot : nullptr;
     api.UiPointer = Ui ? UiPointer : nullptr;
     api.UiKey = Ui ? UiKey : nullptr;
@@ -487,12 +512,18 @@ int wmain(int argc, wchar_t** argv)
         float delta = std::chrono::duration<float>(now - last).count();
         last = now;
         managed.Update(limit ? 1.0f / 60.0f : (delta > 0.1f ? 0.1f : delta));
+        const bool captureFrame = limit && frames + 1 >= limit &&
+            !screenshot.empty();
+        if (captureFrame)
+        {
+            GetActiveRenderBackend()->RequestReadback();
+        }
         if (!RenderGameFrame())
         {
             Sleep(10);
             continue;
         }
-        if (limit && frames + 1 >= limit && !screenshot.empty())
+        if (captureFrame)
         {
             RC_RequestScreenshot(screenshot.c_str());
         }

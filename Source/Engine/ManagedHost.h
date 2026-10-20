@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include "RenderCore/Public/GpuScene.h"
+#include "RenderCore/Public/RenderCore.h"
 
 using ManagedSetWindowTitleFn = void(__cdecl*)(void* windowHandle,
                                                const char* titleUtf8);
@@ -100,10 +102,13 @@ using ManagedGetHostUiElementRectFn = uint8_t(__cdecl*)(const char* hostIdUtf8,
 using ManagedSubmitHostViewportFrameFn = void(__cdecl*)(const char* hostIdUtf8,
     const char* kindUtf8, const float* triangles, uint32_t triangleVertices,
     const float* lines, uint32_t lineVertices);
+using ManagedEnsureGpuMeshFn = uint8_t(__cdecl*)(const GpuMeshUpload* upload);
+using ManagedSubmitGpuSceneFn = uint8_t(__cdecl*)(const GpuSceneFrame* frame);
+using ManagedGetRenderStatsFn = uint8_t(__cdecl*)(RenderStats* stats);
 
 struct ManagedHostApi
 {
-    uint32_t Version = 12;
+    uint32_t Version = 16;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -142,6 +147,13 @@ struct ManagedHostApi
     ManagedDestroyEditorWindowFn DestroyEditorWindow = nullptr;
     ManagedGetHostUiElementRectFn GetHostUiElementRect = nullptr;
     ManagedSubmitHostViewportFrameFn SubmitHostViewportFrame = nullptr;
+    // Version 13 appends backend-neutral retained GPU scene submission.
+    ManagedEnsureGpuMeshFn EnsureGpuMesh = nullptr;
+    ManagedSubmitGpuSceneFn SubmitGpuScene = nullptr;
+    // Version 14 appends read-only transient render telemetry.
+    ManagedGetRenderStatsFn GetRenderStats = nullptr;
+    // Version 15 extends the v13 GpuSceneFrame payload with SkyRadiance.
+    // Version 16 extends GpuSceneVertex to twelve skin influences (120 bytes).
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

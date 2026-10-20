@@ -58,6 +58,7 @@
           <tr><td>动画状态机</td><td><code>AnimationStateMachine</code> / <code>AnimationStateMachineContent.Load</code></td><td>schema v1；<code>engine://animation-state-machines/uefn-mannequin-locomotion</code> 为只读 builtin/preset</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
           <tr><td>输入</td><td><code>InputAction</code> / <code>InputMappingContext</code></td><td>JSON schema v1</td><td><a href="../../../../../README.md#unified-input-routing">README 输入路由</a></td></tr>
           <tr><td>编辑器</td><td><code>EditorRuntime</code> / <code>editor.describe</code></td><td>snapshot schema 按能力声明</td><td><a href="../../../../EditorMcpUiObservability.md">Editor MCP UI</a></td></tr>
+          <tr><td>渲染</td><td><code>GpuSceneFrame</code> / <code>render.describe</code> / <code>sharpengine://render</code></td><td>Native Host API v16；render telemetry schema v1</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
           <tr><td>时间线</td><td><code>PlayableGraph</code> / <code>TimelineAsset</code></td><td>Timeline schema v1</td><td><a href="../../../../AnimationAndTimeline.md">Animation and Timeline</a></td></tr>
           <tr><td>网络</td><td><code>UdpNetworkTransport</code> / <code>DedicatedServerNetworkHost</code> / <code>NetworkClientSession</code></td><td>network schema v1；UDP Command 与快照 Delta</td><td><a href="../../../../Networking.md">Networking</a></td></tr>
           <tr><td>FBX 资产</td><td><code>FbxSourceContract.ExportFbx</code> / <code>AssetContent.ExportFbx</code></td><td>来源 provenance + 语义等价导出</td><td><a href="../../../../AssetsAndRendering.md">Assets and Rendering</a></td></tr>
@@ -77,6 +78,14 @@
         <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
         <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；Content Manager 条目使用 <code>editor.content.select-folder:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 选择文件夹，双击动作使用 <code>editor.content.open:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 进入文件夹。除 World 外的内置可编辑资源通过 <code>IAssetEditorInstance</code> 和 <code>AssetEditorHost</code> 建立独立顶层编辑器根。</p>
         <p><code>IMenuExtension</code>、<code>IToolBarExtension</code> 和 <code>ICustomBarExtension</code> 分别扩展固定 File 菜单、主 Toolbar 和引擎创建的 <code>viewport</code>/<code>timeline</code> CustomBar。CustomBar 的 <code>Append</code>/<code>Replace</code> 只影响显示，命令注册仍然保留；扩展不能创建或删除顶层 Surface。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>RenderCore</code> retained GPU scene</h3>
+        <p><code>GpuSceneVertex</code>、<code>GpuMeshUpload</code>、<code>GpuSceneDraw</code> 和 <code>GpuSceneFrame</code> 是 Editor 与 Game 共用的 native submission contract。Native Host API v13 增加 <code>EnsureGpuMesh</code>/<code>SubmitGpuScene</code>；v14 追加只读 <code>GetRenderStats</code>；v15 在 <code>GpuSceneFrame</code> 中增加由场景组件派生的 <code>SkyRadiance</code>；v16 将 <code>GpuSceneVertex</code> 扩展为 12 组骨骼索引/权重（120 bytes）。字段仅在同步调用期间借用 managed 地址，GPU handle、descriptor、buffer 和 frame slot 不进入序列化状态。Vulkan 的每个 <code>RenderBackend_Vulkan::Surface</code> 持有独立 <code>RmlUiVulkanDeviceContext</code>，其中保存 Instance、Device、Queue、Swapchain 和帧同步句柄；RmlUi adapter 只借用该 context 录制 UI。</p>
+        <p><code>engine.sky-light</code> 是内置组件 schema v1，权威字段为 <code>Color</code> 和非负 <code>Intensity</code>。Authoring state 通过通用组件事务、revision、Undo/Redo 和显式 Save 管理，并在 Runtime 重建；渲染帧只累加 enabled 且 active-in-hierarchy 的实例。Sky Light 不持有天空盒、Cubemap 或 GPU 资源，当前也不生成可见背景。</p>
+        <p><code>GpuMeshPayload</code> 是 schema-independent derived cache payload，当前 <code>PayloadVersion = 3</code>，包含展开的 flat-shading 顶点、每顶点最多 12 个蒙皮影响、section/BoneMap、Bounds 和 BVH。每个 section 的 <code>BoneMap</code> 最多 256 项；构建器按三角形稳定顺序自动切分，不能把该数值解释为资产骨骼上限。缓存位于 <code>Intermediate/RenderCache/&lt;contentHash&gt;.sgpumesh</code>，源资产仍是唯一权威。</p>
+        <p><code>RenderOptions</code> 解析 <code>--render-backend=opengl|vulkan</code>、<code>--render-vsync=on|off</code> 和 <code>--render-validation=on|off</code>；<code>RenderInitDesc.EnableVSync</code>/<code>EnableValidation</code> 把 transient 选择传给每个 Editor surface 和 Game backend。VSync 默认 true；显式 off 如果不能真正选择无阻塞 swap interval 或 immediate/mailbox present mode，初始化必须失败。Validation 默认 false，只有定义了 validation 支持的 Vulkan Debug target 接受 true。</p>
+        <p><code>render.describe</code> 和 <code>sharpengine://render</code> 返回 schema v1 transient snapshot：<code>backend</code>、<code>vsync</code>、<code>validation</code>、<code>gpuScene</code>、<code>cache</code>、<code>timingMilliseconds</code>、<code>native</code> 和 <code>diagnostics</code>。timing 窗口最多 240 帧并同时返回 average/P95；能力 effect 为 <code>read</code>，不创建 revision 或事务。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Runtime.Input</code></h3>
@@ -144,8 +153,15 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li><code>SkeletalMeshAsset</code> schema v2 明确支持每顶点 1–12 个影响；v1 仍按最多 4 个影响读取并迁移，未来 schema、重复非零骨骼影响和超限数据拒绝加载。</li>
+        <li>Native Host API 当前为 v16：v15 的 <code>GpuSceneFrame</code> 增加 <code>SkyRadiance</code>，v16 将 <code>GpuSceneVertex</code> 扩展为 12 个蒙皮影响；managed GPU scene bridge 只向 v16 host 提交当前布局，v14 的 <code>GetRenderStats</code> 保持原字段位置。</li>
+        <li>新增 <code>GpuMeshPayload</code> v3 derived cache、每顶点最多 12 个蒙皮影响、每 section 256 used-bone 上限、自动 section 切分和 BVH；<code>SkeletonFrameState.Positions</code> 改为按需派生，不改变 frame JSON schema。</li>
+        <li>新增 read-only <code>render.describe</code> / <code>sharpengine://render</code> schema v1；OpenGL/Vulkan shader 都从 <code>RenderCore/Shaders</code> 生成 backend artifact。</li>
+        <li><code>RenderOptions</code> 和 <code>RenderInitDesc</code> 增加默认开启的 VSync 选择；<code>render.describe</code> schema v1 兼容追加 <code>vsync</code>，OpenGL/Vulkan 都拒绝无法满足的显式 off。</li>
+        <li><code>RenderOptions</code> 和 <code>RenderInitDesc</code> 接通默认关闭的 validation 选择；<code>render.describe</code> schema v1 兼容追加 <code>validation</code>，只有 Vulkan Debug 接受显式 on。</li>
+        <li>Vulkan Instance、Device、Queue、Swapchain 与帧同步存储迁移到 RenderCore surface-owned <code>RmlUiVulkanDeviceContext</code>；RmlUi 默认构造仍保留内部兼容 context，不改变外部示例 API。</li>
         <li>更新 <code>engine://animations/uefn-mannequin-walk</code> 与 <code>engine://animations/uefn-mannequin-run</code> 的生成数据：局部肢体旋转使用与 mannequin 绑定骨架相符的轴向和受控幅度；SkeletalAnimation schema 仍为 v1，<code>engine.animator</code> schema v3 不变。</li>
-        <li><code>SceneRenderer.BuildFrame</code> 的三角面光照包含固定基础环境光项，方向光为零或背向时仍输出可观察的材质颜色；该项属于派生渲染数据，不改变场景资产 schema。</li>
+        <li>新增 <code>engine.sky-light</code> schema v1（<code>Color</code>、<code>Intensity</code>）；CPU/OpenGL/Vulkan 均从有效组件派生并累加天空光，移除固定 <code>0.24</code> 环境项。没有有效 Sky Light 时环境辐照度为零。</li>
         <li>新增 <code>AnimationStateMachineAsset</code> 与 <code>engine.animator</code> schema v3；状态、参数、过渡和全部 Clip 依赖可从快照重建。</li>
         <li>登记 engine-owned、只读、builtin/preset 的 mannequin locomotion 状态机，并复用 <code>EditorAssetOpenerRegistry</code> 的统一打开流程。</li>
         <li>增加数据资产类型声明与 .sdataasset 封套契约，类型 schema 从 v1 起显式声明；支持抽象基类、继承字段和基类多态加载；未引入已有资产格式迁移。</li>

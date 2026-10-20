@@ -30,6 +30,18 @@ if (RenderBackend is not null)
 {
     editorArguments.Add(RenderBackend);
 }
+var RenderVSync = args.FirstOrDefault(Argument =>
+    Argument.StartsWith("--render-vsync=", StringComparison.Ordinal));
+if (RenderVSync is not null)
+{
+    editorArguments.Add(RenderVSync);
+}
+var RenderValidation = args.FirstOrDefault(Argument =>
+    Argument.StartsWith("--render-validation=", StringComparison.Ordinal));
+if (RenderValidation is not null)
+{
+    editorArguments.Add(RenderValidation);
+}
 var McpValidationPath = args.Contains("--mcp-only", StringComparer.Ordinal)
     ? McpUiValidation.CreateConfiguration(root) : null;
 using var editor = Start(executable, editorArguments.ToArray(), McpValidationPath);
@@ -160,6 +172,23 @@ try
         return;
     }
     var tools = Call(5, "tools/list")["result"]?["tools"]?.AsArray() ?? [];
+    var RenderTool = tools.Select(node => node?.AsObject()).First(tool =>
+        tool?["name"]?.GetValue<string>() == "render.describe")!;
+    Require(RenderTool["annotations"]?["readOnlyHint"]?.GetValue<bool>() == true &&
+            RenderTool["_meta"]?["sharpengine/capability"]?["effect"]?.GetValue<string>() == "read",
+        "Render telemetry must remain a read-only transient capability");
+    var Render = Structured(Tool(6, "render.describe", new JsonObject()));
+    var ExpectedBackend = RenderBackend?["--render-backend=".Length..] ?? "opengl";
+    var ExpectedVSync = RenderVSync?["--render-vsync=".Length..] != "off";
+    var ExpectedValidation = RenderValidation?[
+        "--render-validation=".Length..] == "on";
+    Require(Render["backend"]?.GetValue<string>() == ExpectedBackend &&
+            Render["vsync"]?.GetValue<bool>() == ExpectedVSync &&
+            Render["validation"]?.GetValue<bool>() == ExpectedValidation &&
+            Render["gpuScene"]?["supported"]?.GetValue<bool>() == true &&
+            Render["cache"]?["residentPayloads"]?.GetValue<int>() > 0 &&
+            Render["timingMilliseconds"]?["sampleCount"]?.GetValue<int>() > 0,
+        $"Render telemetry must expose the active GPU backend, cache, and timing: {Render}");
     var pointerTool = tools.Select(node => node?.AsObject()).First(tool =>
         tool?["name"]?.GetValue<string>() == "ui.pointer")!;
     Require(pointerTool["outputSchema"] is JsonObject &&

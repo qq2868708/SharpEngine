@@ -15,7 +15,49 @@ var cycleRegistry = ComponentRegistry.CreateBuiltin();
 cycleRegistry.Register(new("test.a", 1, typeof(Other), "", false, [typeof(Fault)], [], () => new Other(), _ => new()), "test", "test");
 cycleRegistry.Register(new("test.b", 1, typeof(Fault), "", false, [typeof(Other)], [], () => new Fault(), _ => new()), "test", "test");
 Reject(() => cycleRegistry.ValidateRegistrations(), "dependency cycles rejected before instantiation");
-Check(registry.Types.Count == 21, "built-in and generated project descriptors register");
+Check(registry.Types.Count == 22, "built-in and generated project descriptors register");
+var SkyLightType = registry.Get(typeof(SkyLightComponent));
+var SkyLightDefaults = SkyLightType.CreateDefaultState(registry);
+Check(SkyLightDefaults.Count == 2 &&
+    SkyLightDefaults["Color"]!.AsArray().Select(Value => Value!.GetValue<float>())
+        .SequenceEqual(new[] { 1f, 1f, 1f, 1f }) &&
+    SkyLightDefaults["Intensity"]!.GetValue<float>() == 1,
+    "Sky Light schema v1 explicitly serializes default color and intensity");
+Check(SkyLightType.Schema(registry)["properties"]!["Intensity"] is not null,
+    "Sky Light publishes discoverable JSON schema fields");
+Reject(() => registry.ValidateState(SkyLightType, new JsonObject
+{
+    ["Color"] = new JsonArray(1, 1, 1, 1),
+    ["Intensity"] = -0.01f,
+}), "Sky Light rejects negative intensity");
+var SkyLightScene = new SceneData { Name = "Sky Light" };
+var SkyLightEntity = SkyLightScene.CreateEntity(registry, "Sky Light");
+var SkyLightRecord = SkyLightScene.AddComponent(registry, SkyLightEntity.EntityId,
+    SkyLightType.TypeId).Last();
+SkyLightRecord.State["Color"] = new JsonArray(0.25f, 0.5f, 0.75f, 1f);
+SkyLightRecord.State["Intensity"] = 0.4f;
+SkyLightScene.Validate(registry);
+var SkyLightSerialized = SkyLightScene.Serialize();
+Check(SceneData.Parse(SkyLightSerialized, registry).Serialize() == SkyLightSerialized,
+    "Sky Light non-default state round trips deterministically");
+using (var SkyLightRuntime = new RuntimeWorld(SkyLightScene, registry))
+{
+    var LiveSkyLight = (SkyLightComponent)SkyLightRuntime.FindComponent(
+        SkyLightRecord.ComponentId)!;
+    Check(LiveSkyLight.Color == new Color(0.25f, 0.5f, 0.75f, 1f) &&
+        Math.Abs(LiveSkyLight.Intensity - 0.4f) < 0.0001f,
+        "Authoring Sky Light state reconstructs in Runtime");
+}
+var SkyLightDocument = new WorldDocument(SkyLightScene.Clone(), registry);
+var SkyLightAuthoring = new WorldAuthoringSession(SkyLightDocument);
+var SkyLightPatch = SkyLightAuthoring.PatchComponent(SkyLightEntity.EntityId,
+    SkyLightRecord.ComponentId, new JsonObject { ["Intensity"] = 0.8f },
+    SkyLightAuthoring.DocumentRevision);
+Check(SkyLightPatch.Success && SkyLightAuthoring.IsDirty &&
+    SkyLightAuthoring.Undo(SkyLightAuthoring.DocumentRevision).Success &&
+    Math.Abs(SkyLightDocument.Data.Entities.Single().Components.Last()
+        .State["Intensity"]!.GetValue<float>() - 0.4f) < 0.0001f,
+    "Sky Light authoring patches participate in revision, dirty, and Undo");
 var probeType = registry.Get(typeof(Probe));
 Check(probeType.CreateDefaultState(registry)["_private"]!.GetValue<int>() == 17, "private field defaults generated without component construction");
 var data = new SceneData { Name = "Validation" };

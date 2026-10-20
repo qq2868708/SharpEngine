@@ -104,6 +104,7 @@ internal static class McpCapabilityCatalog
                 "external", McpConfigurationInput(), ObjectOutput(), RequiresLiveUi: true,
                 RevisionPrecondition: "MCP configuration revision"),
             Read("input.describe", "Return loaded InputActions, mapping contexts, live control state, and recent routed events."),
+            Read("render.describe", "Return transient render backend, GPU submission and CPU fallback counts, derived cache statistics, and average/P95 frame timings."),
             new("scene.reparent", 1,
                 "Atomically reparent or reorder one World entity through the shared Authoring transaction layer.",
                 "edit", ReparentInput(), EditOutput(),

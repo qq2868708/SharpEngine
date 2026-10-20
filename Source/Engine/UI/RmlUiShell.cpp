@@ -456,6 +456,8 @@ struct RmlUiShell::Impl
     SystemInterface_Win32 System;
     Win32FileInterface Files;
     RenderBackendType Backend = RenderBackendType::OpenGL;
+    bool EnableVSync = true;
+    bool EnableValidation = false;
     bool Ready{};
     bool StartupPending{};
     bool ComInitialized{};
@@ -471,6 +473,7 @@ struct RmlUiShell::Impl
     std::vector<UiSceneVertex> Triangles;
     std::vector<UiSceneVertex> Lines;
     UiViewportRect SceneRect{};
+    GpuSceneFrameStorage GpuScene;
     std::vector<UiSceneVertex> TimelinePreviewTriangles;
     std::vector<UiSceneVertex> TimelinePreviewLines;
     UiViewportRect TimelinePreviewRect{};
@@ -2165,7 +2168,10 @@ void RmlUiShell::Impl::Host::ProcessEvent(Rml::Event& event)
 RmlUiShell::RmlUiShell() : State(std::make_unique<Impl>()) {}
 RmlUiShell::~RmlUiShell() { Shutdown(); }
 
-bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot, RenderBackendType backend)
+bool RmlUiShell::Initialize(HWND window,
+                            const std::filesystem::path& engineRoot,
+                            RenderBackendType backend, bool enableVSync,
+                            bool enableValidation)
 {
     auto& state = *State;
     if (state.Ready || !window) return false;
@@ -2173,6 +2179,8 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     state.StartupPending = !IsWindowVisible(window);
     state.EngineRoot = engineRoot;
     state.Backend = backend;
+    state.EnableVSync = enableVSync;
+    state.EnableValidation = enableValidation;
     state.ComInitialized = SUCCEEDED(
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
 
@@ -2187,7 +2195,9 @@ bool RmlUiShell::Initialize(HWND window, const std::filesystem::path& engineRoot
     GetClientRect(window, &renderClient);
     const RenderInitDesc surfaceDesc
     {
-        window, static_cast<uint32_t>(renderClient.right), static_cast<uint32_t>(renderClient.bottom), false, backend
+        window, static_cast<uint32_t>(renderClient.right),
+        static_cast<uint32_t>(renderClient.bottom), enableValidation, backend,
+        enableVSync
     };
     host->Surface = CreateRenderBackend(surfaceDesc);
     if (!host->Surface)
@@ -2363,7 +2373,9 @@ HWND RmlUiShell::CreateEditorHostWindow(std::string_view rootId,
     GetClientRect(host->Window, &client);
     const RenderInitDesc surfaceDesc
     {
-        host->Window, static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom), false, state.Backend
+        host->Window, static_cast<uint32_t>(client.right),
+        static_cast<uint32_t>(client.bottom), state.EnableValidation, state.Backend,
+        state.EnableVSync
     };
     host->Surface = CreateRenderBackend(surfaceDesc);
     if (!host->Surface)
@@ -2856,6 +2868,10 @@ bool RmlUiShell::Render(bool ObserveUi)
         host.ColorPicker.AfterLayout(host.Document);
         RmlControlTooltip::Update(*host.Context, *host.Document);
         host.Surface->Resize(static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom));
+        if (ObserveUi)
+        {
+            host.Surface->RequestReadback();
+        }
         host.Surface->BeginFrame();
         state.RenderHost = &host;
         ViewportElement::RenderTarget = this;
@@ -2915,6 +2931,21 @@ void RmlUiShell::RenderViewport(const UiViewportRect& viewport,
     {
         triangles = &state.Triangles;
         lines = &state.Lines;
+        const auto* gpuScene = state.GpuScene.Get();
+        GpuSceneFrame adjustedGpuScene{};
+        if (gpuScene)
+        {
+            adjustedGpuScene = *gpuScene;
+            adjustedGpuScene.ViewportX = viewport.X;
+            adjustedGpuScene.ViewportY = viewport.Y;
+            adjustedGpuScene.ViewportWidth = viewport.Width;
+            adjustedGpuScene.ViewportHeight = viewport.Height;
+            adjustedGpuScene.ClientHeight = static_cast<float>(client.bottom);
+        }
+        if (gpuScene && host->Surface->SubmitGpuScene(&adjustedGpuScene))
+        {
+            triangles = nullptr;
+        }
     }
     else if (host->Id == "main" && kind == "timeline-preview")
     {
@@ -2935,13 +2966,39 @@ void RmlUiShell::RenderViewport(const UiViewportRect& viewport,
     {
         viewport.X, viewport.Y, viewport.Width, viewport.Height, static_cast<float>(client.bottom),
         {
-            triangles->data(), static_cast<uint32_t>(triangles->size())
+            triangles ? triangles->data() : nullptr,
+            triangles ? static_cast<uint32_t>(triangles->size()) : 0
         },
         {
             lines->data(), static_cast<uint32_t>(lines->size())
         }
     };
     host->Surface->SubmitFrame(&frame);
+}
+
+bool RmlUiShell::EnsureGpuMesh(const GpuMeshUpload* upload)
+{
+    auto* host = State->FindMainHost();
+    return host && State->SetCurrentHost(*host) &&
+        host->Surface->EnsureGpuMesh(upload);
+}
+
+bool RmlUiShell::SubmitGpuScene(const GpuSceneFrame* frame)
+{
+    return State->GpuScene.Assign(frame);
+}
+
+bool RmlUiShell::GetRenderStats(RenderStats& stats) const
+{
+    auto* host = State->FindMainHost();
+    if (!host || !host->Surface)
+    {
+        return false;
+    }
+    stats = host->Surface->GetStats().Public();
+    stats.Backend = static_cast<uint32_t>(State->Backend);
+    stats.SupportsGpuScene = host->Surface->SupportsGpuScene() ? 1 : 0;
+    return true;
 }
 void RmlUiShell::SetText(const char* id, const char* utf8)
 {
@@ -3064,6 +3121,10 @@ void RmlUiShell::SubmitScene(const UiViewportRect& rect,
 {
     auto& state = *State;
     state.SceneRect = rect;
+    if (triangles && triangleVertices > 0)
+    {
+        state.GpuScene.Clear();
+    }
     if (triangles && triangleVertices > 0)
         state.Triangles.assign(triangles, triangles + triangleVertices);
     else state.Triangles.clear();
@@ -3461,6 +3522,16 @@ uint32_t RmlUiShell::ReadFrame(uint64_t frameId, std::string_view hostId,
 bool RmlUiShell::CaptureScreenshot(const std::filesystem::path& path)
 {
     auto* host = State->FindMainHost();
+    if (!host || !State->SetCurrentHost(*host))
+    {
+        return false;
+    }
+    host->Surface->RequestReadback();
+    if (!Render())
+    {
+        return false;
+    }
+    host = State->FindMainHost();
     if (!host || !State->SetCurrentHost(*host))
     {
         return false;

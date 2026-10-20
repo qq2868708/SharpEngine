@@ -1,4 +1,5 @@
 #include "RenderBackend_Vulkan.h"
+#include "GpuSceneRenderer_Vulkan.h"
 #include "../../../Logging/EngineLog.h"
 #include "../RenderCapture.h"
 #include <RmlUi_Renderer_VK.h>
@@ -102,20 +103,30 @@ struct RenderBackend_Vulkan::Surface
 {
     struct UiRenderer : RenderInterface_VK
     {
+        explicit UiRenderer(RmlUiVulkanDeviceContext& DeviceContext) :
+            RenderInterface_VK(DeviceContext)
+        {
+        }
         uint32_t DrawCalls = 0;
         void RenderGeometry(Rml::CompiledGeometryHandle handle, Rml::Vector2f translation, Rml::TextureHandle texture) override
         {
             ++DrawCalls;
             RenderInterface_VK::RenderGeometry(handle, translation, texture);
         }
-    } Renderer;
+    };
+    RmlUiVulkanDeviceContext DeviceContext;
+    UiRenderer Renderer;
+    GpuSceneRenderer_Vulkan SceneRenderer;
     bool Ready = false;
     bool Presented = false;
+    bool GpuSceneRendered = false;
+    Surface() : Renderer(DeviceContext) {}
     ~Surface()
     {
         if (Ready)
         {
             Renderer.Activate();
+            SceneRenderer.Shutdown();
             Renderer.Shutdown();
         }
     }
@@ -130,13 +141,22 @@ bool RenderBackend_Vulkan::Initialize(const RenderInitDesc* desc)
     {
         return false;
     }
+#ifndef RMLUI_VK_DEBUG
+    if (desc->EnableValidation)
+    {
+        EngineLog::Error("RenderCore",
+            "Vulkan validation is only available in Debug builds");
+        return false;
+    }
+#endif
     State = std::make_unique<Surface>();
     GSurfaceWindow = static_cast<HWND>(desc->WindowHandle);
     const Rml::Vector<const char*> extensions
     {
         VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_WIN32_SURFACE_EXTENSION_NAME
     };
-    const bool ready = State->Renderer.Initialize(extensions, CreateSurface);
+    const bool ready = State->Renderer.Initialize(extensions, CreateSurface,
+        desc->EnableVSync, desc->EnableValidation);
     GSurfaceWindow = nullptr;
     if (!ready)
     {
@@ -145,7 +165,24 @@ bool RenderBackend_Vulkan::Initialize(const RenderInitDesc* desc)
     State->Ready = true;
     Resize(desc->Width, desc->Height);
     Stats.HasFramebuffer = true;
-    EngineLog::Info("RenderCore", "Graphics backend initialized: vulkan");
+    Stats.VSyncEnabled = State->Renderer.IsVSyncEnabled();
+    Stats.ValidationEnabled = State->Renderer.IsValidationEnabled();
+    if (!desc->EnableVSync && Stats.VSyncEnabled)
+    {
+        EngineLog::Error("RenderCore",
+            "Vulkan cannot disable VSync: immediate/mailbox present is unavailable");
+        return false;
+    }
+    if (desc->EnableValidation && !Stats.ValidationEnabled)
+    {
+        EngineLog::Error("RenderCore",
+            "Vulkan validation layer is unavailable");
+        return false;
+    }
+    EngineLog::Info("RenderCore", std::string(
+        "Graphics backend initialized: vulkan; vsync=") +
+        (Stats.VSyncEnabled ? "on" : "off") + "; validation=" +
+        (Stats.ValidationEnabled ? "on" : "off"));
     return State->Renderer.IsSwapchainValid();
 }
 
@@ -154,6 +191,13 @@ bool RenderBackend_Vulkan::MakeCurrent() { return State && State->Ready && State
 Rml::RenderInterface* RenderBackend_Vulkan::GetUiRenderer() { return State ? &State->Renderer : nullptr; }
 uint32_t RenderBackend_Vulkan::GetUiDrawCalls() const { return State ? State->Renderer.DrawCalls : 0; }
 bool RenderBackend_Vulkan::WasPresented() const { return State && State->Presented; }
+void RenderBackend_Vulkan::RequestReadback()
+{
+    if (State && State->Ready && MakeCurrent())
+    {
+        State->Renderer.RequestReadback();
+    }
+}
 
 void RenderBackend_Vulkan::BeginFrame()
 {
@@ -163,6 +207,7 @@ void RenderBackend_Vulkan::BeginFrame()
     }
     ++Stats.FramesBegun;
     State->Presented = false;
+    State->GpuSceneRendered = false;
     State->Renderer.DrawCalls = 0;
     State->Renderer.BeginFrame();
 }
@@ -203,7 +248,10 @@ void RenderBackend_Vulkan::SubmitFrame(const RenderFrame* frame)
     {
         background, 6
     };
-    AppendSceneGeometry(backgroundList, vertices, indices);
+    if (!State->GpuSceneRendered || frame->Triangles.VertexCount > 0)
+    {
+        AppendSceneGeometry(backgroundList, vertices, indices);
+    }
     // The preview vertices are local to the scene viewport. UI and viewport
     // share this surface without owning each other's frame boundaries.
     AppendSceneGeometry(frame->Triangles, vertices, indices);
@@ -219,8 +267,60 @@ void RenderBackend_Vulkan::SubmitFrame(const RenderFrame* frame)
     {
         return;
     }
+    RmlUiVulkanFrameContext context{};
+    const bool hasContext = renderer.GetFrameContext(context) &&
+        context.command_buffer;
+    if (hasContext)
+    {
+        const VkRect2D sceneScissor
+        {
+            {
+                static_cast<int32_t>(frame->ViewportX),
+                static_cast<int32_t>(frame->ViewportY)
+            },
+            {
+                static_cast<uint32_t>(frame->ViewportWidth),
+                static_cast<uint32_t>(frame->ViewportHeight)
+            }
+        };
+        vkCmdSetViewport(context.command_buffer, 0, 1, &context.viewport);
+        vkCmdSetScissor(context.command_buffer, 0, 1, &sceneScissor);
+    }
     renderer.RenderGeometryWithDepth(geometry, Rml::Vector2f(frame->ViewportX, frame->ViewportY));
+    if (hasContext)
+    {
+        vkCmdSetViewport(context.command_buffer, 0, 1, &context.viewport);
+        vkCmdSetScissor(context.command_buffer, 0, 1, &context.scissor);
+    }
     renderer.ReleaseGeometry(geometry);
+}
+
+bool RenderBackend_Vulkan::EnsureGpuMesh(const GpuMeshUpload* Upload)
+{
+    if (!State || !State->Ready || !MakeCurrent())
+    {
+        return false;
+    }
+    RmlUiVulkanFrameContext Context{};
+    return State->Renderer.GetFrameContext(Context) &&
+        State->SceneRenderer.EnsureMesh(Context, Upload);
+}
+
+bool RenderBackend_Vulkan::SubmitGpuScene(const GpuSceneFrame* Frame)
+{
+    if (!State || !State->Ready || !MakeCurrent())
+    {
+        return false;
+    }
+    RmlUiVulkanFrameContext Context{};
+    State->GpuSceneRendered = State->Renderer.GetFrameContext(Context) &&
+        State->SceneRenderer.Render(Context, Frame);
+    return State->GpuSceneRendered;
+}
+
+bool RenderBackend_Vulkan::SupportsGpuScene() const
+{
+    return State && State->Ready;
 }
 
 void RenderBackend_Vulkan::EndFrame()

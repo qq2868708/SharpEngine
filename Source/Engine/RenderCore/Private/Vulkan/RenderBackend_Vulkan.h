@@ -13,6 +13,9 @@ public:
 
     void BeginFrame() override;
     void SubmitFrame(const RenderFrame* frame) override;
+    bool EnsureGpuMesh(const GpuMeshUpload* Upload) override;
+    bool SubmitGpuScene(const GpuSceneFrame* Frame) override;
+    bool SupportsGpuScene() const override;
     void EndFrame() override;
 
     void Resize(uint32_t width, uint32_t height) override;
@@ -21,6 +24,7 @@ public:
     bool MakeCurrent() override;
     uint32_t GetUiDrawCalls() const override;
     bool WasPresented() const override;
+    void RequestReadback() override;
     bool ReadPixels(std::vector<unsigned char>& pixels, uint32_t& width, uint32_t& height) override;
     RenderBackendStats GetStats() const override { return Stats; }
 

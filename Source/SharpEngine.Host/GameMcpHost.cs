@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using SharpEngine.Assets;
 using SharpEngine.Interop;
 
 namespace SharpEngine.Host;
@@ -25,14 +26,19 @@ internal sealed class GameMcpHost : IDisposable
     private readonly ConcurrentQueue<Pending> Requests = new();
     private readonly CancellationTokenSource Cancellation = new();
     private readonly nint Api;
+    private readonly RenderTelemetry RenderTelemetryService;
+    private readonly Func<AssetRegistry?> Assets;
     private readonly string SessionId;
     private readonly string PipeName;
     private readonly string RegistrationPath;
     private readonly Task Server;
 
-    internal GameMcpHost(nint Api)
+    internal GameMcpHost(nint Api, RenderTelemetry RenderTelemetryService,
+        Func<AssetRegistry?> Assets)
     {
         this.Api = Api;
+        this.RenderTelemetryService = RenderTelemetryService;
+        this.Assets = Assets;
         SessionId = Guid.TryParseExact(Argument("--mcp-session-id"), "N", out var Id)
             ? Id.ToString("N") : Guid.NewGuid().ToString("N");
         PipeName = "SharpEngine.Game." + SessionId;
@@ -107,7 +113,7 @@ internal sealed class GameMcpHost : IDisposable
             "ping" => new JsonObject(),
             "tools/list" => ToolList(),
             "tools/call" => CallTool(Parameters),
-            "resources/list" => JsonNode.Parse("""{"resources":[{"uri":"sharpengine://ui","name":"Runtime UI","mimeType":"application/json"}]}""")!,
+            "resources/list" => JsonNode.Parse("""{"resources":[{"uri":"sharpengine://ui","name":"Runtime UI","mimeType":"application/json"},{"uri":"sharpengine://render","name":"Render telemetry","mimeType":"application/json"}]}""")!,
             "resources/templates/list" => JsonNode.Parse("""{"resourceTemplates":[{"uriTemplate":"sharpengine://ui/frames/{frameId}/{hostId}.png","name":"Presented runtime frame","mimeType":"image/png"}]}""")!,
             "resources/read" => ReadResource(Parameters),
             _ => throw new ArgumentException($"Unknown MCP method '{Method}'"),
@@ -129,6 +135,8 @@ internal sealed class GameMcpHost : IDisposable
             {"tools":[
               {"name":"ui.describe","description":"Pin the last completed Game frame and describe RmlUi IDs, bounds, clipping, visibility, z-order, focus and hit targets.",
                "inputSchema":{"type":"object","additionalProperties":false}},
+              {"name":"render.describe","description":"Return transient backend, GPU fallback, cache, and average/P95 frame timing statistics.",
+               "inputSchema":{"type":"object","additionalProperties":false}},
               {"name":"ui.pointer","description":"Host-local coordinate input through the Game window and RmlUi hit testing, focus and bubbling. Use a retained frame and expectedElementId from ui.describe.",
                "inputSchema":{"type":"object","additionalProperties":false,"required":["hostId","event","x","y","expectedFrameId"],"properties":{
                  "hostId":{"const":"game"},"event":{"enum":["move","down","up","cancel","wheel"]},
@@ -145,7 +153,8 @@ internal sealed class GameMcpHost : IDisposable
             """)!.AsObject();
         foreach (var Tool in Tools["tools"]!.AsArray().Select(Node => Node!.AsObject()))
         {
-            var Read = Tool["name"]!.GetValue<string>() == "ui.describe";
+            var Name = Tool["name"]!.GetValue<string>();
+            var Read = Name is "ui.describe" or "render.describe";
             Tool["inputSchema"]!["$schema"] = "https://json-schema.org/draft/2020-12/schema";
             Tool["outputSchema"] = JsonNode.Parse("""{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"frameId":{"type":"integer"},"diagnostics":{"type":"array"}}}""");
             Tool["annotations"] = new JsonObject
@@ -193,6 +202,20 @@ internal sealed class GameMcpHost : IDisposable
                     throw new ArgumentException($"Missing field '{Field}'");
                 }
             }
+        }
+        if (Name == "render.describe")
+        {
+            var RenderState = RenderTelemetryService.Describe(Assets());
+            return new JsonObject
+            {
+                ["content"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = RenderState.ToJsonString(),
+                }),
+                ["structuredContent"] = RenderState,
+                ["isError"] = false,
+            };
         }
         var Table = (NativeEngineApiTable*)Api;
         var Result = new byte[128 * 1024];
@@ -269,6 +292,11 @@ internal sealed class GameMcpHost : IDisposable
                 ["name"] = "ui.describe",
             });
             return Resource(Uri, "application/json", "text", State["structuredContent"]!.ToJsonString());
+        }
+        if (Uri == "sharpengine://render")
+        {
+            return Resource(Uri, "application/json", "text",
+                RenderTelemetryService.Describe(Assets()).ToJsonString());
         }
         const string Prefix = "sharpengine://ui/frames/";
         var Parts = Uri.StartsWith(Prefix, StringComparison.Ordinal) ? Uri[Prefix.Length..].Split('/') : [];

@@ -61,6 +61,7 @@
     <TargetName Condition="'$(SharpEngineTarget)' != 'Server'">Engine</TargetName>
     <TargetName Condition="'$(SharpEngineTarget)' == 'Server'">DedicatedServer</TargetName>
     <SharpUiBuildDir>$(SharpEngineIntermediateDir)External\UI</SharpUiBuildDir>
+    <SharpRenderShaderDir>$(SharpEngineIntermediateDir)Generated\RenderShaders</SharpRenderShaderDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
     <SharpUiConfiguration>Debug</SharpUiConfiguration>
@@ -80,7 +81,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(SharpEngineRoot)\External\RmlUi\Include;$(SharpEngineRoot)\External\RmlUi\Backends;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(SharpEngineRoot)\External\RmlUi\Include;$(SharpEngineRoot)\External\RmlUi\Backends;$(VULKAN_SDK)\Include;$(SharpRenderShaderDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions Condition="'$(SharpEngineTarget)' == 'Game'">SHARPENGINE_GAME;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(SharpEngineTarget)' == 'Server'">SHARPENGINE_SERVER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -96,7 +97,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>RMLUI_STATIC_LIB;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>RMLUI_STATIC_LIB;RMLUI_VK_DEBUG;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>Disabled</Optimization>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -143,17 +144,20 @@
     <ClInclude Include="Platform\Windows\Window\Win32Window.h" />
     <ClInclude Include="RenderCore\Private\Common\VkUtils.h" />
     <ClInclude Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.h" />
+    <ClInclude Include="RenderCore\Private\OpenGL\GpuSceneRenderer_OpenGL.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend_Offscreen.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend_NullRHI.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend_Stats.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.h" />
+    <ClInclude Include="RenderCore\Private\Vulkan\GpuSceneRenderer_Vulkan.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkContext.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkFrame.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkPipeline.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkSurface.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\VkSwapchain.h" />
     <ClInclude Include="RenderCore\Public\RenderCore.h" />
+    <ClInclude Include="RenderCore\Public\GpuScene.h" />
     <ClInclude Include="UI\RmlUiShell.h" />
     <ClInclude Include="UI\RmlColorPicker.h" />
     <ClInclude Include="UI\RmlControlTooltip.h" />
@@ -173,6 +177,8 @@
     <ClCompile Include="Game\GameMain.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\PreviewRenderer.cpp" />
     <ClCompile Include="RenderCore\Private\OpenGL\RenderBackend_OpenGL.cpp" />
+    <ClCompile Include="RenderCore\Private\OpenGL\GpuSceneRenderer_OpenGL.cpp" />
+    <ClCompile Include="RenderCore\Private\Vulkan\GpuSceneRenderer_Vulkan.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\RenderBackend_Offscreen.cpp" />
     <ClCompile Include="RenderCore\Private\RenderBackend_NullRHI.cpp" />
     <ClCompile Include="ManagedHost.cpp" />
@@ -183,7 +189,7 @@
     <ClCompile Include="RenderCore\Private\RenderCore.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
     <ClCompile Include="UI\GameUiShell.cpp" Condition="'$(SharpEngineTarget)' == 'Game'" />
-    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL2.cpp" />
+    <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_GL3.cpp" />
     <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Platform_Win32.cpp" />
     <ClCompile Include="$(SharpEngineRoot)\External\RmlUi\Backends\RmlUi_Renderer_VK.cpp" />
   </ItemGroup>
@@ -199,5 +205,8 @@
   </Target>
   <Target Name="BuildUiDependencies" BeforeTargets="PrepareForBuild" Condition="'$(SharpEngineTarget)' != 'Server'">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)\Tools\BuildUiDependencies.ps1&quot; -Configuration $(Configuration) -Target $(SharpEngineTarget)" />
+  </Target>
+  <Target Name="BuildRenderShaders" BeforeTargets="ClCompile" Condition="'$(SharpEngineTarget)' != 'Server'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(SharpEngineRoot)Tools\BuildRenderShaders.ps1&quot; -OutputDirectory &quot;$(SharpRenderShaderDir)&quot;" />
   </Target>
 </Project>

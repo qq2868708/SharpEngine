@@ -70,7 +70,10 @@ public sealed class WorldEntity
         Record.Components.Where(c => c.TypeId == typeId).OrderBy(c => c.ComponentId, StringComparer.Ordinal).FirstOrDefault();
     public WorldEntityKind Kind
     {
-        get => MeshComponentTypeIds.Any(HasComponent) ? WorldEntityKind.Mesh : HasComponent("engine.camera") ? WorldEntityKind.Camera : HasComponent("engine.directional-light") ? WorldEntityKind.Light : WorldEntityKind.Empty;
+        get => MeshComponentTypeIds.Any(HasComponent) ? WorldEntityKind.Mesh :
+            HasComponent("engine.camera") ? WorldEntityKind.Camera :
+            HasComponent("engine.directional-light") || HasComponent("engine.sky-light") ?
+                WorldEntityKind.Light : WorldEntityKind.Empty;
         init { if (value != WorldEntityKind.Empty) Ensure(value == WorldEntityKind.Mesh ? "engine.mesh-renderer" : value == WorldEntityKind.Camera ? "engine.camera" : "engine.directional-light"); }
     }
     private ComponentRecord Ensure(string typeId)
@@ -80,6 +83,12 @@ public sealed class WorldEntity
         component = ComponentRecord.Create(Defaults.Find(typeId)!, Defaults); Record.Components.Add(component); return component;
     }
     private JsonObject State(string typeId) => Component(typeId)!.State;
+    internal Vector3 LinearColor(string TypeId)
+    {
+        var Values = State(TypeId)["Color"]!.AsArray();
+        return new(Values[0]!.Deserialize<float>(),
+            Values[1]!.Deserialize<float>(), Values[2]!.Deserialize<float>());
+    }
     private WorldVector3 Vector(string name)
     {
         var a = State("engine.transform")[name]!.AsArray();
@@ -97,7 +106,28 @@ public sealed class WorldEntity
     private ComponentRecord EnsureMeshComponent() => MeshComponent ?? Ensure("engine.mesh-renderer");
     public string Asset { get => MeshComponent?.State["Mesh"]?.GetValue<string>() ?? ""; init => EnsureMeshComponent().State["Mesh"] = string.IsNullOrEmpty(value) ? null : value; }
     public string Material { get => MeshComponent?.State["Material"]?.GetValue<string>() ?? ""; init => EnsureMeshComponent().State["Material"] = string.IsNullOrEmpty(value) ? null : value; }
-    private string ColorType => _renderComponent is { TypeId: "engine.mesh-renderer" or "engine.static-mesh" or "engine.skeletal-mesh" or "engine.directional-light" } ? _renderComponent.TypeId : HasComponent("engine.directional-light") ? "engine.directional-light" : MeshComponent?.TypeId ?? "engine.mesh-renderer";
+    private string? LightType
+    {
+        get
+        {
+            return _renderComponent is
+                { TypeId: "engine.directional-light" or "engine.sky-light" } ?
+                    _renderComponent.TypeId : HasComponent("engine.directional-light") ?
+                        "engine.directional-light" : HasComponent("engine.sky-light") ?
+                            "engine.sky-light" : null;
+        }
+    }
+    private string ColorType
+    {
+        get
+        {
+            return _renderComponent is
+                { TypeId: "engine.mesh-renderer" or "engine.static-mesh" or
+                    "engine.skeletal-mesh" or "engine.directional-light" or
+                    "engine.sky-light" } ? _renderComponent.TypeId :
+                LightType ?? MeshComponent?.TypeId ?? "engine.mesh-renderer";
+        }
+    }
     public UiColor Color
     {
         get
@@ -109,7 +139,22 @@ public sealed class WorldEntity
         }
         set => Ensure(ColorType).State["Color"] = new JsonArray(value.R / 255f, value.G / 255f, value.B / 255f, value.A / 255f);
     }
-    public float Intensity { get => HasComponent("engine.directional-light") ? State("engine.directional-light")["Intensity"]!.Deserialize<float>() : 1; set { if (!float.IsFinite(value) || value < 0) throw new ArgumentOutOfRangeException(nameof(value)); Ensure("engine.directional-light").State["Intensity"] = value; } }
+    public float Intensity
+    {
+        get
+        {
+            var TypeId = LightType;
+            return TypeId is null ? 1 : State(TypeId)["Intensity"]!.Deserialize<float>();
+        }
+        set
+        {
+            if (!float.IsFinite(value) || value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value));
+            }
+            Ensure("engine.directional-light").State["Intensity"] = value;
+        }
+    }
     public float FieldOfView { get => HasComponent("engine.camera") ? State("engine.camera")["FieldOfView"]!.Deserialize<float>() : 60; init => Ensure("engine.camera").State["FieldOfView"] = value; }
     public float NearPlane { get => HasComponent("engine.camera") ? State("engine.camera")["NearPlane"]!.Deserialize<float>() : .1f; init => Ensure("engine.camera").State["NearPlane"] = value; }
     public float FarPlane { get => HasComponent("engine.camera") ? State("engine.camera")["FarPlane"]!.Deserialize<float>() : 1000; init => Ensure("engine.camera").State["FarPlane"] = value; }

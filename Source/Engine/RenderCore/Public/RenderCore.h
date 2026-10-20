@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include "GpuScene.h"
 
 #ifdef _WIN32
 #define RC_API __declspec(dllexport)
@@ -29,6 +30,7 @@ extern "C"
         uint32_t Height;
         bool EnableValidation;
         RenderBackendType Backend = RenderBackendType::OpenGL;
+        bool EnableVSync = true;
     };
 
     struct RenderVertex
@@ -70,6 +72,10 @@ extern "C"
         uint32_t Width = 0;
         uint32_t Height = 0;
         uint8_t HasFramebuffer = 0;
+        uint32_t Backend = static_cast<uint32_t>(RenderBackendType::OpenGL);
+        uint8_t SupportsGpuScene = 0;
+        uint8_t VSyncEnabled = 0;
+        uint8_t ValidationEnabled = 0;
     };
 
     RC_API bool RC_Initialize(const RenderInitDesc* desc);
@@ -77,6 +83,8 @@ extern "C"
 
     RC_API void RC_BeginFrame();
     RC_API void RC_SubmitFrame(const RenderFrame* frame);
+    RC_API bool RC_EnsureGpuMesh(const GpuMeshUpload* upload);
+    RC_API bool RC_SubmitGpuScene(const GpuSceneFrame* frame);
     RC_API void RC_EndFrame();
 
     RC_API void RC_Resize(uint32_t width, uint32_t height);

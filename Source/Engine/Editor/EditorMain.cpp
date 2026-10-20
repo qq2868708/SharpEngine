@@ -195,6 +195,18 @@ namespace
             reinterpret_cast<const UiSceneVertex*>(lines),
             static_cast<int>(lineVertices));
     }
+    uint8_t __cdecl EnsureGpuMesh(const GpuMeshUpload* upload)
+    {
+        return GUi && GUi->EnsureGpuMesh(upload) ? 1 : 0;
+    }
+    uint8_t __cdecl SubmitGpuScene(const GpuSceneFrame* frame)
+    {
+        return GUi && GUi->SubmitGpuScene(frame) ? 1 : 0;
+    }
+    uint8_t __cdecl GetRenderStats(RenderStats* stats)
+    {
+        return GUi && stats && GUi->GetRenderStats(*stats) ? 1 : 0;
+    }
     void __cdecl ViewportInput(void* windowHandle, int32_t x, int32_t y,
                                uint32_t inputEvent, uint32_t buttons,
                                int32_t wheelDelta)
@@ -347,7 +359,9 @@ int wmain(int argc,wchar_t** argv)
     if (mcpIsolated) ShowWindow(static_cast<HWND>(window.Window),SW_HIDE);
     RmlUiShell ui;
     Splash.Report(16, "RenderCore / RmlUi", "Initializing graphics, fonts and editor shell");
-    if (!ui.Initialize(static_cast<HWND>(window.Window),engineRoot,renderOptions.Backend))
+    if (!ui.Initialize(static_cast<HWND>(window.Window), engineRoot,
+        renderOptions.Backend, renderOptions.EnableVSync,
+        renderOptions.EnableValidation))
     {
         EngineLog::Error("RmlUi", "Initialization failed");
         ui.Shutdown(); Platform::Shutdown(); return -1;
@@ -355,7 +369,33 @@ int wmain(int argc,wchar_t** argv)
     GUi=&ui;
     ManagedHost managed;
     GManaged=&managed;
-    const ManagedHostApi api{12,&SetWindowTitleUtf8,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&SetUiText,&GetViewportRect,&SubmitViewportFrame,&SetUiMarkup,&SetUiProperty,&ViewportInput,&CreateDockWindow,&DestroyDockWindow,&SetHostMarkup,&ChooseWorldSavePath,&GetUiSnapshot,&UiPointer,&UiKey,&ReadUiFrame,&ReportStartupProgress,&GetUiElementRect,&SubmitTimelinePreviewFrame,&CreateEditorWindow,&CreateOwnedDockWindow,&DestroyEditorWindow,&GetHostUiElementRect,&SubmitHostViewportFrame};
+    ManagedHostApi api{};
+    api.SetWindowTitle = SetWindowTitleUtf8;
+    api.SetUiText = SetUiText;
+    api.GetViewportRect = GetViewportRect;
+    api.SubmitViewportFrame = SubmitViewportFrame;
+    api.SetUiMarkup = SetUiMarkup;
+    api.SetUiProperty = SetUiProperty;
+    api.ViewportInput = ViewportInput;
+    api.CreateDockWindow = CreateDockWindow;
+    api.DestroyDockWindow = DestroyDockWindow;
+    api.SetHostMarkup = SetHostMarkup;
+    api.ChooseWorldSavePath = ChooseWorldSavePath;
+    api.GetUiSnapshot = GetUiSnapshot;
+    api.UiPointer = UiPointer;
+    api.UiKey = UiKey;
+    api.ReadUiFrame = ReadUiFrame;
+    api.ReportStartupProgress = ReportStartupProgress;
+    api.GetUiElementRect = GetUiElementRect;
+    api.SubmitTimelinePreviewFrame = SubmitTimelinePreviewFrame;
+    api.CreateEditorWindow = CreateEditorWindow;
+    api.CreateOwnedDockWindow = CreateOwnedDockWindow;
+    api.DestroyEditorWindow = DestroyEditorWindow;
+    api.GetHostUiElementRect = GetHostUiElementRect;
+    api.SubmitHostViewportFrame = SubmitHostViewportFrame;
+    api.EnsureGpuMesh = EnsureGpuMesh;
+    api.SubmitGpuScene = SubmitGpuScene;
+    api.GetRenderStats = GetRenderStats;
     Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
     const bool loaded=managed.Initialize(
         (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),

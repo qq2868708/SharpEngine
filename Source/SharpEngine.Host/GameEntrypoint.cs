@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using SharpEngine.Interop;
 using SharpEngine.Logging;
 using SharpEngine.Timeline;
@@ -12,6 +13,9 @@ public static unsafe class HostEntrypoint
 {
     private static GameSession? Game;
     private static NativeEngineApiTable* Api;
+    private static NativeGpuSceneBridge? GpuSceneBridge;
+    private static RenderTelemetry? RenderTelemetryService;
+    private static bool GpuFallbackReported;
     private static int Frames;
     private static GameMcpHost? Mcp;
 
@@ -21,13 +25,16 @@ public static unsafe class HostEntrypoint
         try
         {
             Api = (NativeEngineApiTable*)NativeApi;
+            GpuSceneBridge = new NativeGpuSceneBridge(NativeApi);
+            RenderTelemetryService = new RenderTelemetry(NativeApi);
             Game = new GameSession(Environment.GetEnvironmentVariable("SHARPENGINE_ROOT")!,
                 Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST") ?? "",
                 typeof(TimelineRuntimeModule).Assembly);
             SharpLog.Info("MCP", $"Game UI API version={Api->Version}, available={Api->GetUiSnapshot != null}");
             if (Api->Version >= 9 && Api->GetUiSnapshot != null)
             {
-                Mcp = new GameMcpHost(NativeApi);
+                Mcp = new GameMcpHost(NativeApi, RenderTelemetryService,
+                    () => Game?.Assets);
             }
             return 0;
         }
@@ -55,19 +62,49 @@ public static unsafe class HostEntrypoint
             {
                 return;
             }
-            var Frame = SceneRenderer.BuildFrame(Game.World, new UiRect(X, Y, Width, Height), Game.Assets);
-            fixed (WorldViewportVertex* Triangles = Frame.Triangles)
-            fixed (WorldViewportVertex* Lines = Frame.Lines)
+            var Bounds = new UiRect(X, Y, Width, Height);
+            var SceneStart = Stopwatch.GetTimestamp();
+            var GpuSubmitted = false;
+            var TriangleCount = 0;
+            if (GpuSceneBridge?.Available == true)
             {
-                Api->SubmitViewportFrame((float*)Triangles, (uint)Frame.Triangles.Length,
-                    (float*)Lines, (uint)Frame.Lines.Length);
+                var GpuFrame = GpuSceneBuilder.BuildFrame(Game.World, Bounds,
+                    Game.Assets);
+                GpuSubmitted = GpuSceneBridge.Submit(GpuFrame, Height);
+                if (GpuSubmitted)
+                {
+                    TriangleCount = GpuFrame.Instances.Sum(Instance =>
+                        Instance.Mesh.Vertices.Count / 3);
+                    Api->SubmitViewportFrame(null, 0, null, 0);
+                }
+                else if (!GpuFallbackReported)
+                {
+                    GpuFallbackReported = true;
+                    SharpLog.Warning("Render",
+                        "GPU scene submission failed; using visible CPU fallback");
+                }
             }
+            if (!GpuSubmitted)
+            {
+                var Frame = SceneRenderer.BuildFrame(Game.World, Bounds, Game.Assets);
+                TriangleCount = Frame.TriangleCount;
+                fixed (WorldViewportVertex* Triangles = Frame.Triangles)
+                fixed (WorldViewportVertex* Lines = Frame.Lines)
+                {
+                    Api->SubmitViewportFrame((float*)Triangles,
+                        (uint)Frame.Triangles.Length, (float*)Lines,
+                        (uint)Frame.Lines.Length);
+                }
+            }
+            RenderTelemetryService?.Record(Seconds,
+                Stopwatch.GetElapsedTime(SceneStart).TotalMilliseconds,
+                GpuSceneBridge?.Available == true, GpuSubmitted);
             if (++Frames == 1)
             {
-                SharpLog.Info("Game", $"First runtime frame: {Frame.TriangleCount} triangles",
+                SharpLog.Info("Game", $"First runtime frame: {TriangleCount} triangles",
                     new Dictionary<string, string>
                     {
-                        ["triangleCount"] = Frame.TriangleCount.ToString(),
+                        ["triangleCount"] = TriangleCount.ToString(),
                         ["editorAssemblyLoaded"] = AppDomain.CurrentDomain.GetAssemblies()
                             .Any(Assembly => Assembly.GetName().Name == "SharpEngine.Editor").ToString(),
                     });
@@ -138,6 +175,9 @@ public static unsafe class HostEntrypoint
                 });
             Game = null;
             Api = null;
+            GpuSceneBridge = null;
+            RenderTelemetryService = null;
+            GpuFallbackReported = false;
             SharpLog.Shutdown();
         }
     }

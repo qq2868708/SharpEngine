@@ -75,7 +75,10 @@
       <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
       <p>World 是主编辑器当前文档。双击另一个 World 会先处理当前 World 的未保存修改，再替换主 Viewport、Hierarchy、Inspector 和 Play 上下文；World 不创建独立资产编辑器。Prefab 则始终打开自己的顶层资产编辑器，不替换主 World。</p>
       <p>Mesh、StaticMesh 和 SkeletalMesh 编辑器提供真实 3D Preview、几何统计、Source 和 Diagnostics。项目 Mesh 只允许修改默认 Material；顶点、索引、骨骼和蒙皮权重保持只读。Skeleton 编辑器显示骨骼树与兼容 Preview Mesh，项目 Skeleton 只允许修改 <code>previewMeshId</code>。Material 编辑器提供预览球并编辑 shader、baseColor、metallic 和 roughness。引擎来源资产统一只读。</p>
-      <p>主 Viewport 会按共享网格顶点生成场景帧，并只对跨越相机视锥边界的三角形执行裁剪。包含高面数骨骼网格的场景不再为每个三角形重复分配裁剪集合；该优化不改变 World、Mesh 或动画资产内容。</p>
+      <p>主 Viewport 和独立 Game 共用 retained GPU scene。OpenGL 是默认后端，也可以在启动时使用 <code>--render-backend vulkan</code>；静态网格会按资源复用 vertex buffer 并自动实例化，骨骼网格由 GPU skinning。网格、骨骼 section、Bounds 和拾取 BVH 缓存在 <code>Intermediate/RenderCache</code>，它们都是可删除、可重建的派生数据，不会覆盖源资产。</p>
+      <p>场景环境照明由 <code>Sky Light</code> 组件提供，可以在 Inspector 中编辑 <code>Color</code> 和 <code>Intensity</code>。所有已启用且层级激活的 Sky Light 会线性累加；场景没有有效 Sky Light 时不会自动补光，未被其他光源照亮的表面保持黑色。Sky Light 只表示照明，不创建天空盒或可见天空背景。</p>
+      <p>骨骼网格每个顶点最多保留 12 个蒙皮影响；单个骨骼 section 最多引用 256 根实际使用的骨骼，超出时引擎自动切分 section，资产本身没有 256 根骨骼上限。GPU 场景提交失败时会在日志和 Editor Console 中明确提示并回退到 CPU；无效资产仍报告错误，设备丢失不会被当作普通 fallback。CPU 继续负责拾取和 Gizmo，静态网格拾取使用派生 BVH。</p>
+      <p>通过只读 MCP 工具 <code>render.describe</code> 或资源 <code>sharpengine://render</code> 可以查看当前后端、实际 VSync/validation 状态、GPU 提交/CPU fallback、派生缓存命中和驻留字节，以及最近 240 帧的平均值和 P95。帧 timing 使用单调时钟。Editor 和 Game 默认启用 VSync；性能基准或明确接受画面撕裂时可以使用 <code>--render-vsync=off</code>，OpenGL 和 Vulkan 都会验证该请求确实生效，不能生效时启动失败而不是静默保留同步。Vulkan validation 默认关闭，只能在 Debug 构建通过 <code>--render-validation=on</code> 显式启用；OpenGL 或非 Debug 请求会直接失败。</p>
       <p>源资源是可编辑内容的唯一依据；运行和发布过程中产生的构建结果可以重新生成。无法识别的内容会被保留并提示问题，不会悄悄变成可运行对象。</p>
     </section>
     <section class="section-card" id="fbx-assets">
@@ -122,9 +125,15 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>Editor 主 Viewport 与 standalone Game 增加 OpenGL/Vulkan retained GPU scene：持久 mesh buffer、静态实例化、GPU skinning、选择轮廓和可见 CPU fallback；OpenGL 仍为默认后端。</li>
+        <li>骨骼网格保留每顶点最多 12 个蒙皮影响，并按每 section 最多 256 根实际使用骨骼自动切分；资产级骨骼数量不设该上限，CPU 蒙皮位置按需生成，静态 mesh 拾取使用派生 BVH。</li>
+        <li>增加只读 <code>render.describe</code> 与 <code>sharpengine://render</code>，公开 backend、GPU/fallback、derived cache、平均/P95 timing；Vulkan Debug 构建可显式启用 validation layer，Vulkan readback 改为按需。</li>
+        <li>Editor/Game 新增统一的 <code>--render-vsync=on|off</code> transient 启动选项；默认保持 on，off 用于无呈现同步的性能验证，并通过 <code>render.describe.vsync</code> 返回实际状态。</li>
+        <li>新增 <code>--render-validation=on|off</code> transient 启动选项；默认 off，仅 Vulkan Debug 支持 on，并通过 <code>render.describe.validation</code> 返回实际状态。</li>
+        <li>引擎 shader 以 <code>RenderCore/Shaders</code> 为权威源，由构建步骤验证并生成 OpenGL 嵌入源码与 Vulkan SPIR-V；源 shader 不属于项目资产状态。</li>
         <li>优化主 Viewport 的 CPU 场景帧生成：共享顶点每帧只变换一次，完全位于视锥内外的三角形使用无分配快速路径，改善高面数骨骼网格场景的编辑器帧率；渲染结果和资产 schema 不变。</li>
         <li>修正 mannequin Walk/Run 示例 Clip 的局部关节旋转轴和幅度，移动采样时四肢保持连续；Animator、Playable 和状态机契约不变。</li>
-        <li>场景渲染增加基础环境光，骨骼模型背向方向光时仍保留可读的体积和关节轮廓；Sandbox 主相机调整为角色近景构图，便于检查蒙皮与动画姿态。</li>
+        <li>新增 <code>Sky Light</code> 组件，以版本化 <code>Color</code>/<code>Intensity</code> 状态提供环境照明；移除固定基础环境光，没有有效 Sky Light 的场景不再被隐式补光。天空背景仍是独立职责。</li>
         <li>新增可序列化的最小动画状态机，示例 mannequin 会根据移动速度在 Idle、Walk、Run 和 Jump 状态间切换。</li>
         <li>登记只读 builtin/preset locomotion 状态机，并通过统一资源打开器在顶层动画资产编辑器中提供状态图视图。</li>
         <li>增加由 C# 类型声明的版本化数据资产基础，支持字段约束、直接资产引用校验、继承字段和基类多态加载。</li>

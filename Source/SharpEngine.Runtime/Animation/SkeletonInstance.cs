@@ -65,6 +65,14 @@ public sealed class SkeletonInstance
             }
             Skin[Index] = Inverse * Model[Index];
         }
+        var LocalPose = new SkeletalPose(Pose?.Time ?? 0, Array.AsReadOnly(Mesh.Bones.Select((Bone, Index) => (Bone.BoneId, Local[Index])).ToArray()));
+        return new(EntityId, ComponentId, Mesh.AssetId, Code, Message, LocalPose,
+            Model, Skin, () => SkinPositions(Mesh, Skin));
+    }
+
+    private static IReadOnlyList<Vector3> SkinPositions(SkeletalMeshAsset Mesh,
+        IReadOnlyList<Matrix4x4> Skin)
+    {
         var Positions = new Vector3[Mesh.Positions.Count];
         for (var Index = 0; Index < Positions.Length; Index++)
         {
@@ -76,17 +84,18 @@ public sealed class SkeletonInstance
             for (var Item = 0; Item < Influence.BoneIndices.Count; Item++)
             {
                 var Weight = Influence.Weights[Item];
-                Skinned += Vector3.Transform(Original, Skin[Influence.BoneIndices[Item]]) * Weight;
+                Skinned += Vector3.Transform(Original,
+                    Skin[Influence.BoneIndices[Item]]) * Weight;
                 Total += Weight;
             }
             Positions[Index] = Total > 0 ? Skinned / Total : Original;
             if (!VectorMath.IsFinite(Positions[Index]))
             {
-                throw new InvalidDataException("Skinned positions must remain finite.");
+                throw new InvalidDataException(
+                    "Skinned positions must remain finite.");
             }
         }
-        var LocalPose = new SkeletalPose(Pose?.Time ?? 0, Array.AsReadOnly(Mesh.Bones.Select((Bone, Index) => (Bone.BoneId, Local[Index])).ToArray()));
-        return new(EntityId, ComponentId, Mesh.AssetId, Code, Message, LocalPose, Model, Skin, Positions);
+        return Array.AsReadOnly(Positions);
     }
 }
 
@@ -94,11 +103,19 @@ public sealed class SkeletonInstance
 public sealed class SkeletonFrameState : ComponentFrameState
 {
     private readonly JsonObject State;
+    private readonly Lazy<IReadOnlyList<Vector3>> PositionData;
     public string? MeshId
     {
         get;
     }
     public IReadOnlyList<Vector3> Positions
+    {
+        get
+        {
+            return PositionData.Value;
+        }
+    }
+    public IReadOnlyList<Matrix4x4> SkinMatrices
     {
         get;
     }
@@ -112,12 +129,16 @@ public sealed class SkeletonFrameState : ComponentFrameState
     }
 
     internal SkeletonFrameState(string EntityId, string ComponentId, string? MeshId, string Code, string? Message,
-        SkeletalPose? LocalPose = null, Matrix4x4[]? Model = null, Matrix4x4[]? Skin = null, Vector3[]? Positions = null)
+        SkeletalPose? LocalPose = null, Matrix4x4[]? Model = null,
+        Matrix4x4[]? Skin = null,
+        Func<IReadOnlyList<Vector3>>? PositionFactory = null)
     {
         this.MeshId = MeshId;
         this.Code = Code;
         this.Message = Message;
-        this.Positions = Array.AsReadOnly(Positions?.ToArray() ?? Array.Empty<Vector3>());
+        PositionData = new Lazy<IReadOnlyList<Vector3>>(
+            PositionFactory ?? (() => Array.Empty<Vector3>()));
+        SkinMatrices = Array.AsReadOnly(Skin?.ToArray() ?? Array.Empty<Matrix4x4>());
         State = new JsonObject
         {
             ["schemaVersion"] = 1,
