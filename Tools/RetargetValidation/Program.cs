@@ -12,7 +12,16 @@ if (Registry.Diagnostics.Any(Diagnostic => Diagnostic.IsError))
 
 var SourceSkeleton = SkeletonContent.Load(Registry, "engine://skeletons/uefn-mannequin");
 var SourceMesh = SkeletalMeshContent.Load(Registry, "engine://meshes/uefn-mannequin");
-var SourceAnimation = SkeletalAnimationContent.Load(Registry, "engine://animations/uefn-mannequin-walk");
+var ImportedAnimation = SkeletalAnimationContent.Load(Registry, "engine://animations/uefn-mannequin-walk");
+// Bound the retarget fixture independently of the source clip's import density.
+var FixtureTimes = Enumerable.Range(0, 5)
+    .Select(Index => ImportedAnimation.Duration * Index / 4).ToArray();
+var SourceAnimation = new SkeletalAnimationAsset(ImportedAnimation.AssetId,
+    ImportedAnimation.Name, ImportedAnimation.Duration, ImportedAnimation.SampleRate,
+    ImportedAnimation.Bones, ImportedAnimation.Tracks.Select(Track => new BoneTrack(
+        Track.TrackId, Track.BoneId, FixtureTimes.Select(Time => new BoneKeyframe(
+            Time, ImportedAnimation.Sample(Time).Get(Track.BoneId))).ToArray())).ToArray(),
+    ImportedAnimation.SkeletonId);
 SkeletalAnimationCompatibility.Validate(SourceAnimation, SourceMesh);
 var TargetBones = SourceSkeleton.Bones.Select(Bone => Bone.BoneId == "pelvis"
     ? Bone with

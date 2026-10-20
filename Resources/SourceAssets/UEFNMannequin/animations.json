@@ -1,0 +1,702 @@
+{
+  "schemaVersion": 1,
+  "blenderVersion": "5.2.2 LTS",
+  "blend": "UEFNMannequin.blend",
+  "fps": 30,
+  "rootBone": "root",
+  "actions": [
+    {
+      "name": "Idle",
+      "firstFrame": 1,
+      "lastFrame": 61,
+      "duration": 2.0,
+      "loop": true,
+      "rootTravel": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "maximumRootHeight": 0.0,
+      "contacts": [
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        }
+      ]
+    },
+    {
+      "name": "Walk",
+      "firstFrame": 1,
+      "lastFrame": 33,
+      "duration": 1.0666666666666667,
+      "loop": true,
+      "rootTravel": [
+        0.0,
+        -0.8999999761581421,
+        0.0
+      ],
+      "maximumRootHeight": 0.0,
+      "contacts": [
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        }
+      ]
+    },
+    {
+      "name": "Run",
+      "firstFrame": 1,
+      "lastFrame": 21,
+      "duration": 0.6666666666666666,
+      "loop": true,
+      "rootTravel": [
+        0.0,
+        -1.7999999523162842,
+        0.0
+      ],
+      "maximumRootHeight": 0.0,
+      "contacts": [
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": false
+        }
+      ]
+    },
+    {
+      "name": "Jump",
+      "firstFrame": 1,
+      "lastFrame": 43,
+      "duration": 1.4,
+      "loop": false,
+      "rootTravel": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "maximumRootHeight": 0.4431940019130707,
+      "contacts": [
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": false,
+          "r": false
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        },
+        {
+          "l": true,
+          "r": true
+        }
+      ]
+    }
+  ],
+  "reachClampCount": 0
+}

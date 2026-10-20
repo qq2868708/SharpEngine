@@ -94,7 +94,7 @@
       "path": "Content/Assets/Skeletons/UEFNMannequin.sharpskeleton",
       "importer": "SharpEngine.SkeletonJson",
       "tags": ["imported", "skeleton", "uefn", "mannequin"],
-      "metadata": {"bones": "88", "sourceFormat": "FBX", "sourceFile": "skm_uefn_mannequin.FBX", "sourceSha256": "0E5769FDF6E0B703785E6C849669EF5D0F04614440BDAB492C79D989C9D45E95"}
+      "metadata": {"bones": "88", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "coordinateSystem": "Y-up, right-handed, -Z forward"}
     },
     {
       "id": "meshes/robot-static",
@@ -121,7 +121,7 @@
       "path": "Content/Assets/Meshes/UEFNMannequin.sharpskeletalmesh",
       "importer": "SharpEngine.SkeletalMeshJson",
       "tags": ["imported", "mesh", "skeletal", "uefn", "mannequin"],
-      "metadata": {"skeleton": "skeletons/uefn-mannequin", "vertices": "6009", "triangles": "9324", "influences": "4", "coordinateSystem": "Y-up", "sourceFormat": "FBX", "sourceFile": "skm_uefn_mannequin.FBX", "sourceSha256": "0E5769FDF6E0B703785E6C849669EF5D0F04614440BDAB492C79D989C9D45E95"}
+      "metadata": {"skeleton": "skeletons/uefn-mannequin", "vertices": "6009", "triangles": "9324", "influences": "9", "coordinateSystem": "Y-up, right-handed, -Z forward", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "schemaVersion": "2"}
     },
     {
       "id": "animations/uefn-mannequin-idle",
@@ -130,7 +130,7 @@
       "path": "Content/Assets/Animations/UEFNMannequinIdle.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "idle"],
-      "metadata": {"duration": "2.0", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+      "metadata": {"duration": "2.0", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
     },
     {
       "id": "animations/uefn-mannequin-walk",
@@ -139,7 +139,7 @@
       "path": "Content/Assets/Animations/UEFNMannequinWalk.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "walk"],
-      "metadata": {"duration": "1.2", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+      "metadata": {"duration": "1.0666666666666667", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
     },
     {
       "id": "animations/uefn-mannequin-run",
@@ -148,7 +148,7 @@
       "path": "Content/Assets/Animations/UEFNMannequinRun.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "run"],
-      "metadata": {"duration": "0.72", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+      "metadata": {"duration": "0.6666666666666666", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
     },
     {
       "id": "animations/uefn-mannequin-jump",
@@ -157,7 +157,7 @@
       "path": "Content/Assets/Animations/UEFNMannequinJump.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "jump"],
-      "metadata": {"duration": "1.0", "sampleRate": "30", "skeleton": "skeletons/uefn-mannequin", "authoring": "procedural"}
+      "metadata": {"duration": "1.4", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
     },
     {
       "id": "animation-state-machines/uefn-mannequin-locomotion",

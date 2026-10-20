@@ -153,7 +153,7 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
-        <li><code>SkeletalMeshAsset</code> schema v2 明确支持每顶点 1–12 个影响；v1 仍按最多 4 个影响读取并迁移，未来 schema、重复非零骨骼影响和超限数据拒绝加载。</li>
+        <li><code>SkeletalMeshAsset</code> schema v2 明确支持每顶点 1–12 个影响；v1 仍按最多 4 个影响读取并迁移，未来 schema、重复非零骨骼影响和超限数据拒绝加载。<code>ImportUEFNMannequinSource.py</code> 从已保存的 Blender 工程分阶段生成现有稳定 ID 的资产；<code>SkeletalReimportValidation</code> 对照 Blender 独立求值的关节与蒙皮顶点，验证 CPU、12-lane GPU payload 和缓存回读。</li>
         <li>Native Host API 当前为 v16：v15 的 <code>GpuSceneFrame</code> 增加 <code>SkyRadiance</code>，v16 将 <code>GpuSceneVertex</code> 扩展为 12 个蒙皮影响；managed GPU scene bridge 只向 v16 host 提交当前布局，v14 的 <code>GetRenderStats</code> 保持原字段位置。</li>
         <li>新增 <code>GpuMeshPayload</code> v3 derived cache、每顶点最多 12 个蒙皮影响、每 section 256 used-bone 上限、自动 section 切分和 BVH；<code>SkeletonFrameState.Positions</code> 改为按需派生，不改变 frame JSON schema。</li>
         <li>新增 read-only <code>render.describe</code> / <code>sharpengine://render</code> schema v1；OpenGL/Vulkan shader 都从 <code>RenderCore/Shaders</code> 生成 backend artifact。</li>

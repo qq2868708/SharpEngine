@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "sourceFbx": "Original/skm_uefn_mannequin.FBX",
+  "sourceSha256": "0E5769FDF6E0B703785E6C849669EF5D0F04614440BDAB492C79D989C9D45E95",
+  "blenderVersion": "5.2.2 LTS",
+  "bindPoseBlend": "UEFNMannequin_BindPose.blend",
+  "animatedBlend": "UEFNMannequin.blend",
+  "originalBones": 87,
+  "authoringBones": 88,
+  "rootBone": "root",
+  "vertices": 6009,
+  "triangles": 9324,
+  "maximumInfluences": 9,
+  "maximumBindMatrixChange": 2.473592758178711e-05,
+  "maximumVertexPositionChange": 5.960464477539063e-08,
+  "maximumRestSkinningChange": 2.8125324976707805e-07,
+  "lengthUnit": "metre",
+  "forward": "-Y",
+  "up": "+Z",
+  "fps": 30
+}

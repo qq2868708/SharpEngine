@@ -125,6 +125,7 @@
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
       <ul>
+        <li>UEFN Mannequin 从已保存的 Blender 源工程重新导入，骨骼、网格与四段动画统一为 Y-up、右手系、-Z 前方；保留原始最多 9 个蒙皮影响。源文件、四段 Action 与导入对照报告分别保存在 Resources/SourceAssets 和 Saved/Validation。走跑的前进与跳跃高度保留在 root 骨，本轮没有增加角色实体 Root Motion 开关。</li>
         <li>Editor 主 Viewport 与 standalone Game 增加 OpenGL/Vulkan retained GPU scene：持久 mesh buffer、静态实例化、GPU skinning、选择轮廓和可见 CPU fallback；OpenGL 仍为默认后端。</li>
         <li>骨骼网格保留每顶点最多 12 个蒙皮影响，并按每 section 最多 256 根实际使用骨骼自动切分；资产级骨骼数量不设该上限，CPU 蒙皮位置按需生成，静态 mesh 拾取使用派生 BVH。</li>
         <li>增加只读 <code>render.describe</code> 与 <code>sharpengine://render</code>，公开 backend、GPU/fallback、derived cache、平均/P95 timing；Vulkan Debug 构建可显式启用 validation layer，Vulkan readback 改为按需。</li>
