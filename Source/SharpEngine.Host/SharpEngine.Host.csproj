@@ -34,11 +34,9 @@
     <Compile Remove="EditorEntrypoint.cs" />
     <Compile Remove="EditorFirstUse.cs" />
     <Compile Remove="GameEntrypoint.cs" />
-    <Compile Remove="GameMcpHost.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' != 'Game'">
     <Compile Remove="GameEntrypoint.cs" />
-    <Compile Remove="GameMcpHost.cs" />
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' != 'Server'">
     <Compile Remove="ServerEntrypoint.cs" />

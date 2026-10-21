@@ -113,6 +113,8 @@ public sealed partial class EditorRuntime
             _ => InvokeUiAction("editor.engine-settings")));
         _commands.Register(new EditorCommand("core.project-settings", "Project Settings...",
             _ => InvokeUiAction("editor.project-settings")));
+        _commands.Register(new EditorCommand("core.project-plugins", "Project Plugins...",
+            _ => InvokeUiAction("editor.project-plugins"), _ => _projectManifest is not null));
         _commands.Register(new EditorCommand("core.show-project-content", "Show Project Content",
             _ => InvokeUiAction("editor.assets-menu")));
         RegisterPaneVisibilityCommand("view.hierarchy", "Hierarchy", EditorPaneIds.Hierarchy);
@@ -171,6 +173,7 @@ public sealed partial class EditorRuntime
         _menus.RegisterItem(new EditorMenuItem("file", "level", "core.export-scene", 200));
         _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.engine-settings", 100));
         _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.project-settings", 200));
+        _menus.RegisterItem(new EditorMenuItem("file", "settings", "core.project-plugins", 300));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.undo", 100));
         _menus.RegisterItem(new EditorMenuItem("edit", "history", "core.redo", 200));
         _menus.RegisterItem(new EditorMenuItem("assets", "content", "core.browse-current-level", 100));

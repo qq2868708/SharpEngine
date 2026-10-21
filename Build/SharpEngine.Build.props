@@ -44,8 +44,28 @@
     <DebugType Condition="'$(Configuration)' != 'Shipping'">portable</DebugType>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <SharpEngineProjectPluginBuild Condition="'$(SharpEngineUnifiedBuild)' == 'true' and '$(SharpEngineProjectBuildRoot)' != ''">true</SharpEngineProjectPluginBuild>
+    <SharpEngineProjectStageRoot Condition="'$(SharpEngineProjectPluginBuild)' == 'true'">$([MSBuild]::EnsureTrailingSlash('$(SharpEngineProjectBuildRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\ProjectBuild'))</SharpEngineProjectStageRoot>
+    <SharpEngineProjectModuleRoot Condition="'$(SharpEngineProjectPluginBuild)' == 'true'">$([MSBuild]::EnsureTrailingSlash('$(SharpEngineProjectBuildRoot)Intermediate\$(SharpEnginePlatform)\$(Configuration)\$(SharpEngineTarget)\Modules'))</SharpEngineProjectModuleRoot>
+    <MSBuildProjectExtensionsPath Condition="'$(SharpEngineProjectPluginBuild)' == 'true'">$(SharpEngineProjectModuleRoot)$(MSBuildProjectName)\</MSBuildProjectExtensionsPath>
+    <IntermediateOutputPath Condition="'$(SharpEngineProjectPluginBuild)' == 'true'">$(MSBuildProjectExtensionsPath)$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+  <Target Name="ValidateSharpEngineProjectPluginOutput"
+          BeforeTargets="Restore;_GenerateRestoreProjectPathWalk;ResolvePackageAssets;PrepareForBuild"
+          Condition="'$(SharpEngineProjectPluginBuild)' == 'true'">
+    <Error Condition="'$(SharpEnginePlatform)' != 'Win64' or ('$(Configuration)' != 'Debug' and '$(Configuration)' != 'Development' and '$(Configuration)' != 'Shipping') or ('$(SharpEngineTarget)' != 'Editor' and '$(SharpEngineTarget)' != 'Game' and '$(SharpEngineTarget)' != 'Server')"
+           Text="SEOUTPUT015: Project Plugin build requires an approved Platform/Configuration/Target." />
+    <Error Condition="!$([System.IO.Path]::GetFullPath('$(OutputPath)').StartsWith('$(SharpEngineProjectStageRoot)')) or '$(OutputPath)' != '$(SharpEngineOutputRoot)' or '$(OutDir)' != '$(SharpEngineOutputRoot)'"
+           Text="SEOUTPUT015: Project Plugin output must remain under the selected project's ProjectBuild staging directory." />
+    <Error Condition="!$([System.IO.Path]::GetFullPath('$(BaseIntermediateOutputPath)').StartsWith('$(SharpEngineProjectModuleRoot)')) or !$([System.IO.Path]::GetFullPath('$(IntDir)').StartsWith('$(SharpEngineProjectModuleRoot)')) or !$([System.IO.Path]::GetFullPath('$(MSBuildProjectExtensionsPath)').StartsWith('$(SharpEngineProjectModuleRoot)')) or !$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)').StartsWith('$(SharpEngineProjectModuleRoot)'))"
+           Text="SEOUTPUT016: Project Plugin intermediates must remain under the selected project's Modules directory." />
+    <Error Condition="!$([System.IO.Path]::GetFullPath('$(MSBuildProjectFullPath)').StartsWith('$(SharpEngineRoot)Plugins\')) and !$([System.IO.Path]::GetFullPath('$(MSBuildProjectFullPath)').StartsWith('$(SharpEngineProjectBuildRoot)Plugins\')) and !$([System.IO.Path]::GetFullPath('$(MSBuildProjectFullPath)').StartsWith('$(SharpEngineProjectBuildRoot)Source\'))"
+           Text="SEOUTPUT017: Project build may only stage declared project or Plugin Module sources." />
+  </Target>
   <Target Name="ValidateSharpEngineOutputContract"
-          BeforeTargets="Restore;_GenerateRestoreProjectPathWalk;ResolvePackageAssets;PrepareForBuild">
+          BeforeTargets="Restore;_GenerateRestoreProjectPathWalk;ResolvePackageAssets;PrepareForBuild"
+          Condition="'$(SharpEngineProjectPluginBuild)' != 'true'">
     <Error Condition="'$(SharpEnginePlatform)' != 'Win64'"
            Text="SEOUTPUT001: SharpEnginePlatform must be Win64, not '$(SharpEnginePlatform)'." />
     <Error Condition="'$(SharpEngineRequestedPlatform)' != '' and '$(SharpEngineRequestedPlatform)' != 'Win64'"

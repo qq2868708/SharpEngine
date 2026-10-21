@@ -9,7 +9,7 @@ namespace SharpEngine.Editor;
 public sealed partial class EditorRuntime
 {
     public bool ProjectCodeAvailable { get; private set; } = true;
-    internal bool CanApplyProjectCode => PlayState == EditorPlayState.Stopped &&
+    internal bool CanApplyProjectCode => !ProjectPluginsRestartRequired && PlayState == EditorPlayState.Stopped &&
         !_inspectorEditing && _inspectorGesture is null && !_gizmoDragging;
     internal Action? RequestProjectBuild { get; set; }
     private string _projectBuildState = "Idle", _projectBuildMessage = "";
@@ -19,7 +19,8 @@ public sealed partial class EditorRuntime
         schemaVersion = 1, stateRevision = _projectCodeRevision, state = _projectBuildState,
         message = _projectBuildMessage, available = ProjectCodeAvailable,
         pendingUntilStop = _projectBuildState == "Ready" && PlayState != EditorPlayState.Stopped,
-        pendingUntilInputCommit = _projectBuildState == "Ready" && PlayState == EditorPlayState.Stopped && !CanApplyProjectCode,
+        restartRequired = ProjectPluginsRestartRequired,
+        pendingUntilInputCommit = _projectBuildState == "Ready" && PlayState == EditorPlayState.Stopped && !CanApplyProjectCode && !ProjectPluginsRestartRequired,
     });
     internal void SetProjectBuildStatus(string state, string message)
     {

@@ -5,4 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Source/SharpEngine.Runtime/Plugins/PluginConfiguration.cs" Link="PluginConfiguration.cs" />
+  </ItemGroup>
 </Project>

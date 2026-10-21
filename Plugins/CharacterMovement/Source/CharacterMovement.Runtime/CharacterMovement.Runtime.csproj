@@ -1,13 +1,31 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project>
+  <PropertyGroup>
+    <SharpEngineRole>Runtime</SharpEngineRole>
+    <SharpEngineModuleId>SharpEngine.CharacterMovement.Runtime</SharpEngineModuleId>
+    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
+  </PropertyGroup>
+  <Import Project="..\..\..\..\Build\SharpEngine.Build.props" />
+  <PropertyGroup>
+    <SharpEngineOutputRoot Condition="'$(SharpEngineOutputRoot)' == ''">$(SharpEngineBinariesDir)</SharpEngineOutputRoot>
+    <SharpEngineIntermediateRoot Condition="'$(SharpEngineIntermediateRoot)' == ''">$(SharpEngineIntermediateDir)</SharpEngineIntermediateRoot>
+    <OutDir>$(SharpEngineOutputRoot)</OutDir>
+    <IntDir>$(SharpEngineIntermediateRoot)CharacterMovement.Runtime\</IntDir>
+    <OutputPath>$(SharpEngineOutputRoot)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateRoot)CharacterMovement.Runtime\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>SharpEngine.CharacterMovement.Runtime</AssemblyName>
     <RootNamespace>SharpEngine.CharacterMovement</RootNamespace>
-    <SharpEngineModuleId>SharpEngine.CharacterMovement.Runtime</SharpEngineModuleId>
-    <SharpEngineModuleType>Runtime</SharpEngineModuleType>
     <Version>1.0.0</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin\**;obj\**</DefaultItemExcludes>
+    <OutputPath>$(SharpEngineOutputRoot)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateRoot)CharacterMovement.Runtime\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="SharpEngine.Runtime">
@@ -18,8 +36,9 @@
   <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
           Condition="'$(DesignTimeBuild)' != 'true'">
     <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
-           Text="Direct Module builds are unsupported. Build the generated Solution or use SharpEngineProject -Command Build." />
+           Text="Direct Plugin Module builds are unsupported. Build the engine or the project through SharpEngine." />
     <Error Condition="'$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
-           Text="SharpEngineRuntimeApi must point to a built SharpEngine.Runtime.dll. Use the SharpEngine project build command." />
+           Text="SharpEngineRuntimeApi must point to a built SharpEngine.Runtime.dll." />
   </Target>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

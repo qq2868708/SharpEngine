@@ -405,6 +405,10 @@ internal sealed class McpStdioBridge : IDisposable
     private JsonObject LaunchIsolated(JsonElement arguments)
     {
         var projectManifest = OptionalString(arguments, "projectManifest");
+        if (string.IsNullOrWhiteSpace(projectManifest))
+        {
+            throw new ArgumentException("EDITOR_PROJECT_REQUIRED: launchIsolated requires projectManifest");
+        }
         if (projectManifest is not null)
         {
             projectManifest = Path.GetFullPath(projectManifest);
@@ -414,7 +418,13 @@ internal sealed class McpStdioBridge : IDisposable
         var executable = Environment.ProcessPath ??
             throw new InvalidOperationException("The Editor executable path is unavailable");
         var sessionId = Guid.NewGuid().ToString("N");
-        var start = new ProcessStartInfo(executable) { UseShellExecute = false };
+        var start = new ProcessStartInfo(executable)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
         start.ArgumentList.Add("--mcp-isolated");
         start.ArgumentList.Add("--mcp-session-id");
         start.ArgumentList.Add(sessionId);
@@ -423,8 +433,9 @@ internal sealed class McpStdioBridge : IDisposable
             start.ArgumentList.Add("--project");
             start.ArgumentList.Add(projectManifest);
         }
-        _ = Process.Start(start) ??
+        var Launched = Process.Start(start) ??
             throw new IOException("Could not start the isolated Editor");
+        _ = SharpEngine.Interop.UiMcpSessionHost.DrainLaunchedProcess(Launched);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
         McpEditorSessionDescriptor? session;
         do
@@ -487,10 +498,14 @@ internal sealed class McpStdioBridge : IDisposable
                 {
                     ["type"] = "object",
                     ["additionalProperties"] = false,
+                    ["required"] = new JsonArray("projectManifest"),
                     ["properties"] = new JsonObject
                     {
                         ["projectManifest"] = new JsonObject
-                            { ["type"] = new JsonArray("string", "null") },
+                        {
+                            ["type"] = "string",
+                            ["minLength"] = 1,
+                        },
                     },
                 }, AttachOutputSchema()),
         },

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
+using SharpEngine.Plugins;
 
 namespace SharpEngine.ProjectSelector;
 
@@ -11,7 +12,7 @@ internal sealed record GeneratedSolution(string SolutionPath, string WrapperProj
 
 internal static class SolutionGenerator
 {
-    private const int GeneratorVersion = 13;
+    private const int GeneratorVersion = 14;
     private const string CsType = "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}";
     private const string CppType = "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}";
     private const string FolderType = "{2150E333-8FDC-42A3-9474-1A3956D46DE8}";
@@ -80,7 +81,7 @@ internal static class SolutionGenerator
         engineProjectsHash = EngineBuildGraph.Fingerprint(resolved.Engine.Root), engineRoot = resolved.Engine.Root,
         association = resolved.Project.EngineAssociation, modules = resolved.Project.Modules,
         targets = resolved.Project.Targets,
-        plugins = resolved.Project.Plugins.Select(plugin => new
+        plugins = PluginConfiguration.Read(resolved.Engine.ManifestPath, resolved.Project.ManifestPath).Effective.Select(plugin => new
         {
             uri = plugin,
             manifestHash = Hash(ProjectContracts.ResolvePluginManifest(
@@ -362,7 +363,7 @@ internal static class SolutionGenerator
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var uri in project.Plugins)
+        foreach (var uri in PluginConfiguration.Read(engine.ManifestPath, project.ManifestPath).Effective)
         {
             var manifest = ProjectContracts.ResolvePluginManifest(project.Root, engine.Root, uri);
             if (!seen.Add(manifest)) continue;

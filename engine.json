@@ -4,6 +4,7 @@
   "version": "0.2.0-dev",
   "runtime": "CoreCLR",
   "managedTargetFramework": "net8.0",
+  "plugins": [],
   "paths": {
     "source": "Source",
     "binaries": "Binaries/{platform}/{configuration}/{target}",

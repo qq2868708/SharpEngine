@@ -18,7 +18,8 @@ public:
     ~RmlUiShell();
     bool Initialize(HWND window, const std::filesystem::path& engineRoot,
                     RenderBackendType backend = RenderBackendType::OpenGL,
-                    bool enableVSync = true, bool enableValidation = false);
+                    bool enableVSync = true, bool enableValidation = false,
+                    const std::filesystem::path& DocumentRelativePath = "Content/UI/Rml/Editor.rml");
     void Shutdown();
     bool Render(bool ObserveUi = false);
     void ShowWindows();

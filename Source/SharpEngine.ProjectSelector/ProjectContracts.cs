@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using SharpEngine.Plugins;
 
 namespace SharpEngine.ProjectSelector;
 
@@ -60,6 +61,7 @@ internal static class ProjectContracts
                 throw new FileNotFoundException("Project Module was not found", modulePath);
         }
         var plugins = OptionalArray(root, "plugins");
+        _ = PluginConfiguration.ReadArray(root, "disabledPlugins");
         foreach (var plugin in plugins)
         {
             if (string.IsNullOrWhiteSpace(plugin) ||
@@ -127,7 +129,8 @@ internal static class ProjectContracts
                 StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException(
                 $"Project requested unexpected Engine manifest '{project.EngineManifest}'");
-        foreach (var plugin in project.Plugins)
+        var Selection = PluginConfiguration.Read(engine.ManifestPath, project.ManifestPath);
+        foreach (var plugin in Selection.Effective)
         {
             var manifestPath = ResolvePluginManifest(project.Root, engine.Root, plugin);
             var descriptor = PluginContracts.Read(manifestPath);

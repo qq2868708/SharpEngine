@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using SharpEngine.Plugins;
 
 if (args.Length < 1)
 {
@@ -105,7 +106,8 @@ if (projectPaths.Length == 0) Fail("SEMOD001", "A project requires at least one 
 if (projectPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != projectPaths.Length)
     Fail("SEMOD002", "The project contains a duplicate Module project path");
 
-var plugins = ReadPlugins(projectJson, projectRoot, engineRoot);
+var PluginSelection = PluginConfiguration.Read(engineManifestPath, projectManifest);
+var plugins = ReadPlugins(PluginSelection.Effective, projectRoot, engineRoot);
 var pluginModulePaths = plugins.SelectMany(plugin => plugin.Modules.Select(path =>
     new ModuleSource(path))).ToArray();
 var allModuleSources = projectPaths.Select(path =>
@@ -263,6 +265,7 @@ var runtimeManifest = new
     projectManifestHash = FileHash(projectManifest),
     engineId = resolvedEngineId,
     engineVersion = resolvedEngineVersion,
+    enginePluginsHash = PluginSelection.EngineDefaultsHash,
     target,
     configuration,
     platform,
@@ -325,17 +328,13 @@ static string RequiredString(JsonElement value, string property)
     return element.GetString()!;
 }
 
-static IReadOnlyList<PluginInfo> ReadPlugins(JsonElement project, string projectRoot,
+static IReadOnlyList<PluginInfo> ReadPlugins(IReadOnlyList<string> Sources, string projectRoot,
     string engineRoot)
 {
-    if (!project.TryGetProperty("plugins", out var pluginArray)) return [];
-    if (pluginArray.ValueKind != JsonValueKind.Array)
-        Fail("SEPLUGIN001", "Project property 'plugins' must be an array");
     var result = new List<PluginInfo>();
     var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var item in pluginArray.EnumerateArray())
+    foreach (var source in Sources)
     {
-        var source = item.GetString() ?? string.Empty;
         var manifestPath = ResolvePluginManifest(source, projectRoot, engineRoot);
         using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
         var root = document.RootElement;
@@ -475,7 +474,7 @@ static string ResolveLayoutPath(string root, string template, string platform,
     return result;
 }
 
-static ModuleInfo EvaluateModule(string projectPath, string configuration,
+ModuleInfo EvaluateModule(string projectPath, string configuration,
     string platform, string target, string outputRoot, string intermediateRoot,
     string managedApi, string modulesApi)
 {
@@ -510,7 +509,7 @@ static ModuleInfo EvaluateModule(string projectPath, string configuration,
     };
 }
 
-static void BuildModule(string projectPath, string configuration, string platform,
+void BuildModule(string projectPath, string configuration, string platform,
     string target, string outputRoot, string intermediateRoot, string managedApi,
     string modulesApi, string workingDirectory)
 {
@@ -520,7 +519,7 @@ static void BuildModule(string projectPath, string configuration, string platfor
     Run("dotnet", arguments, workingDirectory, capture: false);
 }
 
-static IReadOnlyList<string> BuildProperties(string configuration, string platform,
+IReadOnlyList<string> BuildProperties(string configuration, string platform,
     string target, string outputRoot, string intermediateRoot, string managedApi,
     string modulesApi) =>
 [
@@ -529,6 +528,7 @@ static IReadOnlyList<string> BuildProperties(string configuration, string platfo
     $"-p:SharpEngineTarget={target}",
     $"-p:SharpEngineOutputRoot={EnsureTrailingSeparator(outputRoot)}",
     $"-p:SharpEngineIntermediateRoot={EnsureTrailingSeparator(intermediateRoot)}",
+    $"-p:SharpEngineProjectBuildRoot={EnsureTrailingSeparator(projectRoot)}",
     $"-p:SharpEngineEditorApi={managedApi}",
     $"-p:SharpEngineRuntimeApi={modulesApi}",
     $"-p:SharpEngineNetworkingApi={Path.Combine(Path.GetDirectoryName(modulesApi)!, "SharpEngine.Networking.dll")}",

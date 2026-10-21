@@ -2330,7 +2330,8 @@ RmlUiShell::~RmlUiShell() { Shutdown(); }
 bool RmlUiShell::Initialize(HWND window,
                             const std::filesystem::path& engineRoot,
                             RenderBackendType backend, bool enableVSync,
-                            bool enableValidation)
+                            bool enableValidation,
+                            const std::filesystem::path& DocumentRelativePath)
 {
     auto& state = *State;
     if (state.Ready || !window) return false;
@@ -2386,7 +2387,7 @@ bool RmlUiShell::Initialize(HWND window,
     if (!regular)
         Rml::LoadFontFace(Utf8File(engineRoot /
             "External/RmlUi/Samples/assets/LatoLatin-Regular.ttf"));
-    const auto documentPath = Utf8File(engineRoot / "Content/UI/Rml/Editor.rml");
+    const auto documentPath = Utf8File(engineRoot / DocumentRelativePath);
     main.Document = main.Context->LoadDocument(documentPath);
     if (!main.Document) return false;
     main.Document->AddEventListener(Rml::EventId::Click, &main);

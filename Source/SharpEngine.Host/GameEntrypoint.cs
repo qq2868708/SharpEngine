@@ -18,7 +18,7 @@ public static unsafe class HostEntrypoint
     private static RenderTelemetry? RenderTelemetryService;
     private static bool GpuFallbackReported;
     private static int Frames;
-    private static GameMcpHost? Mcp;
+    private static UiMcpSessionHost? Mcp;
     private static IDisposable? ReleasePointerBinding;
 
     [UnmanagedCallersOnly]
@@ -45,8 +45,8 @@ public static unsafe class HostEntrypoint
             SharpLog.Info("MCP", $"Game UI API version={Api->Version}, available={Api->GetUiSnapshot != null}");
             if (Api->Version >= 9 && Api->GetUiSnapshot != null)
             {
-                Mcp = new GameMcpHost(NativeApi, RenderTelemetryService,
-                    () => Game?.Assets);
+                Mcp = new UiMcpSessionHost(NativeApi, "game",
+                    () => RenderTelemetryService.Describe(Game?.Assets));
             }
             return 0;
         }
@@ -169,7 +169,7 @@ public static unsafe class HostEntrypoint
     {
         try
         {
-            return GameMcpHost.RunBridge();
+            return UiMcpSessionHost.RunBridge("game");
         }
         catch (Exception Error)
         {

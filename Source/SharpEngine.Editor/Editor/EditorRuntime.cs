@@ -581,6 +581,7 @@ public sealed partial class EditorRuntime
         DrainLogs();
         PollDevelopmentSettings();
         PollMcpConfiguration();
+        TickProjectPlugins();
         UpdateInputDemo();
         foreach (var Extension in _extensions.Keys.OfType<IEditorExtensionUpdate>().ToArray())
         {
@@ -877,6 +878,10 @@ public sealed partial class EditorRuntime
         }
         if (HandleDevelopmentSettingsAction(actionHostId, action)) return;
         if (HandleInputDemoAction(actionHostId, action)) return;
+        if (HandleProjectPluginsAction(actionHostId, action))
+        {
+            return;
+        }
         if (actionHostId == "prefab-editor" && action == "window.closed")
         {
             ActivateMainWorld(); _prefabWindowOpen = false;

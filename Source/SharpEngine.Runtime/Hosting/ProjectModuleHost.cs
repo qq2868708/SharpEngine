@@ -103,6 +103,13 @@ internal sealed class ProjectModuleHost : IDisposable
                 root.GetProperty("engineVersion").GetString(), StringComparison.Ordinal))
             throw new InvalidDataException(
                 "Project Modules were built for a different engine. Rebuild the project.");
+        var Selection = SharpEngine.Plugins.PluginConfiguration.Read(
+            Path.Combine(engineRoot, "engine.json"), manifestPath);
+        var HasEnginePluginsHash = root.TryGetProperty("enginePluginsHash", out var EnginePluginsHash);
+        if (!HasEnginePluginsHash || EnginePluginsHash.GetString() != Selection.EngineDefaultsHash)
+        {
+            throw new InvalidDataException("SEPLUGIN025: Engine Plugin defaults changed or build metadata is stale. Rebuild the project.");
+        }
         if (root.TryGetProperty("plugins", out var plugins))
         {
             foreach (var plugin in plugins.EnumerateArray())

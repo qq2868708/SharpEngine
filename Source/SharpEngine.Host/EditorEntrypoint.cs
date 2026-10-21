@@ -27,6 +27,11 @@ public static class HostEntrypoint
         var Progress = new NativeStartupProgress(NativeApi);
         try
         {
+            var ProjectManifest = Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST");
+            if (string.IsNullOrWhiteSpace(ProjectManifest) || !File.Exists(ProjectManifest))
+            {
+                throw new InvalidDataException("EDITOR_PROJECT_REQUIRED: Open or create a project through Project Selector");
+            }
             s_runtime = new EditorRuntime(WindowHandle, Width, Height, NativeApi);
             s_runtime.Initialize(Progress.Report);
             Progress.Report(66, "EditorIntegration", "Registering editor tools and input bindings");

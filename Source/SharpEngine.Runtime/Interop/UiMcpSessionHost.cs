@@ -4,59 +4,69 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using SharpEngine.Assets;
-using SharpEngine.Interop;
 
-namespace SharpEngine.Host;
+namespace SharpEngine.Interop;
 
 // The pipe thread only transports messages. Native UI calls and all mutations
-// execute in Pump on the Game thread, between completed presentations.
-internal sealed class GameMcpHost : IDisposable
+// execute in Pump on the selected host's UI thread, between presentations.
+internal sealed class UiMcpSessionHost : IDisposable
 {
     private sealed record Pending(string Line, TaskCompletionSource<string?> Completion);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static string Registry
+    private static string Registry(string Role)
     {
-        get
-        {
-            return Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData), "SharpEngine", "GameMcpSessions");
-        }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SharpEngine", Role == "game" ? "GameMcpSessions" : "ProjectBrowserMcpSessions");
     }
+    private readonly string Role;
+    private readonly string HostId;
+    private readonly string DomainTool;
+    private readonly string DomainResource;
+    private readonly Func<JsonNode> DescribeDomain;
+    private readonly Func<JsonObject>? CommandTool;
+    private readonly Func<JsonObject, JsonNode>? ExecuteCommand;
     private readonly ConcurrentQueue<Pending> Requests = new();
     private readonly CancellationTokenSource Cancellation = new();
     private readonly nint Api;
-    private readonly RenderTelemetry RenderTelemetryService;
-    private readonly Func<AssetRegistry?> Assets;
     private readonly string SessionId;
     private readonly string PipeName;
     private readonly string RegistrationPath;
     private readonly Task Server;
 
-    internal GameMcpHost(nint Api, RenderTelemetry RenderTelemetryService,
-        Func<AssetRegistry?> Assets)
+    internal UiMcpSessionHost(nint Api, string Role, Func<JsonNode> DescribeDomain,
+        Func<JsonObject>? CommandTool = null, Func<JsonObject, JsonNode>? ExecuteCommand = null)
     {
+        if (Role is not ("game" or "project-browser"))
+        {
+            throw new ArgumentException("Unsupported engine MCP UI role", nameof(Role));
+        }
         this.Api = Api;
-        this.RenderTelemetryService = RenderTelemetryService;
-        this.Assets = Assets;
+        this.Role = Role;
+        this.DescribeDomain = DescribeDomain;
+        this.CommandTool = CommandTool;
+        this.ExecuteCommand = ExecuteCommand;
+        HostId = Role == "game" ? "game" : "main";
+        DomainTool = Role == "game" ? "render.describe" : "browser.describe";
+        DomainResource = Role == "game" ? "sharpengine://render" : "sharpengine://project-browser";
         SessionId = Guid.TryParseExact(Argument("--mcp-session-id"), "N", out var Id)
             ? Id.ToString("N") : Guid.NewGuid().ToString("N");
-        PipeName = "SharpEngine.Game." + SessionId;
-        Directory.CreateDirectory(Registry);
-        RegistrationPath = Path.Combine(Registry, SessionId + ".json");
+        PipeName = (Role == "game" ? "SharpEngine.Game." : "SharpEngine.ProjectBrowser.") + SessionId;
+        Directory.CreateDirectory(Registry(Role));
+        RegistrationPath = Path.Combine(Registry(Role), SessionId + ".json");
         var Temporary = RegistrationPath + ".tmp";
         File.WriteAllText(Temporary, JsonSerializer.Serialize(new
         {
             SchemaVersion = 1,
             SessionId,
-            Mode = "game",
+            Mode = Role,
+            EngineRoot = Environment.GetEnvironmentVariable("SHARPENGINE_ROOT"),
             PipeName,
             ProcessId = Environment.ProcessId,
             ProjectManifest = Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST"),
             UiAvailable = true,
         }, JsonOptions));
         File.Move(Temporary, RegistrationPath, true);
-        SharpEngine.Logging.SharpLog.Info("MCP", "Game session registered: " + RegistrationPath);
+        SharpEngine.Logging.SharpLog.Info("MCP", "UI session registered: " + RegistrationPath);
         Server = Task.Run(RunServer);
     }
 
@@ -109,27 +119,45 @@ internal sealed class GameMcpHost : IDisposable
     {
         return Method switch
         {
-            "initialize" => Initialize(),
+            "initialize" => Initialize(Role),
             "ping" => new JsonObject(),
             "tools/list" => ToolList(),
             "tools/call" => CallTool(Parameters),
-            "resources/list" => JsonNode.Parse("""{"resources":[{"uri":"sharpengine://ui","name":"Runtime UI","mimeType":"application/json"},{"uri":"sharpengine://render","name":"Render telemetry","mimeType":"application/json"}]}""")!,
+            "resources/list" => new JsonObject
+            {
+                ["resources"] = new JsonArray(
+                    new JsonObject
+                    {
+                        ["uri"] = "sharpengine://ui",
+                        ["name"] = "Live engine UI",
+                        ["mimeType"] = "application/json",
+                    },
+                    new JsonObject
+                    {
+                        ["uri"] = DomainResource,
+                        ["name"] = DomainTool,
+                        ["mimeType"] = "application/json",
+                    }),
+            },
             "resources/templates/list" => JsonNode.Parse("""{"resourceTemplates":[{"uriTemplate":"sharpengine://ui/frames/{frameId}/{hostId}.png","name":"Presented runtime frame","mimeType":"image/png"}]}""")!,
             "resources/read" => ReadResource(Parameters),
             _ => throw new ArgumentException($"Unknown MCP method '{Method}'"),
         };
     }
 
-    private static JsonObject Initialize()
+    private static JsonObject Initialize(string Role)
     {
         return JsonNode.Parse("""
             {"protocolVersion":"2025-06-18","capabilities":{"tools":{},"resources":{}},
              "serverInfo":{"name":"sharpengine-game","version":"0.2.0"},
              "instructions":"Discover ui.describe before coordinate input. Read the PNG resource with the same frameId. Input changes transient runtime state only; it does not save assets."}
-            """)!.AsObject();
+            """.Replace("sharpengine-game", "sharpengine-" + Role, StringComparison.Ordinal)
+            .Replace("Input changes transient runtime state only; it does not save assets.",
+                Role == "game" ? "Input changes transient runtime state only; it does not save assets."
+                    : "Project Browser has no EditorRuntime or project Modules. UI input may create project files or launch the selected Editor. Use browser.describe and browser.command for semantic state and commands.", StringComparison.Ordinal))!.AsObject();
     }
 
-    private static JsonObject ToolList()
+    private JsonObject ToolList()
     {
         var Tools = JsonNode.Parse("""
             {"tools":[
@@ -151,10 +179,44 @@ internal sealed class GameMcpHost : IDisposable
                  "expectedFrameId":{"type":"integer","minimum":1}}}}
             ]}
             """)!.AsObject();
+        foreach (var Item in Tools["tools"]!.AsArray())
+        {
+            if (Role == "project-browser")
+            {
+                Item!["description"] = Item["description"]!.GetValue<string>().Replace("Game", "Project Browser", StringComparison.Ordinal);
+            }
+            if (Item!["name"]!.GetValue<string>() == "render.describe")
+            {
+                Item["name"] = DomainTool;
+                Item["description"] = Role == "game" ? "Read render telemetry." : "Read the latest committed lightweight Project Browser state.";
+            }
+            var HostProperty = Item["inputSchema"]?["properties"]?["hostId"];
+            if (HostProperty is not null)
+            {
+                HostProperty["const"] = HostId;
+            }
+            var Modifiers = Item["inputSchema"]?["properties"]?["modifiers"];
+            if (Modifiers is not null)
+            {
+                Modifiers["description"] = "RmlUi modifier mask: control=1, shift=2, alt=4";
+                Modifiers["x-sharpengine-modifiers"] = new JsonObject
+                {
+                    ["control"] = 1,
+                    ["shift"] = 2,
+                    ["alt"] = 4,
+                };
+            }
+        }
+        if (CommandTool is not null)
+        {
+            Tools["tools"]!.AsArray().Add(CommandTool());
+        }
         foreach (var Tool in Tools["tools"]!.AsArray().Select(Node => Node!.AsObject()))
         {
             var Name = Tool["name"]!.GetValue<string>();
-            var Read = Name is "ui.describe" or "render.describe";
+            var Available = Tool["_meta"]?["sharpengine/capability"]?["available"]?.GetValue<bool>() ?? true;
+            var Precondition = Tool["_meta"]?["sharpengine/capability"]?["revisionPrecondition"]?.GetValue<string>();
+            var Read = Name == "ui.describe" || Name == DomainTool;
             Tool["inputSchema"]!["$schema"] = "https://json-schema.org/draft/2020-12/schema";
             Tool["outputSchema"] = JsonNode.Parse("""{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"frameId":{"type":"integer"},"diagnostics":{"type":"array"}}}""");
             Tool["annotations"] = new JsonObject
@@ -162,17 +224,25 @@ internal sealed class GameMcpHost : IDisposable
                 ["readOnlyHint"] = Read,
                 ["destructiveHint"] = false,
                 ["idempotentHint"] = Read,
-                ["openWorldHint"] = false,
+                ["openWorldHint"] = !Read && Role != "game",
             };
             Tool["_meta"] = new JsonObject
             {
                 ["sharpengine/capability"] = new JsonObject
                 {
+                    ["id"] = Name,
                     ["schemaVersion"] = 1,
-                    ["effect"] = Read ? "read" : "runtime",
-                    ["available"] = true,
+                    ["effect"] = Read ? "read" : Role == "game" ? "runtime" : "external",
+                    ["available"] = Available,
+                    ["unavailability"] = Available ? null : new JsonObject
+                    {
+                        ["code"] = "BROWSER_BUSY",
+                        ["message"] = "Wait for browser.describe.busy to become false",
+                        ["retryable"] = true,
+                    },
+                    ["revisionPrecondition"] = Precondition,
                     ["state"] = "transient",
-                    ["context"] = "runtime",
+                    ["context"] = Role == "game" ? "runtime" : "authoring",
                 },
             };
         }
@@ -193,7 +263,8 @@ internal sealed class GameMcpHost : IDisposable
                 throw new ArgumentException($"Unknown field '{Field.Key}'");
             }
         }
-        if (Definition["inputSchema"]?["required"] is JsonArray Required)
+        var Required = Definition["inputSchema"]?["required"] as JsonArray;
+        if (Required is not null)
         {
             foreach (var Field in Required)
             {
@@ -203,9 +274,9 @@ internal sealed class GameMcpHost : IDisposable
                 }
             }
         }
-        if (Name == "render.describe")
+        if (Name == DomainTool)
         {
-            var RenderState = RenderTelemetryService.Describe(Assets());
+            var RenderState = DescribeDomain();
             return new JsonObject
             {
                 ["content"] = new JsonArray(new JsonObject
@@ -214,6 +285,20 @@ internal sealed class GameMcpHost : IDisposable
                     ["text"] = RenderState.ToJsonString(),
                 }),
                 ["structuredContent"] = RenderState,
+                ["isError"] = false,
+            };
+        }
+        if (Name == "browser.command" && ExecuteCommand is not null)
+        {
+            var CommandResult = ExecuteCommand(Arguments);
+            return new JsonObject
+            {
+                ["content"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = CommandResult.ToJsonString(),
+                }),
+                ["structuredContent"] = CommandResult,
                 ["isError"] = false,
             };
         }
@@ -293,19 +378,24 @@ internal sealed class GameMcpHost : IDisposable
             });
             return Resource(Uri, "application/json", "text", State["structuredContent"]!.ToJsonString());
         }
-        if (Uri == "sharpengine://render")
+        if (Uri == DomainResource)
         {
             return Resource(Uri, "application/json", "text",
-                RenderTelemetryService.Describe(Assets()).ToJsonString());
+                DescribeDomain().ToJsonString());
         }
         const string Prefix = "sharpengine://ui/frames/";
         var Parts = Uri.StartsWith(Prefix, StringComparison.Ordinal) ? Uri[Prefix.Length..].Split('/') : [];
-        if (Parts.Length != 2 || Parts[1] != "game.png" || !ulong.TryParse(Parts[0], out var FrameId))
+        if (Parts.Length != 2 || Parts[1] != HostId + ".png")
+        {
+            throw new ArgumentException("Unknown frame resource URI");
+        }
+        var ValidFrame = ulong.TryParse(Parts[0], out var FrameId);
+        if (!ValidFrame)
         {
             throw new ArgumentException("Unknown frame resource URI");
         }
         var Table = (NativeEngineApiTable*)Api;
-        var Host = Utf8("game");
+        var Host = Utf8(HostId);
         uint Width = 0, Height = 0;
         fixed (byte* HostPointer = Host)
         {
@@ -319,7 +409,7 @@ internal sealed class GameMcpHost : IDisposable
             {
                 if (Table->ReadUiFrame(FrameId, HostPointer, Output, Count, &Width, &Height) != Count)
                 {
-                    throw new InvalidOperationException("Frame readback changed during one Game transaction");
+                    throw new InvalidOperationException("Frame readback changed during one UI observation");
                 }
             }
             return Resource(Uri, "image/png", "blob", Convert.ToBase64String(UiPngEncoder.Encode(new NativeUiFrame(Width, Height, Pixels))));
@@ -388,11 +478,11 @@ internal sealed class GameMcpHost : IDisposable
         }
     }
 
-    private static JsonArray ListSessions()
+    private static JsonArray ListSessions(string Role)
     {
         var Sessions = new JsonArray();
-        Directory.CreateDirectory(Registry);
-        foreach (var FilePath in Directory.EnumerateFiles(Registry, "*.json").Order(StringComparer.Ordinal))
+        Directory.CreateDirectory(Registry(Role));
+        foreach (var FilePath in Directory.EnumerateFiles(Registry(Role), "*.json").Order(StringComparer.Ordinal))
         {
             try
             {
@@ -411,9 +501,9 @@ internal sealed class GameMcpHost : IDisposable
         return Sessions;
     }
 
-    private static JsonObject BootstrapTools()
+    private static JsonObject BootstrapTools(string Role)
     {
-        return JsonNode.Parse("""
+        var Result = JsonNode.Parse("""
             {"tools":[
               {"name":"game.sessions.list","description":"Discover live Game sessions owned by this user.",
                "inputSchema":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false},
@@ -425,12 +515,26 @@ internal sealed class GameMcpHost : IDisposable
                "outputSchema":{"type":"object","required":["schemaVersion","attached","session"]},
                "annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":false}}
             ]}
-            """)!.AsObject();
+            """.Replace("game.sessions.list", Role == "game" ? "game.sessions.list" : "projectBrowser.sessions.list", StringComparison.Ordinal)
+            .Replace("game.session.attach", Role == "game" ? "game.session.attach" : "projectBrowser.session.attach", StringComparison.Ordinal)
+            .Replace("Game", Role == "game" ? "Game" : "Project Browser", StringComparison.Ordinal))!.AsObject();
+        if (Role == "project-browser")
+        {
+            Result["tools"]!.AsArray().Add(JsonNode.Parse("""
+                {"name":"projectBrowser.session.launchIsolated","description":"Launch a hidden isolated engine Project Browser and bind this connection to its MCP session. Does not initialize EditorRuntime, World or project Modules.",
+                 "inputSchema":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+                    "properties":{"recentFile":{"type":"string"}}},
+                 "outputSchema":{"type":"object","required":["schemaVersion","attached","session"]},
+                 "annotations":{"readOnlyHint":false,"destructiveHint":false,"openWorldHint":true},
+                 "_meta":{"sharpengine/capability":{"schemaVersion":1,"effect":"external","available":true}}}
+                """));
+        }
+        return Result;
     }
 
     // No implicit foreground target. The bridge discovers sessions through MCP
     // until the caller selects one, then proxies that session for its lifetime.
-    internal static int RunBridge()
+    internal static int RunBridge(string Role)
     {
         var Id = Argument("--mcp-session-id");
         NamedPipeClientStream? Pipe = null;
@@ -438,12 +542,13 @@ internal sealed class GameMcpHost : IDisposable
         StreamWriter? Writer = null;
         JsonObject Attach(string SessionId)
         {
-            if (Pipe is not null || !Guid.TryParseExact(SessionId, "N", out var Parsed))
+            var ValidId = Guid.TryParseExact(SessionId, "N", out var Parsed);
+            if (Pipe is not null || !ValidId)
             {
-                throw new ArgumentException("Select one valid Game session ID per connection");
+                throw new ArgumentException("Select one valid UI session ID per connection");
             }
-            var Descriptor = ListSessions().FirstOrDefault(Session => Session?["sessionId"]?.GetValue<string>() == Parsed.ToString("N"))
-                ?? throw new ArgumentException("Game session is not live");
+            var Descriptor = ListSessions(Role).FirstOrDefault(Session => Session?["sessionId"]?.GetValue<string>() == Parsed.ToString("N"))
+                ?? throw new ArgumentException("UI session is not live");
             Pipe = new NamedPipeClientStream(".", Descriptor["pipeName"]!.GetValue<string>(), PipeDirection.InOut);
             Pipe.Connect(5000);
             Reader = new StreamReader(Pipe, new UTF8Encoding(false), false, 4096, true);
@@ -458,14 +563,63 @@ internal sealed class GameMcpHost : IDisposable
                 ["session"] = Descriptor.DeepClone(),
             };
         }
+        JsonObject LaunchBrowser(JsonObject Arguments)
+        {
+            var DirectoryPath = Path.GetDirectoryName(Environment.ProcessPath!)!;
+            var Configuration = Directory.GetParent(DirectoryPath)!.Name;
+            DirectoryInfo? Root = new DirectoryInfo(DirectoryPath);
+            while (Root is not null && !File.Exists(Path.Combine(Root.FullName, "engine.json")))
+            {
+                Root = Root.Parent;
+            }
+            var EngineRoot = Root?.FullName ?? throw new DirectoryNotFoundException("Engine root was not found");
+            using var Manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(EngineRoot, "engine.json")));
+            var Binaries = Manifest.RootElement.GetProperty("paths").GetProperty("binaries").GetString()!
+                .Replace("{platform}", "Win64").Replace("{configuration}", Configuration).Replace("{target}", "Editor");
+            var Session = Guid.NewGuid().ToString("N");
+            var Start = new ProcessStartInfo(Path.Combine(EngineRoot, Binaries, "Engine.exe"))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            foreach (var Argument in new[]
+                     {
+                         "--project-browser", "--mcp-isolated", "--mcp-session-id", Session,
+                     })
+            {
+                Start.ArgumentList.Add(Argument);
+            }
+            var RecentFile = Arguments["recentFile"]?.GetValue<string>();
+            if (RecentFile is not null)
+            {
+                Start.ArgumentList.Add("--browser-recent-file");
+                Start.ArgumentList.Add(Path.GetFullPath(RecentFile));
+            }
+            var Process = System.Diagnostics.Process.Start(Start) ?? throw new IOException("Could not launch Project Browser");
+            _ = DrainLaunchedProcess(Process);
+            var Deadline = DateTime.UtcNow.AddSeconds(30);
+            while (!ListSessions(Role).Any(Item => Item!["sessionId"]!.GetValue<string>() == Session) && DateTime.UtcNow < Deadline)
+            {
+                if (Process.HasExited)
+                {
+                    throw new IOException($"Project Browser exited with code {Process.ExitCode}");
+                }
+                Thread.Sleep(50);
+            }
+            return Attach(Session);
+        }
         JsonNode Bootstrap(string Method, JsonObject Parameters)
         {
             if (Method == "initialize")
             {
-                var Result = Initialize();
+                var Result = Initialize(Role);
                 Result["capabilities"]!["tools"]!["listChanged"] = true;
                 Result["capabilities"]!["resources"]!["listChanged"] = true;
-                Result["instructions"] = "List Game sessions with game.sessions.list, then attach one using game.session.attach. Discover its UI tools after attachment.";
+                Result["instructions"] = Role == "game"
+                    ? "List Game sessions with game.sessions.list, then attach one using game.session.attach. Discover its UI tools after attachment."
+                    : "List Project Browser sessions with projectBrowser.sessions.list, then attach one using projectBrowser.session.attach. Discover its full tool and resource catalog after attachment.";
                 return Result;
             }
             if (Method == "ping")
@@ -474,7 +628,7 @@ internal sealed class GameMcpHost : IDisposable
             }
             if (Method == "tools/list")
             {
-                return BootstrapTools();
+                return BootstrapTools(Role);
             }
             if (Method == "resources/list")
             {
@@ -485,14 +639,17 @@ internal sealed class GameMcpHost : IDisposable
                 throw new ArgumentException("Attach a Game session before using UI resources");
             }
             var Name = Parameters["name"]?.GetValue<string>();
+            var ListName = Role == "game" ? "game.sessions.list" : "projectBrowser.sessions.list";
+            var AttachName = Role == "game" ? "game.session.attach" : "projectBrowser.session.attach";
             var ResultState = Name switch
             {
-                "game.sessions.list" => new JsonObject
+                var Value when Value == ListName => new JsonObject
                 {
                     ["schemaVersion"] = 1,
-                    ["sessions"] = ListSessions(),
+                    ["sessions"] = ListSessions(Role),
                 },
-                "game.session.attach" => Attach(Parameters["arguments"]!["sessionId"]!.GetValue<string>()),
+                var Value when Value == AttachName => Attach(Parameters["arguments"]!["sessionId"]!.GetValue<string>()),
+                "projectBrowser.session.launchIsolated" when Role == "project-browser" => LaunchBrowser(Parameters["arguments"]?.AsObject() ?? new JsonObject()),
                 _ => throw new ArgumentException("Unknown session tool"),
             };
             return new JsonObject
@@ -566,5 +723,16 @@ internal sealed class GameMcpHost : IDisposable
         {
         }
         Cancellation.Dispose();
+    }
+
+    internal static async Task DrainLaunchedProcess(Process Process)
+    {
+        using (Process)
+        {
+            var Output = Process.StandardOutput.ReadToEndAsync();
+            var Errors = Process.StandardError.ReadToEndAsync();
+            await Process.WaitForExitAsync().ConfigureAwait(false);
+            await Task.WhenAll(Output, Errors).ConfigureAwait(false);
+        }
     }
 }

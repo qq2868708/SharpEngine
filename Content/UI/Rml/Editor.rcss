@@ -1,4 +1,11 @@
 div { display: block; }
+.plugins-main { padding: 24px; overflow: auto; }
+.plugins-note { color: #91a0b4; margin: 8px 0px 16px; font-size: 12px; line-height: 20px; }
+.plugins-row { display: flex; align-items: center; padding: 12px 0px; border-bottom: 1px #303743; }
+.plugins-button { margin-right: 8px; flex-shrink: 0; }
+.plugins-button.disabled { color: #68778b; background-color: #242a33; border-color: #353d49; pointer-events: none; focus: none; }
+.plugins-plan { margin-top: 18px; padding: 16px; border: 1px #384552; }
+.plugins-error { color: #e2a48a; background-color: #30251f; padding: 12px; margin-top: 10px; white-space: pre-wrap; word-break: break-all; }
 body { width: 100%; height: 100%; margin: 0; font-family: Segoe UI; font-size: 13px; color: #c6ccd6; background-color: #171a20; }
 * { box-sizing: border-box; }
 #editor { width: 100%; height: 100%; display: flex; flex-direction: column; }

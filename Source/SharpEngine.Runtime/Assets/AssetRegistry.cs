@@ -204,6 +204,7 @@ public sealed class AssetRegistry
         registry.LoadOwnerManifest(engineManifest, AssetSource.Engine,
             registry.EngineRoot);
 
+        string? SelectedManifest = null;
         if (!string.IsNullOrWhiteSpace(registry.ProjectRoot))
         {
             var projectManifest = string.IsNullOrWhiteSpace(projectManifestPath)
@@ -213,11 +214,14 @@ public sealed class AssetRegistry
 
             if (projectManifest is not null && File.Exists(projectManifest))
             {
+                SelectedManifest = projectManifest;
                 registry.LoadOwnerManifest(projectManifest,
                     AssetSource.Project, registry.ProjectRoot!);
             }
         }
 
+        registry.LoadConfiguredPlugins(engineManifest, SelectedManifest);
+        registry.LoadDefaultWorld(engineManifest);
         return registry;
     }
 
@@ -237,7 +241,30 @@ public sealed class AssetRegistry
                 AssetSource.Project, projectRoot!);
         }
 
+        registry.LoadConfiguredPlugins(engineManifestPath, projectManifestPath);
+        registry.LoadDefaultWorld(engineManifestPath);
         return registry;
+    }
+
+    private void LoadConfiguredPlugins(string EngineManifest, string? ProjectManifest)
+    {
+        if (!File.Exists(EngineManifest))
+        {
+            return;
+        }
+        try
+        {
+            var Selection = SharpEngine.Plugins.PluginConfiguration.Read(EngineManifest, ProjectManifest);
+            using var Plugins = JsonDocument.Parse(JsonSerializer.Serialize(new
+            {
+                plugins = Selection.Effective,
+            }));
+            LoadPlugins(Plugins.RootElement, ProjectManifest ?? EngineManifest);
+        }
+        catch (Exception Error) when (Error is JsonException or InvalidDataException or IOException)
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic(Error.Message, ProjectManifest ?? EngineManifest, true));
+        }
     }
 
     private void LoadOwnerManifest(string manifestPath, AssetSource source,
@@ -273,29 +300,54 @@ public sealed class AssetRegistry
 
             var descriptor = new AssetDescriptor { RelativePath = relativePath };
             LoadManifest(descriptor.ResolvePath(sourceRoot)!, source, sourceRoot);
-            LoadPlugins(document.RootElement, manifestPath);
-            if (source == AssetSource.Engine &&
-                document.RootElement.TryGetProperty("worldPresets", out var presets) &&
-                presets.ValueKind == JsonValueKind.Object &&
-                presets.TryGetProperty("default", out var defaultWorld) &&
-                defaultWorld.ValueKind == JsonValueKind.String)
-            {
-                var rawId = defaultWorld.GetString();
-                if (rawId is null || !TryNormalizeId(rawId, AssetSource.Engine, "", out var id))
-                    throw new InvalidDataException("worldPresets.default must be a valid engine asset id");
-                var asset = Find(id);
-                if (asset is null || !string.Equals(asset.Type, "World",
-                        StringComparison.OrdinalIgnoreCase) || !asset.Exists)
-                    throw new InvalidDataException(
-                        $"worldPresets.default must reference an existing World asset: '{id}'");
-                DefaultWorldId = id;
-            }
         }
         catch (Exception exception) when (exception is JsonException or
             InvalidDataException or IOException or UnauthorizedAccessException)
         {
             _diagnostics.Add(new AssetRegistryDiagnostic(
                 $"Invalid source manifest: {exception.Message}", manifestPath, true));
+        }
+    }
+
+    private void LoadDefaultWorld(string ManifestPath)
+    {
+        if (!File.Exists(ManifestPath))
+        {
+            return;
+        }
+        try
+        {
+            using var Document = JsonDocument.Parse(File.ReadAllText(ManifestPath));
+            if (Document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+            var HasPresets = Document.RootElement.TryGetProperty("worldPresets", out var Presets);
+            if (!HasPresets || Presets.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
+            var HasDefault = Presets.TryGetProperty("default", out var Default);
+            if (!HasDefault || Default.ValueKind != JsonValueKind.String)
+            {
+                return;
+            }
+            var RawId = Default.GetString();
+            var Valid = TryNormalizeId(RawId!, AssetSource.Engine, "", out var Id);
+            if (RawId is null || !Valid)
+            {
+                throw new InvalidDataException("worldPresets.default must be a valid engine asset id");
+            }
+            var Asset = Find(Id);
+            if (Asset is null || !string.Equals(Asset.Type, "World", StringComparison.OrdinalIgnoreCase) || !Asset.Exists)
+            {
+                throw new InvalidDataException($"worldPresets.default must reference an existing World asset: '{Id}'");
+            }
+            DefaultWorldId = Id;
+        }
+        catch (Exception Error) when (Error is JsonException or InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            _diagnostics.Add(new AssetRegistryDiagnostic($"Invalid source manifest: {Error.Message}", ManifestPath, true));
         }
     }
 

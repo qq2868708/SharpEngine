@@ -559,13 +559,14 @@ try
     runtime.ViewportKey(0x57, false, true);
     Require(runtime.World!.ActiveCamera!.Position != initialCameraPosition,
         "Viewport keyboard navigation should move the serialized camera");
-    var original = runtime.World!.Entities.First(e => e.Kind == WorldEntityKind.Mesh && !e.Asset.EndsWith("/plane")).Rotation;
+    const string RuntimeTransformEntityId = "crate";
+    var original = runtime.World!.Entities.Single(Entity => Entity.Id == RuntimeTransformEntityId).Rotation;
     runtime.InvokeUiAction("editor.play");
-    var liveTransform = runtime.RuntimeWorld!.FindEntity("player")!.GetComponent<SharpEngine.Components.TransformComponent>()!;
+    var liveTransform = runtime.RuntimeWorld!.FindEntity(RuntimeTransformEntityId)!.GetComponent<SharpEngine.Components.TransformComponent>()!;
     liveTransform.Rotation += new System.Numerics.Vector3(0, 15, 0);
     runtime.Update(0.1f);
     Require(runtime.PlayState == EditorPlayState.Playing, "Play must enter simulation");
-    var playing = runtime.World.Entities.First(e => e.Kind == WorldEntityKind.Mesh && !e.Asset.EndsWith("/plane"));
+    var playing = runtime.World.Entities.Single(Entity => Entity.Id == RuntimeTransformEntityId);
     Require(playing.Rotation != original, "Runtime component changes must drive the viewport world independently");
     var PlayingCameraPosition = runtime.World.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);
@@ -598,33 +599,79 @@ try
     var snapshotPath = Path.Combine(temporary.FullName, "Saved", "Scenes", "Main.scene.json");
     Require(File.Exists(snapshotPath) && File.ReadAllText(snapshotPath).Contains("worldMatrix", StringComparison.Ordinal),
         "Scene export must contain the AI-facing resolved transform description");
-    runtime.InvokeUiAction("editor.select-entity:player");
-    var mainWorldBeforePrefab = runtime.World;
-    var mainStateBeforePrefab = runtime.World!.Serialize();
+    const string PrefabSourceRootId = "player";
+    runtime.InvokeUiAction("editor.select-entity:" + PrefabSourceRootId);
+    var MainEntityIdsBeforePrefab = runtime.World.Entities.Select(Entity => Entity.Id).ToHashSet(StringComparer.Ordinal);
+    var MainEntityCountBeforePrefab = MainEntityIdsBeforePrefab.Count;
+    var MainWorldBeforePrefab = runtime.World;
+    var MainStateBeforePrefab = runtime.World.Serialize();
+    var PrefabSourceEntityIds = runtime.World.Data.Subtree(PrefabSourceRootId)
+        .Select(Entity => Entity.EntityId).ToHashSet(StringComparer.Ordinal);
     runtime.InvokeUiAction("editor.prefab-export");
-    var exportedPrefabAsset = runtime.Assets.ProjectAssets.Single(asset =>
-        string.Equals(asset.Type, "Prefab", StringComparison.OrdinalIgnoreCase));
-    var prefabPath = runtime.Assets.ResolvePath(exportedPrefabAsset)!;
-    var PrefabRoot = AssetEditorRoot(exportedPrefabAsset.Id);
-    Require(ReferenceEquals(mainWorldBeforePrefab, runtime.World) &&
-        runtime.World.Serialize() == mainStateBeforePrefab,
+    var ExportedPrefabAsset = runtime.Assets.ProjectAssets.Single(Asset =>
+        string.Equals(Asset.Type, "Prefab", StringComparison.OrdinalIgnoreCase));
+    var PrefabPath = runtime.Assets.ResolvePath(ExportedPrefabAsset)!;
+    var ExportedPrefab = WorldDocument.Load(PrefabPath, runtime.Components);
+    var ExportedPrefabRoot = ExportedPrefab.Data.Entities.Single(Entity => Entity.ParentId is null);
+    Require(ExportedPrefab.Data.IsPrefab && ExportedPrefab.Data.Entities.Count > 1 &&
+        PrefabSourceEntityIds.SetEquals(ExportedPrefab.Data.Entities.Select(Entity => Entity.EntityId)) &&
+        ExportedPrefabRoot.EntityId == PrefabSourceRootId,
+        "Prefab export preserves the complete selected multi-entity subtree and its stable root");
+    var PrefabRoot = AssetEditorRoot(ExportedPrefabAsset.Id);
+    Require(ReferenceEquals(MainWorldBeforePrefab, runtime.World) &&
+        runtime.World.Serialize() == MainStateBeforePrefab,
         "Export opens an independent Prefab editor without replacing the main World");
     runtime.InvokeUiAction(
         $"editor.host-action:{PrefabRoot}:editor.asset-command:add-entity");
-    Require(AssetEditorDirty(exportedPrefabAsset.Id) &&
-        runtime.World.Serialize() == mainStateBeforePrefab,
+    Require(AssetEditorDirty(ExportedPrefabAsset.Id) &&
+        runtime.World.Serialize() == MainStateBeforePrefab,
         "Prefab edits are isolated from the main World data and history");
     runtime.InvokeUiAction($"editor.host-action:{PrefabRoot}:editor.asset-command:undo");
-    Require(!AssetEditorDirty(exportedPrefabAsset.Id),
+    Require(!AssetEditorDirty(ExportedPrefabAsset.Id),
         "Prefab Undo uses its own document-local history");
-    runtime.InvokeUiAction($"editor.prefab-instantiate:{exportedPrefabAsset.Id}|");
-    Require(runtime.World.Entities.Count == mainWorldBeforePrefab.Data.Entities.Count && runtime.World.Entities.Count == 6 &&
-        runtime.World.Entities.Last().Id != "player" && runtime.World.Entities.Last().Position == editedPosition,
+    runtime.InvokeUiAction($"editor.prefab-instantiate:{ExportedPrefabAsset.Id}|");
+    var InstantiatedRootId = runtime.SelectedEntityId!;
+    var InstantiatedEntities = runtime.World.Data.Entities
+        .Where(Entity => !MainEntityIdsBeforePrefab.Contains(Entity.EntityId)).ToArray();
+    var InstantiatedRoot = InstantiatedEntities.Single(Entity => Entity.EntityId == InstantiatedRootId);
+    var ExportedComponentIds = ExportedPrefab.Data.Entities.SelectMany(Entity => Entity.Components)
+        .Select(Component => Component.ComponentId).ToHashSet(StringComparer.Ordinal);
+    Require(runtime.World.Entities.Count == MainEntityCountBeforePrefab + ExportedPrefab.Data.Entities.Count &&
+        InstantiatedEntities.Length == ExportedPrefab.Data.Entities.Count &&
+        InstantiatedRoot.ParentId is null &&
+        runtime.World.Data.Subtree(InstantiatedRootId).Count() == InstantiatedEntities.Length &&
+        InstantiatedEntities.All(Entity => Entity.Components.All(Component =>
+            !ExportedComponentIds.Contains(Component.ComponentId))) &&
+        runtime.World.Entities.Single(Entity => Entity.Id == InstantiatedRootId).Position ==
+            ExportedPrefab.Entities.Single(Entity => Entity.Id == ExportedPrefabRoot.EntityId).Position,
         "Prefab instantiation creates an independent World subtree with new IDs");
+    var InstantiatedComponents = InstantiatedEntities.SelectMany(Entity => Entity.Components).ToArray();
+    var InstantiatedController = InstantiatedComponents.Single(Component => Component.TypeId == "engine.player-controller");
+    var InstantiatedAnimator = InstantiatedComponents.Single(Component => Component.TypeId == "engine.animator");
+    var InstantiatedCameraEntity = InstantiatedEntities.Single(Entity => Entity.Components.Any(Component =>
+        Component.ComponentId == InstantiatedController.State["ViewCamera"]!.GetValue<string>()));
+    var InstantiatedMeshEntity = InstantiatedEntities.Single(Entity => Entity.Components.Any(Component =>
+        Component.ComponentId == InstantiatedController.State["FacingMesh"]!.GetValue<string>()));
+    Require(InstantiatedController.State["ControlledEntity"]!.GetValue<string>() == InstantiatedRootId &&
+        InstantiatedCameraEntity.ParentId == InstantiatedRootId && InstantiatedMeshEntity.ParentId == InstantiatedRootId &&
+        InstantiatedAnimator.State["Target"]!.GetValue<string>() ==
+            InstantiatedController.State["FacingMesh"]!.GetValue<string>() &&
+        InstantiatedComponents.Single(Component => Component.TypeId == "engine.third-person-camera")
+            .State["Target"]!.GetValue<string>() == InstantiatedRootId,
+        "Prefab instantiation remaps parent, entity, and cross-child component references to the new subtree");
+    var MainStateAfterPrefab = runtime.World.Serialize();
     runtime.InvokeUiAction("editor.undo");
-    Require(runtime.World.Entities.Count == 5, "Prefab instantiation is one undoable transaction");
-    runtime.OpenPrefab(prefabPath); runtime.InvokeUiAction("editor.play");
-    Require(runtime.World.Entities.Count == 5 && !runtime.World.Data.IsPrefab,
+    Require(runtime.World.Entities.Count == MainEntityCountBeforePrefab &&
+        runtime.World.Serialize() == MainStateBeforePrefab,
+        "Prefab instantiation is one undoable transaction that restores the original World");
+    runtime.InvokeUiAction("editor.redo");
+    Require(runtime.World.Serialize() == MainStateAfterPrefab &&
+        runtime.World.Data.Entities.Any(Entity => Entity.EntityId == InstantiatedRootId),
+        "Prefab Redo restores the entire subtree with identical remapped IDs and references");
+    runtime.InvokeUiAction("editor.undo");
+    runtime.OpenPrefab(PrefabPath);
+    runtime.InvokeUiAction("editor.play");
+    Require(runtime.World.Entities.Count == MainEntityCountBeforePrefab && !runtime.World.Data.IsPrefab,
         "Play while a Prefab editor is open still runs the main World");
     runtime.InvokeUiAction("editor.stop");
     EditorExtensionValidation.Run(Require);

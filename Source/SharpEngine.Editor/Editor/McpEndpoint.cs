@@ -203,6 +203,24 @@ public static class McpEndpoint
         return new(result.ToJsonString(), result["success"]?.GetValue<bool>() != true);
     }
 
+    private static ToolCall ProjectPluginsRequest(EditorRuntime Runtime, JsonElement Request)
+    {
+        var Arguments = Request.GetProperty("params").GetProperty("arguments");
+        foreach (var Field in Arguments.EnumerateObject())
+        {
+            if (Field.Name is not ("operation" or "expectedRevision" or "pluginId" or "expectedPlan"))
+            {
+                throw new ArgumentException($"Unknown Plugin request field: {Field.Name}");
+            }
+        }
+        var HasPlugin = Arguments.TryGetProperty("pluginId", out var Plugin);
+        var HasPlan = Arguments.TryGetProperty("expectedPlan", out var Plan);
+        var Result = Runtime.RequestProjectPlugins(Arguments.GetProperty("operation").GetString()!,
+            Arguments.GetProperty("expectedRevision").GetUInt64(),
+            HasPlugin ? Plugin.GetString() : null, HasPlan ? Plan.GetString() : null);
+        return new ToolCall(Result.ToJsonString(), false);
+    }
+
     private static JsonObject CallTool(EditorRuntime runtime, JsonElement request)
     {
         var name = RequiredString(request, "params", "name");
@@ -221,6 +239,8 @@ public static class McpEndpoint
         {
             "source.modules" => new ToolCall(runtime.DescribeSourceModulesJson(), false),
             "source.status" => new ToolCall(runtime.DescribeProjectCodeJson(), false),
+            "plugins.describe" => new ToolCall(runtime.DescribeProjectPluginsJson(), false),
+            "plugins.request" => ProjectPluginsRequest(runtime, request),
             "source.create" => CreateSource(runtime, request),
             "scene.describe" => new ToolCall(runtime.DescribeSceneJson(), false),
             "components.describe" => new ToolCall(runtime.DescribeComponentsJson(), false),

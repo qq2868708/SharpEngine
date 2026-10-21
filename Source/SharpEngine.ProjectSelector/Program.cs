@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using SharpEngine.Logging;
+using SharpEngine.Interop;
 
 namespace SharpEngine.ProjectSelector;
 
@@ -9,13 +10,23 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--mcp-stdio")
+        {
+            return UiMcpSessionHost.RunBridge("project-browser");
+        }
         ApplicationConfiguration.Initialize();
         var noUi = HasFlag(args, "--no-ui");
         SharpLog.Initialize("ProjectSelector", engineRoot: FindEngineRoot());
         try
         {
-            if (args.Length == 0)
-                throw new ArgumentException("A command or .sharpproject path is required");
+            if (args.Length == 0 || args[0].Equals("browse", StringComparison.OrdinalIgnoreCase))
+            {
+                if (noUi)
+                {
+                    throw new ArgumentException("SEPROJECT002: Project browser requires a graphical session");
+                }
+                return LaunchBrowser(args);
+            }
             var command = args[0].EndsWith(".sharpproject",
                 StringComparison.OrdinalIgnoreCase) ? "open-editor" :
                 args[0].ToLowerInvariant();
@@ -43,6 +54,8 @@ internal static class Program
                 "generate-engine" => GenerateEngine(args),
                 "migrate" => Migrate(args),
                 "initialize-world" => InitializeWorld(args),
+                "preview-project" => PreviewProject(args),
+                "plugins" or "plan-plugin" or "apply-plugin" => PluginCommand(args),
                 _ => throw new ArgumentException($"Unknown Project Selector command '{command}'"),
             };
         }
@@ -241,7 +254,7 @@ internal static class Program
         return 0;
     }
 
-    private static int OpenEditor(string[] args, string? implicitProject, bool noUi, string target = "Editor")
+    internal static int OpenEditor(string[] args, string? implicitProject, bool noUi, string target = "Editor")
     {
         var resolved = ResolveProject(args, implicitProject, prompt: !noUi);
         var requestedConfiguration = Option(args, "--configuration");
@@ -257,6 +270,7 @@ internal static class Program
         var start = new ProcessStartInfo(executable)
         {
             UseShellExecute = false,
+            CreateNoWindow = true,
             WorkingDirectory = resolved.Project.Root,
         };
         if (target == "Editor")
@@ -305,6 +319,87 @@ internal static class Program
         EngineBuildGraph.Build(RequiredOption(args, "--engine-root"), Option(args, "--target") ?? "Editor",
             Option(args, "--configuration") ?? "Debug", Option(args, "--platform") ?? "Win64");
         return 0;
+    }
+
+    private static int PreviewProject(string[] Args)
+    {
+        var Browser = new ProjectBrowser(Option(Args, "--engine-root") ?? FindEngineRoot());
+        var Preview = Browser.Preview(RequiredOption(Args, "--project"));
+        WriteCommandResult(Args, Preview);
+        return Preview.Compatible ? 0 : 1;
+    }
+
+    private static int LaunchBrowser(string[] Args)
+    {
+        var Engine = ProjectContracts.ReadEngine(Option(Args, "--engine-root") ?? FindEngineRoot());
+        var Requested = Option(Args, "--configuration");
+        var Preferred = Directory.GetParent(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory))?.Name ?? "Development";
+        var Configurations = Requested is null ? new[]
+            {
+                Preferred, "Development", "Debug", "Shipping",
+            }.Where(Value => Value is "Debug" or "Development" or "Shipping").Distinct()
+            : new[]
+            {
+                ValidateConfiguration(Requested),
+            };
+        var Executable = Configurations.Select(Configuration => Path.Combine(
+                ProjectContracts.ResolveBinaries(Engine, "Win64", Configuration, "Editor"), "Engine.exe"))
+            .FirstOrDefault(File.Exists) ?? throw new FileNotFoundException("Build the engine Editor target before opening Project Browser");
+        var Start = new ProcessStartInfo(Executable)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Engine.Root,
+        };
+        Start.ArgumentList.Add("--project-browser");
+        using var Process = System.Diagnostics.Process.Start(Start) ?? throw new IOException("Could not start the engine Project Browser");
+        return 0;
+    }
+
+    private static int PluginCommand(string[] Args)
+    {
+        var Project = ResolveProject(Args, null, false);
+        var Graph = PluginGraph.Load(Project);
+        if (Args[0].Equals("plugins", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteCommandResult(Args, new
+            {
+                schemaVersion = 1,
+                plugins = Graph.PluginIds.Select(Id => new
+                {
+                    id = Id,
+                    enabled = Graph.IsEnabled(Id),
+                }).ToArray(),
+            });
+            return 0;
+        }
+        var Action = RequiredOption(Args, "--action");
+        if (Action is not ("enable" or "disable"))
+        {
+            throw new ArgumentException("Plugin action must be enable or disable");
+        }
+        var Plan = Graph.Plan(RequiredOption(Args, "--plugin"), Action == "enable");
+        if (Args[0].Equals("apply-plugin", StringComparison.OrdinalIgnoreCase))
+        {
+            Graph.Apply(Plan, RequiredOption(Args, "--expected-plan"));
+        }
+        WriteCommandResult(Args, Plan);
+        return Plan.Blockers.Count == 0 ? 0 : 1;
+    }
+
+    private static void WriteCommandResult(string[] Args, object Result)
+    {
+        var Serialized = JsonSerializer.Serialize(Result, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        });
+        using var Document = JsonDocument.Parse(Serialized);
+        WriteResult(Args, Document.RootElement);
+        if (Option(Args, "--output") is null)
+        {
+            Console.WriteLine(Serialized);
+        }
     }
 
     private static int Migrate(string[] args)

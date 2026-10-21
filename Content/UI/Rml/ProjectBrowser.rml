@@ -1,0 +1,22 @@
+<rml>
+<head>
+  <title>SharpEngine Project Browser</title>
+  <link type="text/rcss" href="Editor.rcss" />
+  <link type="text/rcss" href="ProjectBrowser.rcss" />
+</head>
+<body>
+<div id="editor">
+  <div id="menubar">
+    <div class="brand"><span class="brand-mark">S</span> SharpEngine</div>
+    <div class="grow" />
+    <span id="projectTitle">项目选择器</span>
+    <div id="windowControls">
+      <button class="window-control" action="window.minimize" title="最小化"><img class="icon" src="sharpengine-resource://engine/Resources/Editor/Icons/minimize.tga" /></button>
+      <button class="window-control" action="window.maximize" title="最大化"><img class="icon" src="sharpengine-resource://engine/Resources/Editor/Icons/maximize.tga" /></button>
+      <button id="browser-window-close" class="window-control close" action="window.close" title="关闭"><img class="icon" src="sharpengine-resource://engine/Resources/Editor/Icons/close.tga" /></button>
+    </div>
+  </div>
+  <div id="browser-content" />
+</div>
+</body>
+</rml>

@@ -11,6 +11,17 @@ var registryPath = @"Software\SharpEngine\Tests\" + Guid.NewGuid().ToString("N")
 var temporary = Directory.CreateTempSubdirectory("SharpEngine-ProjectSelectorValidation-");
 try
 {
+    McpBootstrapValidation.Run(Check);
+    var NativeConfigurationIndex = Array.IndexOf(args, "--native-configuration");
+    var NativeConfiguration = NativeConfigurationIndex >= 0 ? args[NativeConfigurationIndex + 1] : "Debug";
+    EditorStartupValidation.Run(engineRoot, temporary.FullName, Check, NativeConfiguration);
+    PluginOutputValidation.Run(engineRoot, temporary.FullName, Check);
+    PluginSelectionValidation.Run(temporary.FullName, Check);
+    if (args.Contains("--plugin-selection-only", StringComparer.OrdinalIgnoreCase))
+    {
+        Console.WriteLine($"PASS: {assertions} Plugin selection and project browser assertions");
+        return 0;
+    }
     ProjectFileAssociationValidation.Run(registryPath, temporary.FullName, Check);
     EngineFirstUseValidation.Run(registryPath, temporary.FullName, engineRoot, Check);
     if (args.Contains("--registration-only", StringComparer.OrdinalIgnoreCase))

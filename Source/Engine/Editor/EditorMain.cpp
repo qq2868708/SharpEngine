@@ -284,6 +284,7 @@ namespace
         }
         return {};
     }
+
 }
 int wmain(int argc,wchar_t** argv)
 {
@@ -296,6 +297,7 @@ int wmain(int argc,wchar_t** argv)
     bool mcpIsolated=false;
     bool McpVisible = false;
     bool NoSplash = false;
+    bool BrowserRequested = false;
     for (int i=1;i<argc;++i)
     {
         const std::wstring_view argument(argv[i]);
@@ -310,6 +312,10 @@ int wmain(int argc,wchar_t** argv)
         else if (argument==L"--mcp-stdio") mcpStdio=true;
         else if (argument==L"--mcp-isolated") mcpIsolated=true;
         else if (argument == L"--mcp-visible") McpVisible = true;
+        else if (argument == L"--project-browser")
+        {
+            BrowserRequested = true;
+        }
         else if (argument == L"--no-splash")
         {
             NoSplash = true;
@@ -320,7 +326,6 @@ int wmain(int argc,wchar_t** argv)
         EngineLog::Error("Editor", renderError);
         return 2;
     }
-    StartupSplash Splash(!mcpStdio && !mcpIsolated && !NoSplash, projectManifest.stem().wstring());
     const auto executableDirectory=ExecutableDirectory();
     auto engineRoot=FindEngineRoot(executableDirectory);
     if (engineRoot.empty())
@@ -329,8 +334,20 @@ int wmain(int argc,wchar_t** argv)
         return -1;
     }
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT", engineRoot.c_str());
+    if (BrowserRequested && (mcpStdio || !projectManifest.empty()))
+    {
+        EngineLog::Error("ProjectBrowser", "Project browser cannot be combined with --project or --mcp-stdio");
+        return -1;
+    }
+    const bool BrowserMode = BrowserRequested || (projectManifest.empty() && !mcpStdio);
+    if (BrowserMode && mcpIsolated && !BrowserRequested)
+    {
+        EngineLog::Error("Editor", "EDITOR_PROJECT_REQUIRED: Isolated Editor requires --project");
+        return -1;
+    }
+    StartupSplash Splash(!BrowserMode && !mcpStdio && !mcpIsolated && !NoSplash, projectManifest.stem().wstring());
     ManagedProjectSelection selection;
-    if (!projectManifest.empty())
+    if (!BrowserMode && !projectManifest.empty())
     {
         if (!ResolveManagedProject(projectManifest,selection)) return -1;
         engineRoot=selection.EngineRoot;
@@ -339,7 +356,7 @@ int wmain(int argc,wchar_t** argv)
     else SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST", nullptr);
     SetEnvironmentVariableW(L"SHARPENGINE_ROOT", engineRoot.c_str());
     EngineLog::Configure(selection.ProjectRoot.empty() ? engineRoot : selection.ProjectRoot,
-                         "Editor", mcpStdio);
+                         BrowserMode ? "ProjectBrowser" : "Editor", mcpStdio);
 
     if (mcpStdio)
     {
@@ -364,14 +381,17 @@ int wmain(int argc,wchar_t** argv)
     SetCurrentProcessExplicitAppUserModelID(L"SharpEngine.Editor");
     Splash.Report(8, "Platform", "Initializing native editor window");
     Platform::Initialize();
-    auto window=Platform::CreateMainWindow(1440,900,L"SharpEngine Editor", false);
+    const uint32_t WindowWidth = BrowserMode ? 1100 : 1440;
+    const uint32_t WindowHeight = BrowserMode ? 760 : 900;
+    auto window=Platform::CreateMainWindow(WindowWidth, WindowHeight,
+        BrowserMode ? L"SharpEngine Project Browser" : L"SharpEngine Editor", false);
     if (!window.Window) { Platform::Shutdown(); return -1; }
     if (mcpIsolated) ShowWindow(static_cast<HWND>(window.Window),SW_HIDE);
     RmlUiShell ui;
     Splash.Report(16, "RenderCore / RmlUi", "Initializing graphics, fonts and editor shell");
     if (!ui.Initialize(static_cast<HWND>(window.Window), engineRoot,
         renderOptions.Backend, renderOptions.EnableVSync,
-        renderOptions.EnableValidation))
+        renderOptions.EnableValidation, BrowserMode ? "Content/UI/Rml/ProjectBrowser.rml" : "Content/UI/Rml/Editor.rml"))
     {
         EngineLog::Error("RmlUi", "Initialization failed");
         ui.Shutdown(); Platform::Shutdown(); return -1;
@@ -409,18 +429,20 @@ int wmain(int argc,wchar_t** argv)
     api.SetGameplayInputCapture = SetGameplayInputCapture;
     api.GetGameplayInputCapture = GetGameplayInputCapture;
     Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
+    const auto ManagedDirectory = BrowserMode ? executableDirectory.parent_path() / L"Tools" : executableDirectory;
     const bool loaded=managed.Initialize(
-        (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),
-        (executableDirectory/L"SharpEngine.Host.dll").wstring());
+        (ManagedDirectory / (BrowserMode ? L"SharpEngine.ProjectSelector.runtimeconfig.json" : L"SharpEngine.Host.runtimeconfig.json")).wstring(),
+        (ManagedDirectory / (BrowserMode ? L"SharpEngine.ProjectSelector.dll" : L"SharpEngine.Host.dll")).wstring(),
+        BrowserMode ? L"SharpEngine.ProjectSelector.BrowserEntrypoint, SharpEngine.ProjectSelector" : L"");
     GSplash = &Splash;
-    const bool Started = loaded && managed.Start(window.Window,1440,900,&api);
+    const bool Started = loaded && managed.Start(window.Window, WindowWidth, WindowHeight, &api);
     GSplash = nullptr;
     if (!Started)
     {
         EngineLog::Error("ManagedHost", "Initialization failed");
         GManaged=nullptr; GUi=nullptr; ui.Shutdown(); Platform::Shutdown(); return -1;
     }
-    ui.SetActionHandler([&managed, &ui](const char* hostId,
+    ui.SetActionHandler([&managed, &ui, BrowserMode](const char* hostId,
                                         const char* action) {
         const std::string_view command = action ? action : "";
         const std::string_view host = hostId ? hostId : "";
@@ -439,6 +461,11 @@ int wmain(int argc,wchar_t** argv)
         if (command == "window.close")
         {
             if (hostWindow) PostMessageW(hostWindow, WM_CLOSE, 0, 0);
+            return;
+        }
+        if (BrowserMode)
+        {
+            managed.InvokeUiAction(action);
             return;
         }
         std::string routed="editor.host-action:";
@@ -467,7 +494,7 @@ int wmain(int argc,wchar_t** argv)
         if (!ui.Render()) { EngineLog::Error("RmlUi", "Present failed"); renderFailed=true; break; }
         if (frames == 0)
         {
-            Splash.Report(100, "Editor", "Editor ready");
+            Splash.Report(100, BrowserMode ? "ProjectBrowser" : "Editor", BrowserMode ? "Project browser ready" : "Editor ready");
             if (!mcpIsolated || McpVisible)
             {
                 ui.ShowWindows();
@@ -478,7 +505,7 @@ int wmain(int argc,wchar_t** argv)
         // Rendering and presentation count toward the minimum frame interval.
         std::this_thread::sleep_until(now + std::chrono::milliseconds(8));
     }
-    EngineLog::Info("Editor", "Frames rendered=" + std::to_string(frames));
+    EngineLog::Info(BrowserMode ? "ProjectBrowser" : "Editor", "Frames rendered=" + std::to_string(frames));
     if (!screenshot.empty() && !ui.CaptureScreenshot(screenshot))
     { EngineLog::Error("RmlUi", "Screenshot write failed"); renderFailed=true; }
     managed.Shutdown(); GUi=nullptr; ui.Shutdown(); Platform::Shutdown();

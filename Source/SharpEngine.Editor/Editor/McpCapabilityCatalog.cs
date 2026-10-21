@@ -53,6 +53,10 @@ internal sealed record McpCapabilityDescriptor(
 
     internal (bool Available, JsonObject? Reason) Availability(EditorRuntime runtime)
     {
+        if (Id.StartsWith("plugins.", StringComparison.Ordinal) && runtime.ProjectManifest is null)
+        {
+            return (false, McpCapabilityCatalog.Unavailable("PROJECT_UNAVAILABLE", "Open a project before managing Plugins"));
+        }
         if (Id is "source.create" or "source.modules" && runtime.ProjectManifest is null)
             return (false, McpCapabilityCatalog.Unavailable("PROJECT_UNAVAILABLE", "Open a project before creating C# source"));
         if (RequiresLiveUi && !runtime.HasLiveUi)
@@ -73,6 +77,15 @@ internal static class McpCapabilityCatalog
             Read("scene.describe", "Return the complete serialized scene, including hierarchy and resolved world matrices."),
             Read("source.modules", "List evaluated project Modules and root namespaces for C# source creation."),
             Read("source.status", "Read project build/reload state, availability and retry diagnostics."),
+            Read("plugins.describe", "Read project Plugin analysis, pending confirmation plan, busy state and restart requirement."),
+            new("plugins.request", 1,
+                "Analyze or preview project Plugin dependency changes; apply requires the exact previewed planId. Writes project configuration immediately and requires a restart; does not edit the World or its Undo history.",
+                "external", JsonNode.Parse("""
+                    {"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+                     "required":["operation","expectedRevision"],"properties":{
+                     "operation":{"enum":["analyze","plan-enable","plan-disable","apply","cancel"]},
+                     "expectedRevision":{"type":"integer","minimum":0},"pluginId":{"type":"string"},"expectedPlan":{"type":"string"}}}
+                    """)!.AsObject(), ObjectOutput(), RevisionPrecondition: "plugins.describe.revision; apply also requires expectedPlan"),
             new("source.create", 1, "Create one C# class or Runtime component source file and queue a project build. Writes to disk immediately; not part of scene Undo.", "external",
                 new JsonObject { ["$schema"] = "https://json-schema.org/draft/2020-12/schema", ["type"] = "object",
                     ["properties"] = new JsonObject {

@@ -11,6 +11,7 @@
     <Version>0.2.0</Version>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseWindowsForms>true</UseWindowsForms>
     <UseAppHost>true</UseAppHost>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
