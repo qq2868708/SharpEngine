@@ -53,6 +53,22 @@ struct RenderBackend_OpenGL::Surface
             ++DrawCalls;
             RenderInterface_GL3::RenderGeometry(handle, translation, texture);
         }
+        void ReleaseGeometry(Rml::CompiledGeometryHandle Handle) override
+        {
+            // RmlUi can retire another host's geometry during a document update.
+            // VAOs and buffer names must be deleted in the context that created them.
+            const auto PreviousDc = wglGetCurrentDC();
+            const auto PreviousContext = wglGetCurrentContext();
+            if (PreviousContext != Context)
+            {
+                wglMakeCurrent(Dc, Context);
+            }
+            RenderInterface_GL3::ReleaseGeometry(Handle);
+            if (PreviousContext != Context)
+            {
+                wglMakeCurrent(PreviousDc, PreviousContext);
+            }
+        }
         void ReleaseTexture(Rml::TextureHandle texture) override
         {
             // RmlUi can release font resources for several RenderManagers in

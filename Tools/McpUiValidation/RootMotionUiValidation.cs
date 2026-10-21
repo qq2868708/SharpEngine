@@ -73,7 +73,7 @@ internal static class RootMotionUiValidation
                 }
             }
             """);
-        var BuildInfo = new System.Diagnostics.ProcessStartInfo("pwsh")
+        var BuildInfo = new System.Diagnostics.ProcessStartInfo("dotnet")
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -82,9 +82,9 @@ internal static class RootMotionUiValidation
         };
         foreach (var Argument in new[]
         {
-            "-NoProfile", "-File", Path.Combine(Root, "Tools/SharpEngineProject.ps1"),
-            "-Command", "Build", "-EngineRoot", Root, "-ProjectFile", PathValue,
-            "-Target", "Editor", "-Configuration", "Debug",
+            "run", "--project", Path.Combine(Root, "Tools/ProjectBuild/SharpEngine.ProjectBuild.csproj"),
+            "--", "build", PathValue, "--engine-root", Root,
+            "--target", "Editor", "--configuration", "Debug",
         })
         {
             BuildInfo.ArgumentList.Add(Argument);

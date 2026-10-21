@@ -46,6 +46,8 @@ internal static class TimelineViewportUiValidation
                     ["y"] = Y,
                     ["buttons"] = Held ? new JsonArray(Button) : new JsonArray(),
                     ["modifiers"] = new JsonArray(),
+                    ["pointerId"] = 0,
+                    ["wheelX"] = 0,
                     ["wheelY"] = WheelY,
                     ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
                     ["expectedElementId"] = Target["elementId"]!.DeepClone(),
@@ -109,7 +111,7 @@ internal static class TimelineViewportUiValidation
         Check(State()["viewport"]!["yaw"]!.GetValue<double>() > BeforeOrbit,
             "Real right-button drag orbits the camera in the editor-owned preview World");
         var BeforeZoom = State()["viewport"]!["distance"]!.GetValue<double>();
-        Pointer("wheel", "timelinePreviewViewport", OffsetX: 100, OffsetY: 100, WheelY: 1);
+        Pointer("wheel", "timelinePreviewViewport", OffsetX: 100, OffsetY: 100, WheelY: -1);
         Check(State()["viewport"]!["distance"]!.GetValue<double>() < BeforeZoom,
             "The preview viewport supports wheel zoom");
         var Final = State();
