@@ -75,6 +75,18 @@ public sealed partial class ControllableComponent : SharpComponent
         return ControlEnabled && EffectiveEnabled ? MoveInput : Vector2.Zero;
     }
 
+    /// <summary>
+    /// Current frame movement intent, already normalized and gated by control availability.
+    /// Project and plugin movement components read this read-only value instead of the raw input.
+    /// </summary>
+    public Vector2 MovementIntent
+    {
+        get
+        {
+            return ReadMovement();
+        }
+    }
+
     protected override void OnDisable()
     {
         BoundController = null;
@@ -277,6 +289,7 @@ public sealed partial class MovementComponent : SharpComponent
     private string Status = "Idle";
     private string Code = "MOVEMENT_IDLE";
     private string? Message;
+    private bool SuppressedByAuthority;
 
     internal Vector3 AnimationIntentVelocity
     {
@@ -288,6 +301,17 @@ public sealed partial class MovementComponent : SharpComponent
 
     protected override void OnEvaluate(float DeltaSeconds)
     {
+        if (SuppressedByAuthority)
+        {
+            // A movement authority owns this entity; keep reporting the override instead of
+            // recomputing a displacement that would never be committed.
+            IntentVelocity = Vector3.Zero;
+            PendingDisplacement = Vector3.Zero;
+            Velocity = Vector3.Zero;
+            Status = "Overridden";
+            Code = "MOVEMENT_OVERRIDDEN";
+            return;
+        }
         var Controllable = Entity.GetComponent<ControllableComponent>()!;
         var Input = Controllable.ReadMovement();
         var Desired = new Vector3(Input.X, 0, Input.Y) * MaxSpeed;
@@ -343,6 +367,25 @@ public sealed partial class MovementComponent : SharpComponent
             : Vector3.Zero;
         Status = Velocity.LengthSquared() > 0.000001f ? "Moving" : "Idle";
         Code = Status == "Moving" ? "MOVEMENT_MOVING" : "MOVEMENT_IDLE";
+    }
+
+    /// <summary>Another movement authority owns this entity's transform; publish that instead of moving.</summary>
+    internal void SuppressForAuthority(bool Suppressed)
+    {
+        SuppressedByAuthority = Suppressed;
+        if (!Suppressed)
+        {
+            Code = "MOVEMENT_IDLE";
+            Status = "Idle";
+            Message = null;
+            return;
+        }
+        PendingDisplacement = Vector3.Zero;
+        IntentVelocity = Vector3.Zero;
+        Velocity = Vector3.Zero;
+        Status = "Overridden";
+        Code = "MOVEMENT_OVERRIDDEN";
+        Message = "A movement authority owns this entity's transform.";
     }
 
     protected internal override ComponentFrameState CaptureFrameState()

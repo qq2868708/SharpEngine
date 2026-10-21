@@ -99,6 +99,7 @@
       <p>当多个控制来源指向同一个对象时，引擎会按照优先级选择一个来源，保证结果稳定。对象不可用、控制冲突或控制暂时失效时，运行状态会显示相应诊断。</p>
       <p>引擎默认示例包含 <code>prefabs/capsule-character</code> 胶囊体角色 Prefab，并已实例化到引擎的 <code>Content/Worlds/Main.sworld</code>。在编辑器按 Play 后点击 Viewport 使其获得焦点，使用 WASD 移动角色；Stop 会丢弃运行时位置变化。</p>
       <p>示例 Prefab 和主场景使用 UEFN mannequin 骨骼角色，状态机会根据移动速度在 Idle、Walk、Run 之间切换，并保留 Jump 状态入口；胶囊只作为不可见的 Trace 碰撞体，随角色移动。状态机和动画依赖加载失败时会保留诊断，不会静默回退到错误 Clip。Content Manager 双击引擎提供的 AnimationStateMachine 预设会打开独立顶层动画资产编辑器并显示状态与过渡图；该引擎预设保持只读。验证入口与范围见下方专题文档。</p>
+      <p>需要“模式 + 修饰器 + 根运动归属”这种组合式移动时，使用引擎提供的移动组合点，或直接启用 <code>Plugins/CharacterMovement</code> 插件。插件提供移动权威、Walking/Falling 两个可替换模式，以及 Jump、Sprint、SpeedLimit 三个有序修饰器；同实体的 <code>engine.movement</code> 会转为 <code>MOVEMENT_OVERRIDDEN</code>，Transform 只由权威写入。插件为项目级 opt-in：在项目清单的 <code>plugins</code> 登记 <code>engine://Plugins/CharacterMovement/CharacterMovement.sharpplugin</code> 后重建项目即可，引擎默认内容不引用它。</p>
       <p>功能边界、可观察状态和使用限制见 <a href="../../../../ControlAndMovement.md">控制、可控制目标与移动专题文档</a>。</p>
     </section>
     <section class="section-card" id="input-ui">

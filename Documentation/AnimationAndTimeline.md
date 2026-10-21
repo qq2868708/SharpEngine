@@ -130,9 +130,11 @@ SkeletalAnimation schema v2 显式保存 `rootMotion: { enabled, boneId }`；v1 
 
 `Sample` / `SampleLooped` 始终返回源姿态；`SamplePreview` 与 Playable 输出遵守开关：关闭时根平移/旋转恢复 bind，开启时资产预览显示源根轨迹。Runtime Animator 开启时计算连续根增量并驱动 MovementSource 所在实体（未指定时是 Animator 实体），模型必须属于目标子树；在模型输出中剔除根运动以避免重复位移。模型相对变换及父实体变换参与换算。Player 的 FacingMesh 转向 WASD 方向，根位移沿模型当前朝向应用，保留源距离与竖直轨迹，同时保留由镜头控制的根实体朝向；没有水平意图时不再前进。普通 Animator 不执行这项 Player 定向策略。跳跃的竖直根轨迹同样驱动实体。
 
-循环支持一次跨越多个周期；非循环在终点停止，暂停与 Seek 不移动实体。同一实体有多个驱动源时报告 `ROOT_MOTION_CONFLICT`，不按执行顺序选择。Animator 组件 schema 仍为 v3，帧 schema v3 新增 `rootMotion`（enabled、boneId、targetEntityId、applied、redirectedByPlayer、code、worldTranslation）。状态机速度参数使用 Movement 意图速度，实际 LinearVelocity 从已提交位移计算。
+循环支持一次跨越多个周期；非循环在终点停止，暂停与 Seek 不移动实体。`RootMotionSampler.Delta` 把循环展开为一条绝对曲线：从周期中段开始并跨过边界的一帧，按“剩余周期 + 新部分周期”的顺序合成，因此与逐帧累积一致；旧实现只取末帧部分周期，跨边界那一帧会丢失前半段位移。同一实体有多个驱动源时报告 `ROOT_MOTION_CONFLICT`，不按执行顺序选择。Animator 组件 schema 仍为 v3，帧 schema v4 新增 `rootMotion`（enabled、boneId、targetEntityId、applied、redirectedByPlayer、consumedBy、code、worldTranslation）。状态机速度参数使用 Movement 意图速度，实际 LinearVelocity 从已提交位移计算。
 
-`Tools/AnimationValidation/RootMotionValidation.cs` 验证源轨道保留、v1/v2、根骨拒绝、平移与旋转多周期一致性、父子变换、暂停/Seek、缓存重载和多源冲突。`Tools/McpUiValidation --root-motion-only` 在独立项目副本中验证坐标开关、共享 Undo/Redo、显式 Save 和 Runtime 开关结果。
+根运动还可以交给引擎的移动组合点：实现了 `IMovementAuthority` 的组件接管实体后，该帧不再走内建写入，animator 帧改为 `ROOT_MOTION_CONSUMED` 并记录 `consumedBy`。详见 [控制与移动专题](ControlAndMovement.md) 的 Character Movement 插件一节。
+
+`Tools/AnimationValidation/RootMotionValidation.cs` 验证源轨道保留、v1/v2、根骨拒绝、平移与旋转多周期一致性、跨边界合成、父子变换、暂停/Seek、缓存重载和多源冲突。`Tools/McpUiValidation --root-motion-only` 在独立项目副本中验证坐标开关、共享 Undo/Redo、显式 Save 和 Runtime 开关结果。
 
 ## 资产预览布局与时间轴事件
 

@@ -53,6 +53,7 @@ public sealed partial class AnimatorComponent : SharpComponent
     private bool RootRedirectedByPlayer;
     private string RootCode = "ROOT_MOTION_DISABLED";
     private string? RootMessage;
+    private string? RootConsumedBy;
     internal SharpEntity? RootMotionTarget
     {
         get;
@@ -63,6 +64,13 @@ public sealed partial class AnimatorComponent : SharpComponent
         get
         {
             return PendingRootDelta;
+        }
+    }
+    internal double RootMotionAdvance
+    {
+        get
+        {
+            return PendingRootAdvance;
         }
     }
     internal SkeletalMeshComponent? RootMotionMesh
@@ -93,6 +101,7 @@ public sealed partial class AnimatorComponent : SharpComponent
             AppliedRootTranslation = Vector3.Zero;
             RootApplied = false;
             RootRedirectedByPlayer = false;
+            RootConsumedBy = null;
             RootCode = "ROOT_MOTION_DISABLED";
             RootMessage = null;
         }
@@ -243,6 +252,7 @@ public sealed partial class AnimatorComponent : SharpComponent
                     PendingRootAdvance = 0;
                     AppliedRootTranslation = Vector3.Zero;
                     RootApplied = false;
+                    RootConsumedBy = null;
                     RootCode = "ROOT_MOTION_DISABLED";
                 }
                 Output.Clear();
@@ -277,12 +287,14 @@ public sealed partial class AnimatorComponent : SharpComponent
             else
             {
                 RootCode = "ROOT_MOTION_DISABLED";
+                RootConsumedBy = null;
                 RootApplied = false;
                 AppliedRootTranslation = Vector3.Zero;
                 Target.SetPose(this, Pose);
             }
             Status = Playable.State.ToString();
-            var RootFailed = RootCode is "ROOT_MOTION_CONFLICT" or "ROOT_MOTION_TRANSFORM_INVALID";
+            var RootFailed = RootCode is "ROOT_MOTION_CONFLICT" or "ROOT_MOTION_TRANSFORM_INVALID" or
+                "ROOT_MOTION_CONSUMER_CONFLICT";
             Code = RootFailed ? RootCode : "ANIMATOR_READY";
             if (RootFailed)
             {
@@ -308,12 +320,15 @@ public sealed partial class AnimatorComponent : SharpComponent
         }
     }
 
-    internal void CompleteRootMotion(Vector3 Translation, bool RedirectedByPlayer = false)
+    internal void CompleteRootMotion(Vector3 Translation, bool RedirectedByPlayer = false,
+        string? ConsumedBy = null)
     {
         AppliedRootTranslation = Translation;
         RootApplied = PendingRootAdvance > 0;
         RootRedirectedByPlayer = RedirectedByPlayer;
-        RootCode = RootApplied ? "ROOT_MOTION_APPLIED" : "ROOT_MOTION_READY";
+        RootConsumedBy = ConsumedBy;
+        RootCode = ConsumedBy is not null ? "ROOT_MOTION_CONSUMED" :
+            RootApplied ? "ROOT_MOTION_APPLIED" : "ROOT_MOTION_READY";
         RootMessage = null;
     }
 
@@ -321,6 +336,7 @@ public sealed partial class AnimatorComponent : SharpComponent
     {
         RootApplied = false;
         AppliedRootTranslation = Vector3.Zero;
+        RootConsumedBy = null;
         RootCode = DiagnosticCode;
         Code = DiagnosticCode;
         Message = DiagnosticMessage;
@@ -366,7 +382,7 @@ public sealed partial class AnimatorComponent : SharpComponent
     {
         return new AnimatorFrameState(new JsonObject
         {
-            ["schemaVersion"] = 3,
+            ["schemaVersion"] = 4,
             ["entityId"] = Entity.EntityId,
             ["componentId"] = ComponentId,
             ["targetComponentId"] = Target?.ComponentId,
@@ -389,6 +405,7 @@ public sealed partial class AnimatorComponent : SharpComponent
                 ["targetEntityId"] = RootMotionTarget?.EntityId,
                 ["applied"] = RootApplied,
                 ["redirectedByPlayer"] = RootRedirectedByPlayer,
+                ["consumedBy"] = RootConsumedBy,
                 ["code"] = RootCode,
                 ["worldTranslation"] = new JsonArray(AppliedRootTranslation.X, AppliedRootTranslation.Y, AppliedRootTranslation.Z),
             },

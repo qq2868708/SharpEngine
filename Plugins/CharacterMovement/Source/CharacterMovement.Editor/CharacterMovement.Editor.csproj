@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.CharacterMovement.Editor</AssemblyName>
+    <RootNamespace>SharpEngine.CharacterMovement</RootNamespace>
+    <SharpEngineModuleId>SharpEngine.CharacterMovement.Editor</SharpEngineModuleId>
+    <SharpEngineModuleType>Editor</SharpEngineModuleType>
+    <Version>1.0.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SharpEngine.Runtime">
+      <HintPath>$(SharpEngineRuntimeApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpEngine.Editor">
+      <HintPath>$(SharpEngineEditorApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <ProjectReference Include="..\CharacterMovement.Runtime\CharacterMovement.Runtime.csproj" />
+  </ItemGroup>
+  <Target Name="ValidateSharpEngineModule" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'$(SharpEngineUnifiedBuild)' != 'true'"
+           Text="Direct Module builds are unsupported. Build the generated Solution or use SharpEngineProject -Command Build." />
+    <Error Condition="'$(SharpEngineEditorApi)' == '' or !Exists('$(SharpEngineEditorApi)') or '$(SharpEngineRuntimeApi)' == '' or !Exists('$(SharpEngineRuntimeApi)')"
+           Text="SharpEngine managed APIs are missing. Build the engine before the Plugin Module." />
+  </Target>
+</Project>

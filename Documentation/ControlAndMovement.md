@@ -25,3 +25,36 @@ Editor/Game 将 `IInputRuntime` 和当前 host ID 注入 `RuntimeInstance`。Pla
 动画资产 Root Motion 开启时由 Animator 提取根增量到角色实体，并从模型姿态剔除根平移和旋转。Player 的根位移通过子 Mesh 朝向转换到实体空间，保留源水平距离和竖直轨迹，根实体的朝向仍由镜头控制；无水平移动意图时抑制水平根位移。普通 Animator 使用源轨迹。同一实体的普通输入位移在该帧不重复应用。关闭时仅输出原地姿态，由 Movement 移动。Movement 分别公开意图速度与实际速度，状态机使用意图速度以避免根运动反馈使状态卡死。胶囊 Trace 使用移动后的实体变换；当前 collider 提供查询，不增加阻挡解算。
 
 验证：`dotnet run --project Tools/PrefabMovementValidation -- D:/SharpEngine` 覆盖 Prefab、引用、重建、输入、动画与 Trace；`Tools/AnimationValidation` 覆盖根运动循环、旋转、Seek、冲突和资产重新绑定；`dotnet run --project Tools/McpUiValidation -- Debug --player-only --render-backend=vulkan` 验证真实坐标 Play 和键鼠路径。测试创建自己的隔离窗口并在结束时关闭，不连接用户 Editor。
+
+## 移动权威与 Character Movement 插件
+
+`engine.movement` 是低层基础能力：它消费 Controllable 的意图，按单一加减速模型生成位移。需要在同一实体上组合“模式 + 修饰器 + 根运动归属”时，使用引擎提供的移动组合点 `SharpEngine.Components.IMovementAuthority`。
+
+帧末边界（全部 Evaluate 之后、任何 LateUpdate 相机之前）按以下顺序运行，且每个权威都按组件 ID 排序：
+
+1. `BeginMovementFrame(DeltaSeconds)`：解析意图、模式与修饰器，暂存本帧位移。
+2. `ConsumeRootMotion(in RootMotionContribution)`：每个根运动分组调用一次；返回 true 表示权威接管。
+3. `EndMovementFrame(DeltaSeconds)`：权威提交位移，是实体 Transform 的唯一写入者。
+
+持有权威的实体不再收到引擎内建的根运动写入；同一实体上的 `engine.movement` 被静默并发布 `MOVEMENT_OVERRIDDEN`（每次加载只记一条 warning，不进入错误诊断）。同一实体出现两个权威时报告一次 `MOVEMENT_AUTHORITY_CONFLICT` 并保留组件 ID 较小的一个。权威在模式不可用时可以让 `ConsumeRootMotion` 返回 false，把该帧交还引擎默认路径。
+
+`RootMotionContribution` 提供 animator 组件 ID、目标实体、网格组件、目标世界矩阵、网格相对矩阵、世界增量、世界位移、播放推进量和 DeltaSeconds。接管成功后 animator 帧发布 `ROOT_MOTION_CONSUMED`，并在 `rootMotion.consumedBy` 记录权威类型名。
+
+`Plugins/CharacterMovement`（插件 id `sharpengine.character-movement`，manifest schemaVersion 1）用这套组合点提供完整角色移动。插件为项目级 opt-in：在 `.sharpproject` 的 `plugins` 数组登记 `engine://Plugins/CharacterMovement/CharacterMovement.sharpplugin`，构成工程与运行时会同时加载它；引擎默认 Prefab 与 Main Scene 不引用插件组件，因此两者可以并存，旧内容行为不变。
+
+| 组件 | 类型 ID | 职责 |
+| --- | --- | --- |
+| `CharacterMovementComponent` | `6f0c3d1a-…-3b7a10` | 移动权威，schema v1 |
+| `WalkingMovementModeComponent` | `1b7e9c42-…-5b21` | 地面模式（加速/制动），`walking` |
+| `FallingMovementModeComponent` | `a3d24f68-…-8a32` | 空中模式（重力/终端速度/空中操控），`falling` |
+| `JumpMovementModifierComponent` | `c58a7e13-…-1c043` | 队列式起跳，按需消费一次 |
+| `SprintMovementModifierComponent` | `0e9b5d76-…-e2154` | 会话级冲刺倍率 |
+| `CharacterSpeedLimitModifierComponent` | `5c1f8a74-…-47e065` | 绝对平面速度上限 |
+
+组合方式与 UE 的 Character Movement 2.0 同构：组件声明“用哪个模式”，模式实现积分，修饰器只调整帧而不写 Transform。模式身份由 `CharacterMovementModeIdAttribute` 声明一次，`ModeId` 从该元数据解析，避免出现两份可能漂移的字符串。新增模式只需再声明一个实现 `ICharacterMovementMode` 的组件，把 `GroundModeId`/`AirModeId` 指向它即可，无需修改引擎或既有模式。
+
+权威的权威字段是 `InputDeadZone`、`GroundProbeDistance`、`GroundMinNormalY`、`GroundLayerMask`、`GroundModeId`、`AirModeId`、`ApplyRootMotion`、`RootMotionScale`、`ApplyRootMotionRotation`、`RootMotionRequiresIntent`。会话状态（垂直速度、活跃速度、是否处于冲刺）不序列化；`SprintMovementModifierComponent.SetSprinting` 和 `JumpMovementModifierComponent.RequestJump` 属于运行时入口，不进入权威状态。地面判定复用 `RuntimeWorld.Collision.Raycast`，按 Revision 缓存一份查询快照，不新增物理求解。
+
+`ConsumeRootMotion` 在权威接管后总是声明本帧根运动，因此“关闭根运动”与“完全不接管”是两种不同语义：前者保留权威对 Transform 的独占并抑制位移，后者把控制权交回引擎。跳跃的垂直位移由权威与模式共同维护，引擎不解决穿透，落地需要外部移动或碰撞解算把角色放回地面。
+
+验证：`dotnet run --project Tools/CharacterMovementValidation -- D:/SharpEngine` 覆盖插件注册、模式选择、修饰器优先级、根运动归属、`MOVEMENT_OVERRIDDEN`、双权威冲突、失效模式诊断、状态往返和非法配置拒绝。该工具构建插件项目后加载其程序集，不依赖 Editor 窗口。

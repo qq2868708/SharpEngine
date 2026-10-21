@@ -94,6 +94,27 @@ internal static class RootMotionValidation
             Near(Vector3.TransformNormal(Vector3.UnitZ, Accumulated), Vector3.TransformNormal(Vector3.UnitZ, Whole)),
             "translation and rotation compose identically for stepped and multi-loop sampling");
 
+        // Stepped sampling must match a single span that starts mid-cycle and crosses the boundary.
+        foreach (var Start in new[] { 0.6, 0.9, 0.75 })
+        {
+            var Span = Matrix4x4.Identity;
+            const double Step = 0.05;
+            for (var Index = 0; Index < 16; Index++)
+            {
+                var From = (Start + Index * Step) % 1;
+                Span = RootMotionSampler.Delta(Turning, From, Step, true) * Span;
+            }
+            var Direct = RootMotionSampler.Delta(Turning, Start, 0.8, true);
+            Check(Near(Span.Translation, Direct.Translation) &&
+                Near(Vector3.TransformNormal(Vector3.UnitZ, Span),
+                    Vector3.TransformNormal(Vector3.UnitZ, Direct)),
+                "a loop-crossing span from " + Start.ToString("0.00",
+                    System.Globalization.CultureInfo.InvariantCulture) +
+                " matches stepped playback: " + Direct.Translation);
+        }
+        Check(Near(RootMotionSampler.Delta(Motion, 0.9, 0.5, true).Translation, new(0, 0, -1)),
+            "a span that wraps once keeps the pre-wrap remainder and the new partial cycle");
+
         var Fixture = Directory.CreateTempSubdirectory("SharpEngine-RootMotion-");
         try
         {

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "sharpengine.character-movement",
+  "version": "1.0.0",
+  "modules": [
+    "Source/CharacterMovement.Runtime/CharacterMovement.Runtime.csproj",
+    "Source/CharacterMovement.Editor/CharacterMovement.Editor.csproj"
+  ]
+}

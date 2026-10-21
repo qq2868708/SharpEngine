@@ -50,40 +50,44 @@ public static class RootMotionSampler
         }
         var Start = Motion(0);
         var StartInverse = Inverse(Start);
-        var StartTime = Loop ? FromTime % Asset.Duration : Math.Min(FromTime, Asset.Duration);
-        var EndTime = StartTime + AdvanceSeconds;
-        if (!double.IsFinite(EndTime))
+        var Cycle = Loop && Motion(Asset.Duration) != Start
+            ? Motion(Asset.Duration) * StartInverse
+            : Matrix4x4.Identity;
+        // Unfold the loop into one absolute curve so a frame that crosses a boundary composes the
+        // remaining cycles and the new partial cycle in playback order.
+        Matrix4x4 Unfolded(double Time)
         {
-            throw new InvalidDataException("Root motion time must remain finite");
-        }
-        var BeforeMotion = Motion(StartTime);
-        var Before = BeforeMotion * StartInverse;
-        Matrix4x4 After;
-        if (Loop)
-        {
-            var CyclesValue = Math.Floor(EndTime / Asset.Duration);
+            if (!Loop)
+            {
+                var Clamped = Math.Min(Time, Asset.Duration);
+                var MotionValue = Motion(Clamped);
+                return MotionValue == Start ? Matrix4x4.Identity : MotionValue * StartInverse;
+            }
+            if (Time < Asset.Duration)
+            {
+                var MotionValue = Motion(Time);
+                return MotionValue == Start ? Matrix4x4.Identity : MotionValue * StartInverse;
+            }
+            var CyclesValue = Math.Floor(Time / Asset.Duration);
             if (CyclesValue > long.MaxValue)
             {
                 throw new InvalidDataException("Root motion advance exceeds the supported cycle count");
             }
-            var EndMotion = Motion(EndTime % Asset.Duration);
-            var CycleMotion = Motion(Asset.Duration);
-            if (BeforeMotion == EndMotion && (CyclesValue == 0 || CycleMotion == Start))
-            {
-                return Matrix4x4.Identity;
-            }
-            var Cycle = CycleMotion == Start ? Matrix4x4.Identity : CycleMotion * StartInverse;
-            After = EndMotion * StartInverse *
-                Power(Cycle, (long)CyclesValue);
+            var Remainder = Time - (long)CyclesValue * Asset.Duration;
+            var RemainderMotion = Motion(Remainder);
+            var RemainderRelative = RemainderMotion == Start ? Matrix4x4.Identity : RemainderMotion * StartInverse;
+            return RemainderRelative * Power(Cycle, (long)CyclesValue);
         }
-        else
+        var Before = Unfolded(FromTime);
+        var EndTime = FromTime + AdvanceSeconds;
+        if (!double.IsFinite(EndTime))
         {
-            var EndMotion = Motion(Math.Min(EndTime, Asset.Duration));
-            if (BeforeMotion == EndMotion)
-            {
-                return Matrix4x4.Identity;
-            }
-            After = EndMotion * StartInverse;
+            throw new InvalidDataException("Root motion time must remain finite");
+        }
+        var After = Unfolded(EndTime);
+        if (Before == After)
+        {
+            return Matrix4x4.Identity;
         }
         var Result = After * Inverse(Before);
         if (!TransformMath.IsFinite(Result))
