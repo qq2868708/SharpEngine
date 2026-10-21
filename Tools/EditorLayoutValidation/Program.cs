@@ -19,6 +19,7 @@ DockTabGroupState? FindGroup(DockNodeState node, string groupId)
         (node.Second is null ? null : FindGroup(node.Second, groupId));
 }
 
+AssetEditorLayoutCompositionValidation.Run(engineRoot, Require);
 var defaults = store.LoadDefault(engineRoot);
 Require(EditorLayoutValidator.Validate(defaults, requireAllPanesInMain: true).Count == 0,
     "The engine default must expose Content Manager 1 and hide Content Managers 2-4.");

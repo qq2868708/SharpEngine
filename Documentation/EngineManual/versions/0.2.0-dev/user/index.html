@@ -63,6 +63,8 @@
     </section>
     <section class="section-card" id="editor">
       <h2>编辑器工作流</h2>
+      <p>引擎的通用基础设施与功能组合规则见 <a href="../../../../EngineArchitecture.md">基础设施与组合层</a>。</p>
+      <p>Mesh、Skeleton、Timeline、Material 和 Prefab 的 3D 预览统一支持右键环绕、中键平移、滚轮缩放与 Focus 取景。每个窗口拥有独立观察相机，导航不修改挂接 World 内的相机实体，也不改变资产的修改状态或撤销记录。Prefab 预览使用文档副本；资产实体编辑仍走原有撤销与保存流程。Material 直接挂接材质内容，保留现有颜色预览着色方式。</p>
       <p>编辑器提供视口、层级、资源浏览、属性检查、界面编辑和日志查看等面板。播放会使用当前已保存的内容创建独立的运行副本；停止后，运行期间的临时变化会被清除。</p>
       <p>层级、变换、资源选择和设置编辑都支持撤销、重做和恢复。编辑器会在内容变化后重新载入可用结果；如果载入失败，会保留当前编辑状态并显示诊断信息。</p>
       <p>资源浏览器支持按文件夹、名称、来源和类型查找内容，多个浏览器可以分别保留自己的位置、筛选条件和选择。单击文件夹只选择它并保持当前目录，双击文件夹才进入目录；文件夹图标和名称遵循相同规则。资源仍然是单击选择、双击打开。</p>
@@ -70,7 +72,8 @@
     </section>
     <section class="section-card" id="animation-editor">
       <h2>动画时间轴与 Notify</h2>
-      <p>动画资产编辑器提供自己的菜单和工具栏，并在一个窗口内同时显示 Preview、Timeline 与 Details。Preview 始终保留在顶层编辑器根中，Timeline 和 Details 可以在该根内重新停靠或变成游离 Tab。Preview 渲染当前资产编辑器持有的临时 World，使用与 Mesh、Skeleton 编辑器相同的 3D Viewport 布局和场景渲染链路。临时 World 自带相机、Sky Light 和补充方向光；右键拖动环绕、中键拖动平移、滚轮缩放，Focus 重新取景。动画播放只更新模型姿态，不会每帧重置相机；临时 World 不改写资产或主 World。</p>
+      <p>骨骼动画使用专用 SkeletalAnimation 资产编辑器。Preview、Timeline、Details 保持可停靠编排，Preview 为主面板；播放、预览网格、Root Motion、Notify、Undo/Redo 与 Save 的操作方式保持一致。编辑器自己的逻辑文件和 RML 布局文件分离，视口与时间轴内部布局由引用的组件维护。内置布局修改后需要重建并重启 Editor；不自动覆盖已保存的布局。源码与维护入口见 <a href="../../../../AnimationAndTimeline.md">动画与时间轴专题</a>。</p>
+      <p>动画资产编辑器提供自己的菜单和工具栏，并在一个窗口内同时显示 Preview、Timeline 与 Details。Preview 始终保留在顶层编辑器根中，Timeline 和 Details 可以在该根内重新停靠或变成游离 Tab。Preview 渲染当前资产编辑器持有的临时 World，使用与 Mesh、Skeleton 编辑器相同的 3D Viewport 布局和场景渲染链路。临时 World 提供内容、Sky Light 和补充方向光，观察相机由 Viewport3D 独立持有；右键拖动环绕、中键拖动平移、滚轮缩放，Focus 重新取景。动画播放只更新模型姿态，不会每帧重置相机；临时 World 不改写资产或主 World。</p>
       <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation、Timeline 或 AnimationStateMachine 会按 <code>AssetId</code> 打开顶层资产编辑器。不同资产各自拥有独立实例；再次双击同一资产只聚焦原实例。Notify、播放头、Undo/Redo 和 dirty 状态均属于该资产实例。项目资产支持 Save，引擎来源资产保持只读。动画从关联 Skeleton 的 <code>previewMeshId</code> 取得默认预览网格；Details 可以为当前编辑器会话临时选择其他兼容网格，而不会改写动画资产。</p>
       <p>Viewport 的 Transform 按钮和项目 Project Preview 按钮都通过引擎命令执行。项目可以扩展固定的 File 菜单、主 Toolbar 和 <code>viewport</code> CustomBar Surface，但不能创建新的顶层 Surface。</p>
     </section>
@@ -108,6 +111,7 @@
     </section>
     <section class="section-card" id="input-ui">
       <h2>输入与 UI</h2>
+      <p>现有 RML 布局可以由代码在当前 UI 实例中增加或删除容器、文本、按钮和输入框，并绑定点击或值变化事件；也可以挂接 Viewport3D、Timeline 等功能提供的子布局。动态内容随实例刷新保留，输入框保留焦点和光标；关闭后释放，不改写原始布局，不改变资产 dirty 或 Save。父级只操作自己的容器，子功能通过公开接口定制。接入示例与限制见 <a href="../../../../RuntimeUiComposition.md">运行实例 UI 组合</a>。</p>
       <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做，F5 播放或暂停，F8 停止。文本输入框获得焦点时优先处理自身的编辑操作。</p>
       <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。Play 或 Pause 时，Viewport 的相机导航、选择和 Gizmo 不再接收游戏输入；输入只作用于运行时逻辑，Stop 后恢复编辑操作。</p>
       <p>Player Prefab 使用独立第三人称相机和 Player 输入映射。鼠标调整镜头朝向，WASD 移动；默认根实体水平朝向与镜头同步，Mesh 独立转向 WASD 移动方向，A/D 时播放转向后的前向动画。点击 Play 后可直接操作，Shift+F1 释放光标，点击视口重新捕获。暂停、停止、失焦会释放光标并清空按键状态。相机当前不提供遮挡避让。</p>
@@ -116,6 +120,7 @@
     </section>
     <section class="section-card" id="settings-modules">
       <h2>设置与模块</h2>
+      <p>开发功能采用组合式架构：基础能力和完整组合都可通过各自公共接口复用，上层只关心组合后的能力。功能定义与模板可以复用，进度等可变数据归属于每次使用的实例；嵌套子实例由所属组合驱动。组合插槽通过领域能力类型限制可接受的功能，Module 和 Plugin 仍承担构建、发现与分发职责。参见 <a href="../../../../CompositionArchitecture.md">组合式开发架构</a>。</p>
       <p>引擎设置和项目设置使用统一的属性面板编辑。修改会即时检查有效性，支持撤销、重做和恢复，保存后才会成为项目内容。</p>
       <p>功能模块可以只服务编辑器、只服务运行模式，或同时服务两者。启动时会按照依赖关系载入模块，停止时会按相反顺序清理。</p>
     </section>
@@ -137,6 +142,11 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>骨骼动画与状态机编辑器由独立 Animation.Editor 模块管理，复用下层 Timeline、Viewport 和布局基础设施。骨骼动画保留播放、预览模型、Root Motion、Notify、撤销与保存；状态机保留只读三面板显示，其布局由独立文件维护。使用新模块需重建并重启 Editor。</p>
+      <p>增加 UI 实例动态组合：在已有布局上通过代码添加/移除基础控件和子布局，绑定事件；共享布局定义保持只读。隔离 Editor 验证覆盖真实点击、连续输入、中部插入、刷新、实例隔离与源文件不变。</p>
+      <p>骨骼动画从通用 Timeline 编辑器中分离，专用编辑器以一份逻辑文件和一份布局文件组合 Viewport3D、Timeline 及预览 World。共享 UI 模板支持类型化子布局插槽，每个资产仍拥有独立播放、相机和 Dock 实例。</p>
+      <p>3D 预览按基础设施金字塔组合：通用 Viewport3D 提供显示与导航，World 作为内容挂接；同一个 World 可被多个视口独立观察，World 没有 Camera 实体也能预览。主场景视口继续使用既有事务与 Undo 路径。</p>
+      <p>通用资产 3D Viewport 的右键拖动方向与主场景视口默认方向一致：向右拖动向右环绕，向下拖动抬高相机。项目选择器随窗口宽高调整布局与封面高度，窄窗口将最近项目排列在详情上方，内容溢出时可滚动访问操作按钮。</p>
       <p>修复 OpenGL 下打开和操作多个资产编辑器时，界面更新后读取 UI 快照可能导致崩溃的问题。</p>
       <p>启动入口与插件选择：无项目进入使用引擎 RmlUi 与现有视觉方案的轻量项目选择器；静态预览不运行项目代码。新增默认插件的项目覆盖、依赖变更预览和原子保存；插件分析位于 Editor 内。更改需要重建项目并重启 Editor。</p>
       <p>资产预览统一复用 3D Viewport 布局并渲染编辑器持有的临时 World；时间轴内置播放控件、连续刻度标尺和可拖拽时间箭头，拖拽后保持暂停。动画预览不执行 Notify。</p>

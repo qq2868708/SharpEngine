@@ -9,5 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Source\SharpEngine.Editor\SharpEngine.Editor.csproj" />
     <ProjectReference Include="..\..\Source\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" />
+    <ProjectReference Include="..\..\Source\SharpEngine.Animation.Editor\SharpEngine.Animation.Editor.csproj" />
   </ItemGroup>
 </Project>

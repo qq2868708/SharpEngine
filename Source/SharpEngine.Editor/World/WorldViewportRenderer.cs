@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -95,6 +96,39 @@ public static class WorldViewportRenderer
         return frame with { Lines = frame.Lines.Concat(Overlay.Lines).ToArray() };
     }
 
+    public static WorldViewportFrame BuildPreviewFrame(WorldDocument World, UiRect Bounds,
+        Camera3D Camera, AssetRegistry? Assets = null)
+    {
+        var Frame = SceneRenderer.BuildFrame(World, Bounds, Assets, ViewCamera: Camera);
+        if (Bounds.Width <= 0 || Bounds.Height <= 0)
+        {
+            return Frame;
+        }
+        var Lines = Frame.Lines.ToList();
+        AddNavigationOverlay(Lines, Camera.ViewProjection(Bounds.Width / Bounds.Height),
+            Camera.Right, Camera.Up, Camera.Forward, Bounds);
+        return Frame with
+        {
+            Lines = Lines.ToArray(),
+        };
+    }
+
+    private static void AddNavigationOverlay(List<ViewportVertex> Lines, Matrix4x4 ViewProjection,
+        Vector3 Right, Vector3 Up, Vector3 Forward, UiRect Bounds)
+    {
+        for (var Index = -10; Index <= 10; Index++)
+        {
+            var Grid = new Vector4(0.25f, 0.32f, 0.40f, 1);
+            AddLine(Lines, new Vector3(Index, 0.008f, -10),
+                new Vector3(Index, 0.008f, 10), ViewProjection, Bounds,
+                Index == 0 ? new Vector4(0.27f, 0.46f, 0.92f, 1) : Grid);
+            AddLine(Lines, new Vector3(-10, 0.008f, Index),
+                new Vector3(10, 0.008f, Index), ViewProjection, Bounds,
+                Index == 0 ? new Vector4(0.84f, 0.29f, 0.29f, 1) : Grid);
+        }
+        AddCornerGizmo(Lines, Right, Up, Forward, Bounds);
+    }
+
     public static WorldViewportFrame BuildOverlayFrame(WorldDocument world,
         UiRect bounds, string? selectedEntityId = null, string transformTool = "move")
     {
@@ -104,28 +138,15 @@ public static class WorldViewportRenderer
             return new(bounds, [], [], world.Entities.Count, world.MeshCount,
                 camera?.Id ?? string.Empty);
         }
-        var lines = new List<WorldViewportVertex>();
+        var lines = new List<ViewportVertex>();
         var viewProjection = CameraMatrix(world, camera, bounds.Width / bounds.Height);
         var selected = selectedEntityId is null ? null : world.Entities.FirstOrDefault(e =>
             string.Equals(e.Id, selectedEntityId, StringComparison.OrdinalIgnoreCase));
         if (selected is not null)
             AddTransformGizmo(lines, world, selected, camera, bounds, transformTool);
 
-        // Grid and axes also use the scene camera and perspective projection.
-        for (var index = -10; index <= 10; index++)
-        {
-            var grid = new Vector4(0.25f, 0.32f, 0.40f, 1);
-            AddLine(lines, new Vector3(index, 0.008f, -10),
-                new Vector3(index, 0.008f, 10), viewProjection, bounds,
-                index == 0 ? new Vector4(0.27f, 0.46f, 0.92f, 1) : grid);
-            AddLine(lines, new Vector3(-10, 0.008f, index),
-                new Vector3(10, 0.008f, index), viewProjection, bounds,
-                index == 0 ? new Vector4(0.84f, 0.29f, 0.29f, 1) : grid);
-        }
-        // Orientation gizmo: screen-space and fixed in the top-right corner.
-        // Its arms use the camera basis, so they rotate as the viewport orbits
-        // while staying readable and independent of scene scale.
-        AddCornerGizmo(lines, world, camera, bounds);
+        AddNavigationOverlay(lines, viewProjection, WorldDirection(world, camera, Vector3.UnitX),
+            WorldDirection(world, camera, Vector3.UnitY), WorldDirection(world, camera, -Vector3.UnitZ), bounds);
         return new(bounds, [], lines.ToArray(), world.Entities.Count,
             world.MeshCount, camera.Id);
     }
@@ -203,18 +224,18 @@ public static class WorldViewportRenderer
         return Vector2.Dot(pointerDelta, tangent) * 0.5f;
     }
 
-    private static void AddUiLine(List<WorldViewportVertex> lines, float x0,
+    private static void AddUiLine(List<ViewportVertex> lines, float x0,
         float y0, float x1, float y1, Vector4 color)
     {
         if (!float.IsFinite(x0) || !float.IsFinite(y0) ||
             !float.IsFinite(x1) || !float.IsFinite(y1)) return;
-        lines.Add(new WorldViewportVertex(x0, y0, 0.02f,
+        lines.Add(new ViewportVertex(x0, y0, 0.02f,
             color.X, color.Y, color.Z, color.W));
-        lines.Add(new WorldViewportVertex(x1, y1, 0.02f,
+        lines.Add(new ViewportVertex(x1, y1, 0.02f,
             color.X, color.Y, color.Z, color.W));
     }
 
-    private static void AddTransformGizmo(List<WorldViewportVertex> lines,
+    private static void AddTransformGizmo(List<ViewportVertex> lines,
         WorldDocument world, WorldEntity entity, WorldEntity camera, UiRect bounds,
         string transformTool)
     {
@@ -316,7 +337,7 @@ public static class WorldViewportRenderer
         return points;
     }
 
-    private static void AddRotationRing(List<WorldViewportVertex> lines,
+    private static void AddRotationRing(List<ViewportVertex> lines,
         IReadOnlyList<Vector2> points, UiRect bounds, Vector4 color)
     {
         for (var index = 1; index < points.Count; index++)
@@ -329,7 +350,7 @@ public static class WorldViewportRenderer
         }
     }
 
-    private static void AddScaleBox(List<WorldViewportVertex> lines,
+    private static void AddScaleBox(List<ViewportVertex> lines,
         TransformGizmoHandle handle, UiRect bounds, Vector4 color)
     {
         var direction = handle.ScreenDirection;
@@ -435,7 +456,7 @@ public static class WorldViewportRenderer
         return Vector2.Distance(point, start + direction * t);
     }
 
-    private static void AddScreenGizmoLine(List<WorldViewportVertex> lines,
+    private static void AddScreenGizmoLine(List<ViewportVertex> lines,
         Vector2 start, Vector2 end, UiRect bounds, Vector4 color)
     {
         if (!float.IsFinite(start.X) || !float.IsFinite(start.Y) ||
@@ -444,31 +465,28 @@ public static class WorldViewportRenderer
             Math.Clamp(start.Y, 0, bounds.Height));
         end = new Vector2(Math.Clamp(end.X, 0, bounds.Width),
             Math.Clamp(end.Y, 0, bounds.Height));
-        lines.Add(new WorldViewportVertex(start.X, start.Y, 0.0f,
+        lines.Add(new ViewportVertex(start.X, start.Y, 0.0f,
             color.X, color.Y, color.Z, color.W));
-        lines.Add(new WorldViewportVertex(end.X, end.Y, 0.0f,
+        lines.Add(new ViewportVertex(end.X, end.Y, 0.0f,
             color.X, color.Y, color.Z, color.W));
     }
 
-    private static void AddCornerGizmo(List<WorldViewportVertex> lines,
-        WorldDocument world, WorldEntity camera, UiRect bounds)
+    private static void AddCornerGizmo(List<ViewportVertex> Lines,
+        Vector3 ScreenRight, Vector3 ScreenUp, Vector3 ScreenForward, UiRect Bounds)
     {
-        var center = new Vector2(Math.Max(44, bounds.Width - 72), 60);
-        var screenRight = WorldDirection(world, camera, Vector3.UnitX);
-        var screenUp = WorldDirection(world, camera, Vector3.UnitY);
-        var screenForward = WorldDirection(world, camera, -Vector3.UnitZ);
-        AddProjectedGizmoAxis(lines, center, Vector3.UnitX,
-            screenRight, screenUp, screenForward, 44,
+        var Center = new Vector2(Math.Max(44, Bounds.Width - 72), 60);
+        AddProjectedGizmoAxis(Lines, Center, Vector3.UnitX,
+            ScreenRight, ScreenUp, ScreenForward, 44,
             new Vector4(0.95f, 0.30f, 0.30f, 1));
-        AddProjectedGizmoAxis(lines, center, Vector3.UnitY,
-            screenRight, screenUp, screenForward, 44,
+        AddProjectedGizmoAxis(Lines, Center, Vector3.UnitY,
+            ScreenRight, ScreenUp, ScreenForward, 44,
             new Vector4(0.30f, 0.86f, 0.48f, 1));
-        AddProjectedGizmoAxis(lines, center, Vector3.UnitZ,
-            screenRight, screenUp, screenForward, 44,
+        AddProjectedGizmoAxis(Lines, Center, Vector3.UnitZ,
+            ScreenRight, ScreenUp, ScreenForward, 44,
             new Vector4(0.35f, 0.60f, 0.95f, 1));
     }
 
-    private static void AddProjectedGizmoAxis(List<WorldViewportVertex> lines,
+    private static void AddProjectedGizmoAxis(List<ViewportVertex> lines,
         Vector2 center, Vector3 axis,
         Vector3 screenRight, Vector3 screenUp, Vector3 screenForward,
         float length, Vector4 color)
@@ -489,7 +507,7 @@ public static class WorldViewportRenderer
         AddGizmoAxis(lines, center, projected, length, color);
     }
 
-    private static void AddGizmoAxis(List<WorldViewportVertex> lines,
+    private static void AddGizmoAxis(List<ViewportVertex> lines,
         Vector2 center, Vector2 direction,
         float length, Vector4 color)
     {

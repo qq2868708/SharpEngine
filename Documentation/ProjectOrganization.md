@@ -1,5 +1,8 @@
 # Engine projects and targets
 
+Functional reuse and nesting follow the [composition architecture](CompositionArchitecture.md).
+Functional boundaries are distinct from the Module/Plugin build and discovery boundaries below.
+
 Each engine `.csproj` or `.vcxproj` declares one `SharpEngineRole`. Project references
 define managed build dependencies. `EngineBuildGraph` discovers these declarations;
 there is no second engine-project list in the solution generator or layout checker.
@@ -55,6 +58,7 @@ The full Cook pipeline still owns packaging and derived output publication.
 | SharpEngine.Editor | Editor Module | Core authoring transactions, Inspector, Dock, asset browsing, editor UI, preview overlays, project code watching and reload |
 | SharpEngine.Timeline.Runtime | Runtime Module | Built-in Timeline document, Playable composition and Timeline asset loading |
 | SharpEngine.Timeline.Editor | Editor Module | Built-in Timeline semantic view and editor-facing Timeline presentation |
+| SharpEngine.Animation.Editor | Editor Module | Skeletal-animation and state-machine asset editors; consumes Timeline UI and core Editor infrastructure |
 | SharpEngine.Host | Host | Native-to-managed lifecycle entry points; compiled with Editor entry or Game entry according to Target |
 | Engine | NativeHost | One native project; selects EditorMain or GameMain at build time and shares CLR bridge and scene presentation |
 | SharpEngine.ComponentGenerator | Generator | Compile-time Roslyn analyzer; never a runtime assembly reference |
@@ -65,6 +69,12 @@ does not create a dependency or loading boundary: SDK-style projects compile all
 source files beneath their project directory by default. Timeline is an Engine-owned
 feature, so its Runtime and Editor projects live under `Source/` and are referenced by
 the Engine Host; it does not need a Plugin descriptor.
+
+`SharpEngine.Animation.Editor` is an Editor-only consumer of `SharpEngine.Timeline.Editor`.
+Its `AnimationEditorModule` registers the skeletal-animation and state-machine asset
+openers. Timeline Modules do not reference the animation editor Module. Built-in
+Editor startup starts Timeline infrastructure before Animation Editor and releases
+them in reverse order. Game/Server Host references exclude Animation Editor.
 
 Engine feature Modules carry a `SharpEngineModuleAttribute` in their assembly. The
 Host supplies the statically linked Engine assemblies to `EngineModuleHost`, which

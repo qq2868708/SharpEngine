@@ -1,0 +1,27 @@
+<Project>
+  <PropertyGroup><SharpEngineRole>Editor</SharpEngineRole></PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <SharpEngineModuleId>SharpEngine.Animation.Editor</SharpEngineModuleId>
+    <SharpEngineModuleType>Editor</SharpEngineModuleType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>SharpEngine.Animation.Editor</AssemblyName>
+    <RootNamespace>SharpEngine.Animation</RootNamespace>
+    <Version>0.2.0</Version>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputPath>$(SharpEngineBinariesDir)</OutputPath>
+    <BaseIntermediateOutputPath>$(SharpEngineIntermediateDir)SharpEngine.Animation.Editor\</BaseIntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" />
+    <ProjectReference Include="..\SharpEngine.Editor\SharpEngine.Editor.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../Content/UI/Rml/SkeletalAnimationEditor.rml" LogicalName="SharpEngine.Animation.SkeletalAnimationEditor.rml" />
+    <EmbeddedResource Include="../../Content/UI/Rml/AnimationStateMachineEditor.rml" LogicalName="SharpEngine.Animation.AnimationStateMachineEditor.rml" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.UI;
 
 namespace SharpEngine.Editor;
 
@@ -11,7 +12,7 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
 {
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
-    private readonly StaticMeshAsset PreviewSphere;
+    private readonly Viewport3D Viewport;
     private MaterialAssetDescription Material = null!;
 
     public MaterialAssetEditorInstance(EditorAssetOpenContext Context)
@@ -22,7 +23,11 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
         RefreshAsset();
         var Assets = Context.Runtime.Assets ?? throw new InvalidOperationException(
             "Asset registry is unavailable");
-        PreviewSphere = AssetContent.LoadStaticMesh(Assets, "engine://meshes/sphere");
+        var PreviewSphere = AssetContent.LoadStaticMesh(Assets, "engine://meshes/sphere");
+        Viewport = new Viewport3D("materialPreviewViewport", "asset-material-preview");
+        Viewport.AddContent(new MaterialPreviewContent("material:" + Context.Asset.Id, PreviewSphere, () => Material));
+        Viewport.Frame(PreviewSphere.Positions.Select(Position =>
+            new Vector3(Position.X, Position.Y, Position.Z)));
     }
 
     public AssetDescriptor Asset => Context.Asset;
@@ -70,6 +75,10 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        if (Viewport.TryHandleAction(Action))
+        {
+            return true;
+        }
         const string Prefix = "editor.material-field:";
         if (!Action.StartsWith(Prefix, StringComparison.Ordinal))
         {
@@ -103,10 +112,7 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
     {
         return PaneId switch
         {
-            "preview" => "<div class=\"asset-preview-surface material-preview\"><viewport id=\"materialPreviewViewport\" data-viewport-kind=\"asset-material-preview\" data-input-surface=\"material-preview\" /><div class=\"asset-preview-overlay\"><span>" +
-                AssetEditorInstanceUtilities.Escape(Material.Name) +
-                "</span><span>" + AssetEditorInstanceUtilities.Escape(Material.Shader) +
-                "</span></div></div>",
+            "preview" => Viewport.BuildMarkup(Material.Name + " · " + Material.Shader),
             "details" => BuildDetailsMarkup(),
             "source" => AssetEditorInstanceUtilities.Source(Document.Source),
             "diagnostics" => AssetEditorInstanceUtilities.Diagnostics([]),
@@ -122,17 +128,7 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
 
     public void Update(float DeltaSeconds)
     {
-        if (!Context.TryGetElementRect("materialPreviewViewport", out var Bounds))
-        {
-            return;
-        }
-
-        var Color = new Vector4(Material.BaseColor.R, Material.BaseColor.G,
-            Material.BaseColor.B, Material.BaseColor.A);
-        Context.SubmitViewportFrame("asset-material-preview",
-            AssetPreviewRenderer.BuildMeshFrame(PreviewSphere.Positions,
-                PreviewSphere.Indices, Bounds, Color,
-                $"material-preview-camera:{Asset.Id}"));
+        Viewport.Render(Context);
     }
 
     public JsonObject Describe()
@@ -142,6 +138,7 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
             ["schemaVersion"] = 1,
             ["assetId"] = Asset.Id,
             ["editorRootId"] = Context.EditorRootId,
+            ["viewport"] = Viewport.Describe(),
             ["dirty"] = IsDirty,
             ["readOnly"] = IsReadOnly,
             ["documentRevision"] = Document.Revision,

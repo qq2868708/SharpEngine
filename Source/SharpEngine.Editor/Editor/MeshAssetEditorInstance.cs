@@ -12,7 +12,7 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
     private readonly AssetPreviewWorld PreviewWorld;
-    private readonly WorldViewportLayout Viewport = new("meshPreviewViewport", "asset-mesh-preview");
+    private readonly WorldPreview Preview;
     private StaticMeshAsset? StaticMesh;
     private SkeletalMeshAsset? SkeletalMesh;
 
@@ -21,6 +21,8 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         this.Context = Context;
         PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
             throw new InvalidOperationException("Component registry is unavailable"), "mesh-preview:" + Context.Asset.Id);
+        Preview = new WorldPreview(PreviewWorld.World, Context.Runtime.Assets, "meshPreviewViewport", "asset-mesh-preview");
+
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
             Validate);
         RefreshAsset();
@@ -83,7 +85,7 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
-        if (Viewport.TryHandleAction(PreviewWorld.World, Action))
+        if (Preview.Viewport.TryHandleAction(Action))
         {
             return true;
         }
@@ -132,7 +134,7 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 
     public void Update(float DeltaSeconds)
     {
-        Viewport.Render(Context, PreviewWorld.World, Context.Runtime.Assets);
+        Preview.Viewport.Render(Context);
     }
 
     public JsonObject Describe()
@@ -144,7 +146,7 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             ["editorRootId"] = Context.EditorRootId,
             ["assetType"] = Asset.Type,
             ["previewWorld"] = PreviewWorld.Describe(),
-            ["viewport"] = Viewport.Describe(),
+            ["viewport"] = Preview.Viewport.Describe(),
             ["dirty"] = IsDirty,
             ["readOnly"] = IsReadOnly,
             ["documentRevision"] = Document.Revision,
@@ -218,12 +220,12 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             Asset.Type == "StaticMesh" ? "engine.static-mesh" : "engine.mesh-renderer",
             IsSkeletal ? SkeletalMesh!.DefaultMaterial : StaticMesh!.DefaultMaterial, SkeletalMesh);
         var Positions = IsSkeletal ? SkeletalMesh!.Positions : StaticMesh!.Positions;
-        Viewport.Frame(PreviewWorld.World, Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
+        Preview.Viewport.Frame(Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
     }
 
     private string BuildPreviewMarkup()
     {
-        return Viewport.BuildMarkup(Asset.Name);
+        return Preview.Viewport.BuildMarkup(Asset.Name);
     }
 
     private string BuildDetailsMarkup()

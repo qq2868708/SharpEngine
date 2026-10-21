@@ -1,0 +1,34 @@
+<asset-editor-layout schema-version="1" primary-pane="preview">
+  <dock>
+    <split id="asset.root" orientation="horizontal" ratio="0.74">
+      <split id="asset.left" orientation="vertical" ratio="0.58">
+        <tabs id="asset.preview" group="asset.preview.tabs" active="preview"><tab pane="preview" /></tabs>
+        <tabs id="asset.timeline" group="asset.timeline.tabs" active="timeline"><tab pane="timeline" /></tabs>
+      </split>
+      <tabs id="asset.details" group="asset.details.tabs" active="details"><tab pane="details" /></tabs>
+    </split>
+  </dock>
+  <panes>
+    <pane id="preview" label="Preview" closable="false">
+      <ui-slot name="Viewport" title="${AnimationName}" />
+    </pane>
+    <pane id="timeline" label="Timeline" closable="true">
+      <div class="timeline-pane asset-timeline-pane">
+        <div id="timelineViewHost" class="timeline-view-host"><ui-slot name="Timeline" width="${TimelineWidth}" height="${TimelineHeight}" /></div>
+        <div class="timeline-notify-inspector"><span class="timeline-inspector-label">NOTIFY</span><span>${SelectedNotify}</span></div>
+      </div>
+    </pane>
+    <pane id="details" label="Details" closable="true">
+      <div class="asset-details-pane">
+        <div class="asset-preview-mesh-picker">
+          <strong>Preview Mesh</strong>
+          <ui-if test="NoMeshes"><span>No compatible meshes</span></ui-if>
+          <ui-if test="HasMeshes"><button data-action="editor.timeline-preview-default">Skeleton Default</button></ui-if>
+          <ui-repeat items="Meshes"><button data-action="editor.timeline-preview-mesh:${Id}">${Name}</button></ui-repeat>
+          <div><button id="animationRootMotion" data-action="editor.timeline-root-motion" ui-disabled="RootMotionDisabled">Root Motion: ${RootMotionState}</button><span>Enabled drives the entity; disabled removes root translation and rotation.</span></div>
+        </div>
+        <pre class="timeline-details">${DetailsJson}</pre>
+      </div>
+    </pane>
+  </panes>
+</asset-editor-layout>

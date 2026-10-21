@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
@@ -11,7 +12,7 @@ internal sealed class EditorAssetOpenCanceledException(string Message) : Excepti
 public sealed record EditorAssetOpenResult(bool Success, string Code, string AssetId,
     string? OpenerId, string Message);
 
-public sealed class EditorAssetOpenContext
+public sealed class EditorAssetOpenContext : SharpEngine.UI.IViewport3DHost
 {
     internal EditorAssetOpenContext(EditorRuntime Runtime, AssetDescriptor Asset, string Path,
         string EditorId, string EditorRootId)
@@ -31,7 +32,7 @@ public sealed class EditorAssetOpenContext
     public void ShowPane(string PaneId) => Runtime.ShowPane(PaneId);
     public bool TryGetElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds) =>
         Runtime.TryGetAssetEditorElementRect(EditorRootId, ElementId, out Bounds);
-    public void SubmitViewportFrame(string Kind, SharpEngine.World.WorldViewportFrame Frame) =>
+    public void SubmitViewportFrame(string Kind, ViewportFrame Frame) =>
         Runtime.SubmitAssetEditorViewportFrame(EditorRootId, Kind, Frame);
     public void SetStatus(string Message) => Runtime.SetStatusFromExtension(Message);
 }

@@ -133,12 +133,36 @@
         <p>示例 Prefab 使用 <code>engine.skeletal-mesh</code> schema v1（<code>engine://meshes/uefn-mannequin</code>）和 <code>engine.animator</code> schema v3，绑定 <code>engine://animation-state-machines/uefn-mannequin-locomotion</code>。实例化同时重映射 <code>Target</code> 和 <code>MovementSource</code>；胶囊 collider schema v1 提供 <code>RuntimeWorld.Collision.Raycast</code> 查询且不生成渲染几何。动画复用 Playable 采样，<code>SkeletonFrameState</code> 的骨骼矩阵和蒙皮顶点属于派生帧数据，不保存进 Prefab/World。</p>
       </article>
       <article class="api-entry">
-        <h3><code>AssetPreviewWorld</code> / <code>WorldViewportLayout</code></h3>
-        <p>资产编辑器持有临时 <code>AssetPreviewWorld.World</code>；<code>WorldViewportLayout</code> 复用布局、导航与渲染入口，调用者传入 World。<code>Frame</code> 显式取景，<code>Render</code> 使用标准场景渲染，<code>TryHandleAction</code> 接收宿主路由的相机输入；<code>Describe</code> 暴露瞬态预览场景与相机状态，均不保存进资产。源码：<a href="../../../../../Source/SharpEngine.Editor/Editor/AssetPreviewWorld.cs">AssetPreviewWorld.cs</a>、<a href="../../../../../Source/SharpEngine.Editor/Editor/WorldViewportLayout.cs">WorldViewportLayout.cs</a>。</p>
+        <h3><code>Viewport3D</code> / <code>IViewport3DContent</code> / <code>IViewport3DHost</code></h3>
+        <p>Runtime 通用基础设施：视口仅组合 UI、观察相机、导航与内容层，不引用 World、资产注册表或 Editor。<code>AddContent</code> / <code>RemoveContent</code> 管理挂接，不取得内容所有权。<code>Frame</code>、<code>Render</code> 和 <code>TryHandleAction</code> 分别负责取景、宿主呈现和 UI 输入路由。<code>OrbitCameraController</code> 提供可直接调用的 Orbit、Pan、Zoom、Focus API。输入协议为 <code>ui.viewport3d:&lt;elementId&gt;:</code>，RML 标记为 <code>data-viewport3d</code>。<code>Describe</code> 的 Schema v1 暴露 contentIds、相机位置/旋转、pivot、distance、yaw、pitch 和 stateRevision。源码：<a href="../../../../../Source/SharpEngine.Runtime/UI/Viewport3D/Viewport3D.cs">Viewport3D.cs</a>、<a href="../../../../../Source/SharpEngine.Runtime/UI/Viewport3D/IViewport3DContent.cs">内容与宿主接口</a>。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>Camera3D</code> / <code>ViewportFrame</code> / <code>WorldPreview</code></h3>
+        <p><code>Camera3D</code> 是独立观察相机快照；通用 <code>ViewportFrame</code> 与 <code>ViewportVertex</code> 不包含场景业务，顶点仍为七个 float，原生 ABI 不变。<code>WorldViewportFrame</code> 继承通用帧并保留场景统计。<code>SceneRenderer.BuildFrame</code> 可显式传入 ViewCamera，无需 World 内存在 Camera 实体。</p>
+        <p><code>WorldViewportContent</code> 将 World 适配到通用内容接口；<code>WorldPreview</code> 仅组合它与 Viewport3D。导航不修改 World 的 Camera、Transform 或 ActiveCameraId；同一 World 可被多个视口独立观察。Mesh、Skeleton、Timeline、Prefab 的 <code>previewWorld</code> 只描述内容；Material 直接挂接材质内容，仅提供 <code>viewport</code> 快照。源码：<a href="../../../../../Source/SharpEngine.Runtime/Rendering/Camera3D.cs">Camera3D.cs</a>、<a href="../../../../../Source/SharpEngine.Runtime/Rendering/ViewportFrame.cs">ViewportFrame.cs</a>、<a href="../../../../../Source/SharpEngine.Editor/Editor/Viewport/WorldViewportContent.cs">WorldViewportContent.cs</a>、<a href="../../../../../Source/SharpEngine.Editor/Editor/Preview/WorldPreview.cs">WorldPreview.cs</a>。分层规则见 <a href="../../../../EngineArchitecture.md">基础设施与组合层</a>。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>IUiLayoutPart</code> / <code>UiLayoutTemplate</code> / <code>AssetEditorLayoutDefinition</code></h3>
+        <p><code>IUiLayoutPart.BuildLayout(UiLayoutContext)</code> 是 UI 领域的类型化组合插槽，Context 提供宽、高和标题。<code>UiLayoutTemplate</code> 保存只读 RML 定义，按每次使用的 JsonObject 值与 UI 子实例渲染；支持 <code>ui-slot</code>、<code>ui-if</code>、<code>ui-repeat</code> 和 <code>ui-disabled</code>，缺失绑定、类型错误和未知指令显式失败。值作为文本/属性转义，不作为原始 RML 注入。Viewport3D 和 TimelineView 均实现该接口并维护各自嵌入的 RML 定义。</p>
+        <p><code>AssetEditorLayoutDefinition</code> 读取 <code>asset-editor-layout</code> schema-version 1，声明主 Pane、Pane 模板及 split/tabs 默认 Dock 结构；<code>CreateDockLayout</code> 返回独立的既有 EditorLayoutDocument，<code>RenderPane</code> 按本实例的值和类型化插槽呈现。此格式是内置编辑器布局定义，不改变 World、动画资产或已保存 Dock 数据的 Schema。源码：<a href="../../../../../Source/SharpEngine.Runtime/UI/UiLayoutTemplate.cs">UiLayoutTemplate.cs</a>、<a href="../../../../../Source/SharpEngine.Editor/Editor/Layout/AssetEditorLayoutDefinition.cs">AssetEditorLayoutDefinition.cs</a>。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>UiLayoutInstance</code> / <code>UiElement</code> / <code>IUiActionHandler</code></h3>
+        <p><code>UiLayoutTemplate.CreateInstance(InstanceId)</code> 创建独立可变实例。<code>Find</code> / <code>FindByClass</code> 查找自身布局，<code>Add</code> / <code>AddLayout</code> / <code>Remove</code> 组合节点，<code>Text</code>、<code>Enabled</code>、<code>Visible</code>、<code>SetAttribute</code> 修改瞬态表现；基础控件为 UiContainer、UiLabel、UiButton、UiTextField。<code>Clicked</code> / <code>ValueChanged</code> 经 <code>IUiActionHandler.TryHandleAction</code> 路由，已有动作须先显式清除才能替换。Render 在模板展开后应用实例文本与属性，避免二次解释绑定。</p>
+        <p><code>AssetEditorLayoutDefinition.CreateInstance</code> 提供逐面板隔离的 <code>AssetEditorLayoutInstance.GetPane</code>、RenderPane、TryHandleAction、Describe 与 Dispose。查询不进入子布局或 repeat 内部；挂接借用 IUiLayoutPart，不转移所有权。删除使旧句柄和事件失效；Dispose 释放本实例绑定。Describe schemaVersion 1 暴露 instanceId、stateRevision 和实例节点状态；源 RML、资产 Schema、原生 API 表及 MCP 工具列表不变。源码：<a href="../../../../../Source/SharpEngine.Runtime/UI/UiLayoutInstance.cs">UiLayoutInstance.cs</a>、<a href="../../../../../Source/SharpEngine.Runtime/UI/UiElement.cs">UiElement.cs</a>。完整用法和身份约束见 <a href="../../../../RuntimeUiComposition.md">运行实例 UI 组合</a>。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>SkeletalAnimationEditorExtension</code></h3>
+        <p>归属 <code>SharpEngine.Animation.Editor</code>，由 <code>AnimationEditorModule</code> 注册。稳定 Opener ID 仍为 <code>engine.skeletal-animation-editor</code>，专用 Editor ID 为 <code>skeletal-animation-editor</code>。每个资产实例组合 Viewport3D、WorldViewportContent、临时预览 World 和 TimelineView，通过 TimeChanged 驱动姿态采样，不执行 Notify。动画 JSON 事务与历史归属动画编辑器，Timeline 数据是展示结果。Editor 状态 Schema v2 与现有动作 ID 保持一致。专属文件：<a href="../../../../../Source/SharpEngine.Animation.Editor/SkeletalAnimationEditorExtension.cs">逻辑</a>、<a href="../../../../../Content/UI/Rml/SkeletalAnimationEditor.rml">布局</a>；子布局：<a href="../../../../../Content/UI/Rml/Viewport3D.rml">Viewport3D.rml</a>、<a href="../../../../../Content/UI/Rml/TimelineView.rml">TimelineView.rml</a>。</p>
+      </article>
+      <article class="api-entry">
+        <h3><code>AnimationEditorModule</code> / <code>AnimationStateMachineEditorExtension</code></h3>
+        <p>新增 Editor-only 模块 <code>SharpEngine.Animation.Editor</code>，引用 Timeline.Editor 与核心 Editor；Timeline 不反向引用或注册具体动画编辑器。状态机扩展保留 <code>engine.animation-state-machine-editor</code> Opener ID 和原 <code>timeline-editor</code> 窗口身份，使用自己的三面板 RML，保持只读。状态机编辑器状态升级为 schemaVersion 3：移除未使用的 previewWorld、viewport、预览网格字段，增加 runtimeUi；状态图、计数、revision 和只读信息保留。源资产格式不变。模块接入需重建并重启 Editor。源码：<a href="../../../../../Source/SharpEngine.Animation.Editor/AnimationEditorModule.cs">模块入口</a>、<a href="../../../../../Source/SharpEngine.Animation.Editor/AnimationStateMachineEditorExtension.cs">状态机逻辑</a>、<a href="../../../../../Content/UI/Rml/AnimationStateMachineEditor.rml">状态机布局</a>。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Timeline</code></h3>
-        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code>、<code>AnimationNotify</code> 和 MarkerPlayable。每个 <code>TimelineAssetEditorInstance</code> 拥有独立播放、选择、Undo/Redo 和 dirty 状态；资产编辑器命令通过所属 <code>hostId</code> 路由。Preview 是不可游离的主 Pane，Timeline 与 Details 是同一 <code>EditorRootId</code> 下的普通 Pane。</p>
+        <p><code>TimelineNotifyEditing.TryAdd</code> 为 Notify 轨道生成插入候选，返回 Replacement、ClipId 与诊断 Message；不修改源 Document、不提交事务、不维护历史或保存。Timeline 与动画调用方各自提交到所属 Authoring 文档。源码：<a href="../../../../../Source/SharpEngine.Timeline.Editor/TimelineNotifyEditing.cs">TimelineNotifyEditing.cs</a>。</p>
+        <p><code>IPlayable</code>、<code>PlayableGraph</code>、<code>TimelineDocument</code>、<code>TimelineView</code>、<code>TimelineAuthoringSession</code>、<code>AnimationNotify</code> 和 MarkerPlayable。Timeline 和专用 SkeletalAnimation 编辑器各自拥有独立播放、选择、Undo/Redo 和 dirty 状态；资产编辑器命令通过所属 <code>hostId</code> 路由。Preview 是不可游离的主 Pane，Timeline 与 Details 是同一 <code>EditorRootId</code> 下的普通 Pane。</p>
         <p><code>TimelineView</code> 持有当前时间、播放状态和推进逻辑，提供 <code>Play/Pause/Stop/Seek/Update</code>，通过 <code>TimeChanged</code> 与 <code>PlaybackChanged</code> 供外部订阅。<code>TimelineTimeChangedEvent</code> 带 timelineId、前后时间和 <code>Playback/Seek/Stop</code> 来源。<code>Seek</code> 暂停且连续定位，不保存或恢复拖拽前的播放状态。插件订阅事件后自行处理预览；通用时间轴不执行业务 Notify，动画编辑器也不执行 Notify。播放数据属于瞬态状态，Timeline 资产 schema 仍为 v1。<code>TimelineViewState.CurrentTime</code> 通过 <code>Seek</code> 修改，避免绕过事件。源码：<a href="../../../../../Source/SharpEngine.Timeline.Editor/TimelineView.cs">TimelineView.cs</a>、<a href="../../../../../Source/SharpEngine.Timeline.Editor/TimelinePlayback.cs">TimelinePlayback.cs</a>。</p>
       </article>
       <article class="api-entry">
@@ -160,7 +184,11 @@
       </article>
       <article class="api-entry">
         <h3>版本化 JSON 与 MCP</h3>
-        <p>AI-facing snapshot、组件、资产、设置和输入契约包含 schemaVersion。未知未来版本、未知必需类型和迁移失败必须返回结构化诊断；不能静默丢弃字段。</p>
+        <p>AI-facing snapshot、组件、资产、设置和输入契约包含 schemaVersion。World/Prefab 在预稳定阶段仅接受 v3，已知组件必须匹配当前描述符版本；其他格式按各自读者声明兼容范围。未知未来版本、未知必需类型和受支持迁移的失败必须返回结构化诊断；不能静默丢弃字段。</p>
+      </article>
+      <article class="api-entry">
+        <h3>组合能力、类型边界与实例</h3>
+        <p>组合插槽使用领域能力契约，例如 <code>IPlayable</code> 和 <code>ICharacterMovementModifier</code>；不满足对应类型的功能不能进入该插槽。组合体封装子功能，可以公开自己的完整契约；功能定义与模板可复用，进度等可变数据属于使用实例。内部子实例由组合实例驱动，World 组件保持引擎生命周期归属。详见 <a href="../../../../CompositionArchitecture.md">组合式开发架构</a>。本约束不引入万能组合接口或任意多态对象图序列化。</p>
       </article>
       <article class="api-entry">
         <h3><code>SharpEngine.Assets.FbxSourceContract</code></h3>
@@ -181,6 +209,10 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>骨骼动画与状态机编辑器迁入 SharpEngine.Animation.Editor，由 AnimationEditorModule 注册；Timeline 模块仅注册 Timeline。动画事务与时间轴展示分离，新增通用 Notify 候选编辑 API。骨骼动画状态保持 v2，状态机编辑器状态改为 v3 并去除无内容的 3D 预览字段；源资产 Schema、稳定打开 ID 和原生 ABI 不变。</p>
+      <p>新增 UiLayoutInstance、UiElement 基础控件、IUiActionHandler 和 AssetEditorLayoutInstance，实现已有布局上的实例级动态 UI；定义保持只读，事件与原生节点身份按实例隔离，源资产 Schema 与原生 ABI 不变。新增 C# API 的调用方需重建；原生宿主更新需重建并重启 Editor。</p>
+      <p>新增专用 SkeletalAnimation 编辑器及 UI 布局组合契约。Viewport3D/TimelineView 的布局由各自 RML 维护；父布局通过 IUiLayoutPart 插槽引用。新增内置布局定义 schema-version 1，不改变源资产 Schema；内置模板修改需重建并重启，相关 C# API 调用方需重建。</p>
+      <p>通用 3D 视口下移 Runtime UI/Rendering 基础层，World 通过内容适配器接入。原 WorldViewportLayout、IWorldViewportHost 和 WorldViewportVertex 的调用方改用 Viewport3D、IViewport3DHost、ViewportVertex 并重建；UI 动作改为 ui.viewport3d，观察相机独立于 World。原生 API 版本与源资产 Schema 不变。</p>
       <p>新增插件默认项/项目禁用覆盖及依赖变更计划命令；无项目启动改为使用现有引擎 RmlUi 的项目选择器，插件管理位于 Editor。选择器具有显式会话选择和完整 MCP UI/帧观察能力。隔离 Editor 的 projectManifest 改为必填；项目模块产物新增引擎插件默认项指纹，旧产物需要重建。</p>
       <p>增加调用者持有临时 World 的 Viewport 布局复用接口，以及时间轴时间/播放事件与瞬态观察。播放控制统一落到 TimelineView，资产 schema 不变；动画编辑器忽略 Notify 执行。</p>
       <ul>

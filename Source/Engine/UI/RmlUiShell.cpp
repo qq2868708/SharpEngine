@@ -1,6 +1,8 @@
 #include "RmlUiShell.h"
 #include "RmlColorPicker.h"
 #include "RmlControlTooltip.h"
+#include "RmlViewport3DInput.h"
+#include "RmlRuntimeUi.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Box.h>
 #include <RmlUi/Core/ElementInstancer.h>
@@ -450,10 +452,7 @@ struct RmlUiShell::Impl
         double TimelineScale{100};
         double TimelineScroll{};
         double TimelineDuration{};
-        std::string PreviewNavigationId;
-        int PreviewNavigationButton{-1};
-        int PreviewPointerX{};
-        int PreviewPointerY{};
+        RmlViewport3DInput ViewportInput;
         std::string LastAssetClickAction;
         ULONGLONG LastAssetClickTime{};
         int LastAssetClickX{};
@@ -1990,48 +1989,12 @@ struct RmlUiShell::Impl
             event.StopPropagation();
             return;
         }
-        auto* Preview = FindAttributeElement(target, "data-world-viewport");
-        if (EventId == Rml::EventId::Mousedown && Preview)
+        const auto ViewportAction = [&](const std::string& Action)
         {
-            const int Button = event.GetParameter<int>("button", -1);
-            if (Button == 1 || Button == 2)
-            {
-                host.PreviewNavigationId = Attribute(Preview, "data-world-viewport");
-                host.PreviewNavigationButton = Button;
-                host.PreviewPointerX = MouseX;
-                host.PreviewPointerY = MouseY;
-                SetCapture(host.Window);
-                event.StopPropagation();
-                return;
-            }
-        }
-        if (EventId == Rml::EventId::Mousemove && !host.PreviewNavigationId.empty())
+            QueueAction(host, Action);
+        };
+        if (host.ViewportInput.ProcessEvent(event, host.Window, ViewportAction))
         {
-            const int DeltaX = MouseX - host.PreviewPointerX;
-            const int DeltaY = MouseY - host.PreviewPointerY;
-            host.PreviewPointerX = MouseX;
-            host.PreviewPointerY = MouseY;
-            if (DeltaX != 0 || DeltaY != 0)
-            {
-                QueueAction(host, "editor.world-viewport:" + host.PreviewNavigationId +
-                    (host.PreviewNavigationButton == 1 ? ":orbit:" : ":pan:") +
-                    std::to_string(DeltaX) + ":" + std::to_string(DeltaY));
-            }
-            event.StopPropagation();
-            return;
-        }
-        if (EventId == Rml::EventId::Mouseup &&
-            event.GetParameter<int>("button", -1) == host.PreviewNavigationButton)
-        {
-            host.PreviewNavigationId.clear();
-            host.PreviewNavigationButton = -1;
-        }
-        if (EventId == Rml::EventId::Mousescroll && Preview)
-        {
-            const float Delta = -event.GetParameter<float>("wheel_delta_y", 0);
-            QueueAction(host, "editor.world-viewport:" + Attribute(Preview, "data-world-viewport") +
-                ":zoom:0:" + std::to_string(Delta));
-            event.StopPropagation();
             return;
         }
         if (event.GetId() == Rml::EventId::Mousedown && FindAttributeElement(target, "data-component-slider"))
@@ -2929,8 +2892,7 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         reinterpret_cast<HWND>(lParam) != window)
     {
         host->TimelineScrubbing = false;
-        host->PreviewNavigationId.clear();
-        host->PreviewNavigationButton = -1;
+        host->ViewportInput.Cancel();
         if (state.GameplayCapture.IsActive() && state.GameplayCapture.Window() == window)
         {
             state.GameplayCaptureRequest = -1;
@@ -3266,7 +3228,9 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
             Inspector = Previous->GetParentNode()->RemoveChild(Previous);
         }
     }
+    auto RuntimeNodes = RmlRuntimeUi::Capture(*element, *host->Context);
     element->SetInnerRML(markup);
+    RmlRuntimeUi::Restore(*element, RuntimeNodes);
     auto* Placeholder = Inspector ? element->GetElementById("inspectorContent") : nullptr;
     if (Placeholder && Placeholder->GetParentNode())
     {
@@ -3482,7 +3446,7 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
                        std::string(hostId), true);
     const auto* expectedFrame = state.FindFrameSet(expectedFrameId);
     const bool continuingCapture = state.McpButtons != 0 &&
-        (host->TimelineScrubbing || !host->PreviewNavigationId.empty() ||
+        (host->TimelineScrubbing || host->ViewportInput.IsCapturing() ||
          (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host) ||
          ((state.DockDrag.Active || state.DockDrag.Pending) &&
           state.DockDrag.SourceHost == host));
@@ -3514,9 +3478,9 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     {
         target = host->Document->GetElementById(host->TimelineCaptureId);
     }
-    else if (!host->PreviewNavigationId.empty() && host->Document)
+    else if (host->ViewportInput.IsCapturing() && host->Document)
     {
-        target = host->Document->GetElementById(host->PreviewNavigationId);
+        target = host->Document->GetElementById(host->ViewportInput.CapturedElementId());
     }
     else if (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host)
     {

@@ -9,14 +9,8 @@ internal sealed class TimelineEditorExtension : IEditorExtension
     public void Startup(EditorContext Context)
     {
         Registrations.Add(Context.AssetOpeners.Register(new EditorAssetOpener(
-            "engine.skeletal-animation-editor", "SkeletalAnimation",
-            OpenAsset, Priority: -100, EditorId: "timeline-editor")));
-        Registrations.Add(Context.AssetOpeners.Register(new EditorAssetOpener(
             "engine.timeline-editor", "Timeline", OpenAsset, Priority: -100,
             EditorId: "timeline-editor")));
-        Registrations.Add(Context.AssetOpeners.Register(new EditorAssetOpener(
-            "engine.animation-state-machine-editor", "AnimationStateMachine",
-            OpenAsset, Priority: -100, EditorId: "timeline-editor")));
     }
 
     public void Shutdown()

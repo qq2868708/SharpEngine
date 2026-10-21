@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -554,6 +555,6 @@ public sealed partial class EditorRuntime
         _nativeApi.TryGetHostUiElementRect(HostId, ElementId, out Bounds);
 
     internal void SubmitAssetEditorViewportFrame(string HostId, string Kind,
-        WorldViewportFrame Frame) =>
+        ViewportFrame Frame) =>
         _nativeApi.SubmitHostViewportFrame(HostId, Kind, Frame);
 }

@@ -1,64 +1,32 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json.Nodes;
 using SharpEngine.Animation;
 using SharpEngine.Assets;
-using SharpEngine.Playables;
-using SharpEngine.Editor;
 
 namespace SharpEngine.Timeline;
 
-/// <summary>One asset owns its authoring history; the view is transient and the pose is derived.</summary>
+/// <summary>One Timeline asset owns its authoring history and transient view.</summary>
 internal sealed class TimelineAssetToolDocument
 {
     private string SourceHash;
-    private JsonAssetAuthoringDocument? AnimationDocument;
 
     public TimelineAssetToolDocument(AssetRegistry Assets, AssetDescriptor Asset, string Path)
     {
         this.Asset = Asset;
         this.Path = Path;
         SourceHash = HashSource();
-        if (Asset.Type.Equals("AnimationStateMachine", StringComparison.OrdinalIgnoreCase))
+        var Source = TimelineContent.Load(Assets, Asset.Id);
+        if (Source.Tracks.All(Track => !Track.Type.Equals("notify", StringComparison.OrdinalIgnoreCase)))
         {
-            StateMachine = AnimationStateMachineContent.Load(Assets, Asset.Id);
-            return;
+            Source = new TimelineDocument(Source.TimelineId, Source.Name, Source.Duration, Source.FrameRate,
+                Source.Tracks.Append(new TimelineTrack("notify", "Animation Notify", "preview", "notify", [])).ToArray());
         }
-
-        TimelineDocument Source;
-        if (Asset.Type.Equals("SkeletalAnimation", StringComparison.OrdinalIgnoreCase))
+        var AnimationClip = Source.Tracks.FirstOrDefault(Track =>
+            Track.Type.Equals("skeletal-animation", StringComparison.OrdinalIgnoreCase))?.Clips.FirstOrDefault();
+        if (AnimationClip is not null)
         {
-            AnimationDocument = new JsonAssetAuthoringDocument(Asset, Path,
-                Value => SkeletalAnimationAsset.Parse(Value.ToJsonString(), Path));
-            Animation = SkeletalAnimationContent.Load(Assets, Asset.Id);
-            Source = new TimelineDocument(Asset.Id, Animation.Name, Animation.Duration, Animation.SampleRate,
-            [
-                new TimelineTrack("animation", "Skeletal Animation", "preview", "skeletal-animation",
-                [
-                    new TimelineClip("animation-clip", Asset.Id, 0, Animation.Duration,
-                        loopMode: PlayableLoopMode.Once),
-                ]),
-                new TimelineTrack("notify", "Animation Notify", "preview", "notify",
-                    Animation.Notifies.Select(Notify => new TimelineClip(Notify.NotifyId,
-                        Notify.Name, Notify.Time, Notify.Duration)).ToArray()),
-            ]);
+            Animation = SkeletalAnimationContent.Load(Assets, AnimationClip.PlayableId);
         }
-        else
-        {
-            Source = TimelineContent.Load(Assets, Asset.Id);
-            if (Source.Tracks.All(Track => !Track.Type.Equals("notify", StringComparison.OrdinalIgnoreCase)))
-            {
-                Source = new TimelineDocument(Source.TimelineId, Source.Name, Source.Duration, Source.FrameRate,
-                    Source.Tracks.Append(new TimelineTrack("notify", "Animation Notify", "preview", "notify", [])).ToArray());
-            }
-            var AnimationClip = Source.Tracks.FirstOrDefault(Track =>
-                Track.Type.Equals("skeletal-animation", StringComparison.OrdinalIgnoreCase))?.Clips.FirstOrDefault();
-            if (AnimationClip is not null)
-            {
-                Animation = SkeletalAnimationContent.Load(Assets, AnimationClip.PlayableId);
-            }
-        }
-
         Authoring = new TimelineAuthoringSession(Source);
         View = new TimelineView(Source);
     }
@@ -74,18 +42,12 @@ internal sealed class TimelineAssetToolDocument
     public SkeletalAnimationAsset? Animation
     {
         get;
-        private set;
     }
-    public AnimationStateMachineAsset? StateMachine
+    public TimelineAuthoringSession Authoring
     {
         get;
     }
-    public TimelineAuthoringSession? Authoring
-    {
-        get;
-        private set;
-    }
-    public TimelineView? View
+    public TimelineView View
     {
         get;
         set;
@@ -94,50 +56,51 @@ internal sealed class TimelineAssetToolDocument
     {
         get
         {
-            return StateMachine is null && !Asset.ReadOnly && Asset.Source == AssetSource.Project;
+            return !Asset.ReadOnly && Asset.Source == AssetSource.Project;
+        }
+    }
+    public bool IsDirty
+    {
+        get
+        {
+            return Authoring.IsDirty;
+        }
+    }
+    public bool CanUndo
+    {
+        get
+        {
+            return Authoring.CanUndo;
+        }
+    }
+    public bool CanRedo
+    {
+        get
+        {
+            return Authoring.CanRedo;
         }
     }
 
     public JsonObject Describe()
     {
-        var Snapshot = new JsonObject
+        return new JsonObject
         {
             ["assetId"] = Asset.Id,
             ["type"] = Asset.Type,
             ["source"] = Asset.Source.ToString(),
             ["readOnly"] = !Writable,
-            ["documentRevision"] = AnimationDocument?.Revision ?? Authoring?.DocumentRevision ?? 1,
-            ["savepointRevision"] = AnimationDocument?.SavepointRevision ?? Authoring?.SavepointRevision ?? 1,
+            ["documentRevision"] = Authoring.DocumentRevision,
+            ["savepointRevision"] = Authoring.SavepointRevision,
             ["dirty"] = IsDirty,
+            ["currentTime"] = View.State.CurrentTime,
+            ["boneCount"] = Animation?.Bones.Count ?? 0,
+            ["document"] = Authoring.Document.ToJson(),
         };
-        if (StateMachine is not null)
-        {
-            Snapshot["stateCount"] = StateMachine.States.Count;
-            Snapshot["parameterCount"] = StateMachine.Parameters.Count;
-            Snapshot["transitionCount"] = StateMachine.Transitions.Count;
-            Snapshot["clipIds"] = new JsonArray(StateMachine.ClipIds.Select(ClipId => (JsonNode)ClipId).ToArray());
-            Snapshot["document"] = StateMachine.ToJson();
-        }
-        else
-        {
-            Snapshot["currentTime"] = View!.State.CurrentTime;
-            Snapshot["boneCount"] = Animation?.Bones.Count ?? 0;
-            Snapshot["document"] = Authoring!.Document.ToJson();
-        }
-        if (AnimationDocument is not null)
-        {
-            Snapshot["rootMotion"] = new JsonObject
-            {
-                ["enabled"] = Animation!.RootMotion.Enabled,
-                ["boneId"] = Animation.RootMotion.BoneId,
-            };
-        }
-        return Snapshot;
     }
 
     public void Save()
     {
-        if (!Writable || Authoring is null)
+        if (!Writable)
         {
             throw new InvalidOperationException("This asset is read-only");
         }
@@ -145,130 +108,42 @@ internal sealed class TimelineAssetToolDocument
         {
             throw new InvalidOperationException("Asset source changed outside this tool; reopen the Editor before saving");
         }
-
-        if (Asset.Type.Equals("Timeline", StringComparison.OrdinalIgnoreCase))
-        {
-            Authoring.Save(Path);
-        }
-        else
-        {
-            AnimationDocument!.Save();
-            RefreshAnimation();
-        }
+        Authoring.Save(Path);
         SourceHash = HashSource();
     }
 
-    public bool IsDirty => AnimationDocument?.IsDirty ?? Authoring?.IsDirty ?? false;
-    public bool CanUndo => AnimationDocument?.CanUndo ?? Authoring?.CanUndo ?? false;
-    public bool CanRedo => AnimationDocument?.CanRedo ?? Authoring?.CanRedo ?? false;
-
-    public bool SetRootMotion(bool Enabled)
+    public bool AddNotify(out string Message)
     {
-        if (!Writable || AnimationDocument is null)
+        Message = string.Empty;
+        if (!Writable)
         {
             return false;
         }
-        var Changed = AnimationDocument.Edit("root-motion", Value =>
-        {
-            var Candidate = SkeletalAnimationAsset.Parse(Value.ToJsonString());
-            var RootId = Candidate.RootMotion.BoneId;
-            var Replacement = Candidate.WithRootMotion(new(Enabled, RootId)).ToJson();
-            Value.Clear();
-            foreach (var Pair in Replacement)
-            {
-                Value[Pair.Key] = Pair.Value?.DeepClone();
-            }
-        }, out var Message);
-        if (!Changed && Message.Length != 0)
-        {
-            throw new InvalidOperationException(Message);
-        }
-        if (Changed)
-        {
-            RefreshAnimation();
-        }
-        return Changed;
-    }
-
-    public bool ReplaceTimeline(TimelineDocument Replacement)
-    {
-        if (!Writable || Authoring is null)
+        var Prepared = TimelineNotifyEditing.TryAdd(Authoring.Document, out var Replacement, out var ClipId, out Message);
+        if (!Prepared)
         {
             return false;
         }
-        if (AnimationDocument is null)
+        var Changed = Authoring.Replace(Replacement, "add-notify", Authoring.DocumentRevision).Success;
+        if (!Changed)
         {
-            return Authoring.Replace(Replacement, "add-notify", Authoring.DocumentRevision).Success;
+            Message = "Notify edit was rejected";
+            return false;
         }
-        var Notifies = Replacement.Tracks.Where(Track => Track.Type == "notify")
-            .SelectMany(Track => Track.Clips).Select(Clip => new AnimationNotify(
-                Clip.ClipId, Clip.PlayableId, Clip.Start, Clip.Duration)).ToArray();
-        var Changed = AnimationDocument.Edit("add-notify", Value =>
-        {
-            var Candidate = SkeletalAnimationAsset.Parse(Value.ToJsonString());
-            var Json = Candidate.WithNotifies(Notifies).ToJson();
-            Value.Clear();
-            foreach (var Pair in Json)
-            {
-                Value[Pair.Key] = Pair.Value?.DeepClone();
-            }
-        }, out var Message);
-        if (Changed)
-        {
-            RefreshAnimation();
-        }
-        return Changed;
+        View = new TimelineView(Authoring.Document, View.State);
+        View.SelectClip(ClipId);
+        return true;
     }
 
     public bool Undo()
     {
-        if (!Writable)
-        {
-            return false;
-        }
-        if (AnimationDocument is null)
-        {
-            return Authoring!.Undo(Authoring.DocumentRevision).Success;
-        }
-        var Changed = AnimationDocument.Undo();
-        if (Changed)
-        {
-            RefreshAnimation();
-        }
-        return Changed;
+        return Writable && Authoring.Undo(Authoring.DocumentRevision).Success;
     }
 
     public bool Redo()
     {
-        if (!Writable)
-        {
-            return false;
-        }
-        if (AnimationDocument is null)
-        {
-            return Authoring!.Redo(Authoring.DocumentRevision).Success;
-        }
-        var Changed = AnimationDocument.Redo();
-        if (Changed)
-        {
-            RefreshAnimation();
-        }
-        return Changed;
+        return Writable && Authoring.Redo(Authoring.DocumentRevision).Success;
     }
 
-    private void RefreshAnimation()
-    {
-        Animation = SkeletalAnimationAsset.Parse(AnimationDocument!.Source, Path);
-        var Previous = Authoring!.Document;
-        var Tracks = Previous.Tracks.Select(Track => Track.Type == "notify"
-            ? new TimelineTrack(Track.TrackId, Track.Name, Track.TargetId, Track.Type,
-                Animation.Notifies.Select(Notify => new TimelineClip(Notify.NotifyId,
-                    Notify.Name, Notify.Time, Notify.Duration)).ToArray(), Track.Muted)
-            : Track).ToArray();
-        Authoring = new TimelineAuthoringSession(new TimelineDocument(Previous.TimelineId,
-            Previous.Name, Previous.Duration, Previous.FrameRate, Tracks));
-        View = new TimelineView(Authoring.Document, View!.State);
-    }
-
-    private string HashSource() => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path)));
+    private string HashSource() { return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path))); }
 }

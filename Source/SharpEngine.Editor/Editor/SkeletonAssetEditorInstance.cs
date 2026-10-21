@@ -11,7 +11,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
     private readonly AssetPreviewWorld PreviewWorld;
-    private readonly WorldViewportLayout Viewport = new("skeletonPreviewViewport", "asset-skeleton-preview");
+    private readonly WorldPreview Preview;
     private SkeletonAsset Skeleton = null!;
     private SkeletalMeshAsset? PreviewMesh;
 
@@ -20,6 +20,9 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
         this.Context = Context;
         PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
             throw new InvalidOperationException("Component registry is unavailable"), "skeleton-preview:" + Context.Asset.Id);
+        Preview = new WorldPreview(PreviewWorld.World, Context.Runtime.Assets, "skeletonPreviewViewport", "asset-skeleton-preview");
+        Preview.Content.Overlay = PreviewWorld.Decorate;
+
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
             Validate);
         RefreshAsset();
@@ -71,7 +74,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
-        if (Viewport.TryHandleAction(PreviewWorld.World, Action))
+        if (Preview.Viewport.TryHandleAction(Action))
         {
             return true;
         }
@@ -101,7 +104,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     {
         return PaneId switch
         {
-            "preview" => Viewport.BuildMarkup(Skeleton.Name),
+            "preview" => Preview.Viewport.BuildMarkup(Skeleton.Name),
             "tree" => BuildTreeMarkup(),
             "details" => BuildDetailsMarkup(),
             "source" => AssetEditorInstanceUtilities.Source(Document.Source),
@@ -118,7 +121,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
 
     public void Update(float DeltaSeconds)
     {
-        Viewport.Render(Context, PreviewWorld.World, Context.Runtime.Assets, PreviewWorld.Decorate);
+        Preview.Viewport.Render(Context);
     }
 
     public JsonObject Describe()
@@ -133,7 +136,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
             ["documentRevision"] = Document.Revision,
             ["savepointRevision"] = Document.SavepointRevision,
             ["previewWorld"] = PreviewWorld.Describe(),
-            ["viewport"] = Viewport.Describe(),
+            ["viewport"] = Preview.Viewport.Describe(),
             ["boneCount"] = Skeleton.Bones.Count,
             ["previewMeshId"] = Skeleton.PreviewMeshId,
             ["previewMeshAvailable"] = PreviewMesh is not null,
@@ -161,12 +164,12 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
         if (PreviewMesh is null)
         {
             PreviewWorld.SetSkeleton(Skeleton);
-            Viewport.Frame(PreviewWorld.World, PreviewWorld.SkeletonPositions);
+            Preview.Viewport.Frame(PreviewWorld.SkeletonPositions);
         }
         else
         {
             PreviewWorld.SetMesh(PreviewMesh.AssetId, "engine.skeletal-mesh", PreviewMesh.DefaultMaterial, PreviewMesh);
-            Viewport.Frame(PreviewWorld.World, PreviewMesh.Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
+            Preview.Viewport.Frame(PreviewMesh.Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
         }
     }
 

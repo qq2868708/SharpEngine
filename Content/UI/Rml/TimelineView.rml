@@ -1,0 +1,34 @@
+<template>
+  <div class="timeline-view" data-timeline-id="${TimelineId}" data-timeline-header="${HeaderWidth}" data-timeline-scale="${Scale}" data-timeline-scroll="${Scroll}" data-timeline-duration="${Duration}">
+    <div class="timeline-transport">
+      <button id="timelineStart" data-action="editor.timeline-start" title="Go to start">|&lt;</button>
+      <button id="timelinePlay" data-action="editor.timeline-play" ui-disabled="Playing">Play</button>
+      <button id="timelinePause" data-action="editor.timeline-pause" ui-disabled="Paused">Pause</button>
+      <button id="timelineStop" data-action="editor.timeline-stop">Stop</button>
+      <span class="timeline-current-time">${DisplayTime} / ${DisplayDuration}</span>
+      <button data-action="editor.timeline-zoom-out" title="Zoom out">-</button>
+      <button data-action="editor.timeline-zoom-in" title="Zoom in">+</button>
+    </div>
+    <div id="timelineRuler" class="timeline-ruler" data-timeline-ruler="true" data-timeline-header="${HeaderWidth}" data-timeline-scale="${Scale}" data-timeline-scroll="${Scroll}" data-timeline-duration="${Duration}">
+      <div class="timeline-ruler-header">Time</div>
+      <div class="timeline-ruler-scale">
+        <ui-repeat items="Ticks"><div class="timeline-tick${Classes}" style="left:${Left}px">${Label}</div></ui-repeat>
+      </div>
+    </div>
+    <div class="timeline-rows">
+      <ui-repeat items="Rows">
+        <div class="timeline-row${Classes}" style="top:${Top}px;height:${Height}px" data-track-id="${TrackId}">
+          <div class="timeline-row-clips">
+            <ui-repeat items="Clips">
+              <button class="timeline-clip${Classes}" style="left:${Left}px;width:${Width}px;height:${Height}px" data-timeline-action="select-clip:${ClipId}" data-action="editor.timeline-select:${ClipId}" title="${Label}">${Label}</button>
+            </ui-repeat>
+          </div>
+          <span class="timeline-track-label">${Label}</span>
+        </div>
+      </ui-repeat>
+    </div>
+    <ui-if test="HasPlayhead">
+      <div id="timelinePlayhead" class="timeline-playhead" style="left:${PlayheadX}px" data-time="${CurrentTime}" data-timeline-ruler="true"><div class="timeline-playhead-arrow"><div class="timeline-playhead-tip" /></div></div>
+    </ui-if>
+  </div>
+</template>

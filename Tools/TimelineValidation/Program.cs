@@ -114,6 +114,23 @@ try
 }
 catch (InvalidDataException) { assertions++; }
 
+var NotifySource = new TimelineDocument("notify-edit", "Notify edit", 1, 30,
+[
+    new TimelineTrack("notify", "Notify", "preview", "notify", []),
+]);
+var NotifyBefore = NotifySource.Serialize(false);
+var PreparedNotify = TimelineNotifyEditing.TryAdd(NotifySource, out var NotifyReplacement, out var NotifyClipId, out var NotifyMessage);
+Check(PreparedNotify && NotifyMessage.Length == 0 && NotifyReplacement.Tracks[0].Clips.Single().ClipId == NotifyClipId &&
+    NotifySource.Serialize(false) == NotifyBefore,
+    "Shared Notify editing prepares a candidate without mutating its source or owning history");
+var FullNotifySource = new TimelineDocument("notify-full", "Full Notify", 1, 30,
+[
+    new TimelineTrack("notify", "Notify", "preview", "notify", [new TimelineClip("full", "Full", 0, 1)]),
+]);
+var FullNotifyPrepared = TimelineNotifyEditing.TryAdd(FullNotifySource, out var FullNotifyReplacement, out _, out var FullNotifyMessage);
+Check(!FullNotifyPrepared && ReferenceEquals(FullNotifyReplacement, FullNotifySource) && FullNotifyMessage.Length != 0,
+    "A full Notify track rejects insertion without a partial candidate");
+
 Console.WriteLine($"[TimelineValidation] PASS: {assertions} assertions; bones={animation.Bones.Count}; tracks={timeline.Tracks.Count}; ticks={snapshot.Ruler.Count}");
 
 sealed class Resolver(IPlayable playable) : IPlayableResolver

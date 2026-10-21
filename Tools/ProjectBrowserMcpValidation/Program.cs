@@ -112,6 +112,10 @@ try
     Check(!State["editorAssemblyLoaded"]!.GetValue<bool>() && !State["projectModulesLoaded"]!.GetValue<bool>(),
         "Creating and previewing projects must not initialize their code");
     Client.Capture(Evidence, "browser-preview", "main");
+    if (args.Contains("--layout-only", StringComparer.Ordinal))
+    {
+        BrowserLayoutValidation.Run(Client, Browser.Id, Evidence, Check);
+    }
     Client.Click("main", "browser-window-close");
     Check(Browser.WaitForExit(10000),
         "The real RmlUi close button must complete native close-requested without an unknown-action error");
@@ -123,6 +127,12 @@ finally
         Browser.Kill(true);
         Browser.WaitForExit();
     }
+}
+if (args.Contains("--layout-only", StringComparer.Ordinal))
+{
+    File.WriteAllText(Path.Combine(Evidence, "project-path.txt"), ProjectPath);
+    Console.WriteLine($"PASS: {Assertions} Project Browser responsive layout assertions; evidence={Evidence}");
+    return;
 }
 BuildProject(ProjectPath);
 using var EditorClient = new McpClient(Native, "--mcp-stdio");

@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using SharpEngine.Assets;
@@ -8,6 +9,12 @@ var sourceRoot = Path.GetFullPath(args.Length > 0 ? args[0] :
     Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 var world = WorldDocument.Load(Path.Combine(sourceRoot, "Content", "Worlds", "Main.sworld"));
 var assertions = 0;
+WorldViewportNavigationValidation.Run(world, Check);
+if (args.Contains("--viewport-only", StringComparer.Ordinal))
+{
+    Console.WriteLine($"PASS: {assertions} shared viewport navigation assertions");
+    return;
+}
 void Check(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
@@ -132,7 +139,7 @@ Check(rotateFrame.LineCount > frame.LineCount,
     "Rotate gizmo should render projected rings instead of move arrows");
 Check(scaleFrame.LineCount > frame.LineCount,
     "Scale gizmo should render axis end boxes in addition to axes");
-Check(Marshal.SizeOf<WorldViewportVertex>() == 7 * sizeof(float), "Native vertex ABI");
+Check(Marshal.SizeOf<ViewportVertex>() == 7 * sizeof(float), "Native vertex ABI");
 void CheckFinite(WorldViewportFrame f)
 {
     Check(f.Triangles.Concat(f.Lines).All(v =>

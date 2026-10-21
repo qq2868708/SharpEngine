@@ -1,0 +1,6 @@
+/* Generic 3D control; no asset or editor selectors. */
+.viewport3d { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; background-color: #0d1218; }
+.viewport3d viewport { display: block; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; }
+.viewport3d-footer { display: flex; align-items: center; height: 28px; flex-shrink: 0; padding: 0px 12px; color: #64758b; font-size: 10px; background-color: #151b23; border-top: 1px #252e3b; }
+.viewport3d-grow { flex-grow: 1; }
+.viewport3d-footer button { padding: 2px 8px; margin: 0px 8px; }

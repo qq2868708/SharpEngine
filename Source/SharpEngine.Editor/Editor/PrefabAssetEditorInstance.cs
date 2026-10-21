@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Components;
 using SharpEngine.Editor.Layout;
-using SharpEngine.UI;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
@@ -14,6 +13,9 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
     private readonly EditorAssetOpenContext Context;
     private readonly WorldDocument Document;
     private readonly WorldAuthoringSession Authoring;
+    private readonly PrefabPreviewWorld PreviewWorld;
+    private readonly WorldPreview Preview;
+    private ulong PreviewDocumentRevision;
     private string? SelectedEntityId;
 
     public PrefabAssetEditorInstance(EditorAssetOpenContext Context)
@@ -28,6 +30,12 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
         }
         Authoring = new WorldAuthoringSession(Document);
         SelectedEntityId = Document.Entities.FirstOrDefault()?.Id;
+        PreviewWorld = new PrefabPreviewWorld(Document, Context.Runtime.Assets ??
+            throw new InvalidOperationException("Asset registry is unavailable"), "prefab-preview:" + Context.Asset.Id);
+
+        Preview = new WorldPreview(PreviewWorld.World, Context.Runtime.Assets, "prefabPreviewViewport", "asset-prefab-preview");
+        PreviewDocumentRevision = Authoring.DocumentRevision;
+        Preview.Viewport.Frame(PreviewWorld.FramePositions());
     }
 
     public AssetDescriptor Asset => Context.Asset;
@@ -105,10 +113,15 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
         {
             Authoring.Redo(Authoring.DocumentRevision);
         }
+        SynchronizePreview();
     }
 
     public bool TryHandleAction(string Action)
     {
+        if (Preview.Viewport.TryHandleAction(Action))
+        {
+            return true;
+        }
         const string SelectPrefix = "editor.prefab-select:";
         if (Action.StartsWith(SelectPrefix, StringComparison.Ordinal))
         {
@@ -126,7 +139,7 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
     {
         return PaneId switch
         {
-            "viewport" => "<div class=\"viewport-pane asset-prefab-viewport\"><viewport id=\"prefabPreviewViewport\" data-viewport-kind=\"asset-prefab-preview\" data-input-surface=\"prefab-preview\" /><div class=\"viewport-footer\"><span>Prefab Preview</span></div></div>",
+            "viewport" => Preview.Viewport.BuildMarkup("Prefab Preview"),
             "hierarchy" => BuildHierarchyMarkup(),
             "details" => BuildDetailsMarkup(),
             _ => string.Empty,
@@ -144,17 +157,10 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
 
     public void Update(float DeltaSeconds)
     {
-        if (!Context.TryGetElementRect("prefabPreviewViewport", out var Bounds))
-        {
-            return;
-        }
-
         try
         {
-            var Frame = SceneRenderer.BuildFrame(Document,
-                new UiRect(0, 0, Bounds.Width, Bounds.Height),
-                Context.Runtime.Assets);
-            Context.SubmitViewportFrame("asset-prefab-preview", Frame);
+            SynchronizePreview();
+            Preview.Viewport.Render(Context);
         }
         catch (Exception Exception)
         {
@@ -170,6 +176,8 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
             ["schemaVersion"] = 1,
             ["assetId"] = Asset.Id,
             ["editorRootId"] = Context.EditorRootId,
+            ["previewWorld"] = PreviewWorld.Describe(),
+            ["viewport"] = Preview.Viewport.Describe(),
             ["dirty"] = IsDirty,
             ["readOnly"] = IsReadOnly,
             ["documentRevision"] = Authoring.DocumentRevision,
@@ -180,6 +188,15 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
 
     public void Dispose()
     {
+    }
+
+    private void SynchronizePreview()
+    {
+        if (PreviewDocumentRevision != Authoring.DocumentRevision)
+        {
+            PreviewWorld.Synchronize(Document);
+            PreviewDocumentRevision = Authoring.DocumentRevision;
+        }
     }
 
     private void AddEntity()

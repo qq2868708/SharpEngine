@@ -53,25 +53,24 @@ internal static class TimelineInteractionValidation
         var Components = ComponentRegistry.CreateBuiltin();
         var Preview = new AssetPreviewWorld(Components, "viewport-validation");
         Preview.SetMesh("engine://meshes/cube", "engine.mesh-renderer");
-        var Layout = new WorldViewportLayout("validationViewport", "validation");
-        Layout.Frame(Preview.World, [new Vector3(-0.5f), new Vector3(0.5f)]);
-        var Frame = WorldViewportRenderer.BuildFrame(Preview.World, new UiRect(0, 0, 640, 480), assets: Assets);
+        var Layout = new WorldPreview(Preview.World, Assets, "validationViewport", "validation");
+        Layout.Viewport.Frame([new Vector3(-0.5f), new Vector3(0.5f)]);
+        var Frame = Layout.Content.Render(new(new UiRect(0, 0, 640, 480), Layout.Viewport.Camera));
         Check(Frame.TriangleCount > 0 && Frame.Triangles.Any(Vertex => Vertex.R > 0 || Vertex.G > 0 || Vertex.B > 0),
             "The viewport renders real geometry using lights from the editor-owned temporary World");
-        var CameraBefore = Preview.World.ActiveCamera!.Components.Single(Component =>
-            Component.TypeId == "engine.transform").State.ToJsonString();
-        Layout.TryHandleAction(Preview.World, "editor.world-viewport:validationViewport:orbit:20:10");
-        var CameraAfter = Preview.World.ActiveCamera!.Components.Single(Component =>
-            Component.TypeId == "engine.transform").State.ToJsonString();
-        Check(CameraBefore != CameraAfter, "Viewport navigation modifies only the supplied preview camera");
+        var WorldBefore = Preview.World.Serialize();
+        var CameraBefore = Layout.Viewport.Camera;
+        Layout.Viewport.TryHandleAction("ui.viewport3d:validationViewport:orbit:20:10");
+        Check(Layout.Viewport.Camera != CameraBefore && Preview.World.Serialize() == WorldBefore,
+            "Navigation changes only the independent viewport camera");
         var Unlit = Preview.World.Data.Clone();
         foreach (var Light in Unlit.Entities.SelectMany(Entity => Entity.Components).Where(Component =>
             Component.TypeId is "engine.sky-light" or "engine.directional-light"))
         {
             Light.State["Intensity"] = 0;
         }
-        var Dark = WorldViewportRenderer.BuildFrame(new WorldDocument(Unlit, Components),
-            new UiRect(0, 0, 640, 480), assets: Assets);
+        var Dark = SharpEngine.World.SceneRenderer.BuildFrame(new WorldDocument(Unlit, Components),
+            new UiRect(0, 0, 640, 480), assets: Assets, ViewCamera: Layout.Viewport.Camera);
         Check(Dark.TriangleCount > 0 && Dark.Triangles.All(Vertex => Vertex.R == 0 && Vertex.G == 0 && Vertex.B == 0),
             "Preview uses the standard scene lighting path with no hidden fallback illumination");
     }

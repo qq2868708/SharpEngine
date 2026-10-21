@@ -1,4 +1,5 @@
 using System.Numerics;
+using SharpEngine.Rendering;
 using System.Text.Json.Nodes;
 using SharpEngine.Animation;
 using SharpEngine.Assets;
@@ -26,15 +27,6 @@ public sealed class AssetPreviewWorld
             WorldId = Id,
             Name = "Asset Preview",
         };
-        var Camera = Data.CreateEntity(Registry, "Preview Camera");
-        Camera.EntityId = "preview-camera";
-        Data.ActiveCameraId = Camera.EntityId;
-        Data.AddComponent(Registry, Camera.EntityId, "engine.camera", new JsonObject
-        {
-            ["FieldOfView"] = 35,
-            ["NearPlane"] = 0.01,
-            ["FarPlane"] = 10000,
-        });
         var Sky = Data.CreateEntity(Registry, "Preview Sky Light");
         Sky.EntityId = "preview-sky-light";
         Data.AddComponent(Registry, Sky.EntityId, "engine.sky-light", new JsonObject
@@ -143,13 +135,13 @@ public sealed class AssetPreviewWorld
         }
     }
 
-    public WorldViewportFrame Decorate(WorldViewportFrame Frame)
+    public ViewportFrame Decorate(SharpEngine.UI.ViewportRenderContext Context, ViewportFrame Frame)
     {
-        if (DisplaySkeleton is null || World.ActiveCamera is null)
+        if (DisplaySkeleton is null)
         {
             return Frame;
         }
-        var Matrix = SceneRenderer.CameraMatrix(World, World.ActiveCamera, Frame.Bounds.Width / Frame.Bounds.Height);
+        var Matrix = Context.Camera.ViewProjection(Frame.Bounds.Width / Frame.Bounds.Height);
         var Lines = Frame.Lines.ToList();
         foreach (var Bone in DisplaySkeleton.Bones)
         {

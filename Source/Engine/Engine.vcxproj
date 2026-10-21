@@ -161,6 +161,8 @@
     <ClInclude Include="UI\RmlUiShell.h" />
     <ClInclude Include="UI\RmlColorPicker.h" />
     <ClInclude Include="UI\RmlControlTooltip.h" />
+    <ClInclude Include="UI\RmlViewport3DInput.h" />
+    <ClInclude Include="UI\RmlRuntimeUi.h" />
     <ClInclude Include="UI\GameUiShell.h" />
     <ClInclude Include="UI\UiObservation.h" />
     <ClInclude Include="RenderCore\Public\RenderOptions.h" />

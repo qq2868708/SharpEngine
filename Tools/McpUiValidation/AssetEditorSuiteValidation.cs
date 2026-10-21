@@ -11,13 +11,16 @@ internal static class AssetEditorSuiteValidation
         var Output = Path.Combine(Root, "Saved", "Validation", "AssetEditors");
         Directory.CreateDirectory(Output);
         var RequestId = 700;
+        string? SharedRoot = null;
 
         ValidateEditor("engine://meshes/sphere", "meshPreviewViewport", true,
-            "mesh", ref RequestId);
+            "mesh", ref RequestId, KeepOpen: true);
         ValidateEditor("engine://skeletons/uefn-mannequin", "skeletonPreviewViewport",
             true, "skeleton", ref RequestId);
         ValidateEditor("engine://materials/default", "materialPreviewViewport", true,
             "material", ref RequestId);
+        ValidateEditor("engine://prefabs/capsule-character", "prefabPreviewViewport", true,
+            "prefab", ref RequestId);
         ValidateEditor("engine://materials/default", "source", false,
             "material-source", ref RequestId, DetailedPaneId: "source",
             ActivatePaneId: "source", MinimumDetailedRows: 20);
@@ -25,11 +28,17 @@ internal static class AssetEditorSuiteValidation
             "stylesheet", ref RequestId, DetailedPaneId: "source");
         ValidateEditor("engine://input/contexts/demo-gameplay", "assetEditorToolbar", false,
             "input-context", ref RequestId);
+        ValidateEditor("engine://animation-state-machines/uefn-mannequin-locomotion", "animationStateMachineGraph", false,
+            "animation-state-machine", ref RequestId);
+        _ = Tool(RequestId++, "editor.action", new JsonObject
+        {
+            ["action"] = $"editor.host-action:{SharedRoot}:window.close-requested",
+        });
 
         void ValidateEditor(string AssetId, string SemanticId, bool InspectViewport,
             string EvidenceName, ref int Id, string? ExpectedActionPrefix = null,
             string? DetailedPaneId = null, string? ActivatePaneId = null,
-            int MinimumDetailedRows = 50)
+            int MinimumDetailedRows = 50, bool KeepOpen = false)
         {
             var Opened = Structured(Tool(Id++, "editor.action", new JsonObject
             {
@@ -39,6 +48,14 @@ internal static class AssetEditorSuiteValidation
                 .Select(Node => Node!.AsObject()).Single(Node =>
                     Node["assetId"]!.GetValue<string>() == AssetId);
             var RootId = Editor["rootId"]!.GetValue<string>();
+            if (EvidenceName == "animation-state-machine")
+            {
+                var State = Editor["state"]!.AsObject();
+                Require(Editor["openerId"]!.GetValue<string>() == "engine.animation-state-machine-editor" &&
+                    State["schemaVersion"]!.GetValue<int>() == 3 && State["stateCount"]!.GetValue<int>() > 0 &&
+                    State["readOnly"]!.GetValue<bool>() && !State.ContainsKey("previewWorld"),
+                    "The Animation module presents a read-only state graph without allocating a placeholder World");
+            }
             if (ActivatePaneId is not null)
             {
                 _ = Tool(Id++, "editor.action", new JsonObject
@@ -84,6 +101,7 @@ internal static class AssetEditorSuiteValidation
             var Image = DecodePng(Bytes);
             if (InspectViewport)
             {
+                AssetViewportUiValidation.Run(RootId, SemanticId, Require, Tool);
                 var Bounds = Target!["bounds"]!.AsObject();
                 var X = (int)Math.Floor(Bounds["x"]!.GetValue<double>());
                 var Y = (int)Math.Floor(Bounds["y"]!.GetValue<double>());
@@ -129,10 +147,17 @@ internal static class AssetEditorSuiteValidation
                     $"{AssetId} pane '{DetailedPaneId}' must render readable detailed rows");
             }
 
-            _ = Tool(Id++, "editor.action", new JsonObject
+            if (KeepOpen)
             {
-                ["action"] = $"editor.host-action:{RootId}:window.close-requested",
-            });
+                SharedRoot = RootId;
+            }
+            else
+            {
+                _ = Tool(Id++, "editor.action", new JsonObject
+                {
+                    ["action"] = $"editor.host-action:{RootId}:window.close-requested",
+                });
+            }
         }
     }
 

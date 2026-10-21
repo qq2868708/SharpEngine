@@ -137,17 +137,23 @@ try
     Check(engineProjects.Any(project => project.ModuleId == "SharpEngine.Timeline.Runtime" &&
             project.ModuleType == "Runtime") &&
           engineProjects.Any(project => project.ModuleId == "SharpEngine.Timeline.Editor" &&
+            project.ModuleType == "Editor") &&
+          engineProjects.Any(project => project.ModuleId == "SharpEngine.Animation.Editor" &&
             project.ModuleType == "Editor"),
-        "Engine discovery must expose Timeline Runtime and Editor as explicit Modules");
+        "Engine discovery must expose Timeline Runtime/Editor and the consuming Animation Editor Module");
     var TimelineRuntimeRelativePath = Path.GetRelativePath(Path.GetDirectoryName(generated.SolutionPath)!,
         Path.Combine(engineRoot, "Source", "SharpEngine.Timeline.Runtime", "SharpEngine.Timeline.Runtime.csproj"));
     var TimelineEditorRelativePath = Path.GetRelativePath(Path.GetDirectoryName(generated.SolutionPath)!,
         Path.Combine(engineRoot, "Source", "SharpEngine.Timeline.Editor", "SharpEngine.Timeline.Editor.csproj"));
+    var AnimationEditorRelativePath = Path.GetRelativePath(Path.GetDirectoryName(generated.SolutionPath)!,
+        Path.Combine(engineRoot, "Source", "SharpEngine.Animation.Editor", "SharpEngine.Animation.Editor.csproj"));
     Check(firstSolution.Contains(TimelineRuntimeRelativePath.Replace(Path.DirectorySeparatorChar, '\\'),
             StringComparison.OrdinalIgnoreCase) &&
           firstSolution.Contains(TimelineEditorRelativePath.Replace(Path.DirectorySeparatorChar, '\\'),
+            StringComparison.OrdinalIgnoreCase) &&
+          firstSolution.Contains(AnimationEditorRelativePath.Replace(Path.DirectorySeparatorChar, '\\'),
             StringComparison.OrdinalIgnoreCase),
-        "Generated Engine Solution must include Timeline Runtime and Editor projects");
+        "Generated Engine Solution must include Timeline infrastructure and the consuming Animation Editor project");
     string SolutionId(string name) => System.Text.RegularExpressions.Regex.Match(firstSolution,
         "= \"" + System.Text.RegularExpressions.Regex.Escape(name) + "\", \"[^\"]+\", \"([^\"]+)\"").Groups[1].Value;
     var componentGeneratorGuid = SolutionId("ComponentGenerator");

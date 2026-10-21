@@ -9,9 +9,10 @@ public sealed class TimelineEditorModule : ISharpEngineModule
 {
     private IDisposable? Registration;
 
-    public void Startup(ModuleContext context)
+    public void Startup(ModuleContext Context)
     {
-        if (context is EditorModuleContext EditorContext)
+        var EditorContext = Context as EditorModuleContext;
+        if (EditorContext is not null)
         {
             Registration = EditorContext.RegisterEditorExtension(new TimelineEditorExtension());
         }

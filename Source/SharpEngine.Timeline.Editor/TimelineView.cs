@@ -1,6 +1,6 @@
+using SharpEngine.UI;
+using System.Text.Json.Nodes;
 using System.Globalization;
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -135,8 +135,9 @@ public sealed class TimelineViewSnapshot
 /// Renderer-independent timeline view. It produces stable rows, clip rectangles,
 /// ruler ticks, and markup that can be hosted in RmlUi or another frontend.
 /// </summary>
-public sealed class TimelineView
+public sealed class TimelineView : IUiLayoutPart, IUiActionHandler
 {
+    private static readonly UiLayoutTemplate Layout = UiLayoutTemplate.LoadEmbedded(typeof(TimelineView).Assembly, "SharpEngine.Timeline.TimelineView.rml");
     public const float DefaultHeaderWidth = 180;
     public const float DefaultRowHeight = 30;
     public const float RulerHeight = 28;
@@ -201,67 +202,53 @@ public sealed class TimelineView
             HeaderWidth + (float)((CurrentTime - ViewStart) * State.PixelsPerSecond), Ticks, Rows);
     }
 
+    public string BuildLayout(UiLayoutContext Context) { return BuildMarkup(Context.Width, Context.Height); }
+
     public string BuildMarkup(float Width, float Height, float HeaderWidth = DefaultHeaderWidth)
     {
         var Snapshot = BuildSnapshot(Width, Height, HeaderWidth);
-        var Markup = new StringBuilder("<div class=\"timeline-view\" data-timeline-id=\"")
-            .Append(Escape(Snapshot.TimelineId)).Append("\" data-timeline-header=\"")
-            .Append(Number(HeaderWidth)).Append("\" data-timeline-scale=\"").Append(Number(State.PixelsPerSecond))
-            .Append("\" data-timeline-scroll=\"").Append(Number(State.HorizontalScroll))
-            .Append("\" data-timeline-duration=\"").Append(Number(Document.Duration)).Append("\">");
-        Markup.Append("<div class=\"timeline-transport\">")
-            .Append("<button id=\"timelineStart\" data-action=\"editor.timeline-start\" title=\"Go to start\">|&lt;</button>")
-            .Append("<button id=\"timelinePlay\" data-action=\"editor.timeline-play\"")
-            .Append(IsPlaying ? " disabled" : string.Empty).Append(">Play</button>")
-            .Append("<button id=\"timelinePause\" data-action=\"editor.timeline-pause\"")
-            .Append(IsPlaying ? string.Empty : " disabled").Append(">Pause</button>")
-            .Append("<button id=\"timelineStop\" data-action=\"editor.timeline-stop\">Stop</button>")
-            .Append("<span class=\"timeline-current-time\">").Append(Escape(FormatTime(State.CurrentTime)))
-            .Append(" / ").Append(Escape(FormatTime(Document.Duration))).Append("</span>")
-            .Append("<button data-action=\"editor.timeline-zoom-out\" title=\"Zoom out\">-</button>")
-            .Append("<button data-action=\"editor.timeline-zoom-in\" title=\"Zoom in\">+</button></div>");
-        Markup.Append("<div id=\"timelineRuler\" class=\"timeline-ruler\" data-timeline-ruler=\"true\" data-timeline-header=\"")
-            .Append(Number(HeaderWidth)).Append("\" data-timeline-scale=\"").Append(Number(State.PixelsPerSecond))
-            .Append("\" data-timeline-scroll=\"").Append(Number(State.HorizontalScroll))
-            .Append("\" data-timeline-duration=\"").Append(Number(Document.Duration)).Append("\">")
-            .Append("<div class=\"timeline-ruler-header\">Time</div><div class=\"timeline-ruler-scale\">");
-        foreach (var Tick in Snapshot.Ruler)
+        var Values = new JsonObject
         {
-            Markup.Append("<div class=\"timeline-tick").Append(Tick.Major ? " major" : string.Empty)
-                .Append("\" style=\"left:").Append(Number(Tick.X - HeaderWidth)).Append("px\">")
-                .Append(Tick.Major ? Escape(Tick.Label) : string.Empty).Append("</div>");
-        }
-        Markup.Append("</div></div><div class=\"timeline-rows\">");
-        foreach (var Row in Snapshot.Rows)
-        {
-            Markup.Append("<div class=\"timeline-row").Append(Row.Selected ? " selected" : string.Empty)
-                .Append(Row.Muted ? " muted" : string.Empty).Append("\" style=\"top:")
-                .Append(Number(Row.Y - RulerHeight)).Append("px;height:").Append(Number(Row.Height))
-                .Append("px\" data-track-id=\"").Append(Escape(Row.TrackId)).Append("\">")
-                .Append("<div class=\"timeline-row-clips\">");
-            foreach (var Clip in Row.Clips)
-            {
-                Markup.Append("<button class=\"timeline-clip").Append(Clip.Selected ? " selected" : string.Empty)
-                    .Append(Clip.Muted ? " muted" : string.Empty).Append("\" style=\"left:")
-                    .Append(Number(Clip.Bounds.X - HeaderWidth)).Append("px;width:")
-                    .Append(Number(Clip.Bounds.Width)).Append("px;height:").Append(Number(Clip.Bounds.Height))
-                    .Append("px\" data-timeline-action=\"select-clip:").Append(Escape(Clip.ClipId))
-                    .Append("\" data-action=\"editor.timeline-select:").Append(Escape(Clip.ClipId))
-                    .Append("\" title=\"").Append(Escape(Clip.Label)).Append("\">")
-                    .Append(Escape(Clip.Label)).Append("</button>");
-            }
-            Markup.Append("</div><span class=\"timeline-track-label\">").Append(Escape(Row.Label))
-                .Append("</span></div>");
-        }
-        Markup.Append("</div>");
-        if (Snapshot.PlayheadX >= HeaderWidth && Snapshot.PlayheadX <= Width)
-        {
-            Markup.Append("<div id=\"timelinePlayhead\" class=\"timeline-playhead\" style=\"left:")
-                .Append(Number(Snapshot.PlayheadX)).Append("px\" data-time=\"").Append(Number(Snapshot.CurrentTime))
-                .Append("\" data-timeline-ruler=\"true\"><div class=\"timeline-playhead-arrow\"><div class=\"timeline-playhead-tip\" /></div></div>");
-        }
-        Markup.Append("</div>");
-        return Markup.ToString();
+            ["TimelineId"] = Snapshot.TimelineId,
+            ["HeaderWidth"] = Number(HeaderWidth),
+            ["Scale"] = Number(State.PixelsPerSecond),
+            ["Scroll"] = Number(State.HorizontalScroll),
+            ["Duration"] = Number(Document.Duration),
+            ["Playing"] = IsPlaying,
+            ["Paused"] = !IsPlaying,
+            ["DisplayTime"] = FormatTime(State.CurrentTime),
+            ["DisplayDuration"] = FormatTime(Document.Duration),
+            ["HasPlayhead"] = Snapshot.PlayheadX >= HeaderWidth && Snapshot.PlayheadX <= Width,
+            ["PlayheadX"] = Number(Snapshot.PlayheadX),
+            ["CurrentTime"] = Number(Snapshot.CurrentTime),
+            ["Ticks"] = new JsonArray(Snapshot.Ruler.Select(Tick =>
+                (JsonNode)new JsonObject
+                {
+                    ["Classes"] = Tick.Major ? " major" : string.Empty,
+                    ["Left"] = Number(Tick.X - HeaderWidth),
+                    ["Label"] = Tick.Major ? Tick.Label : string.Empty,
+                }).ToArray()),
+            ["Rows"] = new JsonArray(Snapshot.Rows.Select(Row =>
+                (JsonNode)new JsonObject
+                {
+                    ["Classes"] = (Row.Selected ? " selected" : string.Empty) + (Row.Muted ? " muted" : string.Empty),
+                    ["Top"] = Number(Row.Y - RulerHeight),
+                    ["Height"] = Number(Row.Height),
+                    ["TrackId"] = Row.TrackId,
+                    ["Label"] = Row.Label,
+                    ["Clips"] = new JsonArray(Row.Clips.Select(Clip =>
+                        (JsonNode)new JsonObject
+                        {
+                            ["Classes"] = (Clip.Selected ? " selected" : string.Empty) + (Clip.Muted ? " muted" : string.Empty),
+                            ["Left"] = Number(Clip.Bounds.X - HeaderWidth),
+                            ["Width"] = Number(Clip.Bounds.Width),
+                            ["Height"] = Number(Clip.Bounds.Height),
+                            ["ClipId"] = Clip.ClipId,
+                            ["Label"] = Clip.Label,
+                        }).ToArray()),
+                }).ToArray()),
+        };
+        return Layout.Render(new(Width, Height), Values);
     }
 
     public bool IsPlaying
@@ -437,6 +424,5 @@ public sealed class TimelineView
         return Time.ToString(Time < 10 ? "0.###" : "0.#", CultureInfo.InvariantCulture) + "s";
     }
 
-    private static string Escape(string Value) => WebUtility.HtmlEncode(Value);
     private static string Number(double Value) => Value.ToString("0.###", CultureInfo.InvariantCulture);
 }

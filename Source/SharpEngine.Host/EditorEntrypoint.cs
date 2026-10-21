@@ -5,6 +5,7 @@ using SharpEngine.Logging;
 using SharpEngine.Modules;
 using SharpEngine.Interop;
 using SharpEngine.Timeline;
+using SharpEngine.Animation;
 
 namespace SharpEngine.Host;
 
@@ -45,7 +46,8 @@ public static class HostEntrypoint
                 Path.Combine(s_runtime.EngineRoot, "engine.json"))!;
             s_engineModules = EngineModuleHost.Prepare("Editor",
                 typeof(TimelineRuntimeModule).Assembly,
-                typeof(TimelineEditorModule).Assembly);
+                typeof(TimelineEditorModule).Assembly,
+                typeof(AnimationEditorModule).Assembly);
             s_engineModules.Start((Id, Type) => Type == "Editor"
                 ? new EditorModuleContext(ModuleRoot, Id, s_runtime, s_input)
                 : new ModuleContext(ModuleRoot, Id, Type, s_runtime.UiRuntime, s_input, s_runtime),

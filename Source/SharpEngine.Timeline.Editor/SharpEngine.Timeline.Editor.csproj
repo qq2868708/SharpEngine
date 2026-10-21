@@ -19,5 +19,8 @@
     <ProjectReference Include="..\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj" />
     <ProjectReference Include="..\SharpEngine.Editor\SharpEngine.Editor.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../Content/UI/Rml/TimelineView.rml" LogicalName="SharpEngine.Timeline.TimelineView.rml" />
+  </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

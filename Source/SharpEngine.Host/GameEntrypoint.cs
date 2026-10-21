@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using SharpEngine.Interop;
@@ -104,8 +105,8 @@ public static unsafe class HostEntrypoint
             {
                 var Frame = SceneRenderer.BuildFrame(Game.World, Bounds, Game.Assets);
                 TriangleCount = Frame.TriangleCount;
-                fixed (WorldViewportVertex* Triangles = Frame.Triangles)
-                fixed (WorldViewportVertex* Lines = Frame.Lines)
+                fixed (ViewportVertex* Triangles = Frame.Triangles)
+                fixed (ViewportVertex* Lines = Frame.Lines)
                 {
                     Api->SubmitViewportFrame((float*)Triangles,
                         (uint)Frame.Triangles.Length, (float*)Lines,

@@ -27,6 +27,10 @@ if (args.Contains("--root-motion-only", StringComparer.Ordinal))
 {
     settingsProject = RootMotionUiValidation.CreateProject(root);
 }
+if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
+{
+    settingsProject = DynamicUiValidation.CreateProject(root, configuration);
+}
 var editorArguments = new List<string> { "--mcp-isolated", "--mcp-session-id", sessionId };
 if (args.Contains("--player-only", StringComparer.Ordinal))
 {
@@ -143,6 +147,12 @@ try
             "notifications/resources/list_changed",
         "Attachment must notify clients that the resource list changed");
 
+    if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
+    {
+        DynamicUiValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} dynamic UI integration assertions");
+        return;
+    }
     if (args.Contains("--root-motion-only", StringComparer.Ordinal))
     {
         RootMotionUiValidation.Run(root, Require, Tool, Call);

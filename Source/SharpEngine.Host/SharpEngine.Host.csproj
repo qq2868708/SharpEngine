@@ -24,6 +24,7 @@
     <ProjectReference Include="..\SharpEngine.Timeline.Runtime\SharpEngine.Timeline.Runtime.csproj" Condition="'$(SharpEngineTarget)' != 'Server'" />
     <ProjectReference Include="..\SharpEngine.Editor\SharpEngine.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
     <ProjectReference Include="..\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
+    <ProjectReference Include="..\SharpEngine.Animation.Editor\SharpEngine.Animation.Editor.csproj" Condition="'$(SharpEngineTarget)' == 'Editor'" />
     <ProjectReference Include="..\SharpEngine.Networking\SharpEngine.Networking.csproj" Condition="'$(SharpEngineTarget)' == 'Server'" />
   </ItemGroup>
   <ItemGroup Condition="'$(SharpEngineTarget)' == 'Game'">

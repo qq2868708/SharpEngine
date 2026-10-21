@@ -1,0 +1,27 @@
+<asset-editor-layout schema-version="1" primary-pane="preview">
+  <dock>
+    <split id="asset.root" orientation="horizontal" ratio="0.74">
+      <split id="asset.left" orientation="vertical" ratio="0.58">
+        <tabs id="asset.preview" group="asset.preview.tabs" active="preview"><tab pane="preview" /></tabs>
+        <tabs id="asset.timeline" group="asset.timeline.tabs" active="timeline"><tab pane="timeline" /></tabs>
+      </split>
+      <tabs id="asset.details" group="asset.details.tabs" active="details"><tab pane="details" /></tabs>
+    </split>
+  </dock>
+  <panes>
+    <pane id="preview" label="Preview" closable="false">
+      <div id="animationStateMachinePreview" class="timeline-preview-info"><div class="timeline-preview-title">${Title}</div><div>Initial state: ${InitialState}</div><div>States: ${StateCount}</div><div>Transitions: ${TransitionCount}</div></div>
+    </pane>
+    <pane id="timeline" label="Timeline" closable="true">
+      <div id="animationStateMachineGraph" class="animation-state-machine-editor">
+        <div class="animation-state-machine-header"><strong>States</strong><span>${StateCount} states · ${TransitionCount} transitions</span></div>
+        <div class="animation-state-machine-states">
+          <ui-repeat items="States"><div class="animation-state-machine-state${InitialClass}"><strong>${Id}</strong><span>Clip: ${Clip}</span></div></ui-repeat>
+        </div>
+      </div>
+    </pane>
+    <pane id="details" label="Details" closable="true">
+      <div class="asset-details-pane"><div class="asset-preview-mesh-picker"><strong>Preview Mesh</strong><span>No compatible meshes</span></div><pre class="timeline-details">${DetailsJson}</pre></div>
+    </pane>
+  </panes>
+</asset-editor-layout>

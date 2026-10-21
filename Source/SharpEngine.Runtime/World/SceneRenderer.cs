@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
@@ -12,20 +13,9 @@ using SharpEngine.UI;
 
 namespace SharpEngine.World;
 
-/// <summary>One native-friendly vertex: relative viewport pixels, 0..1 depth,
-/// and RGBA. The Editor OpenGL and Game Vulkan backends consume the same data.</summary>
-[StructLayout(LayoutKind.Sequential)]
-public readonly record struct WorldViewportVertex(float X, float Y, float Z,
-    float R, float G, float B, float A);
-
 public sealed record WorldViewportFrame(UiRect Bounds,
-    WorldViewportVertex[] Triangles, WorldViewportVertex[] Lines,
-    int EntityCount, int MeshCount, string CameraId)
-{
-    public int TriangleCount => Triangles.Length / 3;
-    public int LineCount => Lines.Length / 2;
-    public IReadOnlyList<string> Diagnostics { get; init; } = Array.Empty<string>();
-}
+    ViewportVertex[] Triangles, ViewportVertex[] Lines,
+    int EntityCount, int MeshCount, string CameraId) : ViewportFrame(Bounds, Triangles, Lines);
 
 public static class SceneRenderer
 {
@@ -60,19 +50,21 @@ public static class SceneRenderer
     private static readonly int[] PlaneTriangles = { 0, 1, 2, 0, 2, 3 };
 
     public static WorldViewportFrame BuildFrame(WorldDocument world,
-        UiRect bounds, AssetRegistry? assets = null, string? selectedEntityId = null)
+        UiRect bounds, AssetRegistry? assets = null, string? selectedEntityId = null,
+        Camera3D? ViewCamera = null)
     {
         ArgumentNullException.ThrowIfNull(world);
-        var Triangles = new List<WorldViewportVertex>();
-        var Lines = new List<WorldViewportVertex>();
+        var Triangles = new List<ViewportVertex>();
+        var Lines = new List<ViewportVertex>();
         var Diagnostics = new List<string>();
         var Camera = world.ActiveCamera;
-        if (Camera is null || bounds.Width <= 0 || bounds.Height <= 0 ||
+        if ((Camera is null && ViewCamera is null) || bounds.Width <= 0 || bounds.Height <= 0 ||
             !float.IsFinite(bounds.Width) || !float.IsFinite(bounds.Height))
             return new WorldViewportFrame(bounds, [], [], world.Entities.Count,
                 world.MeshCount, Camera?.Id ?? string.Empty);
 
-        var ViewProjection = CameraMatrix(world, Camera, bounds.Width / bounds.Height);
+        var ViewProjection = ViewCamera?.ViewProjection(bounds.Width / bounds.Height) ??
+            CameraMatrix(world, Camera!, bounds.Width / bounds.Height);
         var Lights = world.Entities.SelectMany(Entity => Entity.RenderViews("engine.directional-light"))
             .Where(Entity => Entity.HasEnabledComponent("engine.directional-light") && Entity.Intensity > 0)
             .Select(Light =>
@@ -176,7 +168,7 @@ public static class SceneRenderer
         }
 
         return new WorldViewportFrame(bounds, Triangles.ToArray(), Lines.ToArray(),
-            world.Entities.Count, world.MeshCount, Camera.Id)
+            world.Entities.Count, world.MeshCount, ViewCamera is null ? Camera!.Id : "viewport-observer")
         { Diagnostics = Diagnostics.AsReadOnly() };
     }
 
@@ -646,7 +638,7 @@ public static class SceneRenderer
         return ResultCount;
     }
 
-    internal static void AddLine(List<WorldViewportVertex> lines, Vector3 a,
+    internal static void AddLine(List<ViewportVertex> lines, Vector3 a,
         Vector3 b, Matrix4x4 matrix, UiRect bounds, Vector4 color)
     {
         var start = Vector4.Transform(new Vector4(a, 1), matrix);
@@ -668,7 +660,7 @@ public static class SceneRenderer
         lines.Add(second with { Z = Math.Max(0, second.Z - 0.00005f) });
     }
 
-    internal static WorldViewportVertex ToVertex(Vector4 clip, UiRect bounds,
+    internal static ViewportVertex ToVertex(Vector4 clip, UiRect bounds,
         Vector4 color) => new((clip.X / clip.W + 1) * 0.5f * bounds.Width,
             (1 - clip.Y / clip.W) * 0.5f * bounds.Height,
             Math.Clamp(clip.Z / clip.W, 0, 1), color.X, color.Y, color.Z, color.W);

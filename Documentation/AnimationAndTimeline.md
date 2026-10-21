@@ -31,7 +31,7 @@ Save 先重新解析序列化内容，再用临时文件原子替换项目源资
 
 在 Content Manager 中单击资源只改变选择状态；双击 `SkeletalAnimation` 资源会通过
 `EditorRuntime.OpenAsset` 打开顶层动画资产编辑器。同一 `AssetId` 重复打开时聚焦原实例；不同
-资产各自拥有独立实例，即使它们共享 `timeline-editor` 的 `EditorId`。Preview 是不可游离的主
+资产各自拥有独立实例，即使它们共享 `skeletal-animation-editor` 的 `EditorId`。Preview 是不可游离的主
 Pane，Timeline 与 Details 是同一 `EditorRootId` 下的普通 Pane，可以在该根内停靠或成为游离
 Tab，但不能跨到主编辑器或另一个资产编辑器。每个实例拥有自己的播放头、Notify 轨道、
 Undo/Redo 历史和 dirty 状态。
@@ -138,8 +138,31 @@ SkeletalAnimation schema v2 显式保存 `rootMotion: { enabled, boneId }`；v1 
 
 ## 资产预览布局与时间轴事件
 
-Mesh、Skeleton、动画编辑器各自持有临时 AssetPreviewWorld，包含相机、Sky Light 和方向光；WorldViewportLayout 复用布局，渲染调用者传入的 World。动画姿态通过 SkeletonInstance 准备到临时 World 的派生渲染状态，相机只在打开、切换预览网格或 Focus 时取景。右键环绕、中键平移、滚轮缩放。主 World、源资产和 Cook 结果不受预览操作影响。
+Mesh、Skeleton、动画编辑器各自持有临时 AssetPreviewWorld，包含内容、Sky Light 和方向光；WorldPreview 使用通用 Viewport3D，并挂接 WorldViewportContent。观察相机属于 Viewport3D，不注入或修改 World 相机实体。动画姿态通过 SkeletonInstance 准备到临时 World 的派生渲染状态，观察相机只在打开、切换预览网格或 Focus 时取景。右键环绕、中键平移、滚轮缩放。主 World、源资产和 Cook 结果不受预览操作影响。
 
 TimelineView 拥有当前时间和播放推进；Play、Pause、Stop、Seek、Update 统一触发时间/播放事件。TimeChanged 包含前后时间与 Playback/Seek/Stop 来源，外部编辑器订阅后更新预览。播放控件属于 Timeline 面板，标尺支持连续拖拽和箭头拖拽，不吸附到刻度或帧。拖拽立即暂停，释放后保持暂停。播放至末尾停止，再次播放从头开始。
 
 动画编辑器完全忽略 Notify 执行，播放和定位都只采样姿态；Notify 的编辑、Undo/Redo 和保存仍保留。技能等插件在自己的编辑器里订阅时间事件并实现特殊预览，不向通用时间轴注入业务执行。播放数据只属于会话，不进入 Timeline 或动画资产。
+
+## 专用骨骼动画资产编辑器
+
+`SkeletalAnimation` 由 `SharpEngine.Animation.Editor` 模块中的 `SkeletalAnimationEditorExtension` 注册专用打开入口，稳定 Opener ID 仍为 `engine.skeletal-animation-editor`，Editor ID 为 `skeletal-animation-editor`。`AnimationEditorModule` 同时负责骨骼动画与状态机扩展的注册和释放；`TimelineEditorModule` 只注册 Timeline 编辑器。依赖方向是 `Animation.Editor → Timeline.Editor → Timeline.Runtime`，Timeline 不引用上层动画编辑器模块。
+
+这个编辑器专属维护文件只有两个：
+
+- `Source/SharpEngine.Animation.Editor/SkeletalAnimationEditorExtension.cs`：注册、每资产实例、动画 Authoring 适配、预览内容组织、展示数据和事件绑定。
+- `Content/UI/Rml/SkeletalAnimationEditor.rml`：Preview/Timeline/Details 面板、默认 Dock 结构、Details 控件和子布局插槽。
+
+编辑器创建 Viewport3D，挂接临时 World 的 WorldViewportContent，再放入兼容骨骼模型；Timeline 的 TimeChanged 触发 SamplePreview 和 SetPose。观察相机属于 Viewport，动画预览只采样姿态，不执行 Notify。播放、Root Motion、Notify、预览网格、Undo/Redo、Save 和只读约束沿用现有领域能力。
+
+骨骼动画的 JSON 事务与历史归属于该逻辑文件内部的 `SkeletalAnimationDocument`，Timeline 只是由动画生成的展示数据。`TimelineAssetToolDocument` 只处理 Timeline 资产，不能再通过资产类型分支编辑骨骼动画或状态机。通用 `TimelineNotifyEditing.TryAdd` 仅构建候选轨道数据，调用者决定提交到 Timeline 事务还是动画 JSON 事务，不取得历史与保存的所有权。
+
+状态机使用同模块内的 `AnimationStateMachineEditorExtension.cs` 与 `Content/UI/Rml/AnimationStateMachineEditor.rml`，保留 Preview/Timeline/Details、状态列表、初始状态标记及只读行为。稳定 Opener ID 为 `engine.animation-state-machine-editor`；Editor ID 仍使用原 `timeline-editor`，用于兼容窗口身份和已保存 Dock 布局，不表示它属于 Timeline 模块。状态机状态快照升级为 schemaVersion 3：保留图、计数、revision 与只读状态，增加 runtimeUi；移除未使用的 previewWorld、viewport 和预览网格字段，不再创建空的 3D 预览 World。骨骼动画编辑器快照仍为 v2，源动画/状态机/Timeline 格式不变。
+
+父布局使用 `<ui-slot name="Viewport" />`、`<ui-slot name="Timeline" />` 引用实现 `IUiLayoutPart` 的子实例。Viewport3D 和 TimelineView 的内部标记分别由 `Content/UI/Rml/Viewport3D.rml`、`Content/UI/Rml/TimelineView.rml` 维护；父编辑器不拼接这些标记。通用 `UiLayoutTemplate` 按本次使用的数据展开文本、条件和重复项，并对文本及属性进行 XML 转义；插槽只接收 UI 布局契约，不接收任意业务对象。
+
+`AssetEditorLayoutDefinition` 解析 `asset-editor-layout` schema-version 1，把默认 Dock 定义转换成既有 EditorLayoutDocument；每次使用创建独立可变 Dock 数据。已有分割、游离、窗口归属和布局保存路径继续由资产编辑器宿主管理。
+
+专用编辑器还持有 `AssetEditorLayoutInstance`，各 Pane 的 `UiLayoutInstance` 支持代码向自己的容器添加控件、绑定事件或挂接子布局。实例修改不会保存到原始 RML；`runtimeUi` 提供实例状态观察，最终显示与焦点仍通过原生 UI 快照验证。接入方法见 [运行实例 UI 组合](RuntimeUiComposition.md)。
+
+这些内置 RML 定义作为所属模块的嵌入资源构建。修改内置布局后重建对应引擎模块并重启 Editor；不新增另一份布局 manifest，不自动改写用户保存的布局，也不声称支持内置模板热重载。

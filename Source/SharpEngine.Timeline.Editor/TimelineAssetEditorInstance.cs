@@ -25,7 +25,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
     private bool PreviewMeshOverridden;
     private TimelineClip? PreviewClip;
     private readonly AssetPreviewWorld PreviewWorld;
-    private readonly WorldViewportLayout Viewport = new("timelinePreviewViewport", "asset-preview");
+    private readonly WorldPreview Preview;
     private TimelineView? SubscribedView;
 
     private bool IsPlaying
@@ -41,6 +41,8 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         this.Context = Context;
         PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
             throw new InvalidOperationException("Component registry is unavailable"), "animation-preview:" + Context.Asset.Id);
+        Preview = new WorldPreview(PreviewWorld.World, Context.Runtime.Assets, "timelinePreviewViewport", "asset-preview");
+
         Assets = Context.Runtime.Assets ?? throw new InvalidOperationException(
             "Asset registry is unavailable");
         Tool = new TimelineAssetToolDocument(Assets, Context.Asset, Context.Path);
@@ -67,7 +69,6 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
     ];
     public IReadOnlyList<AssetEditorCommandDefinition> Commands { get; } =
     [
-        new("root-motion", "Enable Root Motion", "Edit", 90, null, true),
         new("add-notify", "Add Notify", "Edit", 100, "add", true),
         new("undo", "Undo", "Edit", 200, "reset", true),
         new("redo", "Redo", "Edit", 210, "reset", true),
@@ -129,7 +130,6 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             "pause" => HasTimeline && IsPlaying,
             "stop" => HasTimeline && (IsPlaying || View.State.CurrentTime > 0),
             "seek-start" => HasTimeline && View.State.CurrentTime > 0,
-            "root-motion" => Asset.Type == "SkeletalAnimation" && !IsReadOnly && !IsPlaying,
             "add-notify" => HasTimeline && !IsReadOnly && !IsPlaying,
             "undo" => HasTimeline && !IsPlaying && Tool.CanUndo,
             "redo" => HasTimeline && !IsPlaying && Tool.CanRedo,
@@ -154,12 +154,6 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             case "seek-start":
                 Seek(0);
                 break;
-            case "root-motion":
-                Tool.SetRootMotion(!Tool.Animation!.RootMotion.Enabled);
-                PreviewAnimation = Tool.Animation;
-                SubscribeTimeline();
-                UpdatePreviewPose();
-                break;
             case "add-notify":
                 AddNotify();
                 break;
@@ -181,7 +175,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             return true;
         }
 
-        if (Viewport.TryHandleAction(PreviewWorld.World, Action))
+        if (Preview.Viewport.TryHandleAction(Action))
         {
             return true;
         }
@@ -203,11 +197,6 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             return true;
         }
 
-        if (Action == "editor.timeline-root-motion" && CanExecuteCommand("root-motion"))
-        {
-            ExecuteCommand("root-motion");
-            return true;
-        }
         return false;
     }
 
@@ -237,7 +226,8 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         {
             View.Update(DeltaSeconds);
         }
-        if (Context.TryGetElementRect("timelineViewHost", out var Bounds) && Bounds.Width > 0 && Bounds.Height > 0)
+        var Found = Context.TryGetElementRect("timelineViewHost", out var Bounds);
+        if (Found && Bounds.Width > 0 && Bounds.Height > 0)
         {
             TimelineWidth = Math.Max(TimelineView.DefaultHeaderWidth + 1, Bounds.Width);
             TimelineHeight = Bounds.Height;
@@ -256,7 +246,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         State["panes"] = new JsonArray(Panes.Select(Pane => (JsonNode)Pane.PaneId).ToArray());
         State["playing"] = IsPlaying;
         State["previewWorld"] = PreviewWorld.Describe();
-        State["viewport"] = Viewport.Describe();
+        State["viewport"] = Preview.Viewport.Describe();
         State["notifyPreview"] = "ignored";
         if (HasTimeline)
         {
@@ -287,18 +277,14 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
     {
         if (PreviewAnimation is null || PreviewClip is null)
         {
-            return BuildStateMachinePreviewMarkup();
+            return "<div class=\"timeline-empty\">No skeletal animation clip is available for preview</div>";
         }
 
-        return Viewport.BuildMarkup(PreviewAnimation.Name);
+        return Preview.Viewport.BuildMarkup(PreviewAnimation.Name);
     }
 
     private string BuildTimelineMarkup()
     {
-        if (Tool.StateMachine is not null)
-        {
-            return BuildStateMachineMarkup(Tool.StateMachine);
-        }
         if (!HasTimeline)
         {
             return "<div class=\"timeline-empty\">No Timeline document</div>";
@@ -335,14 +321,6 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
                     .Append(Uri.EscapeDataString(Mesh.AssetId)).Append("\">")
                     .Append(WebUtility.HtmlEncode(Mesh.Name)).Append("</button>");
             }
-        }
-        if (Asset.Type == "SkeletalAnimation")
-        {
-            Markup.Append("<div><button id=\"animationRootMotion\" data-action=\"editor.timeline-root-motion\"")
-                .Append(IsReadOnly || IsPlaying ? " disabled" : string.Empty)
-                .Append(">Root Motion: ")
-                .Append(Tool.Animation!.RootMotion.Enabled ? "Enabled" : "Disabled")
-                .Append("</button><span>Enabled drives the entity; disabled removes root translation and rotation.</span></div>");
         }
         Markup.Append("</div><pre class=\"timeline-details\">")
             .Append(WebUtility.HtmlEncode(Json)).Append("</pre></div>");
@@ -399,7 +377,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
 
         PreviewMesh = Mesh;
         PreviewWorld.SetMesh(Mesh.AssetId, "engine.skeletal-mesh", Mesh.DefaultMaterial, Mesh);
-        Viewport.Frame(PreviewWorld.World, Mesh.Positions.Select(Position =>
+        Preview.Viewport.Frame(Mesh.Positions.Select(Position =>
             new System.Numerics.Vector3(Position.X, Position.Y, Position.Z)));
         UpdatePreviewPose();
         PreviewMeshOverridden = !AssetId.Equals(DefaultPreviewMeshId,
@@ -409,7 +387,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
 
     private void SubmitPreviewFrame()
     {
-        Viewport.Render(Context, PreviewWorld.World, Assets);
+        Preview.Viewport.Render(Context);
     }
 
     private void SubscribeTimeline()
@@ -467,46 +445,15 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
 
     private void AddNotify()
     {
-        var NotifyTrack = Document.Tracks.FirstOrDefault(Track =>
-            Track.Type.Equals("notify", StringComparison.OrdinalIgnoreCase));
-        if (NotifyTrack is null)
-        {
-            Context.SetStatus("Notify track is unavailable");
-            return;
-        }
-
-        var Duration = Math.Min(0.1, Document.Duration);
-        var Start = Math.Clamp(0.25 * NotifyTrack.Clips.Count + 0.1,
-            0, Document.Duration - Duration);
-        foreach (var ExistingClip in NotifyTrack.Clips.OrderBy(Clip => Clip.Start))
-        {
-            if (ExistingClip.Start >= Start + Duration || ExistingClip.End <= Start)
-            {
-                continue;
-            }
-            Start = ExistingClip.End + 0.05;
-        }
-        if (Start + Duration > Document.Duration + 1e-9)
-        {
-            Context.SetStatus("No free space remains on the Notify track");
-            return;
-        }
-
-        var Clip = new TimelineClip($"notify-{Guid.NewGuid():N}",
-            $"Notify {NotifyTrack.Clips.Count + 1}", Start, Duration);
-        var Tracks = Document.Tracks.Select(Track => ReferenceEquals(Track, NotifyTrack) ?
-            new TimelineTrack(Track.TrackId, Track.Name, Track.TargetId, Track.Type,
-                Track.Clips.Concat([Clip]).ToArray(), Track.Muted) : Track).ToArray();
-        var Changed = Tool.ReplaceTimeline(new TimelineDocument(Document.TimelineId,
-            Document.Name, Document.Duration, Document.FrameRate, Tracks));
+        var Changed = Tool.AddNotify(out var Message);
         if (!Changed)
         {
-            Context.SetStatus("Notify edit was rejected");
+            Context.SetStatus(Message);
             return;
         }
         PreviewAnimation = Tool.Animation;
-        View = new TimelineView(Document, View.State);
-        View.SelectClip(Clip.ClipId);
+        SubscribeTimeline();
+        UpdatePreviewPose();
     }
 
     private void Undo()
@@ -527,35 +474,6 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             View = new TimelineView(Document, View.State);
             UpdatePreviewPose();
         }
-    }
-
-    private string BuildStateMachinePreviewMarkup()
-    {
-        if (Tool.StateMachine is null)
-        {
-            return "<div class=\"timeline-empty\">No skeletal animation clip is available for preview</div>";
-        }
-        var StateMachine = Tool.StateMachine;
-        return $"<div class=\"timeline-preview-info\"><div class=\"timeline-preview-title\">{WebUtility.HtmlEncode(Title)}</div><div>Initial state: {WebUtility.HtmlEncode(StateMachine.InitialStateId)}</div><div>States: {StateMachine.States.Count}</div><div>Transitions: {StateMachine.Transitions.Count}</div></div>";
-    }
-
-    private static string BuildStateMachineMarkup(AnimationStateMachineAsset StateMachine)
-    {
-        var Markup = new StringBuilder("<div class=\"animation-state-machine-editor\">");
-        Markup.Append("<div class=\"animation-state-machine-header\"><strong>States</strong><span>")
-            .Append(StateMachine.States.Count).Append(" states · ")
-            .Append(StateMachine.Transitions.Count).Append(" transitions</span></div>")
-            .Append("<div class=\"animation-state-machine-states\">");
-        foreach (var State in StateMachine.States)
-        {
-            Markup.Append("<div class=\"animation-state-machine-state")
-                .Append(State.StateId == StateMachine.InitialStateId ? " initial" : string.Empty)
-                .Append("\"><strong>").Append(WebUtility.HtmlEncode(State.StateId))
-                .Append("</strong><span>Clip: ").Append(WebUtility.HtmlEncode(State.ClipId))
-                .Append("</span></div>");
-        }
-        Markup.Append("</div></div>");
-        return Markup.ToString();
     }
 
     private static DockNodeState Tabs(string NodeId, string GroupId, string PaneId) =>

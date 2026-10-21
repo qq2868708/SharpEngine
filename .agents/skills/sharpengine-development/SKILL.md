@@ -77,3 +77,11 @@ implementation-only refactor may omit the manual, but state that boundary when
 reporting the work.
 
 Report any validation boundary honestly. A source review, direct semantic command test, or mocked action does not prove that a runtime UI control is visible and clickable.
+
+## Infrastructure Pyramid
+
+For reusable engine capabilities, follow
+[Infrastructure And Composition](references/infrastructure-composition.md).
+General infrastructure must function independently; higher-level capabilities
+combine it with content adapters and small customizations. Use the confirmed
+contract in `Documentation/EngineArchitecture.md` and validate isolation.

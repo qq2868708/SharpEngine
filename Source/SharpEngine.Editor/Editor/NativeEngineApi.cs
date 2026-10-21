@@ -1,3 +1,4 @@
+using SharpEngine.Rendering;
 using SharpEngine.Interop;
 using System.Text;
 using System.Runtime.InteropServices;
@@ -507,8 +508,8 @@ internal unsafe readonly struct NativeEngineApi
         if (_submitViewportFrame == null) return;
         // Native copies these spans before returning. No managed address is
         // retained across a frame or exposed as a C++/graphics object.
-        fixed (WorldViewportVertex* triangles = frame.Triangles)
-        fixed (WorldViewportVertex* lines = frame.Lines)
+        fixed (ViewportVertex* triangles = frame.Triangles)
+        fixed (ViewportVertex* lines = frame.Lines)
             _submitViewportFrame((float*)triangles, (uint)frame.Triangles.Length,
                 (float*)lines, (uint)frame.Lines.Length);
     }
@@ -549,8 +550,8 @@ internal unsafe readonly struct NativeEngineApi
             return;
         }
 
-        fixed (WorldViewportVertex* triangles = frame.Triangles)
-        fixed (WorldViewportVertex* lines = frame.Lines)
+        fixed (ViewportVertex* triangles = frame.Triangles)
+        fixed (ViewportVertex* lines = frame.Lines)
         {
             SubmitTimelinePreviewFrameFunction((float*)triangles,
                 (uint)frame.Triangles.Length, (float*)lines,
@@ -592,7 +593,7 @@ internal unsafe readonly struct NativeEngineApi
     }
 
     public void SubmitHostViewportFrame(string HostId, string Kind,
-        WorldViewportFrame Frame)
+        ViewportFrame Frame)
     {
         if (SubmitHostViewportFrameFunction == null)
         {
@@ -603,8 +604,8 @@ internal unsafe readonly struct NativeEngineApi
         var KindUtf8 = Encoding.UTF8.GetBytes(Kind + "\0");
         fixed (byte* HostPointer = HostUtf8)
         fixed (byte* KindPointer = KindUtf8)
-        fixed (WorldViewportVertex* Triangles = Frame.Triangles)
-        fixed (WorldViewportVertex* Lines = Frame.Lines)
+        fixed (ViewportVertex* Triangles = Frame.Triangles)
+        fixed (ViewportVertex* Lines = Frame.Lines)
         {
             SubmitHostViewportFrameFunction(HostPointer, KindPointer,
                 (float*)Triangles, (uint)Frame.Triangles.Length,

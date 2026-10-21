@@ -1,0 +1,228 @@
+using System.Text.Json.Nodes;
+using System.Xml.Linq;
+using SharpEngine.Assets;
+using SharpEngine.Editor;
+using SharpEngine.Editor.Layout;
+using SharpEngine.Modules;
+using SharpEngine.UI;
+
+public sealed class DynamicUiEditorModule : ISharpEngineModule
+{
+    private IDisposable? Registration;
+    public void Startup(ModuleContext Context)
+    {
+        var Editor = Context as EditorModuleContext;
+        if (Editor is not null)
+        {
+            Registration = Editor.RegisterEditorExtension(new DynamicUiExtension());
+        }
+    }
+    public void Shutdown()
+    {
+        Registration?.Dispose();
+        Registration = null;
+    }
+}
+
+sealed class DynamicUiExtension : IEditorExtension
+{
+    private readonly List<IDisposable> Registrations = [];
+    public void Startup(EditorContext Context)
+    {
+        string[] Assets = ["engine://animations/uefn-mannequin-walk", "engine://animations/uefn-mannequin-idle"];
+        foreach (var Asset in Assets)
+        {
+            Registrations.Add(Context.AssetOpeners.Register(new EditorAssetOpener("validation.dynamic-ui." + Registrations.Count,
+                "SkeletalAnimation", Open, Priority: 100, AssetId: Asset, EditorId: "dynamic-ui-validation")));
+        }
+    }
+    public void Shutdown()
+    {
+        foreach (var Registration in Registrations)
+        {
+            Registration.Dispose();
+        }
+        Registrations.Clear();
+    }
+    private static IAssetEditorInstance Open(EditorAssetOpenContext Context) { return new DynamicUiEditor(Context); }
+}
+
+sealed class DynamicUiEditor : IAssetEditorInstance
+{
+    private readonly EditorAssetOpenContext Context;
+    private readonly UiLayoutInstance Ui;
+    private readonly string Source;
+    private readonly string SourcePath;
+    private int Clicks;
+    private int Refreshes;
+    private string LastText = string.Empty;
+
+    public DynamicUiEditor(EditorAssetOpenContext Context)
+    {
+        this.Context = Context;
+        SourcePath = Path.Combine(Context.Runtime.Assets!.ProjectRoot!, "Content/UI/Dynamic.rml");
+        Source = File.ReadAllText(SourcePath);
+        Ui = UiLayoutTemplate.Parse(Source).CreateInstance(Context.EditorRootId);
+    }
+    public AssetDescriptor Asset
+    {
+        get
+        {
+            return Context.Asset;
+        }
+    }
+    public string EditorId
+    {
+        get
+        {
+            return "dynamic-ui-validation";
+        }
+    }
+    public string Title
+    {
+        get
+        {
+            return Asset.Name;
+        }
+    }
+    public string PrimaryPaneId
+    {
+        get
+        {
+            return "content";
+        }
+    }
+    public bool IsDirty
+    {
+        get
+        {
+            return false;
+        }
+    }
+    public bool IsReadOnly
+    {
+        get
+        {
+            return true;
+        }
+    }
+    public IReadOnlyList<AssetEditorPaneDefinition> Panes
+    {
+        get;
+    } = [new("content", "Runtime UI", false)];
+    public IReadOnlyList<AssetEditorCommandDefinition> Commands
+    {
+        get;
+    } = [];
+    public EditorLayoutDocument CreateDefaultLayout()
+    {
+        return new EditorLayoutDocument
+        {
+            MainHost = new DockHostState
+            {
+                HostId = "main",
+                Root = new DockNodeState
+                {
+                    NodeId = "content",
+                    Kind = DockNodeKind.Tabs,
+                    TabGroup = new DockTabGroupState
+                    {
+                        GroupId = "content.tabs",
+                        ActivePaneId = "content",
+                        Panes = [new DockPaneState
+                        {
+                            PaneId = "content",
+                        }],
+                    },
+                },
+            },
+            HiddenPaneIds = [],
+            ActiveContentManagerId = string.Empty,
+            ContentManagers = [],
+        };
+    }
+    public bool CanExecuteCommand(string CommandId) { return false; }
+    public void ExecuteCommand(string CommandId)
+    {
+    }
+    public void Save()
+    {
+    }
+    public void Update(float DeltaSeconds)
+    {
+    }
+    public void Dispose() { Ui.Dispose(); }
+    public bool TryHandleAction(string Action)
+    {
+        if (Ui.TryHandleAction(Action))
+        {
+            return true;
+        }
+        if (Action == "fixture.add")
+        {
+            if (Ui.Find("runtime-panel") is null)
+            {
+                AddControls();
+            }
+            return true;
+        }
+        if (Action == "fixture.refresh")
+        {
+            Refreshes++;
+            return true;
+        }
+        if (Action == "fixture.remove")
+        {
+            Ui.Find("runtime-panel")?.Remove();
+            return true;
+        }
+        return false;
+    }
+    private void AddControls()
+    {
+        var Panel = new UiContainer("runtime-panel");
+        Panel.SetAttribute("style", "display:flex;flex-direction:column;width:340px;margin-top:12px;");
+        var Button = new UiButton("runtime-button", "Code ${Literal} <&>");
+        var Counter = new UiLabel("counter", Clicks.ToString());
+        var Input = new UiTextField("runtime-input");
+        var Mirror = new UiLabel("mirror", "empty");
+        Button.Clicked += () =>
+        {
+            Clicks++;
+            Counter.Text = Clicks.ToString();
+        };
+        Input.ValueChanged += Value =>
+        {
+            LastText = Value;
+            Mirror.Text = Value;
+        };
+        Panel.Add(Button);
+        Panel.Add(Counter);
+        Panel.Add(Input);
+        Panel.Add(Mirror);
+        Ui.Find("panel")!.Add(Panel);
+    }
+    public string BuildPaneMarkup(string PaneId)
+    {
+        return Ui.Render(new(800, 600), new JsonObject
+        {
+            ["Caption"] = "Original layout · refresh " + Refreshes,
+        });
+    }
+    public JsonObject Describe()
+    {
+        return new JsonObject
+        {
+            ["schemaVersion"] = 1,
+            ["clicks"] = Clicks,
+            ["text"] = LastText,
+            ["refreshes"] = Refreshes,
+            ["buttonId"] = Ui.Find("runtime-button")?.ElementId,
+            ["inputId"] = Ui.Find("runtime-input")?.ElementId,
+            ["sourcePath"] = SourcePath,
+            ["sourceUnchanged"] = Source == File.ReadAllText(SourcePath),
+            ["dirty"] = false,
+            ["ui"] = Ui.Describe(),
+        };
+    }
+}

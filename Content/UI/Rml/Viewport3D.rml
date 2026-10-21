@@ -1,0 +1,10 @@
+<template>
+  <div class="viewport3d">
+    <viewport id="${ElementId}" tabindex="0" data-viewport-kind="${Kind}" data-input-surface="${ElementId}" data-viewport3d="${ElementId}" />
+    <div class="viewport3d-footer">
+      <span>${Title}</span><div class="viewport3d-grow" />
+      <button data-action="ui.viewport3d:${ElementId}:focus">Focus</button>
+      <span>RMB Orbit · MMB Pan · Wheel Zoom</span>
+    </div>
+  </div>
+</template>

@@ -106,15 +106,27 @@ internal static unsafe class EditorExtensionValidation
             var TimelineExtension = (IEditorExtension)Activator.CreateInstance(
                 TimelineExtensionType, nonPublic: true)!;
             using var TimelineRegistration = runtime.RegisterExtension(TimelineExtension);
+            var AnimationAssembly = typeof(SharpEngine.Animation.AnimationEditorModule).Assembly;
+            require(AnimationAssembly != typeof(TimelineEditorModule).Assembly &&
+                !typeof(TimelineEditorModule).Assembly.GetReferencedAssemblies().Any(Assembly => Assembly.Name == AnimationAssembly.GetName().Name),
+                "Animation.Editor must consume Timeline.Editor without a reverse assembly dependency");
+            var SkeletalExtensionType = AnimationAssembly.GetType(
+                "SharpEngine.Animation.SkeletalAnimationEditorExtension", throwOnError: true)!;
+            var SkeletalExtension = (IEditorExtension)Activator.CreateInstance(SkeletalExtensionType, nonPublic: true)!;
+            using var SkeletalRegistration = runtime.RegisterExtension(SkeletalExtension);
+            var StateMachineExtensionType = AnimationAssembly.GetType(
+                "SharpEngine.Animation.AnimationStateMachineEditorExtension", throwOnError: true)!;
+            var StateMachineExtension = (IEditorExtension)Activator.CreateInstance(StateMachineExtensionType, nonPublic: true)!;
+            using var StateMachineRegistration = runtime.RegisterExtension(StateMachineExtension);
             var RobotWalkOpen = runtime.OpenAsset("engine://animations/robot-walk");
             require(RobotWalkOpen.Success &&
                 RobotWalkOpen.OpenerId == "engine.skeletal-animation-editor" &&
                 runtime.DescribeEditorJson().Contains("engine://animations/robot-walk",
                     StringComparison.Ordinal) &&
-                runtime.DescribeEditorJson().Contains("\"editorId\": \"timeline-editor\"",
+                runtime.DescribeEditorJson().Contains("\"editorId\": \"skeletal-animation-editor\"",
                     StringComparison.Ordinal) &&
                 runtime.DescribeEditorJson().Contains("\"timeline\"", StringComparison.Ordinal),
-                "The built-in SkeletalAnimation opener must activate the Timeline pane and document");
+                "The dedicated SkeletalAnimation opener must compose the preview, Timeline and Details panes");
             var UefnIdleOpen = runtime.OpenAsset("engine://animations/uefn-mannequin-idle");
             require(UefnIdleOpen.Success &&
                 runtime.DescribeEditorJson().Contains(
@@ -123,7 +135,7 @@ internal static unsafe class EditorExtensionValidation
                 runtime.DescribeEditorJson().Contains(
                     "engine://animations/robot-walk",
                     StringComparison.Ordinal) &&
-                runtime.DescribeEditorJson().Split("\"editorId\": \"timeline-editor\"",
+                runtime.DescribeEditorJson().Split("\"editorId\": \"skeletal-animation-editor\"",
                     StringSplitOptions.None).Length >= 3,
                 "Different SkeletalAnimation assets must own independent editor roots");
             var RobotWalkReopen = runtime.OpenAsset("engine://animations/robot-walk");

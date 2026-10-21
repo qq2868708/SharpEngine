@@ -21,6 +21,8 @@ internal static class TimelinePreviewValidation
                 Node["assetId"]!.GetValue<string>() ==
                 "engine://animations/uefn-mannequin-walk") ??
             throw new InvalidDataException("Timeline asset editor state was unavailable");
+        Require(Editor["editorId"]!.GetValue<string>() == "skeletal-animation-editor",
+            "SkeletalAnimation assets use their dedicated editor extension");
         var RootId = Editor["rootId"]!.GetValue<string>();
         var OpenUi = Structured(Tool(5001, "ui.describe", new JsonObject()));
         var RootHost = OpenUi["hosts"]!.AsArray().Select(Node => Node!.AsObject())
@@ -69,6 +71,16 @@ internal static class TimelinePreviewValidation
             "Timeline play command must advance the document time");
         Require(!Before.Pixels.SequenceEqual(Middle.Pixels),
             "Timeline playback must update the rendered 3D preview geometry");
+        var SecondOpen = Structured(Tool(5053, "editor.action", new JsonObject
+        {
+            ["action"] = "editor.open-asset:engine://animations/uefn-mannequin-idle",
+        }));
+        var SecondEditor = SecondOpen["assetTools"]!["editors"]!.AsArray().Single(Item =>
+            Item!["assetId"]!.GetValue<string>() == "engine://animations/uefn-mannequin-idle")!;
+        var SecondRoot = SecondEditor["rootId"]!.GetValue<string>();
+        Require(SecondRoot != RootId && !SecondEditor["state"]!["playing"]!.GetValue<bool>() &&
+            SecondEditor["state"]!["currentTime"]!.GetValue<double>() == 0,
+            "Two animation editors share definitions but retain independent clocks and roots");
         var Detached = Structured(Tool(5051, "editor.action", new JsonObject
         {
             ["action"] = $"editor.host-action:{RootId}:editor.dock-drop:details:{RootId}:none:none:detach:-1",
@@ -95,6 +107,15 @@ internal static class TimelinePreviewValidation
         Require(ClosedUi["hosts"]?.AsArray().All(HostNode =>
                 HostNode?["hostId"]?.GetValue<string>() != RootId) == true,
             "Closing a clean asset editor must destroy its native host");
+        var Remaining = Closed["assetTools"]!["editors"]!.AsArray().Single(Item =>
+            Item!["rootId"]!.GetValue<string>() == SecondRoot)!;
+        Require(Remaining["state"]!["currentTime"]!.GetValue<double>() == 0 &&
+            !Remaining["state"]!["playing"]!.GetValue<bool>(),
+            "Closing one animation editor does not advance or stop another instance's clock");
+        _ = Tool(508, "editor.action", new JsonObject
+        {
+            ["action"] = $"editor.host-action:{SecondRoot}:window.close-requested",
+        });
     }
 
     private static PreviewCapture Capture(

@@ -105,11 +105,13 @@ internal static class TimelineViewportUiValidation
         Check(ArrowTime > Scrubbed["currentTime"]!.GetValue<double>() + 0.1,
             "The visible playhead arrow itself can be dragged");
         var BeforeOrbit = State()["viewport"]!["yaw"]!.GetValue<double>();
+        var BeforePitch = State()["viewport"]!["pitch"]!.GetValue<double>();
         Pointer("down", "timelinePreviewViewport", "right", 100, 100);
         Pointer("move", "timelinePreviewViewport", "right", 140, 115, true);
         Pointer("up", "timelinePreviewViewport", "right", 140, 115);
-        Check(State()["viewport"]!["yaw"]!.GetValue<double>() > BeforeOrbit,
-            "Real right-button drag orbits the camera in the editor-owned preview World");
+        Check(State()["viewport"]!["yaw"]!.GetValue<double>() > BeforeOrbit &&
+            State()["viewport"]!["pitch"]!.GetValue<double>() < BeforePitch,
+            "Right/down RMB drag orbits right and raises the preview camera like the main viewport");
         var BeforeZoom = State()["viewport"]!["distance"]!.GetValue<double>();
         Pointer("wheel", "timelinePreviewViewport", OffsetX: 100, OffsetY: 100, WheelY: -1);
         Check(State()["viewport"]!["distance"]!.GetValue<double>() < BeforeZoom,
