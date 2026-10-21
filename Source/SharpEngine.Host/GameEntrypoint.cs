@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using SharpEngine.Interop;
+using SharpEngine.Input;
 using SharpEngine.Logging;
 using SharpEngine.Timeline;
 using SharpEngine.UI;
@@ -18,6 +19,7 @@ public static unsafe class HostEntrypoint
     private static bool GpuFallbackReported;
     private static int Frames;
     private static GameMcpHost? Mcp;
+    private static IDisposable? ReleasePointerBinding;
 
     [UnmanagedCallersOnly]
     public static int Initialize(nint Window, uint Width, uint Height, nint NativeApi)
@@ -30,6 +32,16 @@ public static unsafe class HostEntrypoint
             Game = new GameSession(Environment.GetEnvironmentVariable("SHARPENGINE_ROOT")!,
                 Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST") ?? "",
                 typeof(TimelineRuntimeModule).Assembly);
+            ReleasePointerBinding = Game.Input.BindAction(InputRoute.Gameplay,
+                "engine://input/actions/player.release-pointer", int.MaxValue, Event =>
+                {
+                    if (Event.Phase == InputActionPhase.Performed && Api->Version >= 17 &&
+                        Api->SetGameplayInputCapture != null)
+                    {
+                        Api->SetGameplayInputCapture(0);
+                    }
+                    return true;
+                });
             SharpLog.Info("MCP", $"Game UI API version={Api->Version}, available={Api->GetUiSnapshot != null}");
             if (Api->Version >= 9 && Api->GetUiSnapshot != null)
             {
@@ -56,6 +68,10 @@ public static unsafe class HostEntrypoint
                 return;
             }
             Mcp?.Pump();
+            var Captured = Api->Version >= 17 && Api->GetGameplayInputCapture != null &&
+                Api->GetGameplayInputCapture() != 0;
+            Game.Input.ObserveGameplayCapture("game", Captured);
+            Game.Input.SetRouteEnabled(InputRoute.Gameplay, Captured);
             Game.Update(Seconds);
             float X = 0, Y = 0, Width = 0, Height = 0;
             if (Api->GetViewportRect(&X, &Y, &Width, &Height) == 0)
@@ -134,6 +150,11 @@ public static unsafe class HostEntrypoint
         }
         try
         {
+            if (Kind == (uint)NativeInputEventKind.PointerDown && Code == 0 && Handled == 0 &&
+                Api != null && Api->Version >= 17 && Api->SetGameplayInputCapture != null)
+            {
+                Api->SetGameplayInputCapture(1);
+            }
             Game.Input.ProcessNative("game", (NativeInputEventKind)Kind, Code,
                 X, Y, ValueX, ValueY, Modifiers, Handled != 0, Focused != 0);
         }
@@ -163,6 +184,8 @@ public static unsafe class HostEntrypoint
         try
         {
             Mcp?.Dispose();
+            ReleasePointerBinding?.Dispose();
+            ReleasePointerBinding = null;
             Mcp = null;
             Game?.Dispose();
         }

@@ -11,6 +11,7 @@
 #include "RmlUi_Platform_Win32.h"
 #include "../RenderCore/Private/RenderBackend.h"
 #include "../RenderCore/Private/RenderCapture.h"
+#include "../Platform/Windows/Window/GameplayInputCapture.h"
 #include "../Logging/EngineLog.h"
 #include "../RenderCore/Public/RenderCore.h"
 #include "Platform/Windows/SharpEngineBranding.h"
@@ -443,6 +444,16 @@ struct RmlUiShell::Impl
         int PointerX{};
         int PointerY{};
         bool PointerKnown{};
+        bool TimelineScrubbing{};
+        std::string TimelineCaptureId;
+        float TimelineStartX{};
+        double TimelineScale{100};
+        double TimelineScroll{};
+        double TimelineDuration{};
+        std::string PreviewNavigationId;
+        int PreviewNavigationButton{-1};
+        int PreviewPointerX{};
+        int PreviewPointerY{};
         std::string LastAssetClickAction;
         ULONGLONG LastAssetClickTime{};
         int LastAssetClickX{};
@@ -566,6 +577,8 @@ struct RmlUiShell::Impl
     } SplitterDrag;
 
     HWND ViewportCaptureWindow{};
+    SharpEngine::Windows::GameplayInputCapture GameplayCapture;
+    int GameplayCaptureRequest = -1;
 
     Host* FindHost(std::string_view id) const
     {
@@ -575,6 +588,68 @@ struct RmlUiShell::Impl
     }
 
     Host* FindMainHost() const { return FindHost("main"); }
+
+    bool GameplayBounds(Host& Main, RECT& Bounds) const
+    {
+        auto* Viewport = Main.Document ? Main.Document->GetElementById("viewportCanvas") : nullptr;
+        if (!Viewport || Viewport->GetOffsetWidth() <= 0 || Viewport->GetOffsetHeight() <= 0)
+        {
+            return false;
+        }
+        Bounds.left = static_cast<LONG>(Viewport->GetAbsoluteLeft());
+        Bounds.top = static_cast<LONG>(Viewport->GetAbsoluteTop());
+        Bounds.right = Bounds.left + static_cast<LONG>(Viewport->GetOffsetWidth());
+        Bounds.bottom = Bounds.top + static_cast<LONG>(Viewport->GetOffsetHeight());
+        MapWindowPoints(Main.Window, nullptr, reinterpret_cast<POINT*>(&Bounds), 2);
+        return true;
+    }
+
+    void ApplyGameplayCapture()
+    {
+        auto* Main = FindMainHost();
+        if (!Main)
+        {
+            return;
+        }
+        if (GameplayCaptureRequest < 0)
+        {
+            RECT Bounds{};
+            if (GameplayCapture.IsActive() && GameplayBounds(*Main, Bounds))
+            {
+                GameplayCapture.UpdateBounds(Bounds);
+            }
+            return;
+        }
+        const bool Requested = GameplayCaptureRequest == 1;
+        GameplayCaptureRequest = -1;
+        RECT Bounds{};
+        if (Requested && GameplayBounds(*Main, Bounds) && GameplayCapture.Acquire(Main->Window, Bounds))
+        {
+            Main->Document->GetElementById("viewportCanvas")->Focus();
+            Main->PointerKnown = false;
+        }
+        else
+        {
+            if (Requested)
+            {
+                EngineLog::Warning("Input", "Gameplay capture acquisition failed: foreground=" +
+                    std::to_string(GetForegroundWindow() == Main->Window) +
+                    " visible=" + std::to_string(IsWindowVisible(Main->Window)) +
+                    " error=" + std::to_string(GetLastError()));
+            }
+            GameplayCapture.Release();
+            auto* Focus = Main->Context ? Main->Context->GetFocusElement() : nullptr;
+            if (Focus)
+            {
+                Focus->Blur();
+            }
+            if (InputEvent)
+            {
+                InputEvent("main", 8, 0, 0, 0, 0, 0, 0, 0, false, false);
+            }
+        }
+        ++StateRevision;
+    }
 
     static std::string SceneKey(std::string_view HostId, std::string_view Kind)
     {
@@ -692,6 +767,7 @@ struct RmlUiShell::Impl
         if (element->HasAttribute("data-pane-id")) return "pane";
         if (element->HasAttribute("data-dock-pane")) return "tab";
         if (element->HasAttribute("data-dock-group")) return "tab-group";
+        if (element->HasAttribute("data-timeline-ruler")) return "slider";
         if (element->HasAttribute("data-color-control"))
         {
             return "input";
@@ -718,6 +794,7 @@ struct RmlUiShell::Impl
         return role == "splitter" || role == "tab" || role == "button" ||
             role == "input" || role == "viewport" || role == "menu-item" ||
             element->HasAttribute("data-input-surface") ||
+            element->HasAttribute("data-timeline-ruler") ||
             element->HasAttribute("action") || element->HasAttribute("data-action");
     }
 
@@ -1875,6 +1952,88 @@ struct RmlUiShell::Impl
             return;
         }
         Rml::Element* target = event.GetTargetElement();
+        const auto EventId = event.GetId();
+        const int MouseX = event.GetParameter<int>("mouse_x", 0);
+        const int MouseY = event.GetParameter<int>("mouse_y", 0);
+        auto* Timeline = FindAttributeElement(target, "data-timeline-id");
+        auto* Ruler = FindAttributeElement(target, "data-timeline-ruler");
+        if (EventId == Rml::EventId::Mousedown && Ruler && Timeline &&
+            event.GetParameter<int>("button", -1) == 0)
+        {
+            host.TimelineStartX = Timeline->GetAbsoluteOffset().x +
+                FloatAttribute(Timeline, "data-timeline-header", 180);
+            if (MouseX < host.TimelineStartX)
+            {
+                return;
+            }
+            host.TimelineScale = (std::max)(0.001f, FloatAttribute(Timeline, "data-timeline-scale", 100));
+            host.TimelineScroll = FloatAttribute(Timeline, "data-timeline-scroll", 0);
+            host.TimelineDuration = FloatAttribute(Timeline, "data-timeline-duration", 0);
+            host.TimelineScrubbing = true;
+            host.TimelineCaptureId = Ruler->GetId();
+            QueueAction(host, "editor.timeline-scrub-start");
+            SetCapture(host.Window);
+        }
+        if (host.TimelineScrubbing &&
+            (EventId == Rml::EventId::Mousedown || EventId == Rml::EventId::Mousemove ||
+             EventId == Rml::EventId::Mouseup))
+        {
+            const double Time = std::clamp(
+                (MouseX - host.TimelineStartX + host.TimelineScroll) / host.TimelineScale,
+                0.0, host.TimelineDuration);
+            QueueAction(host, "editor.timeline-seek:" + std::to_string(Time));
+            if (EventId == Rml::EventId::Mouseup && event.GetParameter<int>("button", -1) == 0)
+            {
+                host.TimelineScrubbing = false;
+                QueueAction(host, "editor.timeline-scrub-end");
+            }
+            event.StopPropagation();
+            return;
+        }
+        auto* Preview = FindAttributeElement(target, "data-world-viewport");
+        if (EventId == Rml::EventId::Mousedown && Preview)
+        {
+            const int Button = event.GetParameter<int>("button", -1);
+            if (Button == 1 || Button == 2)
+            {
+                host.PreviewNavigationId = Attribute(Preview, "data-world-viewport");
+                host.PreviewNavigationButton = Button;
+                host.PreviewPointerX = MouseX;
+                host.PreviewPointerY = MouseY;
+                SetCapture(host.Window);
+                event.StopPropagation();
+                return;
+            }
+        }
+        if (EventId == Rml::EventId::Mousemove && !host.PreviewNavigationId.empty())
+        {
+            const int DeltaX = MouseX - host.PreviewPointerX;
+            const int DeltaY = MouseY - host.PreviewPointerY;
+            host.PreviewPointerX = MouseX;
+            host.PreviewPointerY = MouseY;
+            if (DeltaX != 0 || DeltaY != 0)
+            {
+                QueueAction(host, "editor.world-viewport:" + host.PreviewNavigationId +
+                    (host.PreviewNavigationButton == 1 ? ":orbit:" : ":pan:") +
+                    std::to_string(DeltaX) + ":" + std::to_string(DeltaY));
+            }
+            event.StopPropagation();
+            return;
+        }
+        if (EventId == Rml::EventId::Mouseup &&
+            event.GetParameter<int>("button", -1) == host.PreviewNavigationButton)
+        {
+            host.PreviewNavigationId.clear();
+            host.PreviewNavigationButton = -1;
+        }
+        if (EventId == Rml::EventId::Mousescroll && Preview)
+        {
+            const float Delta = -event.GetParameter<float>("wheel_delta_y", 0);
+            QueueAction(host, "editor.world-viewport:" + Attribute(Preview, "data-world-viewport") +
+                ":zoom:0:" + std::to_string(Delta));
+            event.StopPropagation();
+            return;
+        }
         if (event.GetId() == Rml::EventId::Mousedown && FindAttributeElement(target, "data-component-slider"))
         {
             host.InspectorGesture = true;
@@ -2237,6 +2396,7 @@ bool RmlUiShell::Initialize(HWND window,
     main.Document->AddEventListener(Rml::EventId::Blur, &main, true);
     main.Document->AddEventListener(Rml::EventId::Keydown, &main, true);
     main.Document->AddEventListener(Rml::EventId::Mouseup, &main);
+    main.Document->AddEventListener(Rml::EventId::Mousescroll, &main, true);
     main.Document->AddEventListener(Rml::EventId::Mousedown, &main, true);
     main.Document->AddEventListener(Rml::EventId::Dragstart, &main, true);
     main.Document->AddEventListener(Rml::EventId::Dragover, &main, true);
@@ -2425,6 +2585,7 @@ HWND RmlUiShell::CreateEditorHostWindow(std::string_view rootId,
     host->Document->AddEventListener(Rml::EventId::Blur, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Keydown, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Mouseup, host.get());
+    host->Document->AddEventListener(Rml::EventId::Mousescroll, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Mousedown, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Dragstart, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Dragover, host.get(), true);
@@ -2502,6 +2663,8 @@ bool RmlUiShell::DestroyEditorWindow(std::string_view rootId)
 void RmlUiShell::Shutdown()
 {
     auto& state = *State;
+    state.GameplayCaptureRequest = -1;
+    state.GameplayCapture.Release();
     state.CancelDockDrag();
     if (state.DockGhostWindow)
     {
@@ -2623,6 +2786,24 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         BeginPaint(window, &paint);
         EndPaint(window, &paint);
         return 0;
+    }
+    if (message == WM_INPUT && state.GameplayCapture.IsActive() &&
+        state.GameplayCapture.Window() == window)
+    {
+        float DeltaX = 0;
+        float DeltaY = 0;
+        const bool Moved = state.GameplayCapture.ReadMouseDelta(lParam, DeltaX, DeltaY);
+        if (Moved && state.InputEvent)
+        {
+            state.InputEvent(host->Id.c_str(), 2, 0, host->PointerX, host->PointerY,
+                DeltaX, DeltaY, 0, static_cast<uint32_t>(state.ModifierState()), false, true);
+        }
+        return DefWindowProcW(window, message, wParam, lParam);
+    }
+    if (message == WM_KILLFOCUS && host->Id == "main")
+    {
+        state.GameplayCaptureRequest = -1;
+        state.GameplayCapture.Release();
     }
     bool viewportFocused = false;
     bool textFocused = host->Ime.IsComposing();
@@ -2746,6 +2927,18 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     if (message == WM_CAPTURECHANGED &&
         reinterpret_cast<HWND>(lParam) != window)
     {
+        host->TimelineScrubbing = false;
+        host->PreviewNavigationId.clear();
+        host->PreviewNavigationButton = -1;
+        if (state.GameplayCapture.IsActive() && state.GameplayCapture.Window() == window)
+        {
+            state.GameplayCaptureRequest = -1;
+            state.GameplayCapture.Release();
+            if (state.InputEvent)
+            {
+                state.InputEvent(host->Id.c_str(), 8, 0, 0, 0, 0, 0, 0, 0, false, false);
+            }
+        }
         state.ViewportCaptureWindow = nullptr;
         state.CancelDockDrag();
         state.CancelSplitterDrag();
@@ -2771,6 +2964,11 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         propagate = host->Context->ProcessMouseButtonDown(2, state.ModifierState());
     else if (message == WM_MOUSEHWHEEL)
         propagate = host->Context->ProcessMouseWheel({static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA, 0}, state.ModifierState());
+    else if (message == WM_LBUTTONUP &&
+        (state.GameplayCapture.IsActive() || host->TimelineScrubbing))
+    {
+        propagate = host->Context->ProcessMouseButtonUp(0, state.ModifierState());
+    }
     else if (state.InjectedModifiers >= 0 &&
         (buttonMessage || message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL))
     {
@@ -2810,7 +3008,8 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
             state.InputEvent(host->Id.c_str(), 6, 0, 0, 0, 0, 0, 0, 0,
                 true, false);
         }
-        else if (pointerRouted)
+        else if (pointerRouted && !(message == WM_MOUSEMOVE &&
+            state.GameplayCapture.IsActive() && state.InjectedModifiers < 0))
         {
             uint32_t kind = 2;
             float valueX = pointerDeltaX;
@@ -2836,7 +3035,8 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         }
     }
     if ((message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP) &&
-        !(static_cast<uint32_t>(wParam) & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON))) ReleaseCapture();
+        !(static_cast<uint32_t>(wParam) & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) &&
+        !state.GameplayCapture.IsActive()) ReleaseCapture();
     if (!propagate) return 0;
     return callOriginal();
 }
@@ -2845,6 +3045,7 @@ bool RmlUiShell::Render(bool ObserveUi)
 {
     auto& state = *State;
     if (!state.Ready) return false;
+    state.ApplyGameplayCapture();
     state.FlushPendingDestroy();
     bool presented = true;
     Impl::FrameSet frame;
@@ -2999,6 +3200,19 @@ bool RmlUiShell::GetRenderStats(RenderStats& stats) const
     stats.Backend = static_cast<uint32_t>(State->Backend);
     stats.SupportsGpuScene = host->Surface->SupportsGpuScene() ? 1 : 0;
     return true;
+}
+bool RmlUiShell::SetGameplayInputCapture(bool Enabled)
+{
+    if (!State->Ready)
+    {
+        return false;
+    }
+    State->GameplayCaptureRequest = Enabled ? 1 : 0;
+    return true;
+}
+bool RmlUiShell::IsGameplayInputCaptured() const
+{
+    return State->GameplayCapture.IsActive();
 }
 void RmlUiShell::SetText(const char* id, const char* utf8)
 {
@@ -3267,7 +3481,8 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
                        std::string(hostId), true);
     const auto* expectedFrame = state.FindFrameSet(expectedFrameId);
     const bool continuingCapture = state.McpButtons != 0 &&
-        ((state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host) ||
+        (host->TimelineScrubbing || !host->PreviewNavigationId.empty() ||
+         (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host) ||
          ((state.DockDrag.Active || state.DockDrag.Pending) &&
           state.DockDrag.SourceHost == host));
     if ((!expectedFrame && !(event == 3 && continuingCapture)) ||
@@ -3294,11 +3509,23 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     SendMessageW(host->Window, WM_MOUSEMOVE,
         static_cast<WPARAM>(buttons), MAKELPARAM(x, y));
     Rml::Element* target = host->Context->GetHoverElement();
-    if (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host)
+    if (host->TimelineScrubbing && host->Document)
+    {
+        target = host->Document->GetElementById(host->TimelineCaptureId);
+    }
+    else if (!host->PreviewNavigationId.empty() && host->Document)
+    {
+        target = host->Document->GetElementById(host->PreviewNavigationId);
+    }
+    else if (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host)
+    {
         target = state.SplitterDrag.Element;
+    }
     else if ((state.DockDrag.Active || state.DockDrag.Pending) &&
              state.DockDrag.SourceHost == host)
+    {
         target = state.DockDrag.SourceElement;
+    }
     const auto targetId = Impl::StableAncestorId(*host, target);
     if (!expectedElementId.empty() && targetId != expectedElementId)
     {
@@ -3357,7 +3584,7 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     }
     else if (event == 3)
     {
-        if (GetCapture() == host->Window)
+        if (GetCapture() == host->Window && !state.GameplayCapture.IsActive())
             ReleaseCapture();
         state.McpButtons = 0;
     }

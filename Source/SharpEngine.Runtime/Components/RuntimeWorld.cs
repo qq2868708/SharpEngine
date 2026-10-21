@@ -43,6 +43,32 @@ public sealed partial class RuntimeWorld : IDisposable
     public ulong Revision { get; private set; } = 1;
     public IReadOnlyList<ComponentDiagnostic> Diagnostics => _diagnostics.ToArray();
     public IReadOnlyList<SharpEntity> Entities => _entities.Values.ToArray();
+    public PlayerControllerComponent? LocalPlayerController
+    {
+        get
+        {
+            CheckThread();
+            return _entities.Values.Where(Entity => Entity.ActiveInHierarchy)
+                .SelectMany(Entity => Entity.GetComponents<PlayerControllerComponent>())
+                .Where(Controller => Controller.IsAlive && Controller.EffectiveEnabled &&
+                    Controller.ControlledEntity is not null && Controller.ControlledEntity.IsAlive &&
+                    Controller.ControlledEntity.ActiveInHierarchy &&
+                    Controller.ControlledEntity.GetComponent<ControllableComponent>() is
+                        { ControlEnabled: true, EffectiveEnabled: true })
+                .OrderByDescending(Controller => Controller.Priority)
+                .ThenBy(Controller => Controller.ComponentId, StringComparer.Ordinal)
+                .FirstOrDefault();
+        }
+    }
+
+    public void ClearPlayerInput()
+    {
+        CheckThread();
+        foreach (var Controller in _entities.Values.SelectMany(Entity => Entity.GetComponents<PlayerControllerComponent>()))
+        {
+            Controller.ClearPlayerInput();
+        }
+    }
     public SharpEntity? FindEntity(string id) => _entities.GetValueOrDefault(id);
     public SharpComponent? FindComponent(string id) => _entities.Values.SelectMany(e => e.MutableComponents).FirstOrDefault(c => c.ComponentId == id);
     public RuntimeWorld(SceneData Source, ComponentRegistry Registry, SharpEngine.Assets.AssetRegistry? Assets = null, RuntimeInstance? Instance = null)
@@ -302,6 +328,16 @@ public sealed partial class RuntimeWorld : IDisposable
         Boundary();
         Phase("Evaluate", Active(), DeltaSeconds);
         Boundary();
+        _inPhase = true;
+        try
+        {
+            FinalizeAnimationAndMovement(DeltaSeconds, Active().ToArray());
+        }
+        finally
+        {
+            _inPhase = false;
+        }
+        Boundary();
         Phase("LateUpdate", Active(), DeltaSeconds);
         Boundary();
         Publish();
@@ -326,8 +362,12 @@ public sealed partial class RuntimeWorld : IDisposable
     }
     private SceneData Capture()
     {
+        var PlayerCamera = LocalPlayerController?.ViewCamera;
+        var ActiveCameraId = PlayerCamera is not null && PlayerCamera.IsAlive &&
+            PlayerCamera.Enabled && PlayerCamera.Entity.ActiveInHierarchy
+            ? PlayerCamera.Entity.EntityId : _identity.ActiveCameraId;
         var result = new SceneData { WorldId = _identity.WorldId, Name = _identity.Name,
-            ActiveCameraId = FindEntity(_identity.ActiveCameraId ?? "") is null ? null : _identity.ActiveCameraId };
+            ActiveCameraId = FindEntity(ActiveCameraId ?? "") is null ? null : ActiveCameraId };
         foreach (var entity in _entities.Values)
         {
             var record = new EntityRecord { EntityId = entity.EntityId, Name = entity.Name, ParentId = entity.Parent?.EntityId, ActiveSelf = entity.ActiveSelf };

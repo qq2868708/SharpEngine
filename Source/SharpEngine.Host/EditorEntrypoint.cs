@@ -89,10 +89,11 @@ public static class HostEntrypoint
             if (s_runtime is { } runtime && s_input is { } input)
             {
                 input.SetRouteEnabled(InputRoute.Editor, true);
+                input.ObserveGameplayCapture("main", runtime.PlayInputCaptured);
                 input.SetRouteEnabled(InputRoute.RuntimeUi,
                     runtime.PlayState != EditorPlayState.Stopped);
                 input.SetRouteEnabled(InputRoute.Gameplay,
-                    runtime.PlayState == EditorPlayState.Playing);
+                    runtime.PlayState == EditorPlayState.Playing && runtime.PlayInputCaptured);
                 input.AdvanceFrame(deltaSeconds);
             }
             s_projectCode?.Tick();
@@ -199,12 +200,22 @@ public static class HostEntrypoint
             var hostId = Marshal.PtrToStringUTF8(hostIdUtf8) ?? "main";
             if (!Enum.IsDefined(typeof(NativeInputEventKind), eventKind)) return;
             var kind = (NativeInputEventKind)eventKind;
+            if (hostId == "main" && runtime.PlayState == EditorPlayState.Playing &&
+                kind == NativeInputEventKind.PointerDown && code == 0 && viewportFocused != 0)
+            {
+                runtime.RequestPlayInputCapture();
+            }
             input.SetRouteEnabled(InputRoute.RuntimeUi, runtime.PlayState != EditorPlayState.Stopped);
-            input.SetRouteEnabled(InputRoute.Gameplay, runtime.PlayState == EditorPlayState.Playing);
+            input.SetRouteEnabled(InputRoute.Gameplay,
+                runtime.PlayState == EditorPlayState.Playing && runtime.PlayInputCaptured);
             var handled = input.ProcessNative(hostId, kind, code, x, y, valueX,
                 valueY, modifiers, uiHandled != 0, viewportFocused != 0);
-            if (kind == NativeInputEventKind.FocusLost)
+            if (kind is NativeInputEventKind.FocusLost or NativeInputEventKind.GameplayCaptureLost)
             {
+                if (hostId == "main")
+                {
+                    runtime.NotifyPlayInputCaptureLost();
+                }
                 runtime.ViewportKey(0, false, false);
                 return;
             }
@@ -262,6 +273,16 @@ public static class HostEntrypoint
     private static void RegisterEditorInput(EditorRuntime runtime,
         InputRuntimeService input)
     {
+        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
+            "engine://input/actions/player.release-pointer", int.MaxValue, Event =>
+            {
+                if (Event.Phase != InputActionPhase.Performed || runtime.PlayState == EditorPlayState.Stopped)
+                {
+                    return false;
+                }
+                runtime.ReleasePlayInputCapture();
+                return true;
+            }));
         s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
             "engine://input/actions/editor.play-pause", int.MaxValue, value =>
             {

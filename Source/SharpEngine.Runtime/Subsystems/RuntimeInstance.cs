@@ -1,5 +1,6 @@
 using SharpEngine.Assets;
 using SharpEngine.Components;
+using SharpEngine.Input;
 
 namespace SharpEngine.Subsystems;
 
@@ -23,6 +24,14 @@ public sealed class RuntimeInstance : IDisposable
     {
         get;
     }
+    public IInputRuntime? Input
+    {
+        get;
+    }
+    public string? InputHostId
+    {
+        get;
+    }
     public SubsystemCollection Subsystems
     {
         get;
@@ -38,10 +47,18 @@ public sealed class RuntimeInstance : IDisposable
     }
 
     public RuntimeInstance(AssetRegistry? Assets = null, EngineLifetime? Engine = null)
+        : this(Assets, Engine, null, null)
+    {
+    }
+
+    public RuntimeInstance(AssetRegistry? Assets, EngineLifetime? Engine,
+        IInputRuntime? Input, string? InputHostId)
     {
         OwnsEngine = Engine is null;
         this.Engine = Engine ?? new();
         this.Assets = Assets;
+        this.Input = Input;
+        this.InputHostId = InputHostId;
         try
         {
             Subsystems = new(this.Engine.Registry, SubsystemScope.Instance, this, this.Engine.Subsystems);

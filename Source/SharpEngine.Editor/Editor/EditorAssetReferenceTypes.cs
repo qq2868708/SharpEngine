@@ -10,6 +10,6 @@ internal static class EditorAssetReferenceTypes
         if (name.Equals(nameof(StaticMeshAsset), StringComparison.Ordinal))
             return manifestType.Equals("Mesh", StringComparison.OrdinalIgnoreCase) ||
                 manifestType.Equals("StaticMesh", StringComparison.OrdinalIgnoreCase);
-        return manifestType.Equals(name.Replace("Asset", ""), StringComparison.OrdinalIgnoreCase);
+        return manifestType.Equals(SharpEngine.Components.ComponentValue.AssetTypeName(referenceType), StringComparison.OrdinalIgnoreCase);
     }
 }

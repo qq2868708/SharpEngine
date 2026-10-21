@@ -66,9 +66,14 @@
     </section>
     <section class="section-card" id="animation-editor">
       <h2>动画时间轴与 Notify</h2>
-      <p>动画资产编辑器提供自己的菜单和工具栏，并在一个窗口内同时显示 Preview、Timeline 与 Details。Preview 始终保留在顶层编辑器根中，Timeline 和 Details 可以在该根内重新停靠或变成游离 Tab。Preview 通过 SkeletonInstance 计算 CPU 蒙皮网格，把真实的带深度三角形提交到当前资产编辑器的 3D viewport，并根据网格范围自动取景；Timeline 播放不会隐藏 Preview。</p>
+      <p>动画资产编辑器提供自己的菜单和工具栏，并在一个窗口内同时显示 Preview、Timeline 与 Details。Preview 始终保留在顶层编辑器根中，Timeline 和 Details 可以在该根内重新停靠或变成游离 Tab。Preview 渲染当前资产编辑器持有的临时 World，使用与 Mesh、Skeleton 编辑器相同的 3D Viewport 布局和场景渲染链路。临时 World 自带相机、Sky Light 和补充方向光；右键拖动环绕、中键拖动平移、滚轮缩放，Focus 重新取景。动画播放只更新模型姿态，不会每帧重置相机；临时 World 不改写资产或主 World。</p>
       <p>在 Content Manager 中单击资源只选择它；双击 SkeletalAnimation、Timeline 或 AnimationStateMachine 会按 <code>AssetId</code> 打开顶层资产编辑器。不同资产各自拥有独立实例；再次双击同一资产只聚焦原实例。Notify、播放头、Undo/Redo 和 dirty 状态均属于该资产实例。项目资产支持 Save，引擎来源资产保持只读。动画从关联 Skeleton 的 <code>previewMeshId</code> 取得默认预览网格；Details 可以为当前编辑器会话临时选择其他兼容网格，而不会改写动画资产。</p>
       <p>Viewport 的 Transform 按钮和项目 Project Preview 按钮都通过引擎命令执行。项目可以扩展固定的 File 菜单、主 Toolbar 和 <code>viewport</code> CustomBar Surface，但不能创建新的顶层 Surface。</p>
+    </section>
+    <section class="section-card" id="timeline-controls">
+      <h2>时间轴操作</h2>
+      <p>播放、暂停、停止和回到起点位于 Timeline 面板内。时间轴自行维护并推进当前时间，向宿主编辑器发出时间变化事件。标尺由长短刻度构成；点击或拖动标尺可连续定位，也可以直接拖动当前时间的箭头。定位不会吸附到刻度或帧，拖拽开始时暂停，松手后继续保持暂停。播放到结尾停在末帧，再次播放从头开始。</p>
+      <p>动画编辑器无论播放还是拖拽，都仅更新预览姿态，完全忽略 Notify 执行。Notify 数据仍可编辑、撤销和保存。技能编辑器等插件可以在自己的编辑器中订阅时间轴事件，独立实现特殊预览。</p>
     </section>
     <section class="section-card" id="world-assets">
       <h2>世界与资源</h2>
@@ -100,6 +105,8 @@
       <h2>输入与 UI</h2>
       <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做，F5 播放或暂停，F8 停止。文本输入框获得焦点时优先处理自身的编辑操作。</p>
       <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。Play 或 Pause 时，Viewport 的相机导航、选择和 Gizmo 不再接收游戏输入；输入只作用于运行时逻辑，Stop 后恢复编辑操作。</p>
+      <p>Player Prefab 使用独立第三人称相机和 Player 输入映射。鼠标调整镜头朝向，WASD 移动；默认根实体水平朝向与镜头同步，Mesh 独立转向 WASD 移动方向，A/D 时播放转向后的前向动画。点击 Play 后可直接操作，Shift+F1 释放光标，点击视口重新捕获。暂停、停止、失焦会释放光标并清空按键状态。相机当前不提供遮挡避让。</p>
+      <p>项目动画 Details 中的 Root Motion 开关开启时让根位移驱动角色实体；关闭时显示原地动画并由移动组件控制位移。跳跃高度也随该开关处理，原始轨道不会删除。根设置与 Notify 共用撤销/重做，Save 才写入源资产；引擎内置动画保持只读。详见 <a href="../../../../ControlAndMovement.md">控制与移动</a>和<a href="../../../../AnimationAndTimeline.md">动画</a>。</p>
       <p>StyleSheet 编辑器直接维护 RCSS 文本权威源，显示规则预览、引用该样式的 RML 文档和语法诊断。InputAction 与 InputMappingContext 使用结构化表单；Context 编辑器支持 bindings 的增删以及 action、control、scale、modifier、route 和 priority 编辑。无效引用、非法 Control 或未知枚举不会进入 dirty 文档。</p>
     </section>
     <section class="section-card" id="settings-modules">
@@ -125,9 +132,12 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>资产预览统一复用 3D Viewport 布局并渲染编辑器持有的临时 World；时间轴内置播放控件、连续刻度标尺和可拖拽时间箭头，拖拽后保持暂停。动画预览不执行 Notify。</p>
       <ul>
+        <li>Player Prefab 增加第三人称镜头：鼠标旋转镜头，WASD 按镜头水平朝向移动，根实体朝向同步镜头，Mesh 独立朝 WASD 移动方向转身并播放前向动画。点 Play 自动捕获输入，Shift+F1 释放，点击视口恢复；暂停、停止和失焦释放。</li>
+        <li>项目动画 Details 可开关 Root Motion：开启驱动角色实体及其胶囊与模型，关闭剔除根平移/旋转。根设置与 Notify 共用撤销、重做和显式保存，源轨道完整保留，引擎资产仍只读。</li>
         <li>构建系统增加生成前输出守卫：拒绝非标准 configuration/target 和 binaries/intermediate/shader 路径覆盖；验证产物统一进入 <code>Saved/Validation</code>，全量布局检查继续严格拒绝未知目录。</li>
-        <li>UEFN Mannequin 从已保存的 Blender 源工程重新导入，骨骼、网格与四段动画统一为 Y-up、右手系、-Z 前方；保留原始最多 9 个蒙皮影响。源文件、四段 Action 与导入对照报告分别保存在 Resources/SourceAssets 和 Saved/Validation。走跑的前进与跳跃高度保留在 root 骨，本轮没有增加角色实体 Root Motion 开关。</li>
+        <li>UEFN Mannequin 从已保存的 Blender 源工程重新导入，骨骼、网格与四段动画统一为 Y-up、右手系、-Z 前方；保留原始最多 9 个蒙皮影响。源文件、四段 Action 与导入对照报告分别保存在 Resources/SourceAssets 和 Saved/Validation。走跑的前进与跳跃高度保留在 root 骨，现在可在项目动画的 Details 中启用 Root Motion，由角色实体承接根位移；关闭则输出原地姿态。</li>
         <li>Editor 主 Viewport 与 standalone Game 增加 OpenGL/Vulkan retained GPU scene：持久 mesh buffer、静态实例化、GPU skinning、选择轮廓和可见 CPU fallback；OpenGL 仍为默认后端。</li>
         <li>骨骼网格保留每顶点最多 12 个蒙皮影响，并按每 section 最多 256 根实际使用骨骼自动切分；资产级骨骼数量不设该上限，CPU 蒙皮位置按需生成，静态 mesh 拾取使用派生 BVH。</li>
         <li>增加只读 <code>render.describe</code> 与 <code>sharpengine://render</code>，公开 backend、GPU/fallback、derived cache、平均/P95 timing；Vulkan Debug 构建可显式启用 validation layer，Vulkan readback 改为按需。</li>

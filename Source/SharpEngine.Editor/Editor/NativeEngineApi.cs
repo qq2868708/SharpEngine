@@ -51,6 +51,8 @@ internal unsafe readonly struct NativeEngineApi
         float*, byte> GetHostUiElementRectFunction;
     private readonly delegate* unmanaged[Cdecl]<byte*, byte*, float*, uint, float*,
         uint, void> SubmitHostViewportFrameFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte, byte> SetGameplayInputCaptureFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte> GetGameplayInputCaptureFunction;
 
     public bool HasDocumentUi => _setUiText != null && _getViewportRect != null;
     public bool HasDockHosts => _createDockWindow != null && _destroyDockWindow != null &&
@@ -131,6 +133,22 @@ internal unsafe readonly struct NativeEngineApi
             GetHostUiElementRectFunction = api->GetHostUiElementRect;
             SubmitHostViewportFrameFunction = api->SubmitHostViewportFrame;
         }
+        if (api->Version >= 17)
+        {
+            SetGameplayInputCaptureFunction = api->SetGameplayInputCapture;
+            GetGameplayInputCaptureFunction = api->GetGameplayInputCapture;
+        }
+    }
+
+    internal bool SetGameplayInputCapture(bool Enabled)
+    {
+        return SetGameplayInputCaptureFunction != null &&
+            SetGameplayInputCaptureFunction(Enabled ? (byte)1 : (byte)0) != 0;
+    }
+
+    internal bool IsGameplayInputCaptured()
+    {
+        return GetGameplayInputCaptureFunction != null && GetGameplayInputCaptureFunction() != 0;
     }
 
     public void SetWindowTitle(nint windowHandle, string title)

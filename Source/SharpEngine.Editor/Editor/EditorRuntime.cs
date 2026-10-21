@@ -281,6 +281,12 @@ public sealed partial class EditorRuntime
         inputDemo = new { open = _inputDemoOpen, uiConsumes = _inputDemoConsume,
             uiCount = _inputDemoUiCount, gameplayCount = _inputDemoGameCount,
             x = _inputDemoX, y = _inputDemoY },
+        playInputCapture = new
+        {
+            requested = PlayInputRequested,
+            active = PlayInputCaptured,
+            releaseShortcut = "Shift+F1",
+        },
         scene = _world?.Describe(),
         isDirty = IsDirty,
         documentRevision = DocumentRevision,
@@ -1084,13 +1090,19 @@ public sealed partial class EditorRuntime
                     BeginComponentPlay();
                 }
                 PlayState = EditorPlayState.Playing;
+                if (actionHostId == "main")
+                {
+                    RequestPlayInputCapture();
+                }
                 SetStatus("Playing — independent Runtime World");
                 break;
             case "editor.pause":
+                ReleasePlayInputCapture();
                 if (PlayState == EditorPlayState.Playing)
                 { PlayState = EditorPlayState.Paused; SetStatus("Simulation paused"); }
                 break;
             case "editor.stop":
+                ReleasePlayInputCapture();
                 if (PlayState != EditorPlayState.Stopped)
                 {
                     EndComponentPlay();

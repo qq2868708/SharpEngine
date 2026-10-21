@@ -27,7 +27,6 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
     }
     private ProjectModuleHost? _modules;
     private EngineModuleHost? _engineModules;
-    private PlayerControllerInputBridge? PlayerControllerInput;
     private DevelopmentSettingsRegistry? _settings;
     public RuntimeWorld? RuntimeWorld { get; private set; }
     public AssetRegistry Assets { get; }
@@ -58,7 +57,7 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
         Input = InputRuntimeService.Load(Assets);
         try
         {
-            Instance = new RuntimeInstance(Assets, SubsystemLifetime);
+            Instance = new RuntimeInstance(Assets, SubsystemLifetime, Input, "game");
             _settings = new DevelopmentSettingsRegistry(projectRoot, engineRoot);
             var registry = ComponentRegistry.CreateBuiltin();
             _engineModules = EngineModuleHost.Prepare("Game", engineModuleAssemblies);
@@ -77,7 +76,6 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
             if (World.ActiveCamera is null)
                 throw new InvalidDataException("GAME_CAMERA_REQUIRED: Startup World must contain an active camera");
             RuntimeWorld = Instance.CreateWorld(World.Data, registry);
-            PlayerControllerInput = PlayerControllerInputBridge.TryCreate(RuntimeWorld, Input);
             World.ApplyRuntimeFrame(RuntimeWorld.Frame);
             Input.SetRouteEnabled(InputRoute.Editor, false);
             Input.SetRouteEnabled(InputRoute.RuntimeUi, true);
@@ -103,8 +101,6 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
 
     public void Dispose()
     {
-        PlayerControllerInput?.Dispose();
-        PlayerControllerInput = null;
         Instance?.Dispose();
         Instance = null;
         RuntimeWorld = null;

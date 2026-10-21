@@ -87,7 +87,9 @@ public static class SkeletalAnimationRetargeter
             TargetSkeleton.AssetId,
             null,
             null,
-            SourceAnimation.Notifies);
+            SourceAnimation.Notifies,
+            new AnimationRootMotionSettings(SourceAnimation.RootMotion.Enabled,
+                SourceAnimation.RootMotion.BoneId is null ? null : BoneMap[SourceAnimation.RootMotion.BoneId]));
     }
 
     private static BoneKeyframe BuildKeyframe(

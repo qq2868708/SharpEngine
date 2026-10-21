@@ -1,8 +1,9 @@
 using System.Numerics;
+using System.Text.Json.Nodes;
 using SharpEngine.Animation;
 using SharpEngine.Assets;
 using SharpEngine.Components;
-using SharpEngine.Hosting;
+using SharpEngine.Subsystems;
 using SharpEngine.Input;
 using SharpEngine.UI;
 using SharpEngine.World;
@@ -13,10 +14,7 @@ var EngineRoot = Path.GetFullPath(args.Length > 0 ? args[0] : DefaultRoot);
 var ProjectRoot = Path.GetFullPath(args.Length > 1 ? args[1] : EngineRoot);
 var ProjectManifestPath = Directory.GetFiles(ProjectRoot, "*.sharpproject",
     SearchOption.TopDirectoryOnly).SingleOrDefault();
-if (ProjectManifestPath is null)
-{
-    throw new InvalidDataException($"Project manifest not found under '{ProjectRoot}'");
-}
+
 var Registry = ComponentRegistry.CreateBuiltin();
 var PrefabPath = Path.Combine(ProjectRoot, "Content", "Prefabs", "CapsuleCharacter.sprefab");
 var WorldPath = Path.Combine(ProjectRoot, "Content", "Worlds", "Main.sworld");
@@ -36,10 +34,10 @@ void Check(bool Condition, string Message)
     Assertions++;
 }
 
-Check(Prefab.IsPrefab && Prefab.Entities.Count == 1,
+Check(Prefab.IsPrefab && Prefab.Entities.Count == 3,
     "Animated character asset is a single-root Prefab");
-var PrefabRoot = Prefab.Entities.Single();
-var PrefabSkeletalMesh = PrefabRoot.Components.SingleOrDefault(Component =>
+var PrefabRoot = Prefab.Entities.Single(Entity => Entity.ParentId is null);
+var PrefabSkeletalMesh = Prefab.Entities.SelectMany(Entity => Entity.Components).SingleOrDefault(Component =>
     Component.TypeId == "engine.skeletal-mesh");
 var PrefabAnimator = PrefabRoot.Components.SingleOrDefault(Component =>
     Component.TypeId == "engine.animator");
@@ -60,7 +58,7 @@ Check(PrefabRoot.Components.Any(Component => Component.TypeId == "engine.capsule
     PrefabRoot.Components.Any(Component => Component.TypeId == "engine.player-controller"),
     "Prefab contains non-rendering collision, controllable, movement and player controller components");
 var ScenePlayer = World.Entities.Single(Entity => Entity.EntityId == "player");
-Check(ScenePlayer.Components.Any(Component => Component.TypeId == "engine.skeletal-mesh" &&
+Check(World.Entities.Where(Entity => Entity.ParentId == ScenePlayer.EntityId).SelectMany(Entity => Entity.Components).Any(Component => Component.TypeId == "engine.skeletal-mesh" &&
     Component.State["Mesh"]?.GetValue<string>() == "engine://meshes/uefn-mannequin") &&
     ScenePlayer.Components.Any(Component => Component.TypeId == "engine.animator" &&
         Component.State["Controller"]?.GetValue<string>() == "engine://animation-state-machines/uefn-mannequin-locomotion") &&
@@ -77,7 +75,7 @@ var CopiedController = CopiedRoot.Components.Single(Component =>
     Component.TypeId == "engine.player-controller");
 Check(CopiedController.State["ControlledEntity"]?.GetValue<string>() == CopiedRoot.EntityId,
     "Prefab instantiation remaps the self ControlledEntity reference");
-var CopiedMesh = CopiedRoot.Components.Single(Component => Component.TypeId == "engine.skeletal-mesh");
+var CopiedMesh = Copies.SelectMany(Entity => Entity.Components).Single(Component => Component.TypeId == "engine.skeletal-mesh");
 var CopiedAnimator = CopiedRoot.Components.Single(Component => Component.TypeId == "engine.animator");
 Check(CopiedAnimator.State["Target"]?.GetValue<string>() == CopiedMesh.ComponentId &&
     CopiedMesh.ComponentId != PrefabSkeletalMesh!.ComponentId,
@@ -91,16 +89,15 @@ using (var CopiedRuntime = new RuntimeWorld(Destination, Registry, Assets))
         CopiedRuntime.Frame.Get<SkeletonFrameState>(CopiedMesh.ComponentId)?.Code == "SKELETON_READY",
         "Reconstructed Prefab resolves the remapped live skeleton and prepares its first frame");
 }
-using var Runtime = new RuntimeWorld(World, Registry, Assets);
 var Input = InputRuntimeService.Load(Assets);
+using var Instance = new RuntimeInstance(Assets, null, Input, "main");
+var Runtime = Instance.CreateWorld(World, Registry);
 Input.SetRouteEnabled(InputRoute.Gameplay, true);
-using var Bridge = PlayerControllerInputBridge.TryCreate(Runtime, Input) ??
-    throw new InvalidOperationException("The sample Gameplay input bridge could not be created");
 var Player = Runtime.FindEntity("player") ?? throw new InvalidOperationException("Main scene player missing");
 var Transform = Player.GetComponent<TransformComponent>() ??
     throw new InvalidOperationException("Animated player Transform missing");
-var Mesh = Player.GetComponent<SkeletalMeshComponent>()!;
 var Animator = Player.GetComponent<AnimatorComponent>()!;
+var Mesh = Animator.Target!;
 var Collider = Player.GetComponent<CapsuleColliderComponent>()!;
 var InitialSkeleton = Runtime.Frame.Get<SkeletonFrameState>(Mesh.ComponentId)!;
 Check(Animator.Target?.ComponentId == Mesh.ComponentId && InitialSkeleton.Code == "SKELETON_READY" &&
@@ -157,5 +154,72 @@ Check(RuntimeText.Contains("player-controller", StringComparison.Ordinal) &&
 Check(File.ReadAllText(WorldPath) == SourceText &&
     File.ReadAllText(PrefabPath) == PrefabSourceText && World.Serialize() == AuthoringText,
     "Play animation and movement preserve source Prefab, World and authoring data");
+
+var Controller = Player.GetComponent<PlayerControllerComponent>()!;
+var Camera = Controller.ViewCamera!.Entity.GetComponent<ThirdPersonCameraComponent>()!;
+Check(!Controller.FaceMoveDirection && Runtime.Frame.Snapshot().ActiveCameraId == Camera.Entity.EntityId,
+    "Player selects its third person view and uses the camera-facing strafe policy");
+var InitialScale = Transform.Scale;
+Input.ProcessNative("main", NativeInputEventKind.PointerMove, 0, 100, 30, 100, 30, 0, false, true);
+Runtime.Tick(0.1f);
+Check(Math.Abs(Camera.Yaw + 15) < 0.001f && Math.Abs(Camera.Pitch + 19.5f) < 0.001f &&
+    Math.Abs(Transform.Rotation.Y - Camera.Yaw) < 0.001f,
+    "Look consumes mouse delta once and synchronizes character yaw without tilting the body");
+var BeforeStrafe = Transform.Position;
+Input.ProcessNative("main", NativeInputEventKind.KeyDown, 'D', 0, 0, 0, 0, 0, false, true);
+Runtime.Tick(0.2f);
+var Strafe = Transform.Position - BeforeStrafe;
+var Facing = Vector3.Transform(-Vector3.UnitZ,
+    Quaternion.CreateFromAxisAngle(Vector3.UnitY, Camera.Yaw * MathF.PI / 180));
+Check(Strafe.Length() > 0.1f && Math.Abs(Vector3.Dot(Strafe, Facing)) < 0.001f &&
+    Math.Abs(Transform.Rotation.Y - Camera.Yaw) < 0.001f,
+    "D strafes perpendicular to the camera direction without turning the character");
+var ModelForward = Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ,
+    EntityTransformMath.WorldMatrix(Mesh.Entity)));
+Check(Vector3.Dot(ModelForward, Vector3.Normalize(Strafe)) > 0.999f && Controller.FacingMesh == Mesh,
+    "the independent Mesh turns toward A/D movement while the root keeps camera yaw");
+Input.ProcessNative("main", NativeInputEventKind.GameplayCaptureLost, 0, 0, 0, 0, 0, 0, false, false);
+Runtime.Tick(0.5f);
+var ReleasedPosition = Transform.Position;
+Runtime.Tick(0.2f);
+Check(Transform.Position == ReleasedPosition, "capture loss cancels held move input");
+Input.ProcessNative("other-host", NativeInputEventKind.KeyDown, 'W', 0, 0, 0, 0, 0, false, true);
+Runtime.Tick(0.2f);
+Check(Transform.Position == ReleasedPosition, "a Player ignores events from another host");
+Input.ProcessNative("other-host", NativeInputEventKind.KeyUp, 'W', 0, 0, 0, 0, 0, false, true);
+Input.ProcessNative("main", NativeInputEventKind.KeyDown, 'W', 0, 0, 0, 0, 0, true, true);
+Runtime.Tick(0.2f);
+Check(Transform.Position == ReleasedPosition, "UI-consumed move keys never reach Player movement");
+Input.ProcessNative("main", NativeInputEventKind.KeyUp, 'W', 0, 0, 0, 0, 0, false, true);
+Player.GetComponent<ControllableComponent>()!.ControlEnabled = false;
+Runtime.Tick(0.1f);
+Check(!Runtime.Frame.Get<ControllerFrameState>(Controller.ComponentId)!.ToJson()["input"]!["bound"]!.GetValue<bool>(),
+    "disabling control releases the Player input registrations");
+Player.GetComponent<ControllableComponent>()!.ControlEnabled = true;
+Runtime.Tick(0.1f);
+Check(Transform.Position == ReleasedPosition && Transform.Scale == InitialScale,
+    "control recovery clears input and repeated view yaw updates preserve character scale");
+var CameraType = Registry.Get(typeof(ThirdPersonCameraComponent));
+Check(CameraType.SchemaVersion == 1 && CameraType.CreateDefaultState(Registry).Count == 6 &&
+    Registry.Get(typeof(PlayerControllerComponent)).SchemaVersion == 2,
+    "camera and Player schemas expose explicit configuration defaults");
+var Rebuilt = SceneData.Parse(Runtime.Snapshot().Serialize(), Registry);
+Check(Rebuilt.Serialize() == Runtime.Snapshot().Serialize(), "third person authoritative state round trips deterministically");
+var Legacy = World.Clone();
+var LegacyController = Legacy.Entities.SelectMany(Entity => Entity.Components).Single(Component =>
+    Component.TypeId == "engine.player-controller");
+LegacyController.SchemaVersion = 1;
+LegacyController.State = new JsonObject
+{
+    ["ControlledEntity"] = "player",
+    ["Priority"] = 0,
+};
+using (var Migrated = new RuntimeWorld(Legacy, Registry, Assets))
+{
+    var MigratedController = Migrated.FindEntity("player")!.GetComponent<PlayerControllerComponent>()!;
+    Check(MigratedController.InputContext.Id == "engine://input/contexts/player" &&
+        MigratedController.LookAction.Id is null && MigratedController.ViewCamera is null,
+        "v1 Player migrates explicitly without inventing a camera reference");
+}
 
 Console.WriteLine($"[PrefabMovementValidation] PASS: {Assertions} assertions; skeletal Prefab, Play movement, animation and non-rendering Trace collision");

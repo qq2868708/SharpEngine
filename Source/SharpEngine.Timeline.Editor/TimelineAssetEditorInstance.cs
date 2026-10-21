@@ -13,8 +13,8 @@ namespace SharpEngine.Timeline;
 
 internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
 {
-    private const float TimelineWidth = 1200;
-    private const float TimelineHeight = 320;
+    private float TimelineWidth = 1200;
+    private float TimelineHeight = 320;
     private readonly EditorAssetOpenContext Context;
     private readonly TimelineAssetToolDocument Tool;
     private readonly AssetRegistry Assets;
@@ -24,11 +24,23 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
     private string? DefaultPreviewMeshId;
     private bool PreviewMeshOverridden;
     private TimelineClip? PreviewClip;
-    private bool IsPlaying;
+    private readonly AssetPreviewWorld PreviewWorld;
+    private readonly WorldViewportLayout Viewport = new("timelinePreviewViewport", "asset-preview");
+    private TimelineView? SubscribedView;
+
+    private bool IsPlaying
+    {
+        get
+        {
+            return Tool.View?.IsPlaying == true;
+        }
+    }
 
     public TimelineAssetEditorInstance(EditorAssetOpenContext Context)
     {
         this.Context = Context;
+        PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
+            throw new InvalidOperationException("Component registry is unavailable"), "animation-preview:" + Context.Asset.Id);
         Assets = Context.Runtime.Assets ?? throw new InvalidOperationException(
             "Asset registry is unavailable");
         Tool = new TimelineAssetToolDocument(Assets, Context.Asset, Context.Path);
@@ -37,13 +49,15 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             Track.Type.Equals("skeletal-animation", StringComparison.OrdinalIgnoreCase))?
             .Clips.FirstOrDefault();
         ResolveCompatibleMeshes();
+        SubscribeTimeline();
+        UpdatePreviewPose();
     }
 
     public AssetDescriptor Asset => Tool.Asset;
     public string EditorId => "timeline-editor";
     public string Title => Tool.Asset.Name;
     public string PrimaryPaneId => "preview";
-    public bool IsDirty => Tool.Authoring?.IsDirty == true;
+    public bool IsDirty => Tool.IsDirty;
     public bool IsReadOnly => !Tool.Writable;
     public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; } =
     [
@@ -53,10 +67,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
     ];
     public IReadOnlyList<AssetEditorCommandDefinition> Commands { get; } =
     [
-        new("play", "Play", "Playback", 100, "play", true),
-        new("pause", "Pause", "Playback", 110, "pause", true),
-        new("stop", "Stop", "Playback", 120, "stop", true),
-        new("seek-start", "Go To Start", "Playback", 130, null, true),
+        new("root-motion", "Enable Root Motion", "Edit", 90, null, true),
         new("add-notify", "Add Notify", "Edit", 100, "add", true),
         new("undo", "Undo", "Edit", 200, "reset", true),
         new("redo", "Redo", "Edit", 210, "reset", true),
@@ -66,9 +77,15 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         throw new InvalidOperationException("This asset does not have a Timeline document");
     private TimelineView View
     {
-        get => Tool.View ?? throw new InvalidOperationException(
-            "This asset does not have a Timeline view");
-        set => Tool.View = value;
+        get
+        {
+            return Tool.View ?? throw new InvalidOperationException("This asset does not have a Timeline view");
+        }
+        set
+        {
+            Tool.View = value;
+            SubscribeTimeline();
+        }
     }
     private TimelineDocument Document => Authoring.Document;
     private bool HasTimeline => Tool.Authoring is not null;
@@ -112,9 +129,10 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             "pause" => HasTimeline && IsPlaying,
             "stop" => HasTimeline && (IsPlaying || View.State.CurrentTime > 0),
             "seek-start" => HasTimeline && View.State.CurrentTime > 0,
+            "root-motion" => Asset.Type == "SkeletalAnimation" && !IsReadOnly && !IsPlaying,
             "add-notify" => HasTimeline && !IsReadOnly && !IsPlaying,
-            "undo" => HasTimeline && !IsPlaying && Authoring.CanUndo,
-            "redo" => HasTimeline && !IsPlaying && Authoring.CanRedo,
+            "undo" => HasTimeline && !IsPlaying && Tool.CanUndo,
+            "redo" => HasTimeline && !IsPlaying && Tool.CanRedo,
             _ => false,
         };
     }
@@ -127,7 +145,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
                 StartPlayback();
                 break;
             case "pause":
-                IsPlaying = false;
+                View.Pause();
                 Context.SetStatus("Timeline preview paused");
                 break;
             case "stop":
@@ -135,6 +153,12 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
                 break;
             case "seek-start":
                 Seek(0);
+                break;
+            case "root-motion":
+                Tool.SetRootMotion(!Tool.Animation!.RootMotion.Enabled);
+                PreviewAnimation = Tool.Animation;
+                SubscribeTimeline();
+                UpdatePreviewPose();
                 break;
             case "add-notify":
                 AddNotify();
@@ -157,15 +181,12 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             return true;
         }
 
-        const string SeekPrefix = "editor.timeline-seek:";
-        if (Action.StartsWith(SeekPrefix, StringComparison.Ordinal) && HasTimeline)
+        if (Viewport.TryHandleAction(PreviewWorld.World, Action))
         {
-            var Parsed = double.TryParse(Action[SeekPrefix.Length..], NumberStyles.Float,
-                CultureInfo.InvariantCulture, out var Time);
-            if (Parsed && double.IsFinite(Time))
-            {
-                Seek(Time);
-            }
+            return true;
+        }
+        if (HasTimeline && View.TryHandleAction(Action))
+        {
             return true;
         }
 
@@ -182,6 +203,11 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             return true;
         }
 
+        if (Action == "editor.timeline-root-motion" && CanExecuteCommand("root-motion"))
+        {
+            ExecuteCommand("root-motion");
+            return true;
+        }
         return false;
     }
 
@@ -199,22 +225,23 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
     public void Save()
     {
         Tool.Save();
+        SharpEngine.World.SceneRenderer.InvalidateAssets(Assets);
+        SubscribeTimeline();
+        UpdatePreviewPose();
     }
 
     public void Update(float DeltaSeconds)
     {
-        if (HasTimeline && IsPlaying && float.IsFinite(DeltaSeconds) && DeltaSeconds > 0)
+        SubscribeTimeline();
+        if (HasTimeline && float.IsFinite(DeltaSeconds) && DeltaSeconds >= 0)
         {
-            var NextTime = View.State.CurrentTime + Math.Clamp(DeltaSeconds, 0, 0.1f);
-            if (NextTime >= Document.Duration)
-            {
-                NextTime = Document.Duration;
-                IsPlaying = false;
-                Context.SetStatus("Timeline preview completed");
-            }
-            View.Seek(NextTime);
+            View.Update(DeltaSeconds);
         }
-
+        if (Context.TryGetElementRect("timelineViewHost", out var Bounds) && Bounds.Width > 0 && Bounds.Height > 0)
+        {
+            TimelineWidth = Math.Max(TimelineView.DefaultHeaderWidth + 1, Bounds.Width);
+            TimelineHeight = Bounds.Height;
+        }
         SubmitPreviewFrame();
     }
 
@@ -228,12 +255,32 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         State["previewMeshOverridden"] = PreviewMeshOverridden;
         State["panes"] = new JsonArray(Panes.Select(Pane => (JsonNode)Pane.PaneId).ToArray());
         State["playing"] = IsPlaying;
+        State["previewWorld"] = PreviewWorld.Describe();
+        State["viewport"] = Viewport.Describe();
+        State["notifyPreview"] = "ignored";
+        if (HasTimeline)
+        {
+            State["timelineState"] = new JsonObject
+            {
+                ["schemaVersion"] = 1,
+                ["stateRevision"] = View.StateRevision,
+                ["playing"] = View.IsPlaying,
+                ["pixelsPerSecond"] = View.State.PixelsPerSecond,
+                ["horizontalScroll"] = View.State.HorizontalScroll,
+                ["view"] = JsonNode.Parse(View.BuildSnapshot(TimelineWidth, TimelineHeight).ToJson()),
+            };
+        }
         return State;
     }
 
     public void Dispose()
     {
-        IsPlaying = false;
+        if (SubscribedView is not null)
+        {
+            SubscribedView.Pause();
+            SubscribedView.TimeChanged -= OnTimelineTimeChanged;
+            SubscribedView = null;
+        }
     }
 
     private string BuildPreviewMarkup()
@@ -243,25 +290,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
             return BuildStateMachinePreviewMarkup();
         }
 
-        var Time = Math.Clamp(View.State.CurrentTime - PreviewClip.Start, 0,
-            PreviewClip.Duration);
-        var AnimationTime = PreviewClip.SourceStart + Time * PreviewClip.Speed;
-        var Percent = PreviewAnimation.Duration <= 0 ? 0 :
-            AnimationTime / PreviewAnimation.Duration * 100;
-        var Markup = new StringBuilder(
-            "<div class=\"timeline-preview asset-preview\"><div class=\"timeline-preview-stage\"><viewport id=\"timelinePreviewViewport\" class=\"timeline-preview-viewport\" data-viewport-kind=\"asset-preview\" data-input-surface=\"timeline-preview\" /></div><div class=\"timeline-preview-info\"><div class=\"timeline-preview-title\">")
-            .Append(WebUtility.HtmlEncode(PreviewAnimation.Name))
-            .Append("</div><div class=\"timeline-preview-subtitle\">")
-            .Append(FormatTime(AnimationTime)).Append(" / ")
-            .Append(FormatTime(PreviewAnimation.Duration))
-            .Append(IsReadOnly ? " · Read only" : " · Editable")
-            .Append("</div><div class=\"timeline-preview-mesh\">")
-            .Append(PreviewMesh is null ? "No explicit preview mesh" :
-                WebUtility.HtmlEncode(PreviewMesh.Name))
-            .Append("</div><div class=\"timeline-preview-progress\"><div class=\"timeline-preview-progress-value\" style=\"width:")
-            .Append(Number(Math.Clamp(Percent, 0, 100)))
-            .Append("%\" /></div></div></div>");
-        return Markup.ToString();
+        return Viewport.BuildMarkup(PreviewAnimation.Name);
     }
 
     private string BuildTimelineMarkup()
@@ -277,7 +306,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
 
         var Selected = Document.Tracks.SelectMany(Track => Track.Clips)
             .FirstOrDefault(Clip => Clip.ClipId == View.State.SelectedClipId);
-        return "<div class=\"timeline-pane asset-timeline-pane\"><div class=\"timeline-view-host\">" +
+        return "<div class=\"timeline-pane asset-timeline-pane\"><div id=\"timelineViewHost\" class=\"timeline-view-host\">" +
             View.BuildMarkup(TimelineWidth, TimelineHeight) +
             "</div><div class=\"timeline-notify-inspector\"><span class=\"timeline-inspector-label\">NOTIFY</span><span>" +
             WebUtility.HtmlEncode(Selected is null ? "Select a clip or add a notify" :
@@ -306,6 +335,14 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
                     .Append(Uri.EscapeDataString(Mesh.AssetId)).Append("\">")
                     .Append(WebUtility.HtmlEncode(Mesh.Name)).Append("</button>");
             }
+        }
+        if (Asset.Type == "SkeletalAnimation")
+        {
+            Markup.Append("<div><button id=\"animationRootMotion\" data-action=\"editor.timeline-root-motion\"")
+                .Append(IsReadOnly || IsPlaying ? " disabled" : string.Empty)
+                .Append(">Root Motion: ")
+                .Append(Tool.Animation!.RootMotion.Enabled ? "Enabled" : "Disabled")
+                .Append("</button><span>Enabled drives the entity; disabled removes root translation and rotation.</span></div>");
         }
         Markup.Append("</div><pre class=\"timeline-details\">")
             .Append(WebUtility.HtmlEncode(Json)).Append("</pre></div>");
@@ -348,6 +385,7 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         if (AssetId is null)
         {
             PreviewMesh = null;
+            PreviewWorld.SetMesh(null, "engine.skeletal-mesh");
             return;
         }
 
@@ -360,6 +398,10 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         }
 
         PreviewMesh = Mesh;
+        PreviewWorld.SetMesh(Mesh.AssetId, "engine.skeletal-mesh", Mesh.DefaultMaterial, Mesh);
+        Viewport.Frame(PreviewWorld.World, Mesh.Positions.Select(Position =>
+            new System.Numerics.Vector3(Position.X, Position.Y, Position.Z)));
+        UpdatePreviewPose();
         PreviewMeshOverridden = !AssetId.Equals(DefaultPreviewMeshId,
             StringComparison.OrdinalIgnoreCase);
         Context.SetStatus($"Preview mesh · {Mesh.Name}");
@@ -367,42 +409,59 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
 
     private void SubmitPreviewFrame()
     {
-        if (PreviewAnimation is null || PreviewClip is null || PreviewMesh is null ||
-            !Context.TryGetElementRect("timelinePreviewViewport", out var Bounds))
+        Viewport.Render(Context, PreviewWorld.World, Assets);
+    }
+
+    private void SubscribeTimeline()
+    {
+        if (ReferenceEquals(SubscribedView, Tool.View))
         {
             return;
         }
+        if (SubscribedView is not null)
+        {
+            SubscribedView.TimeChanged -= OnTimelineTimeChanged;
+        }
+        SubscribedView = Tool.View;
+        if (SubscribedView is not null)
+        {
+            SubscribedView.TimeChanged += OnTimelineTimeChanged;
+        }
+    }
 
-        var Time = Math.Clamp(View.State.CurrentTime - PreviewClip.Start, 0,
-            PreviewClip.Duration);
+    private void OnTimelineTimeChanged(TimelineTimeChangedEvent Event)
+    {
+        // Animation preview only samples the pose. Notify execution belongs to subscribing plugin editors.
+        UpdatePreviewPose();
+    }
+
+    private void UpdatePreviewPose()
+    {
+        if (PreviewAnimation is null || PreviewClip is null || PreviewMesh is null || !HasTimeline)
+        {
+            return;
+        }
+        var Time = Math.Clamp(View.State.CurrentTime - PreviewClip.Start, 0, PreviewClip.Duration);
         var AnimationTime = PreviewClip.SourceStart + Time * PreviewClip.Speed;
-        var Pose = PreviewClip.LoopMode == PlayableLoopMode.Loop ?
-            PreviewAnimation.SampleLooped(AnimationTime) : PreviewAnimation.Sample(AnimationTime);
-        Context.SubmitViewportFrame("asset-preview",
-            TimelinePreviewRenderer.BuildFrame(PreviewMesh, PreviewAnimation, Pose, Bounds));
+        PreviewWorld.SetPose(PreviewAnimation.SamplePreview(AnimationTime,
+            PreviewClip.LoopMode == PlayableLoopMode.Loop));
     }
 
     private void StartPlayback()
     {
-        if (View.State.CurrentTime >= Document.Duration)
-        {
-            View.Seek(0);
-        }
-        IsPlaying = true;
+        View.Play();
         Context.SetStatus("Timeline preview playing");
     }
 
     private void StopPlayback()
     {
-        IsPlaying = false;
-        View.Seek(0);
+        View.Stop();
         Context.SetStatus("Timeline preview stopped");
     }
 
     private void Seek(double Time)
     {
         View.Seek(Time);
-        IsPlaying = false;
         Context.SetStatus($"Timeline cursor · {FormatTime(View.State.CurrentTime)}");
     }
 
@@ -438,41 +497,35 @@ internal sealed class TimelineAssetEditorInstance : IAssetEditorInstance
         var Tracks = Document.Tracks.Select(Track => ReferenceEquals(Track, NotifyTrack) ?
             new TimelineTrack(Track.TrackId, Track.Name, Track.TargetId, Track.Type,
                 Track.Clips.Concat([Clip]).ToArray(), Track.Muted) : Track).ToArray();
-        var Result = Authoring.Replace(new TimelineDocument(Document.TimelineId,
-            Document.Name, Document.Duration, Document.FrameRate, Tracks),
-            "add-notify", Authoring.DocumentRevision);
-        if (!Result.Success)
+        var Changed = Tool.ReplaceTimeline(new TimelineDocument(Document.TimelineId,
+            Document.Name, Document.Duration, Document.FrameRate, Tracks));
+        if (!Changed)
         {
-            Context.SetStatus(Result.Message);
+            Context.SetStatus("Notify edit was rejected");
             return;
         }
+        PreviewAnimation = Tool.Animation;
         View = new TimelineView(Document, View.State);
         View.SelectClip(Clip.ClipId);
     }
 
     private void Undo()
     {
-        var Result = Authoring.Undo(Authoring.DocumentRevision);
-        if (Result.Success)
+        if (Tool.Undo())
         {
+            PreviewAnimation = Tool.Animation;
             View = new TimelineView(Document, View.State);
-        }
-        else
-        {
-            Context.SetStatus(Result.Message);
+            UpdatePreviewPose();
         }
     }
 
     private void Redo()
     {
-        var Result = Authoring.Redo(Authoring.DocumentRevision);
-        if (Result.Success)
+        if (Tool.Redo())
         {
+            PreviewAnimation = Tool.Animation;
             View = new TimelineView(Document, View.State);
-        }
-        else
-        {
-            Context.SetStatus(Result.Message);
+            UpdatePreviewPose();
         }
     }
 

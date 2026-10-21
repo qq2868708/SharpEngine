@@ -105,10 +105,12 @@ using ManagedSubmitHostViewportFrameFn = void(__cdecl*)(const char* hostIdUtf8,
 using ManagedEnsureGpuMeshFn = uint8_t(__cdecl*)(const GpuMeshUpload* upload);
 using ManagedSubmitGpuSceneFn = uint8_t(__cdecl*)(const GpuSceneFrame* frame);
 using ManagedGetRenderStatsFn = uint8_t(__cdecl*)(RenderStats* stats);
+using ManagedSetGameplayInputCaptureFn = uint8_t(__cdecl*)(uint8_t enabled);
+using ManagedGetGameplayInputCaptureFn = uint8_t(__cdecl*)();
 
 struct ManagedHostApi
 {
-    uint32_t Version = 16;
+    uint32_t Version = 17;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -154,6 +156,9 @@ struct ManagedHostApi
     ManagedGetRenderStatsFn GetRenderStats = nullptr;
     // Version 15 extends the v13 GpuSceneFrame payload with SkyRadiance.
     // Version 16 extends GpuSceneVertex to twelve skin influences (120 bytes).
+    // Version 17 appends foreground gameplay focus and bounded relative mouse capture.
+    ManagedSetGameplayInputCaptureFn SetGameplayInputCapture = nullptr;
+    ManagedGetGameplayInputCaptureFn GetGameplayInputCapture = nullptr;
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

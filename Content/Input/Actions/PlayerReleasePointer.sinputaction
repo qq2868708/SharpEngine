@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "actionId": "engine://input/actions/player.release-pointer",
+  "valueType": "Button",
+  "continuous": false
+}

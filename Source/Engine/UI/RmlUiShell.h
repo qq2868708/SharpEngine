@@ -61,6 +61,8 @@ public:
     bool EnsureGpuMesh(const GpuMeshUpload* upload);
     bool SubmitGpuScene(const GpuSceneFrame* frame);
     bool GetRenderStats(RenderStats& stats) const;
+    bool SetGameplayInputCapture(bool enabled);
+    bool IsGameplayInputCaptured() const;
     void SubmitTimelineScene(const UiSceneVertex* triangles, int triangleVertices,
                              const UiSceneVertex* lines, int lineVertices);
     void SubmitHostScene(std::string_view hostId, std::string_view kind,

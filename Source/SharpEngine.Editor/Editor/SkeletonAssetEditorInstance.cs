@@ -10,12 +10,16 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
 {
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
+    private readonly AssetPreviewWorld PreviewWorld;
+    private readonly WorldViewportLayout Viewport = new("skeletonPreviewViewport", "asset-skeleton-preview");
     private SkeletonAsset Skeleton = null!;
     private SkeletalMeshAsset? PreviewMesh;
 
     public SkeletonAssetEditorInstance(EditorAssetOpenContext Context)
     {
         this.Context = Context;
+        PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
+            throw new InvalidOperationException("Component registry is unavailable"), "skeleton-preview:" + Context.Asset.Id);
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
             Validate);
         RefreshAsset();
@@ -67,6 +71,10 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        if (Viewport.TryHandleAction(PreviewWorld.World, Action))
+        {
+            return true;
+        }
         const string Prefix = "editor.skeleton-preview-mesh:";
         if (!Action.StartsWith(Prefix, StringComparison.Ordinal))
         {
@@ -93,9 +101,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     {
         return PaneId switch
         {
-            "preview" => "<div class=\"asset-preview-surface\"><viewport id=\"skeletonPreviewViewport\" data-viewport-kind=\"asset-skeleton-preview\" data-input-surface=\"skeleton-preview\" /><div class=\"asset-preview-overlay\"><span>" +
-                AssetEditorInstanceUtilities.Escape(Skeleton.Name) +
-                "</span><span>" + Skeleton.Bones.Count + " bones</span></div></div>",
+            "preview" => Viewport.BuildMarkup(Skeleton.Name),
             "tree" => BuildTreeMarkup(),
             "details" => BuildDetailsMarkup(),
             "source" => AssetEditorInstanceUtilities.Source(Document.Source),
@@ -112,17 +118,7 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
 
     public void Update(float DeltaSeconds)
     {
-        if (!Context.TryGetElementRect("skeletonPreviewViewport", out var Bounds))
-        {
-            return;
-        }
-
-        var Frame = PreviewMesh is null ?
-            AssetPreviewRenderer.BuildSkeletonFrame(Skeleton, Bounds) :
-            AssetPreviewRenderer.BuildMeshFrame(PreviewMesh.Positions,
-                PreviewMesh.Indices, Bounds, new Vector4(0.58f, 0.7f, 0.86f, 1),
-                $"skeleton-preview-camera:{Asset.Id}");
-        Context.SubmitViewportFrame("asset-skeleton-preview", Frame);
+        Viewport.Render(Context, PreviewWorld.World, Context.Runtime.Assets, PreviewWorld.Decorate);
     }
 
     public JsonObject Describe()
@@ -136,6 +132,8 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
             ["readOnly"] = IsReadOnly,
             ["documentRevision"] = Document.Revision,
             ["savepointRevision"] = Document.SavepointRevision,
+            ["previewWorld"] = PreviewWorld.Describe(),
+            ["viewport"] = Viewport.Describe(),
             ["boneCount"] = Skeleton.Bones.Count,
             ["previewMeshId"] = Skeleton.PreviewMeshId,
             ["previewMeshAvailable"] = PreviewMesh is not null,
@@ -160,6 +158,16 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     {
         Skeleton = SkeletonAsset.Parse(Document.Snapshot.ToJsonString(), Context.Path);
         PreviewMesh = ResolvePreviewMesh(Skeleton, false);
+        if (PreviewMesh is null)
+        {
+            PreviewWorld.SetSkeleton(Skeleton);
+            Viewport.Frame(PreviewWorld.World, PreviewWorld.SkeletonPositions);
+        }
+        else
+        {
+            PreviewWorld.SetMesh(PreviewMesh.AssetId, "engine.skeletal-mesh", PreviewMesh.DefaultMaterial, PreviewMesh);
+            Viewport.Frame(PreviewWorld.World, PreviewMesh.Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
+        }
     }
 
     private SkeletalMeshAsset? ResolvePreviewMesh(SkeletonAsset Value, bool ValidateOnly)

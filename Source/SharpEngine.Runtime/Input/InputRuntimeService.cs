@@ -18,6 +18,7 @@ internal enum NativeInputEventKind : uint
     Wheel,
     FocusLost,
     CaptureLost,
+    GameplayCaptureLost,
 }
 
 internal sealed class InputRuntimeService : IInputRuntime
@@ -71,6 +72,19 @@ internal sealed class InputRuntimeService : IInputRuntime
     private int _pointerX;
     private int _pointerY;
     private string _lastHostId = "main";
+    private string? CaptureHost;
+    private bool GameplayCaptured;
+
+    internal void ObserveGameplayCapture(string HostId, bool Captured)
+    {
+        CheckThread();
+        if (CaptureHost != HostId || GameplayCaptured != Captured)
+        {
+            CaptureHost = HostId;
+            GameplayCaptured = Captured;
+            _stateRevision++;
+        }
+    }
 
     private InputRuntimeService(IReadOnlyList<InputActionDefinition> actions,
         IReadOnlyList<InputMappingContextDefinition> contexts)
@@ -179,7 +193,7 @@ internal sealed class InputRuntimeService : IInputRuntime
         if (kind is NativeInputEventKind.PointerMove or NativeInputEventKind.PointerDown or
             NativeInputEventKind.PointerUp or NativeInputEventKind.Wheel)
         { _pointerX = x; _pointerY = y; }
-        if (kind == NativeInputEventKind.FocusLost)
+        if (kind is NativeInputEventKind.FocusLost or NativeInputEventKind.GameplayCaptureLost)
         {
             _controls.Clear();
             _uiSuppressedControls.Clear();
@@ -303,6 +317,11 @@ internal sealed class InputRuntimeService : IInputRuntime
             ["stateRevision"] = _stateRevision,
             ["frameId"] = _frameId,
             ["hostId"] = _lastHostId,
+            ["capture"] = new JsonObject
+            {
+                ["hostId"] = CaptureHost,
+                ["active"] = GameplayCaptured,
+            },
             ["pointer"] = new JsonObject { ["x"] = _pointerX, ["y"] = _pointerY },
             ["actions"] = JsonSerializer.SerializeToNode(_actions, SnapshotJsonOptions),
             ["contexts"] = new JsonArray(_contexts.Select(context => (JsonNode?)new JsonObject

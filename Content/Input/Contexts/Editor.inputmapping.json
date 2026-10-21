@@ -27,7 +27,9 @@
       "control": "Keyboard/Z",
       "scaleX": 1,
       "scaleY": 0,
-      "modifiers": ["Keyboard/Control"],
+      "modifiers": [
+        "Keyboard/Control"
+      ],
       "exactModifiers": true
     },
     {
@@ -35,7 +37,9 @@
       "control": "Keyboard/Y",
       "scaleX": 1,
       "scaleY": 0,
-      "modifiers": ["Keyboard/Control"],
+      "modifiers": [
+        "Keyboard/Control"
+      ],
       "exactModifiers": true
     },
     {
@@ -43,7 +47,20 @@
       "control": "Keyboard/Z",
       "scaleX": 1,
       "scaleY": 0,
-      "modifiers": ["Keyboard/Control", "Keyboard/Shift"],
+      "modifiers": [
+        "Keyboard/Control",
+        "Keyboard/Shift"
+      ],
+      "exactModifiers": true
+    },
+    {
+      "action": "engine://input/actions/player.release-pointer",
+      "control": "Keyboard/F1",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [
+        "Keyboard/Shift"
+      ],
       "exactModifiers": true
     }
   ]

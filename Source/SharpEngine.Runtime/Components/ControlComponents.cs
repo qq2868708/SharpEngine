@@ -72,7 +72,7 @@ public sealed partial class ControllableComponent : SharpComponent
 
     internal Vector2 ReadMovement()
     {
-        return MoveInput;
+        return ControlEnabled && EffectiveEnabled ? MoveInput : Vector2.Zero;
     }
 
     protected override void OnDisable()
@@ -242,7 +242,7 @@ public abstract partial class ControllerComponent : SharpComponent
     }
 }
 
-[ComponentTypeId("engine.player-controller"), ComponentSchemaVersion(1), DisallowMultipleComponent,
+[ComponentTypeId("engine.player-controller"), ComponentSchemaVersion(2), DisallowMultipleComponent,
     AddComponentMenu("Gameplay/Player Controller")]
 public sealed partial class PlayerControllerComponent : ControllerComponent
 {
@@ -264,6 +264,8 @@ public sealed partial class MovementComponent : SharpComponent
     [Range(0, 200)] public float Deceleration = 30;
 
     private Vector3 Velocity;
+    private Vector3 IntentVelocity;
+    private Vector3 PendingDisplacement;
     /// <summary>Derived live velocity, finalized after all Evaluate callbacks. Not serialized.</summary>
     public Vector3 LinearVelocity
     {
@@ -276,17 +278,24 @@ public sealed partial class MovementComponent : SharpComponent
     private string Code = "MOVEMENT_IDLE";
     private string? Message;
 
+    internal Vector3 AnimationIntentVelocity
+    {
+        get
+        {
+            return IntentVelocity;
+        }
+    }
+
     protected override void OnEvaluate(float DeltaSeconds)
     {
-        var Transform = Entity.GetComponent<TransformComponent>()!;
         var Controllable = Entity.GetComponent<ControllableComponent>()!;
         var Input = Controllable.ReadMovement();
         var Desired = new Vector3(Input.X, 0, Input.Y) * MaxSpeed;
         var Rate = Desired.LengthSquared() > 0.000001f ? Acceleration : Deceleration;
-        Velocity = MoveTowards(Velocity, Desired, Rate * DeltaSeconds);
         if (DeltaSeconds > 0)
         {
-            Transform.Position += Velocity * DeltaSeconds;
+            IntentVelocity = MoveTowards(IntentVelocity, Desired, Rate * DeltaSeconds);
+            PendingDisplacement = IntentVelocity * DeltaSeconds;
         }
         Status = Velocity.LengthSquared() > 0.000001f ? "Moving" : "Idle";
         Code = Status == "Moving" ? "MOVEMENT_MOVING" : "MOVEMENT_IDLE";
@@ -296,6 +305,8 @@ public sealed partial class MovementComponent : SharpComponent
     protected override void OnDisable()
     {
         Velocity = Vector3.Zero;
+        IntentVelocity = Vector3.Zero;
+        PendingDisplacement = Vector3.Zero;
         Status = "Disabled";
         Code = "MOVEMENT_DISABLED";
         Message = null;
@@ -304,6 +315,34 @@ public sealed partial class MovementComponent : SharpComponent
     protected override void OnUninitialize()
     {
         Velocity = Vector3.Zero;
+        IntentVelocity = Vector3.Zero;
+        PendingDisplacement = Vector3.Zero;
+    }
+
+    internal void CommitMovement(bool RootDriven, Vector3 WorldPositionBefore, float DeltaSeconds)
+    {
+        if (!RootDriven && PendingDisplacement != Vector3.Zero)
+        {
+            var Transform = Entity.GetComponent<TransformComponent>()!;
+            var Displacement = PendingDisplacement;
+            if (Entity.Parent is not null)
+            {
+                var Invertible = SharpEngine.Mathematics.TransformMath.TryInverse(
+                    EntityTransformMath.WorldMatrix(Entity.Parent), out var ParentInverse);
+                if (!Invertible)
+                {
+                    throw new InvalidDataException("Movement parent transform must be invertible");
+                }
+                Displacement = Vector3.TransformNormal(Displacement, ParentInverse);
+            }
+            Transform.Position += Displacement;
+        }
+        PendingDisplacement = Vector3.Zero;
+        Velocity = DeltaSeconds > 0
+            ? (EntityTransformMath.WorldMatrix(Entity).Translation - WorldPositionBefore) / DeltaSeconds
+            : Vector3.Zero;
+        Status = Velocity.LengthSquared() > 0.000001f ? "Moving" : "Idle";
+        Code = Status == "Moving" ? "MOVEMENT_MOVING" : "MOVEMENT_IDLE";
     }
 
     protected internal override ComponentFrameState CaptureFrameState()
@@ -317,6 +356,7 @@ public sealed partial class MovementComponent : SharpComponent
             ["code"] = Code,
             ["message"] = Message,
             ["velocity"] = new JsonArray(Velocity.X, Velocity.Y, Velocity.Z),
+            ["intentVelocity"] = new JsonArray(IntentVelocity.X, IntentVelocity.Y, IntentVelocity.Z),
         });
     }
 

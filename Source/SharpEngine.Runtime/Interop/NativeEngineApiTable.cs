@@ -46,4 +46,6 @@ namespace SharpEngine.Interop;
         public delegate* unmanaged[Cdecl]<NativeGpuMeshUpload*, byte> EnsureGpuMesh;
         public delegate* unmanaged[Cdecl]<NativeGpuSceneFrame*, byte> SubmitGpuScene;
         public delegate* unmanaged[Cdecl]<NativeRenderStats*, byte> GetRenderStats;
+        public delegate* unmanaged[Cdecl]<byte, byte> SetGameplayInputCapture;
+        public delegate* unmanaged[Cdecl]<byte> GetGameplayInputCapture;
     }

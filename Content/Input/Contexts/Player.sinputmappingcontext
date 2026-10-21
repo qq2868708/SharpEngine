@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "contextId": "engine://input/contexts/player",
+  "route": "Gameplay",
+  "priority": 0,
+  "activateByDefault": false,
+  "bindings": [
+    {
+      "action": "engine://input/actions/player.move",
+      "control": "Keyboard/W",
+      "scaleX": 0,
+      "scaleY": 1,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/player.move",
+      "control": "Keyboard/S",
+      "scaleX": 0,
+      "scaleY": -1,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/player.move",
+      "control": "Keyboard/A",
+      "scaleX": -1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/player.move",
+      "control": "Keyboard/D",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/player.look",
+      "control": "Mouse/Delta",
+      "scaleX": 1,
+      "scaleY": 1,
+      "modifiers": [],
+      "exactModifiers": false
+    },
+    {
+      "action": "engine://input/actions/player.release-pointer",
+      "control": "Keyboard/F1",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [
+        "Keyboard/Shift"
+      ],
+      "exactModifiers": true
+    }
+  ]
+}

@@ -2,6 +2,11 @@
   "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
   "schemaVersion": 1,
   "assets": [
+    {"id": "input/actions/player.move", "type": "InputAction", "name": "PlayerMove", "path": "Content/Input/Actions/PlayerMove.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
+    {"id": "input/actions/player.look", "type": "InputAction", "name": "PlayerLook", "path": "Content/Input/Actions/PlayerLook.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
+    {"id": "input/actions/player.release-pointer", "type": "InputAction", "name": "PlayerReleasePointer", "path": "Content/Input/Actions/PlayerReleasePointer.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
+    {"id": "input/contexts/player", "type": "InputMappingContext", "name": "Player", "path": "Content/Input/Contexts/Player.sinputmappingcontext", "importer": "SharpEngine.InputMappingContextJson", "tags": ["input", "player"]},
+
 {"id":"input/actions/demo.confirm","type":"InputAction","name":"DemoConfirm","path":"Content/Input/Actions/DemoConfirm.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
 {"id":"input/actions/demo.move","type":"InputAction","name":"DemoMove","path":"Content/Input/Actions/DemoMove.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
 {"id":"input/contexts/demo-ui","type":"InputMappingContext","name":"DemoUi","path":"Content/Input/Contexts/DemoUi.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},

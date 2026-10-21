@@ -1,17 +1,26 @@
 .timeline-view { position: relative; display: block; width: 100%; height: 100%; overflow: hidden; background-color: #171b22; color: #cbd4e2; }
-.timeline-ruler { position: absolute; left: 0px; top: 0px; right: 0px; height: 24px; background-color: #242b35; border-bottom: 1px #11151a; overflow: hidden; }
-.timeline-tick { position: absolute; top: 0px; height: 24px; padding-top: 5px; padding-left: 3px; border-left: 1px #3d4857; color: #75859a; font-size: 10px; white-space: nowrap; }
-.timeline-tick.major { border-left-color: #63748a; color: #b9c7d8; }
-.timeline-rows { position: absolute; left: 0px; top: 24px; right: 0px; bottom: 0px; overflow: auto; }
+.timeline-transport { position: absolute; display: flex; align-items: center; left: 0px; top: 0px; right: 0px; height: 32px; padding: 3px 6px; background-color: #202630; border-bottom: 1px #11151a; }
+.timeline-transport button { height: 24px; min-width: 28px; margin-right: 4px; padding: 3px 8px; background-color: #303b49; border: 1px #46566a; border-radius: 2px; color: #dce8f8; font-size: 11px; }
+.timeline-transport button:hover { background-color: #405775; }
+.timeline-transport button:disabled { opacity: 0.4; }
+.timeline-current-time { margin-left: 8px; margin-right: 12px; color: #e6ba7c; font-size: 11px; }
+.timeline-ruler { position: absolute; left: 0px; top: 32px; right: 0px; height: 28px; background-color: #242b35; border-bottom: 1px #11151a; overflow: hidden; cursor: pointer; }
+.timeline-ruler-header { position: absolute; left: 0px; top: 0px; width: 180px; height: 28px; padding: 6px 8px; color: #91a1b8; border-right: 1px #11151a; }
+.timeline-ruler-scale { position: absolute; left: 180px; top: 0px; right: 0px; height: 28px; overflow: hidden; }
+.timeline-tick { position: absolute; top: 18px; height: 10px; width: 1px; border-left: 1px #526071; pointer-events: none; }
+.timeline-tick.major { top: 0px; height: 28px; width: 80px; padding-top: 3px; padding-left: 4px; border-left-color: #8a9bb2; color: #c6d1e0; font-size: 10px; white-space: nowrap; }
+.timeline-rows { position: absolute; left: 0px; top: 60px; right: 0px; bottom: 0px; overflow: auto; }
 .timeline-row { position: absolute; left: 0px; right: 0px; border-bottom: 1px #2c3541; background-color: #1d222a; }
 .timeline-row.selected { background-color: #26384a; }
 .timeline-row.muted { opacity: 0.55; }
 .timeline-track-label { position: absolute; left: 0px; top: 0px; width: 180px; height: 30px; padding: 8px 8px; overflow: hidden; white-space: nowrap; background-color: #222933; color: #aebbd0; border-right: 1px #11151a; }
-.timeline-clip { position: absolute; padding: 4px 8px; overflow: hidden; white-space: nowrap; text-align: left; background-color: #315d82; border: 1px #6a9ed1; border-radius: 2px; color: #ecf4ff; font-size: 10px; }
+.timeline-row-clips { position: absolute; left: 180px; top: 0px; right: 0px; height: 30px; overflow: hidden; }
+.timeline-clip { position: absolute; top: 0px; padding: 4px 8px; overflow: hidden; white-space: nowrap; text-align: left; background-color: #315d82; border: 1px #6a9ed1; border-radius: 2px; color: #ecf4ff; font-size: 10px; }
 .timeline-clip:hover { background-color: #3f76a4; }
 .timeline-clip.selected { background-color: #a16b35; border-color: #e4b06d; }
 .timeline-clip.muted { background-color: #46505b; border-color: #687584; }
-.timeline-playhead { position: absolute; top: 0px; bottom: 0px; width: 1px; background-color: #f08d67; pointer-events: none; }
+.timeline-playhead { position: absolute; top: 32px; bottom: 0px; width: 1px; background-color: #f08d67; cursor: ew-resize; }
+.timeline-playhead-arrow { position: absolute; left: -6px; top: 0px; width: 12px; height: 8px; background-color: #f08d67; cursor: ew-resize; }
 .animation-state-machine-editor { display: block; width: 100%; height: 100%; overflow: auto; padding: 12px; background-color: #171b22; color: #cbd4e2; }
 .animation-state-machine-header { display: flex; justify-content: space-between; padding: 8px 10px; background-color: #242b35; color: #dce8f8; }
 .animation-state-machine-states { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
@@ -20,3 +29,5 @@
 .animation-state-machine-state span, .animation-state-machine-transitions span { color: #aebbd0; font-size: 11px; }
 .animation-state-machine-transitions { display: flex; flex-direction: column; gap: 5px; padding: 10px; background-color: #1d222a; }
 .animation-state-machine-transitions > div { display: flex; justify-content: space-between; gap: 12px; padding: 5px 8px; border-bottom: 1px #2c3541; }
+
+.timeline-playhead-tip { position: absolute; left: 0px; top: 8px; width: 0px; height: 0px; border-top: 7px #f08d67; border-left: 6px #00000000; border-right: 6px #00000000; }

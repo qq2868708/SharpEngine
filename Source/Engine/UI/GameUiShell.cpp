@@ -275,7 +275,7 @@ void GameUiShell::Render()
     }
 }
 
-bool GameUiShell::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
+bool GameUiShell::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, bool GameplayCaptured)
 {
     if (!State || !State->Context)
     {
@@ -285,7 +285,7 @@ bool GameUiShell::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
     {
         auto* context = State->Context;
         const auto injected = State->InjectedModifiers;
-        const int modifiers = ((injected & 1) ? Rml::Input::KM_SHIFT : 0) | ((injected & 2) ? Rml::Input::KM_CTRL : 0) |
+        const int modifiers = ((injected & 2) ? Rml::Input::KM_SHIFT : 0) | ((injected & 1) ? Rml::Input::KM_CTRL : 0) |
                               ((injected & 4) ? Rml::Input::KM_ALT : 0);
         const auto x = static_cast<int>(static_cast<short>(LOWORD(lParam)));
         const auto y = static_cast<int>(static_cast<short>(HIWORD(lParam)));
@@ -306,6 +306,10 @@ bool GameUiShell::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam)
             const auto key = RmlWin32::ConvertKey(static_cast<int>(wParam));
             return message == WM_KEYDOWN ? !context->ProcessKeyDown(key, modifiers) : !context->ProcessKeyUp(key, modifiers);
         }
+    }
+    if (message == WM_LBUTTONUP && GameplayCaptured)
+    {
+        return !State->Context->ProcessMouseButtonUp(0, RmlWin32::GetKeyModifierState());
     }
     return !RmlWin32::WindowProcedure(State->Context, State->Ime, State->Window, message, wParam, lParam);
 }

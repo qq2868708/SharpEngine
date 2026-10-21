@@ -402,3 +402,8 @@ viewport { display: block; }
 .context-menu { position: absolute; top: 0px; left: 0px; z-index: 500; }
 .menu-heading { padding: 6px 12px 4px; color: #718198; font-size: 10px; letter-spacing: 1px; }
 .menu-divider { height: 1px; margin: 5px; background-color: #424d5c; }
+
+.asset-world-viewport { width: 100%; height: 100%; background-color: #0d1218; }
+.asset-world-viewport viewport { display: block; flex-grow: 1; flex-basis: 0px; min-width: 0px; min-height: 0px; }
+.asset-world-viewport .viewport-footer { height: 28px; flex-shrink: 0; }
+.asset-world-viewport .viewport-footer button { padding: 2px 8px; margin: 0px 8px; }

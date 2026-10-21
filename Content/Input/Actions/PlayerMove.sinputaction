@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "actionId": "engine://input/actions/player.move",
+  "valueType": "Axis2D",
+  "continuous": true
+}

@@ -31,12 +31,12 @@ internal static class AnimationPipelineValidation
         var Live = (AnimatorComponent)Runtime.FindComponent(Animator.ComponentId)!;
         var Initial = Runtime.Frame.Get<SkeletonFrameState>(Mesh.ComponentId)!;
         Check(Live.Target?.ComponentId == Mesh.ComponentId && Initial.Positions.Count > 0, "parent Animator binds child skeleton before first frame");
-        Runtime.Tick(0.25f);
+        Runtime.Tick(0.2f);
         var Frozen = Runtime.Frame;
         var Skeleton = Frozen.Get<SkeletonFrameState>(Mesh.ComponentId)!;
         var Json = Skeleton.ToJson();
         Check(Json["modelMatrices"]!.AsArray().Count > 0 && Json["skinMatrices"]!.AsArray().Count == Json["modelMatrices"]!.AsArray().Count &&
-            Json["localPose"]!["time"]!.GetValue<double>() == 0.25 && !Initial.Positions.SequenceEqual(Skeleton.Positions), "frame end publishes sampled local pose, matrices and skinned vertices together");
+            Json["localPose"]!["time"]!.GetValue<double>() == (double)0.2f && !Initial.Positions.SequenceEqual(Skeleton.Positions), "frame end publishes sampled local pose, matrices and skinned vertices together");
         var World = new WorldDocument(Frozen, Registry);
         var Frame = SceneRenderer.BuildFrame(World, Bounds, Assets);
         var SampleCount = Frozen.Get<AnimatorFrameState>(Live.ComponentId)!.ToJson()["sampleCount"]!.GetValue<ulong>();

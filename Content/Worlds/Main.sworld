@@ -150,30 +150,18 @@
         {
           "componentId": "player-controller",
           "typeId": "engine.player-controller",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "enabled": true,
           "state": {
             "ControlledEntity": "player",
-            "Priority": 0
-          }
-        },
-        {
-          "componentId": "player-static-mesh",
-          "typeId": "engine.skeletal-mesh",
-          "schemaVersion": 1,
-          "enabled": true,
-          "state": {
-            "Mesh": "engine://meshes/uefn-mannequin",
-            "Material": null,
-            "Animation": null,
-            "AnimationTime": 0,
-            "LoopAnimation": true,
-            "Color": [
-              0.82,
-              0.82,
-              0.86,
-              1
-            ]
+            "Priority": 0,
+            "InputContext": "engine://input/contexts/player",
+            "MoveAction": "engine://input/actions/player.move",
+            "LookAction": "engine://input/actions/player.look",
+            "ViewCamera": "player-view-camera",
+            "FaceMoveDirection": false,
+            "TurnSpeed": 720,
+            "FacingMesh": "player-static-mesh"
           }
         }
       ]
@@ -355,6 +343,116 @@
               1
             ],
             "Intensity": 0.24
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "player-model",
+      "name": "Mannequin",
+      "parentId": "player",
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "player-model-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              -1,
+              0
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "player-static-mesh",
+          "typeId": "engine.skeletal-mesh",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Mesh": "engine://meshes/uefn-mannequin",
+            "Material": null,
+            "Animation": null,
+            "AnimationTime": 0,
+            "LoopAnimation": true,
+            "Color": [
+              0.82,
+              0.82,
+              0.86,
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "player-view",
+      "name": "Player Camera",
+      "parentId": "player",
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "player-view-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              0,
+              3.5
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "player-view-camera",
+          "typeId": "engine.camera",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "FieldOfView": 65,
+            "NearPlane": 0.1,
+            "FarPlane": 100
+          }
+        },
+        {
+          "componentId": "player-third-person-camera",
+          "typeId": "engine.third-person-camera",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Target": "player",
+            "TargetOffset": [
+              0,
+              0.4,
+              0
+            ],
+            "Distance": 3.5,
+            "Yaw": 0,
+            "Pitch": -15,
+            "LookSensitivity": 0.15
           }
         }
       ]

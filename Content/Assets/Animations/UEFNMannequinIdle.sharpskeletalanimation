@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "skeletal-animation",
+  "rootMotion": {"enabled": false, "boneId": "root"},
   "assetId": "engine://animations/uefn-mannequin-idle",
   "name": "UEFN Mannequin Idle",
   "duration": 2.0,

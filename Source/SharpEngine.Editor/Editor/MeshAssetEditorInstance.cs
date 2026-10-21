@@ -11,12 +11,16 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 {
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
+    private readonly AssetPreviewWorld PreviewWorld;
+    private readonly WorldViewportLayout Viewport = new("meshPreviewViewport", "asset-mesh-preview");
     private StaticMeshAsset? StaticMesh;
     private SkeletalMeshAsset? SkeletalMesh;
 
     public MeshAssetEditorInstance(EditorAssetOpenContext Context)
     {
         this.Context = Context;
+        PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
+            throw new InvalidOperationException("Component registry is unavailable"), "mesh-preview:" + Context.Asset.Id);
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
             Validate);
         RefreshAsset();
@@ -79,6 +83,10 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        if (Viewport.TryHandleAction(PreviewWorld.World, Action))
+        {
+            return true;
+        }
         const string MaterialPrefix = "editor.mesh-default-material:";
         if (!Action.StartsWith(MaterialPrefix, StringComparison.Ordinal))
         {
@@ -117,21 +125,14 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
     public void Save()
     {
         Document.Save();
+        SharpEngine.World.SceneRenderer.InvalidateAssets(Context.Runtime.Assets ??
+            throw new InvalidOperationException("Asset registry is unavailable"));
         RefreshAsset();
     }
 
     public void Update(float DeltaSeconds)
     {
-        if (!Context.TryGetElementRect("meshPreviewViewport", out var Bounds))
-        {
-            return;
-        }
-
-        var Positions = IsSkeletal ? SkeletalMesh!.Positions : StaticMesh!.Positions;
-        var Indices = IsSkeletal ? SkeletalMesh!.Indices : StaticMesh!.Indices;
-        Context.SubmitViewportFrame("asset-mesh-preview",
-            AssetPreviewRenderer.BuildMeshFrame(Positions, Indices, Bounds,
-                PreviewColor(), $"mesh-preview-camera:{Asset.Id}"));
+        Viewport.Render(Context, PreviewWorld.World, Context.Runtime.Assets);
     }
 
     public JsonObject Describe()
@@ -142,6 +143,8 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             ["assetId"] = Asset.Id,
             ["editorRootId"] = Context.EditorRootId,
             ["assetType"] = Asset.Type,
+            ["previewWorld"] = PreviewWorld.Describe(),
+            ["viewport"] = Viewport.Describe(),
             ["dirty"] = IsDirty,
             ["readOnly"] = IsReadOnly,
             ["documentRevision"] = Document.Revision,
@@ -211,34 +214,16 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             StaticMesh = StaticMeshAsset.Parse(Source, Context.Path, Asset.Id);
             SkeletalMesh = null;
         }
-    }
-
-    private Vector4 PreviewColor()
-    {
-        var MaterialId = IsSkeletal ? SkeletalMesh!.DefaultMaterial :
-            StaticMesh!.DefaultMaterial;
-        if (MaterialId is not null && Context.Runtime.Assets is { } Assets)
-        {
-            try
-            {
-                var Material = AssetContent.LoadMaterial(Assets, MaterialId);
-                return new Vector4(Material.BaseColor.R, Material.BaseColor.G,
-                    Material.BaseColor.B, Material.BaseColor.A);
-            }
-            catch (Exception Exception) when (Exception is InvalidDataException or
-                IOException or KeyNotFoundException)
-            {
-            }
-        }
-        return new Vector4(0.58f, 0.7f, 0.86f, 1);
+        PreviewWorld.SetMesh(Asset.Id, IsSkeletal ? "engine.skeletal-mesh" :
+            Asset.Type == "StaticMesh" ? "engine.static-mesh" : "engine.mesh-renderer",
+            IsSkeletal ? SkeletalMesh!.DefaultMaterial : StaticMesh!.DefaultMaterial, SkeletalMesh);
+        var Positions = IsSkeletal ? SkeletalMesh!.Positions : StaticMesh!.Positions;
+        Viewport.Frame(PreviewWorld.World, Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
     }
 
     private string BuildPreviewMarkup()
     {
-        return "<div class=\"asset-preview-surface\"><viewport id=\"meshPreviewViewport\" data-viewport-kind=\"asset-mesh-preview\" data-input-surface=\"mesh-preview\" /><div class=\"asset-preview-overlay\"><span>" +
-            AssetEditorInstanceUtilities.Escape(Asset.Name) +
-            "</span><span>" + (IsSkeletal ? "Skeletal Mesh" : "Static Mesh") +
-            "</span></div></div>";
+        return Viewport.BuildMarkup(Asset.Name);
     }
 
     private string BuildDetailsMarkup()

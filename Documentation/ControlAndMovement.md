@@ -1,39 +1,27 @@
-# 控制、可控制目标与移动
+# 控制、可控制目标、第三人称与移动
 
-控制器和可控制目标是两个不同的组件职责。
+PlayerController 负责输入和朝向，Controllable 仲裁控制来源，Movement 生成移动意图；世界在全部 Evaluate 完成后统一采样动画并提交位移，再进入 LateUpdate 相机跟随。
 
-```text
-PlayerControllerComponent / AiControllerComponent
-                │  提交移动意图
-                ▼
-       ControllableComponent
-                │  提供当前帧意图
-                ▼
-         MovementComponent
-                │  Evaluate 阶段更新 Transform
-```
+`ControllerComponent.ControlledEntity` 使用稳定实体 ID。目标必须具备 `engine.controllable`；多来源按 Priority 降序、组件 ID 稳定排序仲裁。`AiControllerComponent` 或没有输入服务的程序化运行可继续调用 `SetMoveInput`。
 
-`ControllableComponent` 是目标实体的能力声明。它不决定输入来源，也不持有控制器的持久引用；运行时会记录当前绑定的控制器和本帧移动意图。一个目标同时被多个控制器指向时，先比较 `Priority`，再按控制器组件 ID 稳定排序，只有获胜者可以提交意图。
+`PlayerControllerComponent` schema v2 保存 `InputContext`、`MoveAction`、`LookAction`、`ViewCamera`、`FacingMesh`、`FaceMoveDirection`、`TurnSpeed`，以及原有 `ControlledEntity` / `Priority`。旧 v1 迁移为默认 Player Context/MoveAction，LookAction 与 ViewCamera 为 null。Move/Look 必须是所选 Gameplay Context 内注册的 Axis2D 动作，Look 要求 ViewCamera 实体有 ThirdPersonCamera。无效绑定在组件帧中报告 `PLAYER_INPUT_BINDING_INVALID`。
 
-`ControllerComponent` 是控制来源的共同基类，序列化的 `ControlledEntity` 使用稳定实体 ID。绑定时必须找到目标实体上的 `engine.controllable`，否则控制器在 Frame 中发布 `CONTROLLER_TARGET_NOT_CONTROLLABLE`。`PlayerControllerComponent` 和 `AiControllerComponent` 共享这条绑定路径；输入模块或 AI 行为通过 `SetMoveInput` 写入当前运行时意图。
+Editor/Game 将 `IInputRuntime` 和当前 host ID 注入 `RuntimeInstance`。Player 组件在启用时持有 Context activation 和 Action registrations，停用、删除或停止运行时释放。一个世界按 Priority 与组件 ID 选取有效的 LocalPlayerController；只接受其 Context 和 host 的事件，输入不再广播给所有 Player。控制能力停用、失焦或捕获丢失都会清空输入。
 
-控制器不直接修改目标的 Transform。`MovementComponent` 要求同一实体具备 `TransformComponent` 和 `ControllableComponent`，在 `Evaluate` 阶段消费已经提交的二维输入，把它映射到 XZ 平面，并按 `MaxSpeed`、`Acceleration`、`Deceleration` 更新速度和位置。这样控制器更新顺序不会决定移动结果，也为将来的导航移动、物理移动和其他 Processable 能力保留了边界。
+输入链路：
 
-这组控制意图和速度属于运行时状态。`RuntimeFrame` 会发布控制器绑定、目标状态和移动速度；场景序列化只保存组件配置和 `ControlledEntity` 的稳定引用，不保存控制器对象、委托、缓存或当前速度。
+1. Win32 键鼠事件先经过 RmlUi 的焦点、命中、文本编辑和事件传播；消费的事件停止。
+2. 未消费事件进入 InputRuntimeService，按 Editor、RuntimeUi、Gameplay 路由，再按 Context priority 和稳定 ID 处理；已消费 Control 不再流向较低路由。
+3. Player 组件激活 `engine://input/contexts/player`。WASD 组合成 `engine://input/actions/player.move`，相对鼠标位移形成 `player.look`。组件引用的是资产 ID，不依赖 demo Context。
+4. Move 缓存持续 Axis2D，Look 累加当帧 Performed 增量。相机 Yaw 将 WASD 转成世界 XZ 意图；Controller 提交给 Controllable，Movement 按速度和加减速生成位移。
+5. `FaceMoveDirection=false` 时根实体水平朝向与镜头同步，`FacingMesh` 子模型独立转向 WASD 的世界移动方向，A/D 时转向左右并播放前向动画；true 时根实体也转向移动方向。第三人称相机只绕目标旋转，不把俯仰施加给角色身体。
 
-最小用法：
+`engine.third-person-camera` schema v1 保存 Target、TargetOffset、Distance、Yaw、Pitch、LookSensitivity。LateUpdate 与帧准备阶段在目标世界位置计算相机；运行帧公开目标和诊断。相机没有新增遮挡避让或物理碰撞能力。
 
-```csharp
-var Controller = Entity.GetComponent<PlayerControllerComponent>()!;
-Controller.SetMoveInput(new Vector2(1, 0));
-```
+内置 `engine://prefabs/capsule-character` 的根在胶囊中心，局部 Mesh 子实体 Y=-1；根上的 Animator.Target 引用该 Mesh。相机子实体的 ThirdPersonCamera.Target 指向根，PlayerController.ViewCamera 引用相机组件，FacingMesh 引用模型组件，实例化自动重映射内部实体与组件 ID。Main Scene 使用同样配置；Runtime 自动选用 LocalPlayer 的 ViewCamera，Stop 恢复原 Authoring 相机。
 
-输入绑定应由模块或宿主持有，并在同一引擎线程调用 `SetMoveInput`；控制器组件不直接依赖 `InputRuntimeService`。AI 控制器可以由 AI 行为每帧提交相同的移动意图，后续也可以在同一目标侧增加攻击、交互等独立 Processable 能力，而无需把这些逻辑塞进 Controller 基类。
+点击 Play 自动聚焦视口、隐藏并限制光标；Shift+F1 通过 Editor Context 的 `player.release-pointer` 释放，点击运行视口重新捕获。暂停、停止、窗口失焦及意外丢失捕获也释放。捕获状态经 `editor.describe.playInputCapture` 与 `input.describe.capture` 可读。物理鼠标使用 Raw Input 相对增量；MCP 的 ui.key/ui.pointer 仍经过真实 RmlUi 路径。隔离 Editor 默认隐藏，真实焦点验收需加 `--mcp-visible`。
 
-引擎默认示例角色资源为 `engine://prefabs/capsule-character`，源文件是引擎目录下的 `Content/Prefabs/CapsuleCharacter.sprefab`。它的根实体包含 UEFN mannequin 骨骼网格、locomotion Animator、胶囊碰撞体、可控制能力、移动和玩家控制器，并把 `ControlledEntity` 指向自身；Animator 通过 `MovementSource` 读取最终移动速度，场景实例化时由 `SceneData.Instantiate` 重映射内部组件引用。引擎的 `Content/Worlds/Main.sworld` 已放置同样的实例。
+动画资产 Root Motion 开启时由 Animator 提取根增量到角色实体，并从模型姿态剔除根平移和旋转。Player 的根位移通过子 Mesh 朝向转换到实体空间，保留源水平距离和竖直轨迹，根实体的朝向仍由镜头控制；无水平移动意图时抑制水平根位移。普通 Animator 使用源轨迹。同一实体的普通输入位移在该帧不重复应用。关闭时仅输出原地姿态，由 Movement 移动。Movement 分别公开意图速度与实际速度，状态机使用意图速度以避免根运动反馈使状态卡死。胶囊 Trace 使用移动后的实体变换；当前 collider 提供查询，不增加阻挡解算。
 
-`D:\SharpEngineProjects\SharpEngineSandbox` 的 `project://prefabs/capsule-character` 和项目主场景使用骨骼角色变体：移除静态胶囊网格，添加 `SkeletalMeshComponent`（`engine://meshes/uefn-mannequin`）及 Animator schema v3，绑定 `engine://animation-state-machines/uefn-mannequin-locomotion`。`Animator.Target` 和 `MovementSource` 显式引用组件 ID，Prefab 实例化同时重映射这些引用和控制器的实体引用。角色原点在脚底，胶囊的 `Center=[0,1,0]`、`Radius=0.5`、`Height=2`。`CapsuleColliderComponent` 不生成渲染几何，参与 `RuntimeWorld.Collision.Raycast`；状态机按最终移动速度切换 Idle、Walk、Run，Jump 状态保留独立参数入口。
-
-在编辑器 Play 时，宿主只把 `DemoMove` Axis2D 动作转发给场景中的玩家控制器，并在停止 Play 时释放绑定。按 WASD 前先点击 Viewport 获取焦点，角色和它的胶囊 Trace 体应在 XZ 平面移动。Sandbox 的 Animator 复用 `SkeletalAnimationPlayable` 采样并输出姿态，骨骼网格在帧末 `PrepareRender` 阶段计算骨骼矩阵和蒙皮顶点。运行时的 Transform、速度和骨骼帧属于 Runtime 状态，Stop 后源 World 文件和 Authoring 数据保持不变。
-
-Sandbox 验证入口：`dotnet run --project Tools/PrefabMovementValidation -- D:\SharpEngine D:\SharpEngineProjects\SharpEngineSandbox`。它覆盖 Prefab 引用重映射、输入桥接移动、动画采样、移动后的 Trace、禁用碰撞不影响渲染和源文件隔离。程序化输入验证不代表桌面物理键盘操作验收。
+验证：`dotnet run --project Tools/PrefabMovementValidation -- D:/SharpEngine` 覆盖 Prefab、引用、重建、输入、动画与 Trace；`Tools/AnimationValidation` 覆盖根运动循环、旋转、Seek、冲突和资产重新绑定；`dotnet run --project Tools/McpUiValidation -- Debug --player-only --render-backend=vulkan` 验证真实坐标 Play 和键鼠路径。测试创建自己的隔离窗口并在结束时关闭，不连接用户 Editor。

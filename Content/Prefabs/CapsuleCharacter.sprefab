@@ -103,11 +103,49 @@
         {
           "componentId": "capsule-character-player-controller",
           "typeId": "engine.player-controller",
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "enabled": true,
           "state": {
             "ControlledEntity": "capsule-character-root",
-            "Priority": 0
+            "Priority": 0,
+            "InputContext": "engine://input/contexts/player",
+            "MoveAction": "engine://input/actions/player.move",
+            "LookAction": "engine://input/actions/player.look",
+            "ViewCamera": "capsule-character-view-camera",
+            "FaceMoveDirection": false,
+            "TurnSpeed": 720,
+            "FacingMesh": "capsule-character-mesh"
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "capsule-character-model",
+      "name": "Mannequin",
+      "parentId": "capsule-character-root",
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "capsule-character-model-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              -1,
+              0
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
           }
         },
         {
@@ -127,6 +165,66 @@
               0.86,
               1
             ]
+          }
+        }
+      ]
+    },
+    {
+      "entityId": "capsule-character-view",
+      "name": "Player Camera",
+      "parentId": "capsule-character-root",
+      "activeSelf": true,
+      "components": [
+        {
+          "componentId": "capsule-character-view-transform",
+          "typeId": "engine.transform",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Position": [
+              0,
+              0,
+              3.5
+            ],
+            "Rotation": [
+              0,
+              0,
+              0
+            ],
+            "Scale": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "componentId": "capsule-character-view-camera",
+          "typeId": "engine.camera",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "FieldOfView": 65,
+            "NearPlane": 0.1,
+            "FarPlane": 100
+          }
+        },
+        {
+          "componentId": "capsule-character-third-person-camera",
+          "typeId": "engine.third-person-camera",
+          "schemaVersion": 1,
+          "enabled": true,
+          "state": {
+            "Target": "capsule-character-root",
+            "TargetOffset": [
+              0,
+              0.4,
+              0
+            ],
+            "Distance": 3.5,
+            "Yaw": 0,
+            "Pitch": -15,
+            "LookSensitivity": 0.15
           }
         }
       ]

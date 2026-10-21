@@ -70,8 +70,8 @@ Prefab 内部引用重映射和删除时置空。Animator 每实体最多一个�
 运行时更新链路为：
 
 1. 所有组件完成 `Update` 后进入通用 `OnEvaluate(DeltaSeconds)` 阶段。
-   Animator 自己管理 `SkeletalAnimationPlayable`，复用 Play/Pause/Seek/Advance/Evaluate，
-   将采样得到的局部姿态写给 `Target`。世界负责阶段调度，动画行为封装在 Animator 内。
+   全部 Evaluate 完成后，世界统一调用 Animator 管理的 `SkeletalAnimationPlayable`，复用 Play/Pause/Seek/Advance/Evaluate，
+   将采样得到的局部姿态写给 `Target`，提取根运动并提交实体/Movement 位移，然后才执行 LateUpdate 相机。
 2. 全部 `LateUpdate` 完成后，在发布边界执行零增量求值，协调当帧定位、切换目标等修改。
    已采样且未变化的时间复用姿态。新加入的 Animator 在本帧准备初始姿态，从下个 Tick 开始推进。
 3. 通用 `OnPrepareRender()` 阶段由骨骼网格组件更新自己持有的 `SkeletonInstance`：
@@ -100,10 +100,9 @@ Authoring 预览通过显式 `SceneRenderPreparation.Prepare(World, Assets)` 在
 `.sanimationstatemachine` 文本格式，保存参数默认值、状态顺序、Clip 引用和过渡条件；
 当前内置 locomotion 图包含 `idle`、`walk`、`run`、`jump` 四个状态。`AnimatorComponent`
 可以通过 `Controller` 绑定状态机，通过 `MovementSource` 和
-`MovementSpeedParameter` 把 Movement 的最终速度写入数值参数。状态切换在全部 Movement
-求值完成后的 LateUpdate 阶段执行，组件 ID 顺序不会改变决策结果。状态图会在加载时解析
-全部 Clip 依赖，任一依赖无效则整张图报告绑定失败；切换采用直接采样，当前不做姿态混合、
-重定向或根运动。状态机控制器的运行时状态（当前状态、过渡 ID、参数和播放时间）进入
+`MovementSpeedParameter` 把 Movement 的意图速度写入数值参数，避免根运动的实际速度反馈。状态切换在全部 Movement
+求值完成后、LateUpdate 之前执行，组件 ID 顺序不会改变决策结果。状态图会在加载时解析
+全部 Clip 依赖，任一依赖无效则整张图报告绑定失败；切换采用直接采样，当前不做姿态混合；根运动使用各 Clip 的资产设置。状态机控制器的运行时状态（当前状态、过渡 ID、参数和播放时间）进入
 Animator 帧观察，图资产和组件状态均可从最新提交快照重建。
 
 `engine://animation-state-machines/uefn-mannequin-locomotion` 是引擎提供的只读
@@ -115,10 +114,30 @@ builtin/preset 资产，依赖 UEFN mannequin 骨骼和四个 Clip。Content Man
 验证入口：
 
 ```powershell
-dotnet run --project Tools/AnimationValidation/SharpEngine.AnimationValidation.csproj -p:SharpEngineTarget=AnimationValidation -- D:\SharpEngine
+dotnet run --project Tools/AnimationValidation/SharpEngine.AnimationValidation.csproj -- D:\SharpEngine
 ```
 
 覆盖组件序列化、v1/v2 到 v3 迁移、事务与重建、Playable 语义、显式目标生命周期、
 Prefab 重映射、状态机依赖与条件、Movement 驱动的 Idle/Walk 切换、帧末姿态与几何、
 冻结快照、状态机引擎预设依赖和统一编辑器打开路由，以及绘制/拾取/观察不采样。
 帧几何验证不代表原生窗口或打包运行验收。
+
+## 动画资产 Root Motion
+
+SkeletalAnimation schema v2 显式保存 `rootMotion: { enabled, boneId }`；v1 读取时迁移为关闭，并在唯一根骨存在时记录其 ID。`boneId` 必须引用无父骨，启用时不可为空；未知字段、未来版本和无效根骨拒绝加载。`WithRootMotion`、`WithNotifies` 和重定向保留源轨道及根设置，Blender 重导入脚本保留已有设置。
+
+项目动画的 Details 提供 Root Motion 按钮，工具栏和语义命令 `root-motion` 使用同一修改入口。根设置与 Notify 共用 JsonAssetAuthoringDocument 的 Undo/Redo、documentRevision、dirty 和显式 Save；外部源 hash 冲突拒绝覆盖。保存原子替换后使动画缓存失效。Engine 来源资产仍只读，需使用项目动画变体进行编辑。
+
+`Sample` / `SampleLooped` 始终返回源姿态；`SamplePreview` 与 Playable 输出遵守开关：关闭时根平移/旋转恢复 bind，开启时资产预览显示源根轨迹。Runtime Animator 开启时计算连续根增量并驱动 MovementSource 所在实体（未指定时是 Animator 实体），模型必须属于目标子树；在模型输出中剔除根运动以避免重复位移。模型相对变换及父实体变换参与换算。Player 的 FacingMesh 转向 WASD 方向，根位移沿模型当前朝向应用，保留源距离与竖直轨迹，同时保留由镜头控制的根实体朝向；没有水平意图时不再前进。普通 Animator 不执行这项 Player 定向策略。跳跃的竖直根轨迹同样驱动实体。
+
+循环支持一次跨越多个周期；非循环在终点停止，暂停与 Seek 不移动实体。同一实体有多个驱动源时报告 `ROOT_MOTION_CONFLICT`，不按执行顺序选择。Animator 组件 schema 仍为 v3，帧 schema v3 新增 `rootMotion`（enabled、boneId、targetEntityId、applied、redirectedByPlayer、code、worldTranslation）。状态机速度参数使用 Movement 意图速度，实际 LinearVelocity 从已提交位移计算。
+
+`Tools/AnimationValidation/RootMotionValidation.cs` 验证源轨道保留、v1/v2、根骨拒绝、平移与旋转多周期一致性、父子变换、暂停/Seek、缓存重载和多源冲突。`Tools/McpUiValidation --root-motion-only` 在独立项目副本中验证坐标开关、共享 Undo/Redo、显式 Save 和 Runtime 开关结果。
+
+## 资产预览布局与时间轴事件
+
+Mesh、Skeleton、动画编辑器各自持有临时 AssetPreviewWorld，包含相机、Sky Light 和方向光；WorldViewportLayout 复用布局，渲染调用者传入的 World。动画姿态通过 SkeletonInstance 准备到临时 World 的派生渲染状态，相机只在打开、切换预览网格或 Focus 时取景。右键环绕、中键平移、滚轮缩放。主 World、源资产和 Cook 结果不受预览操作影响。
+
+TimelineView 拥有当前时间和播放推进；Play、Pause、Stop、Seek、Update 统一触发时间/播放事件。TimeChanged 包含前后时间与 Playback/Seek/Stop 来源，外部编辑器订阅后更新预览。播放控件属于 Timeline 面板，标尺支持连续拖拽和箭头拖拽，不吸附到刻度或帧。拖拽立即暂停，释放后保持暂停。播放至末尾停止，再次播放从头开始。
+
+动画编辑器完全忽略 Notify 执行，播放和定位都只采样姿态；Notify 的编辑、Undo/Redo 和保存仍保留。技能等插件在自己的编辑器里订阅时间事件并实现特殊预览，不向通用时间轴注入业务执行。播放数据只属于会话，不进入 Timeline 或动画资产。

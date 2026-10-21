@@ -19,7 +19,7 @@ Check(engineRuntime.Actions.Where(value => value.Id.Contains("/editor.")).Select
     "engine://input/actions/editor.stop",
     "engine://input/actions/editor.undo",
 }), "Engine InputActions must load in deterministic ID order");
-Check(engineRuntime.MappingContexts.Single(value => value.Id == "engine://input/contexts/editor").Bindings.Count == 5,
+Check(engineRuntime.MappingContexts.Single(value => value.Id == "engine://input/contexts/editor").Bindings.Count == 6,
     "Engine InputMappingContext must load its validated bindings");
 var undoEvents = new List<InputActionEvent>();
 var redoEvents = new List<InputActionEvent>();

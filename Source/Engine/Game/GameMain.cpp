@@ -16,6 +16,7 @@
 #include "RenderCore/Public/RenderOptions.h"
 #include "RenderCore/Private/RenderBackend.h"
 #include "UI/GameUiShell.h"
+#include "Platform/Windows/Window/GameplayInputCapture.h"
 
 namespace
 {
@@ -26,6 +27,14 @@ namespace
     uint32_t RenderHeight = 720;
     POINT LastPointer{};
     bool PointerKnown{};
+    SharpEngine::Windows::GameplayInputCapture GameplayCapture;
+    bool CaptureRequested = false;
+    uint8_t __cdecl SetGameplayCapture(uint8_t Enabled)
+    {
+        CaptureRequested = Enabled != 0;
+        return Window ? 1 : 0;
+    }
+    uint8_t __cdecl GetGameplayCapture() { return GameplayCapture.IsActive() ? 1 : 0; }
     std::vector<UiSceneVertex> Triangles, Lines;
     GpuSceneFrameStorage GpuScene;
     uint8_t __cdecl Viewport(float* x, float* y, float* w, float* h)
@@ -140,6 +149,25 @@ namespace
             width = static_cast<uint32_t>(bounds.right);
             height = static_cast<uint32_t>(bounds.bottom);
         }
+        if (Window)
+        {
+            RECT Bounds{};
+            GetClientRect(Window, &Bounds);
+            MapWindowPoints(Window, nullptr, reinterpret_cast<POINT*>(&Bounds), 2);
+            if (CaptureRequested && !GameplayCapture.IsActive())
+            {
+                CaptureRequested = GameplayCapture.Acquire(Window, Bounds);
+            }
+            else if (!CaptureRequested && GameplayCapture.IsActive())
+            {
+                GameplayCapture.Release();
+                if (Managed)
+                {
+                    Managed->InputEvent("game", 8, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                }
+            }
+            GameplayCapture.UpdateBounds(Bounds);
+        }
         if (Ui)
         {
             Ui->Update(width, height);
@@ -172,7 +200,7 @@ namespace
     }
     LRESULT CALLBACK Procedure(HWND window, UINT message, WPARAM wp, LPARAM lp)
     {
-        const bool uiHandled = Ui && Ui->HandleMessage(message, wp, lp);
+        const bool uiHandled = Ui && Ui->HandleMessage(message, wp, lp, GameplayCapture.IsActive());
         if (message == WM_CLOSE)
         {
             PostQuitMessage(0);
@@ -184,7 +212,7 @@ namespace
         }
         if (Managed)
         {
-            uint32_t modifiers = (GetKeyState(VK_SHIFT) < 0 ? 1u : 0u) | (GetKeyState(VK_CONTROL) < 0 ? 2u : 0u) |
+            uint32_t modifiers = (GetKeyState(VK_SHIFT) < 0 ? 2u : 0u) | (GetKeyState(VK_CONTROL) < 0 ? 1u : 0u) |
                                  (GetKeyState(VK_MENU) < 0 ? 4u : 0u);
             if (Ui)
             {
@@ -213,7 +241,10 @@ namespace
             {
                 kind = 4;
                 code = message == WM_LBUTTONUP ? 0 : message == WM_RBUTTONUP ? 1 : 2;
-                ReleaseCapture();
+                if (!GameplayCapture.IsActive())
+                {
+                    ReleaseCapture();
+                }
             }
             if (message == WM_XBUTTONDOWN || message == WM_XBUTTONUP)
             {
@@ -225,10 +256,20 @@ namespace
                 }
                 else
                 {
-                    ReleaseCapture();
+                    if (!GameplayCapture.IsActive())
+                    {
+                        ReleaseCapture();
+                    }
                 }
             }
-            if (message == WM_MOUSEMOVE)
+            if (message == WM_INPUT)
+            {
+                if (GameplayCapture.ReadMouseDelta(lp, dx, dy))
+                {
+                    kind = 2;
+                }
+            }
+            if (message == WM_MOUSEMOVE && !GameplayCapture.IsActive())
             {
                 kind = 2;
                 if (PointerKnown)
@@ -263,16 +304,24 @@ namespace
             if (message == WM_KILLFOCUS)
             {
                 kind = 6;
+                CaptureRequested = false;
+                GameplayCapture.Release();
                 PointerKnown = false;
             }
             if (message == WM_CAPTURECHANGED)
             {
                 kind = 7;
+                if (GameplayCapture.IsActive() && reinterpret_cast<HWND>(lp) != window)
+                {
+                    CaptureRequested = false;
+                    GameplayCapture.Release();
+                    kind = 8;
+                }
             }
             if (kind != 99)
             {
                 Managed->InputEvent("game", kind, code, x, y, dx, dy, 0, modifiers, uiHandled ? 1 : 0,
-                                    Ui && Ui->IsFocused() ? 1 : 0);
+                                    GameplayCapture.IsActive() || (Ui && Ui->IsFocused()) ? 1 : 0);
             }
         }
         if (uiHandled)
@@ -458,6 +507,8 @@ int wmain(int argc, wchar_t** argv)
     api.EnsureGpuMesh = EnsureGpuMesh;
     api.SubmitGpuScene = SubmitGpuScene;
     api.GetRenderStats = GetRenderStats;
+    api.SetGameplayInputCapture = SetGameplayCapture;
+    api.GetGameplayInputCapture = GetGameplayCapture;
     api.GetUiSnapshot = Ui ? GetUiSnapshot : nullptr;
     api.UiPointer = Ui ? UiPointer : nullptr;
     api.UiKey = Ui ? UiKey : nullptr;
@@ -484,6 +535,7 @@ int wmain(int argc, wchar_t** argv)
     if (Window && !hidden)
     {
         ShowWindow(Window, SW_SHOW);
+        CaptureRequested = true;
     }
     auto last = std::chrono::steady_clock::now();
     uint32_t frames = 0;
@@ -540,6 +592,8 @@ int wmain(int argc, wchar_t** argv)
                                 std::to_string(stats.FramesSubmitted) + " triangles=" + std::to_string(stats.TriangleVertices) +
                                 " lines=" + std::to_string(stats.LineVertices) +
                                 " framebuffer=" + std::to_string(stats.HasFramebuffer));
+    CaptureRequested = false;
+    GameplayCapture.Release();
     Managed = nullptr;
     managed.Shutdown();
     Ui = nullptr;

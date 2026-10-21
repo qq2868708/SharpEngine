@@ -28,6 +28,7 @@ internal static class TimelinePreviewValidation
         Require(RootHost["rootId"]!.GetValue<string>() == RootId &&
             RootHost["kind"]!.GetValue<string>() == "top-level-editor",
             "Timeline must open as a top-level editor root with its own native host");
+        TimelineViewportUiValidation.Run(RootId, Require, Tool, Call);
 
         _ = Tool(501, "editor.action", new JsonObject
         {

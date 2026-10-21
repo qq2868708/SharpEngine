@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "skeletal-animation",
+  "rootMotion": {"enabled": false, "boneId": "root"},
   "assetId": "engine://animations/uefn-mannequin-walk",
   "name": "UEFN Mannequin Walk",
   "duration": 1.0666666666666667,

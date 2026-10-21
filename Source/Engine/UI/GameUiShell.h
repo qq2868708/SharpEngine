@@ -20,7 +20,7 @@ public:
     void Shutdown();
     void Update(uint32_t width, uint32_t height);
     void Render();
-    bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam);
+    bool HandleMessage(UINT message, WPARAM wParam, LPARAM lParam, bool GameplayCaptured = false);
     bool IsFocused() const;
     uint32_t InputModifiers(uint32_t nativeModifiers) const;
     void SetPresentHandler(std::function<bool()> handler);

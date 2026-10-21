@@ -207,6 +207,14 @@ namespace
     {
         return GUi && stats && GUi->GetRenderStats(*stats) ? 1 : 0;
     }
+    uint8_t __cdecl SetGameplayInputCapture(uint8_t Enabled)
+    {
+        return GUi && GUi->SetGameplayInputCapture(Enabled != 0) ? 1 : 0;
+    }
+    uint8_t __cdecl GetGameplayInputCapture()
+    {
+        return GUi && GUi->IsGameplayInputCaptured() ? 1 : 0;
+    }
     void __cdecl ViewportInput(void* windowHandle, int32_t x, int32_t y,
                                uint32_t inputEvent, uint32_t buttons,
                                int32_t wheelDelta)
@@ -286,6 +294,7 @@ int wmain(int argc,wchar_t** argv)
     std::filesystem::path screenshot;
     bool mcpStdio=false;
     bool mcpIsolated=false;
+    bool McpVisible = false;
     bool NoSplash = false;
     for (int i=1;i<argc;++i)
     {
@@ -300,6 +309,7 @@ int wmain(int argc,wchar_t** argv)
         else if (argument==L"--screenshot" && i+1<argc) screenshot=argv[++i];
         else if (argument==L"--mcp-stdio") mcpStdio=true;
         else if (argument==L"--mcp-isolated") mcpIsolated=true;
+        else if (argument == L"--mcp-visible") McpVisible = true;
         else if (argument == L"--no-splash")
         {
             NoSplash = true;
@@ -396,6 +406,8 @@ int wmain(int argc,wchar_t** argv)
     api.EnsureGpuMesh = EnsureGpuMesh;
     api.SubmitGpuScene = SubmitGpuScene;
     api.GetRenderStats = GetRenderStats;
+    api.SetGameplayInputCapture = SetGameplayInputCapture;
+    api.GetGameplayInputCapture = GetGameplayInputCapture;
     Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
     const bool loaded=managed.Initialize(
         (executableDirectory/L"SharpEngine.Host.runtimeconfig.json").wstring(),
@@ -456,7 +468,7 @@ int wmain(int argc,wchar_t** argv)
         if (frames == 0)
         {
             Splash.Report(100, "Editor", "Editor ready");
-            if (!mcpIsolated)
+            if (!mcpIsolated || McpVisible)
             {
                 ui.ShowWindows();
             }

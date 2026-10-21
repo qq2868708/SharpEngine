@@ -110,7 +110,7 @@ with (Output / 'blender-reference.bin').open('wb') as Reference:
                 for Key in Track['keyframes'] for Field in ['position', 'rotation', 'scale'])
             if Constant:
                 Track['keyframes'] = [First]
-        Animation = {'schemaVersion': 1, 'kind': 'skeletal-animation',
+        Animation = {'schemaVersion': 2, 'kind': 'skeletal-animation',
             'assetId': 'engine://animations/uefn-mannequin-' + Clip['name'].lower(),
             'name': 'UEFN Mannequin ' + Clip['name'], 'duration': Duration, 'sampleRate': SampleRate,
             'skeletonId': Skeleton['assetId'], 'bones': BoneRecords, 'tracks': Tracks, 'notifies': []}
@@ -120,6 +120,8 @@ with (Output / 'blender-reference.bin').open('wb') as Reference:
         Notifies = Previous.get('notifies', [])
         if any(Notify['time'] + Notify['duration'] > Duration + 1e-9 for Notify in Notifies):
             raise ValueError('An existing Notify exceeds the reimported duration: ' + Clip['name'])
+        Animation['rootMotion'] = Previous.get('rootMotion', {'enabled': False,
+            'boneId': next(Bone['boneId'] for Bone in BoneRecords if Bone['parentBoneId'] is None)})
         Animation['notifies'] = Notifies
         Write('Content/Assets/Animations/UEFNMannequin' + Clip['name'] + '.sharpskeletalanimation', Animation)
         Name = Clip['name'].encode('utf-8')

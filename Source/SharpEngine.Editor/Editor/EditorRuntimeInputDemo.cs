@@ -72,7 +72,7 @@ public sealed partial class EditorRuntime
                 }
                 return true;
             }));
-        InvokeUiAction("editor.play");
+        InvokeUiAction("editor.host-action:input-demo:editor.play");
         _inputDemoDirty = true;
         UpdateInputDemo();
     }

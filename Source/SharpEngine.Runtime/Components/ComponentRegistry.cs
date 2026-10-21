@@ -193,6 +193,18 @@ public sealed class ComponentRegistry
 
 public static class ComponentValue
 {
+    public static string AssetTypeName(Type ReferenceType)
+    {
+        if (ReferenceType == typeof(SharpEngine.Input.InputActionDefinition))
+        {
+            return "InputAction";
+        }
+        if (ReferenceType == typeof(SharpEngine.Input.InputMappingContextDefinition))
+        {
+            return "InputMappingContext";
+        }
+        return ReferenceType.Name.Replace("Asset", "");
+    }
     public static bool IsReference(Type type) => type == typeof(SharpEntity) || typeof(SharpComponent).IsAssignableFrom(type);
     private static bool Asset(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(AssetRef<>);
     private static Type? Element(Type type) => type.IsArray ? type.GetElementType() :
@@ -332,7 +344,10 @@ public static class ComponentValue
         if (IsReference(type) || Asset(type))
         {
             var reference = new JsonObject { ["type"] = new JsonArray("string", "null"), ["x-sharpengine-reference"] = Asset(type) ? "asset" : type == typeof(SharpEntity) ? "entity" : "component" };
-            if (Asset(type)) reference["x-sharpengine-asset-type"] = type.GetGenericArguments()[0].Name.Replace("Asset", "");
+            if (Asset(type))
+            {
+                reference["x-sharpengine-asset-type"] = AssetTypeName(type.GetGenericArguments()[0]);
+            }
             if (typeof(SharpComponent).IsAssignableFrom(type)) reference["x-sharpengine-component-types"] = new JsonArray(registry.Types.Where(d => type.IsAssignableFrom(d.RuntimeType)).OrderBy(d => d.TypeId).Select(d => (JsonNode?)JsonValue.Create(d.TypeId)).ToArray());
             return reference;
         }

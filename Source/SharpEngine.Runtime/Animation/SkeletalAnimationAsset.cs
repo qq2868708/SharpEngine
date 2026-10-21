@@ -30,6 +30,9 @@ public sealed record BoneTrack(
 /// <summary>Authoritative editor event range. This contract does not execute gameplay callbacks.</summary>
 public sealed record AnimationNotify(string NotifyId, string Name, double Time, double Duration);
 
+/// <summary>Asset-owned root motion policy. Source bone tracks are always retained.</summary>
+public sealed record AnimationRootMotionSettings(bool Enabled, string? BoneId);
+
 /// <summary>A derived pose sampled from a skeletal animation asset.</summary>
 public sealed class SkeletalPose
 {
@@ -74,7 +77,7 @@ public sealed class SkeletalPose
 /// </summary>
 public sealed class SkeletalAnimationAsset
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public SkeletalAnimationAsset(string assetId, string name, double duration,
         float sampleRate, IReadOnlyList<SkeletonBone> bones,
@@ -87,6 +90,16 @@ public sealed class SkeletalAnimationAsset
         float SampleRate, IReadOnlyList<SkeletonBone> Bones,
         IReadOnlyList<BoneTrack> Tracks, string? SkeletonId,
         string? SourcePath, string? SourceSha256, IReadOnlyList<AnimationNotify>? Notifies = null)
+        : this(AssetId, Name, Duration, SampleRate, Bones, Tracks, SkeletonId,
+            SourcePath, SourceSha256, Notifies, DefaultRootMotion(Bones))
+    {
+    }
+
+    public SkeletalAnimationAsset(string AssetId, string Name, double Duration,
+        float SampleRate, IReadOnlyList<SkeletonBone> Bones,
+        IReadOnlyList<BoneTrack> Tracks, string? SkeletonId,
+        string? SourcePath, string? SourceSha256, IReadOnlyList<AnimationNotify>? Notifies,
+        AnimationRootMotionSettings RootMotion)
     {
         this.AssetId = RequireId(AssetId, nameof(AssetId));
         this.Name = string.IsNullOrWhiteSpace(Name) ? throw new ArgumentException("Animation name is required", nameof(Name)) : Name.Trim();
@@ -106,6 +119,7 @@ public sealed class SkeletalAnimationAsset
         this.SourcePath = string.IsNullOrWhiteSpace(SourcePath) ? null : SourcePath.Trim();
         this.SourceSha256 = string.IsNullOrWhiteSpace(SourceSha256) ? null : SourceSha256.Trim();
         this.Notifies = Array.AsReadOnly((Notifies ?? Array.Empty<AnimationNotify>()).ToArray());
+        this.RootMotion = RootMotion ?? throw new ArgumentNullException(nameof(RootMotion));
         var NotifyIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var Notify in this.Notifies)
         {
@@ -132,10 +146,28 @@ public sealed class SkeletalAnimationAsset
         get;
     }
 
+    public AnimationRootMotionSettings RootMotion
+    {
+        get;
+    }
+
     public SkeletalAnimationAsset WithNotifies(IReadOnlyList<AnimationNotify> Notifies)
     {
         return new SkeletalAnimationAsset(AssetId, Name, Duration, SampleRate, Bones,
-            Tracks, SkeletonId, SourcePath, SourceSha256, Notifies);
+            Tracks, SkeletonId, SourcePath, SourceSha256, Notifies, RootMotion);
+    }
+
+    public SkeletalAnimationAsset WithRootMotion(AnimationRootMotionSettings Settings)
+    {
+        return new SkeletalAnimationAsset(AssetId, Name, Duration, SampleRate, Bones,
+            Tracks, SkeletonId, SourcePath, SourceSha256, Notifies, Settings);
+    }
+
+    private static AnimationRootMotionSettings DefaultRootMotion(IReadOnlyList<SkeletonBone> Bones)
+    {
+        ArgumentNullException.ThrowIfNull(Bones);
+        var Roots = Bones.Where(Bone => Bone.ParentBoneId is null).ToArray();
+        return new(false, Roots.Length == 1 ? Roots[0].BoneId : null);
     }
     /// <summary>Optional provenance path relative to the owning engine/project root.</summary>
     public string? SourcePath
@@ -174,6 +206,19 @@ public sealed class SkeletalAnimationAsset
         var wrapped = time % Duration;
         if (wrapped < 0) wrapped += Duration;
         return Sample(wrapped);
+    }
+
+    public SkeletalPose SamplePreview(double Time, bool Loop = false)
+    {
+        var Pose = Loop ? SampleLooped(Time) : Sample(Time);
+        return RootMotion.Enabled ? Pose : RootMotionSampler.RemoveRootMotion(this, Pose);
+    }
+
+    internal BoneTransform SampleBone(string BoneId, double Time)
+    {
+        var Bone = Bones.Single(Bone => Bone.BoneId == BoneId);
+        var Track = Tracks.SingleOrDefault(Track => Track.BoneId == BoneId);
+        return Track is null ? Bone.BindTransform : SampleTrack(Track, Math.Clamp(Time, 0, Duration));
     }
 
     public string Serialize(bool indented = true) => ToJson().ToJsonString(new JsonSerializerOptions
@@ -229,6 +274,11 @@ public sealed class SkeletalAnimationAsset
             ["duration"] = Duration,
             ["sampleRate"] = SampleRate,
             ["skeletonId"] = SkeletonId,
+            ["rootMotion"] = new JsonObject
+            {
+                ["enabled"] = RootMotion.Enabled,
+                ["boneId"] = RootMotion.BoneId,
+            },
             ["bones"] = bones,
             ["tracks"] = tracks,
             ["notifies"] = new JsonArray(Notifies.Select(Notify => (JsonNode)new JsonObject
@@ -257,22 +307,42 @@ public sealed class SkeletalAnimationAsset
             using var document = JsonDocument.Parse(json);
             EnsureNoDuplicateProperties(document.RootElement);
             var root = JsonNode.Parse(json) as JsonObject ?? throw new InvalidDataException("Animation root must be an object");
-            ExactWithOptional(root,
-                ["schemaVersion", "kind", "assetId", "name", "duration", "sampleRate", "skeletonId", "bones", "tracks"],
-                ["sourcePath", "sourceSha256", "notifies"]);
-            if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion ||
+            var VersionNode = root["schemaVersion"] ?? throw new InvalidDataException("Animation schemaVersion is required");
+            var Version = VersionNode.GetValue<int>();
+            var RequiredFields = new List<string>
+            {
+                "schemaVersion", "kind", "assetId", "name", "duration", "sampleRate", "skeletonId", "bones", "tracks",
+            };
+            if (Version == CurrentSchemaVersion)
+            {
+                RequiredFields.Add("rootMotion");
+            }
+            ExactWithOptional(root, RequiredFields, ["sourcePath", "sourceSha256", "notifies"]);
+            if ((Version != 1 && Version != CurrentSchemaVersion) ||
                 root["kind"]!.GetValue<string>() != "skeletal-animation")
+            {
                 throw new InvalidDataException("Unsupported skeletal animation schema");
+            }
 
             var bones = root["bones"]!.AsArray().Select(ParseBone).ToArray();
             var tracks = root["tracks"]!.AsArray().Select(ParseTrack).ToArray();
+            var RootMotion = DefaultRootMotion(bones);
+            if (Version == CurrentSchemaVersion)
+            {
+                var Settings = root["rootMotion"] as JsonObject ??
+                    throw new InvalidDataException("Animation rootMotion must be an object");
+                ExactWithOptional(Settings, ["enabled", "boneId"], []);
+                var Enabled = Settings["enabled"]?.GetValue<bool>() ??
+                    throw new InvalidDataException("Animation rootMotion.enabled must be a boolean");
+                RootMotion = new(Enabled, OptionalString(Settings, "boneId"));
+            }
             return new SkeletalAnimationAsset(root["assetId"]!.GetValue<string>(),
                 root["name"]!.GetValue<string>(), root["duration"]!.GetValue<double>(),
                 root["sampleRate"]!.GetValue<float>(), bones, tracks,
                 root["skeletonId"]?.GetValue<string>(), OptionalString(root, "sourcePath"),
                 OptionalString(root, "sourceSha256"), root.ContainsKey("notifies")
                     ? root["notifies"]!.AsArray().Select(Value => ParseNotify(Value!.AsObject())).ToArray()
-                    : Array.Empty<AnimationNotify>());
+                    : Array.Empty<AnimationNotify>(), RootMotion);
         }
         catch (InvalidDataException) { throw; }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or ArgumentException or OverflowException)
@@ -291,6 +361,15 @@ public sealed class SkeletalAnimationAsset
     private void Validate()
     {
         SkeletonAsset.ValidateBones(Bones);
+        if (RootMotion.Enabled && RootMotion.BoneId is null)
+        {
+            throw new InvalidDataException("Enabled root motion requires an explicit root bone");
+        }
+        if (RootMotion.BoneId is not null && !Bones.Any(Bone =>
+            Bone.BoneId == RootMotion.BoneId && Bone.ParentBoneId is null))
+        {
+            throw new InvalidDataException("Root motion bone must identify an existing skeleton root");
+        }
         var boneIds = new HashSet<string>(Bones.Select(bone => bone.BoneId), StringComparer.Ordinal);
 
         var trackIds = new HashSet<string>(StringComparer.Ordinal);
@@ -425,7 +504,7 @@ public sealed class SkeletalAnimationPlayable : PlayableBase
 
     public SkeletalPose SamplePose(double Time)
     {
-        return LoopMode == PlayableLoopMode.Loop ? Asset.SampleLooped(Time) : Asset.Sample(Time);
+        return Asset.SamplePreview(Time, LoopMode == PlayableLoopMode.Loop);
     }
 
     public override void Evaluate(in PlayableEvaluationContext Context, IPlayableOutputSink Output)

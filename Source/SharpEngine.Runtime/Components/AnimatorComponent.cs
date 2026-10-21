@@ -2,6 +2,7 @@ using SharpEngine.Animation;
 using SharpEngine.Assets;
 using SharpEngine.Playables;
 using System.Text.Json.Nodes;
+using System.Numerics;
 
 namespace SharpEngine.Components;
 
@@ -45,26 +46,56 @@ public sealed partial class AnimatorComponent : SharpComponent
     private Dictionary<string, double> EffectiveParameters = new(StringComparer.Ordinal);
     private string? TransitionId;
     private string? BoundStateId;
+    private Matrix4x4 PendingRootDelta = Matrix4x4.Identity;
+    private double PendingRootAdvance;
+    private Vector3 AppliedRootTranslation;
+    private bool RootApplied;
+    private bool RootRedirectedByPlayer;
+    private string RootCode = "ROOT_MOTION_DISABLED";
+    private string? RootMessage;
+    internal SharpEntity? RootMotionTarget
+    {
+        get;
+        private set;
+    }
+    internal Matrix4x4 RootMotionDelta
+    {
+        get
+        {
+            return PendingRootDelta;
+        }
+    }
+    internal SkeletalMeshComponent? RootMotionMesh
+    {
+        get
+        {
+            return BoundTarget;
+        }
+    }
 
     protected override void OnEvaluate(float DeltaSeconds)
     {
-        // Controllers advance only after the entire movement Evaluate phase has completed.
-        if (Controller.Id is null || DeltaSeconds == 0)
+        if (DeltaSeconds == 0)
         {
             Evaluate(DeltaSeconds);
         }
     }
 
-    protected override void OnLateUpdate(float DeltaSeconds)
-    {
-        if (Controller.Id is not null && DeltaSeconds > 0)
-        {
-            Evaluate(DeltaSeconds);
-        }
-    }
+    internal void PrepareAnimationFrame(float DeltaSeconds) { Evaluate(DeltaSeconds); }
 
     private void Evaluate(float DeltaSeconds)
     {
+        RootMotionTarget = null;
+        if (DeltaSeconds > 0)
+        {
+            PendingRootDelta = Matrix4x4.Identity;
+            PendingRootAdvance = 0;
+            AppliedRootTranslation = Vector3.Zero;
+            RootApplied = false;
+            RootRedirectedByPlayer = false;
+            RootCode = "ROOT_MOTION_DISABLED";
+            RootMessage = null;
+        }
         var Assets = World.Assets;
         if (BoundTarget != Target)
         {
@@ -109,6 +140,8 @@ public sealed partial class AnimatorComponent : SharpComponent
             var Generation = AnimatorContent.Generation(Assets);
             var ClipId = Clip.Id;
             var ClipLoop = Loop;
+            var RootFromTime = Time;
+            var RootAdvance = 0d;
             if (Controller.Id is not null)
             {
                 if (ControllerBinding is null || ControllerAssets != Assets || BoundController != Controller.Id ||
@@ -132,12 +165,14 @@ public sealed partial class AnimatorComponent : SharpComponent
                 if (MovementSource is not null && MovementSpeedParameter != "")
                 {
                     Values[MovementSpeedParameter] = MovementSource.IsAlive && MovementSource.Enabled && MovementSource.Entity.ActiveInHierarchy
-                        ? MovementSource.LinearVelocity.Length() : 0;
+                        ? MovementSource.AnimationIntentVelocity.Length() : 0;
                 }
                 var NextTime = StateChanged ? 0 : Time;
+                RootFromTime = NextTime;
                 if (DeltaSeconds > 0 && Playing)
                 {
-                    NextTime += (double)DeltaSeconds * Speed * State.Speed;
+                    RootAdvance = (double)DeltaSeconds * Speed * State.Speed;
+                    NextTime += RootAdvance;
                     if (!double.IsFinite(NextTime))
                     {
                         throw new InvalidDataException("Animation advancement must remain finite.");
@@ -149,6 +184,8 @@ public sealed partial class AnimatorComponent : SharpComponent
                     {
                         State = Graph.State(Transition.ToStateId);
                         NextTime = 0;
+                        RootFromTime = 0;
+                        RootAdvance = 0;
                     }
                     else
                     {
@@ -192,20 +229,65 @@ public sealed partial class AnimatorComponent : SharpComponent
             Playable.Seek(Time);
             if (DeltaSeconds > 0 && Controller.Id is null)
             {
+                RootFromTime = Playable.Time;
+                RootAdvance = Playing ? (double)DeltaSeconds * Speed : 0;
                 Playable.Advance((double)DeltaSeconds * Speed);
                 Time = Playable.Time;
                 Playing = Playable.State == PlayableState.Playing;
             }
             if (Pose is null || SampledTime != Playable.Time)
             {
+                if (DeltaSeconds == 0)
+                {
+                    PendingRootDelta = Matrix4x4.Identity;
+                    PendingRootAdvance = 0;
+                    AppliedRootTranslation = Vector3.Zero;
+                    RootApplied = false;
+                    RootCode = "ROOT_MOTION_DISABLED";
+                }
                 Output.Clear();
                 Playable.Evaluate(new(Playable.Time, DeltaSeconds, 0, DeltaSeconds == 0), Output);
                 SampledTime = Playable.Time;
                 SampleCount++;
             }
-            Target.SetPose(this, Pose);
+            if (Playable.Asset.RootMotion.Enabled)
+            {
+                var Candidate = MovementSource?.Entity ?? Entity;
+                var Ancestor = Target.Entity;
+                while (Ancestor is not null && Ancestor != Candidate)
+                {
+                    Ancestor = Ancestor.Parent;
+                }
+                if (Ancestor is null)
+                {
+                    throw new InvalidDataException("Root motion target must own the animated mesh hierarchy");
+                }
+                RootMotionTarget = Candidate;
+                if (DeltaSeconds > 0)
+                {
+                    PendingRootAdvance = RootAdvance;
+                    PendingRootDelta = RootMotionSampler.Delta(Playable.Asset, RootFromTime, RootAdvance, ClipLoop);
+                }
+                if (RootCode == "ROOT_MOTION_DISABLED")
+                {
+                    RootCode = "ROOT_MOTION_READY";
+                }
+                Target.SetPose(this, RootMotionSampler.RemoveRootMotion(Playable.Asset, Pose!));
+            }
+            else
+            {
+                RootCode = "ROOT_MOTION_DISABLED";
+                RootApplied = false;
+                AppliedRootTranslation = Vector3.Zero;
+                Target.SetPose(this, Pose);
+            }
             Status = Playable.State.ToString();
-            Code = "ANIMATOR_READY";
+            var RootFailed = RootCode is "ROOT_MOTION_CONFLICT" or "ROOT_MOTION_TRANSFORM_INVALID";
+            Code = RootFailed ? RootCode : "ANIMATOR_READY";
+            if (RootFailed)
+            {
+                Message = RootMessage;
+            }
         }
         catch (Exception Error) when (Error is IOException or InvalidDataException or KeyNotFoundException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
@@ -221,7 +303,28 @@ public sealed partial class AnimatorComponent : SharpComponent
             }
             Code = "ANIMATOR_BINDING_INVALID";
             Message = Error.Message;
+            RootMotionTarget = null;
+            RootCode = "ROOT_MOTION_BINDING_INVALID";
         }
+    }
+
+    internal void CompleteRootMotion(Vector3 Translation, bool RedirectedByPlayer = false)
+    {
+        AppliedRootTranslation = Translation;
+        RootApplied = PendingRootAdvance > 0;
+        RootRedirectedByPlayer = RedirectedByPlayer;
+        RootCode = RootApplied ? "ROOT_MOTION_APPLIED" : "ROOT_MOTION_READY";
+        RootMessage = null;
+    }
+
+    internal void RejectRootMotion(string DiagnosticCode, string DiagnosticMessage)
+    {
+        RootApplied = false;
+        AppliedRootTranslation = Vector3.Zero;
+        RootCode = DiagnosticCode;
+        Code = DiagnosticCode;
+        Message = DiagnosticMessage;
+        RootMessage = DiagnosticMessage;
     }
 
     private void ValidateMovementBinding(AnimationStateMachineAsset Graph)
@@ -245,6 +348,7 @@ public sealed partial class AnimatorComponent : SharpComponent
 
     protected override void OnDisable()
     {
+        RootMotionTarget = null;
         ReleaseTarget();
         Status = "Disabled";
         Code = "ANIMATOR_DISABLED";
@@ -262,7 +366,7 @@ public sealed partial class AnimatorComponent : SharpComponent
     {
         return new AnimatorFrameState(new JsonObject
         {
-            ["schemaVersion"] = 2,
+            ["schemaVersion"] = 3,
             ["entityId"] = Entity.EntityId,
             ["componentId"] = ComponentId,
             ["targetComponentId"] = Target?.ComponentId,
@@ -278,6 +382,16 @@ public sealed partial class AnimatorComponent : SharpComponent
             ["duration"] = Code == "ANIMATOR_READY" ? Playable?.Duration : null,
             ["sampleTime"] = Code == "ANIMATOR_READY" ? Playable?.Time : null,
             ["sampleCount"] = SampleCount,
+            ["rootMotion"] = new JsonObject
+            {
+                ["enabled"] = Playable?.Asset.RootMotion.Enabled ?? false,
+                ["boneId"] = Playable?.Asset.RootMotion.BoneId,
+                ["targetEntityId"] = RootMotionTarget?.EntityId,
+                ["applied"] = RootApplied,
+                ["redirectedByPlayer"] = RootRedirectedByPlayer,
+                ["code"] = RootCode,
+                ["worldTranslation"] = new JsonArray(AppliedRootTranslation.X, AppliedRootTranslation.Y, AppliedRootTranslation.Z),
+            },
         });
     }
 

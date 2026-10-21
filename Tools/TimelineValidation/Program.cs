@@ -60,6 +60,7 @@ graph.Play();
 Check(graph.Evaluate(0.25).Count == 1 && graph.FrameIndex == 1, "Playable graph must advance and evaluate nodes deterministically");
 
 var view = new TimelineView(timeline);
+TimelineInteractionValidation.Run(registry, timeline, Check);
 view.Seek(1.25);
 Check(view.SelectClip(clip.ClipId), "Timeline view must select a stable clip ID");
 var snapshot = view.BuildSnapshot(1000, 300);

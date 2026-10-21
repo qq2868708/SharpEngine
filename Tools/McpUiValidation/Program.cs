@@ -23,7 +23,15 @@ void Require(bool condition, string message)
 
 var sessionId = Guid.NewGuid().ToString("N");
 var settingsProject = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
+if (args.Contains("--root-motion-only", StringComparer.Ordinal))
+{
+    settingsProject = RootMotionUiValidation.CreateProject(root);
+}
 var editorArguments = new List<string> { "--mcp-isolated", "--mcp-session-id", sessionId };
+if (args.Contains("--player-only", StringComparer.Ordinal))
+{
+    editorArguments.Add("--mcp-visible");
+}
 if (!string.IsNullOrWhiteSpace(settingsProject)) editorArguments.AddRange(["--project", settingsProject]);
 var RenderBackend = args.FirstOrDefault(Argument => Argument.StartsWith("--render-backend=", StringComparison.Ordinal));
 if (RenderBackend is not null)
@@ -135,6 +143,18 @@ try
             "notifications/resources/list_changed",
         "Attachment must notify clients that the resource list changed");
 
+    if (args.Contains("--root-motion-only", StringComparer.Ordinal))
+    {
+        RootMotionUiValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} Root Motion asset UI assertions");
+        return;
+    }
+    if (args.Contains("--player-only", StringComparer.Ordinal))
+    {
+        PlayerUiValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} Player UI and gameplay input assertions");
+        return;
+    }
     if (args.Contains("--mcp-only", StringComparer.Ordinal))
     {
         McpUiValidation.Run(root, Require, Tool, Call);

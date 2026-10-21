@@ -311,6 +311,7 @@ using (var Runtime = new RuntimeWorld(Dynamic, Registry, Assets))
     Runtime.Tick(0.25f);
     Check(Near(DynamicAnimator.Time, 0.25), "new Animator advances next tick");
 }
+RootMotionValidation.Run(Root, Registry, Check);
 AnimationPipelineValidation.Run(Assets, Registry, Check);
 AnimationStateMachineValidation.Run(Root, Assets, Registry, Check);
 Console.WriteLine($"[AnimationValidation] PASS: {Count} assertions; Playable playback, component transactions and skinned frame geometry");

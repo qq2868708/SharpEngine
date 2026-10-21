@@ -1,6 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "skeletal-animation",
+  "rootMotion": {"enabled": false, "boneId": "root"},
   "assetId": "engine://animations/uefn-mannequin-run",
   "name": "UEFN Mannequin Run",
   "duration": 0.6666666666666666,

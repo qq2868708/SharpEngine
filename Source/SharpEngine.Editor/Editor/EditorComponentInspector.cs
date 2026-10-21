@@ -13,7 +13,6 @@ namespace SharpEngine.Editor;
 public sealed partial class EditorRuntime : IComponentRuntime
 {
     private RuntimeWorld? _runtimeWorld;
-    private PlayerControllerInputBridge? PlayerControllerInput;
     private WorldDocument? _playAuthoringWorld;
     private string? _playSelection;
     private string _componentMarkup = "";
@@ -63,15 +62,10 @@ public sealed partial class EditorRuntime : IComponentRuntime
         _rightPointerDragging = false;
         _playAuthoringWorld = _world;
         _playSelection = SelectedEntityId;
-        Instance = new SharpEngine.Subsystems.RuntimeInstance(_assets, SubsystemLifetime);
+        Instance = new SharpEngine.Subsystems.RuntimeInstance(_assets, SubsystemLifetime, _inputRuntime, "main");
         try
         {
             _runtimeWorld = Instance.CreateWorld(_world.Data, _world.Registry);
-            if (_inputRuntime is not null)
-            {
-                PlayerControllerInput = PlayerControllerInputBridge.TryCreate(_runtimeWorld,
-                    _inputRuntime);
-            }
         }
         catch
         {
@@ -85,8 +79,7 @@ public sealed partial class EditorRuntime : IComponentRuntime
     }
     private void EndComponentPlay()
     {
-        PlayerControllerInput?.Dispose();
-        PlayerControllerInput = null;
+        ReleasePlayInputCapture();
         _runtimeWorld?.Dispose(); _runtimeWorld = null;
         Instance?.Dispose();
         Instance = null;
@@ -510,7 +503,12 @@ public sealed partial class EditorRuntime : IComponentRuntime
                 options.Add(("", "None"));
                 if (type == typeof(SharpEntity)) options.AddRange(_world!.Entities.Select(e => (e.Id, e.Name)));
                 else if (typeof(SharpComponent).IsAssignableFrom(type)) options.AddRange(_world!.Data.Entities.SelectMany(e => e.Components.Where(c => Components!.Find(c.TypeId) is { } d && type.IsAssignableFrom(d.RuntimeType)).Select(c => (c.ComponentId, e.Name + " / " + Components!.Find(c.TypeId)!.DisplayName + " / " + c.ComponentId[..Math.Min(8, c.ComponentId.Length)]))));
-                else options.AddRange((_assets?.Assets ?? []).Where(a => a.Type.Equals(type.GetGenericArguments()[0].Name.Replace("Asset", ""), StringComparison.OrdinalIgnoreCase)).Select(a => (a.Id, a.Name)));
+                else
+                {
+                    options.AddRange((_assets?.Assets ?? []).Where(Asset => Asset.Type.Equals(
+                        ComponentValue.AssetTypeName(type.GetGenericArguments()[0]), StringComparison.OrdinalIgnoreCase))
+                        .Select(Asset => (Asset.Id, Asset.Name)));
+                }
             }
             html.Append("<select id=\"").Append(controlId).Append("\" data-change-action=\"").Append(actionPrefix).Append("\">");
             foreach (var option in options) html.Append("<option value=\"").Append(Escape(option.Id)).Append("\" ").Append((value?.GetValue<string>() ?? "") == option.Id ? "selected=\"selected\"" : "").Append('>').Append(Escape(option.Label)).Append("</option>");
