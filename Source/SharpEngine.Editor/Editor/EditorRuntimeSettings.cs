@@ -340,6 +340,12 @@ public sealed partial class EditorRuntime
         {
             RefreshSettingsWindow(scope);
         }
+        if (scope == SettingsScope.Engine)
+        {
+            // Engine shortcuts and navigation bind the live input context immediately.
+            ApplyEngineShortcuts();
+            RefreshViewportModeUi();
+        }
         MarkExtensionUiDirty();
         SetStatus($"{ScopeTitle(scope)} changed · {id}/{path}");
     }

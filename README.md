@@ -297,6 +297,11 @@ event is evaluated by active `InputMappingContext` assets in deterministic
 `Editor`, `RuntimeUi`, then `Gameplay` order. Project code does not subscribe to
 Win32 or maintain a separate UI input configuration.
 
+RmlUi consumption only suppresses the `RuntimeUi` and `Gameplay` routes. The
+`Editor` route is always evaluated first, so engine shortcuts keep working while
+a text field, a hierarchy row, or a splitter owns the keyboard; input the editor
+does not bind still reaches the UI and the game.
+
 `InputAction` and `InputMappingContext` are versioned JSON assets registered in
 the normal asset manifest. Runtime Modules bind semantic actions through the
 shared service:
@@ -313,10 +318,36 @@ _move = context.Input?.BindAction(InputRoute.Gameplay,
 
 Returning `true` consumes the action before lower routes. The default project
 template maps W/A/S/D to a continuous Axis2D move action and the left mouse
-button to a primary Button action. Engine Editor actions use the same router:
-F5 toggles Play/Pause and F8 stops. `sharpengine://input` and `input.describe`
-expose loaded actions, active contexts, live controls, diagnostics, and recent
-routed events. Native platform events remain an internal engine SPI.
+button to a primary Button action. Engine Editor actions use the same router and
+are configured in one place, `File > Engine Settings > Shortcuts`
+(`sharpengine.editor-shortcuts`):
+
+| Setting | Default | Action |
+| --- | --- | --- |
+| `playPause` | F5 | `editor.play-pause` |
+| `stop` | F8 | `editor.stop` |
+| `undo` | Ctrl+Z | `editor.undo` |
+| `redo` | Ctrl+Y | `editor.redo` |
+| `redoAlternate` | Ctrl+Shift+Z | `editor.redo` |
+| `releasePointer` | Escape | `player.release-pointer` |
+| `navigateForward/Back/Left/Right/Up/Down` | W/S/A/D/E/Q | Viewport navigation |
+| `navigate*Alternate` | Up/Down/Left/Right | Secondary navigation keys |
+| `navigateSpeedModifier` | Shift | Viewport navigation speed boost |
+
+Each entry is a primary key plus exact Ctrl/Shift/Alt flags. Every committed edit
+rebinds the live `engine://input/contexts/editor` bindings immediately; a
+duplicate gesture reports `SESHORTCUT_DUPLICATE` and keeps the previously applied
+binding, and `None` leaves the shortcut unbound. `editor.describe.shortcuts` and
+`sharpengine://input` expose the applied bindings. `sharpengine://input` and
+`input.describe` expose loaded actions, active contexts, live controls,
+diagnostics, and recent routed events. Native platform events remain an internal
+engine SPI.
+
+While gameplay owns the pointer, real Win32 pointer messages only drive the game:
+they no longer hover editor elements, retarget a dock drag, or resize a splitter.
+Acquiring gameplay capture also clears any hover and pointer capture left over in
+the editor UI, and releasing it restores editor activation so later shortcuts are
+not delivered to whatever window a global hotkey opened.
 
 Open **Window > Input Routing Demo** to try the first Win64 keyboard/mouse
 implementation. It starts Play and opens a focusable play area, a text field,

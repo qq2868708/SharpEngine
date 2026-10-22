@@ -78,6 +78,14 @@ Check(undoEvents.Count == UndoAfterCtrlRelease,
     "Shift+Z must not satisfy the editor Ctrl+Z binding");
 engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 'Z',
     0, 0, 0, 0, 2, false, false);
+var UiHandledPlayCount = PlayEvents.Count;
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyDown, 0x74,
+    0, 0, 0, 0, 0, true, false);
+Check(PlayEvents.Count > UiHandledPlayCount &&
+    PlayEvents[^1].Phase == InputActionPhase.Performed,
+    "Editor shortcuts must keep working while RmlUi owns the key");
+engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 0x74,
+    0, 0, 0, 0, 0, true, false);
 
 var actions = new[]
 {

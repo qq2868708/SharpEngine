@@ -290,6 +290,7 @@ try
         "editor.settings-change:project:validation.gameplay:profile/title:Configured");
     Require(DevelopmentSettings.Get<ValidationProjectSettings>().Profile.Title == "Configured",
         "Nested Project Settings edits must update static runtime reads atomically");
+    ShortcutValidation.Run(runtime, Require);
     if (args.Contains("--settings-only", StringComparer.Ordinal))
     {
         runtime.Shutdown();

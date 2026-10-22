@@ -20,7 +20,7 @@ Editor/Game 将 `IInputRuntime` 和当前 host ID 注入 `RuntimeInstance`。Pla
 
 内置 `engine://prefabs/capsule-character` 的根在胶囊中心，局部 Mesh 子实体 Y=-1；根上的 Animator.Target 引用该 Mesh。相机子实体的 ThirdPersonCamera.Target 指向根，PlayerController.ViewCamera 引用相机组件，FacingMesh 引用模型组件，实例化自动重映射内部实体与组件 ID。Main Scene 使用同样配置；Runtime 自动选用 LocalPlayer 的 ViewCamera，Stop 恢复原 Authoring 相机。
 
-点击 Play 自动聚焦视口、隐藏并限制光标；Shift+F1 通过 Editor Context 的 `player.release-pointer` 释放，点击运行视口重新捕获。暂停、停止、窗口失焦及意外丢失捕获也释放。捕获状态经 `editor.describe.playInputCapture` 与 `input.describe.capture` 可读。物理鼠标使用 Raw Input 相对增量；MCP 的 ui.key/ui.pointer 仍经过真实 RmlUi 路径。隔离 Editor 默认隐藏，真实焦点验收需加 `--mcp-visible`。
+点击 Play 自动聚焦视口、隐藏并限制光标；默认 Esc（`sharpengine.editor-shortcuts/releasePointer`，可改键）通过 Editor Context 的 `player.release-pointer` 释放，点击运行视口重新捕获。暂停、停止、窗口失焦及意外丢失捕获也释放。捕获状态经 `editor.describe.playInputCapture`、`editor.describe.shortcuts` 与 `input.describe.capture` 可读。游戏捕获期间真实 Win32 指针消息只驱动游戏，不再让编辑器界面 hover 或拖动分割条；捕获释放后编辑器会重新取得窗口激活。物理鼠标使用 Raw Input 相对增量；MCP 的 ui.key/ui.pointer 仍经过真实 RmlUi 路径。隔离 Editor 默认隐藏，真实焦点验收需加 `--mcp-visible`。
 
 动画资产 Root Motion 开启时由 Animator 提取根增量到角色实体，并从模型姿态剔除根平移和旋转。Player 的根位移通过子 Mesh 朝向转换到实体空间，保留源水平距离和竖直轨迹，根实体的朝向由 Player 所选转向策略控制；无水平移动意图时抑制水平根位移。普通 Animator 使用源轨迹。同一实体的普通输入位移在该帧不重复应用。关闭时仅输出原地姿态，由 Movement 移动。Movement 分别公开意图速度与实际速度，状态机使用意图速度以避免根运动反馈使状态卡死。胶囊 Trace 使用移动后的实体变换；当前 collider 提供查询，不增加阻挡解算。
 

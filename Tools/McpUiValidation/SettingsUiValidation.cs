@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 
 internal static class SettingsUiValidation
 {
@@ -154,9 +154,29 @@ internal static class SettingsUiValidation
         require(Read()["hosts"]!.AsArray().Count(node =>
                 node!["hostId"]!.GetValue<string>().StartsWith("settings.")) == 2,
             "Repeated File commands must reuse the two independent settings windows");
+        Shortcuts();
         Click("settings.engine", "window.close", action: true);
         Click("settings.project", "window.close", action: true);
         require(Read()["hosts"]!.AsArray().Count == 1,
             "Both settings windows must close independently of the main dock layout");
+
+        void Shortcuts()
+        {
+            Click("settings.engine", "editor.settings-page:engine:sharpengine.editor-shortcuts",
+                action: true);
+            var page = Result(tool(sequence++, "editor.describe", new()))["settings"]!["pages"]!
+                .AsArray().Select(node => node!.AsObject())
+                .Single(node => node["id"]!.GetValue<string>() == "sharpengine.editor-shortcuts");
+            require(page["scope"]!.GetValue<string>() == "engine" &&
+                page["fields"]!.AsArray().Count == 17,
+                "Engine Settings must publish every engine shortcut field");
+            var shortcut = Result(tool(sequence++, "editor.describe", new()));
+            require(shortcut["shortcuts"]!["bindings"]!.AsArray().Count == 6 &&
+                shortcut["shortcuts"]!["bindings"]![0]!["gesture"]!.GetValue<string>() == "F5" &&
+                shortcut["playInputCapture"]!["releaseShortcut"]!.GetValue<string>() == "Escape",
+                "The described shortcut map must match the live editor bindings");
+        }
     }
 }
+
+

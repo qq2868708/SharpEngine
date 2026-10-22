@@ -44,6 +44,8 @@ internal sealed class InputRuntimeService : IInputRuntime
     private readonly IReadOnlyList<InputMappingContextDefinition> _contexts;
     private readonly Dictionary<string, InputActionDefinition> _actionsById;
     private readonly Dictionary<string, InputMappingContextDefinition> _contextsById;
+    private readonly Dictionary<string, IReadOnlyList<InputBindingDefinition>> _contextBindings =
+        new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _activationCounts = new(StringComparer.Ordinal);
     private readonly Dictionary<InputRoute, bool> _routeEnabled = new()
     {
@@ -95,12 +97,76 @@ internal sealed class InputRuntimeService : IInputRuntime
                 binding with { Modifiers = Array.AsReadOnly(binding.Modifiers.ToArray()) }).ToArray()) }).ToArray());
         _actionsById = _actions.ToDictionary(value => value.Id, StringComparer.Ordinal);
         _contextsById = _contexts.ToDictionary(value => value.Id, StringComparer.Ordinal);
+        foreach (var context in _contexts)
+            _contextBindings[context.Id] = context.Bindings;
         foreach (var context in _contexts.Where(value => value.ActivateByDefault))
             _activationCounts[context.Id] = 1;
     }
 
     public IReadOnlyList<InputActionDefinition> Actions => _actions;
     public IReadOnlyList<InputMappingContextDefinition> MappingContexts => _contexts;
+
+    /// <summary>Replaces the bindings of one active mapping context, for example to apply
+    /// engine-owned shortcut settings. Validated atomically; invalid input changes nothing.</summary>
+    internal bool SetContextBindings(string ContextId, IReadOnlyList<InputBindingDefinition> Bindings,
+        out string Error)
+    {
+        CheckThread();
+        Error = string.Empty;
+        if (!_contextsById.ContainsKey(ContextId))
+        {
+            Error = $"Unknown InputMappingContext '{ContextId}'";
+            return false;
+        }
+        var Validated = new List<InputBindingDefinition>(Bindings.Count);
+        var Seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var Binding in Bindings)
+        {
+            if (!_actionsById.ContainsKey(Binding.ActionId))
+            {
+                Error = $"Unknown InputAction '{Binding.ActionId}'";
+                return false;
+            }
+            if (!float.IsFinite(Binding.ScaleX) || !float.IsFinite(Binding.ScaleY))
+            {
+                Error = $"Binding '{Binding.ActionId}' requires finite scales";
+                return false;
+            }
+            try
+            {
+                ValidateControl(Binding.Control, ContextId);
+                foreach (var Modifier in Binding.Modifiers)
+                {
+                    ValidateControl(Modifier, ContextId);
+                }
+            }
+            catch (InvalidDataException Exception)
+            {
+                Error = Exception.Message;
+                return false;
+            }
+            var Key = Binding.ActionId + "\n" + Binding.Control + "\n" +
+                string.Join(',', Binding.Modifiers.OrderBy(value => value, StringComparer.Ordinal)) +
+                "\n" + Binding.ExactModifiers;
+            if (!Seen.Add(Key))
+            {
+                Error = $"Duplicate binding '{Binding.Control}' for '{Binding.ActionId}'";
+                return false;
+            }
+            Validated.Add(Binding with
+            {
+                Modifiers = Array.AsReadOnly(Binding.Modifiers.ToArray()),
+            });
+        }
+        _contextBindings[ContextId] = Array.AsReadOnly(Validated.ToArray());
+        _stateRevision++;
+        EvaluateAll("Bindings/Changed", InputDeviceKind.Keyboard);
+        return true;
+    }
+
+    internal IReadOnlyList<InputBindingDefinition> BindingsFor(string ContextId) =>
+        _contextBindings.TryGetValue(ContextId, out var Bindings) ? Bindings :
+            Array.Empty<InputBindingDefinition>();
 
     internal static InputRuntimeService Load(AssetRegistry assets)
     {
@@ -294,7 +360,7 @@ internal sealed class InputRuntimeService : IInputRuntime
         _stateRevision++;
         foreach (var context in ActiveContexts().ToArray())
         {
-            foreach (var actionId in context.Bindings.Select(value => value.ActionId)
+            foreach (var actionId in BindingsFor(context.Id).Select(value => value.ActionId)
                          .Distinct(StringComparer.Ordinal).OrderBy(value => value,
                              StringComparer.Ordinal))
             {
@@ -332,7 +398,7 @@ internal sealed class InputRuntimeService : IInputRuntime
                 ["priority"] = context.Priority,
                 ["active"] = IsContextActive(context.Id),
                 ["routeEnabled"] = _routeEnabled[context.Route],
-                ["bindings"] = JsonSerializer.SerializeToNode(context.Bindings,
+                ["bindings"] = JsonSerializer.SerializeToNode(BindingsFor(context.Id),
                     SnapshotJsonOptions),
             }).ToArray()),
             ["controls"] = new JsonArray(_controls.Where(value => !value.Value.IsZero)
@@ -365,7 +431,7 @@ internal sealed class InputRuntimeService : IInputRuntime
                      .ThenByDescending(context => context.Priority)
                      .ThenBy(context => context.Id, StringComparer.Ordinal).ToArray())
         {
-            foreach (var actionId in context.Bindings.Select(value => value.ActionId)
+            foreach (var actionId in BindingsFor(context.Id).Select(value => value.ActionId)
                          .Distinct(StringComparer.Ordinal).OrderBy(value => value,
                              StringComparer.Ordinal))
             {
@@ -374,7 +440,7 @@ internal sealed class InputRuntimeService : IInputRuntime
                 _values.TryGetValue(key, out var before);
                 var after = ValueFor(context, action);
                 var actionHandled = false;
-                var mayStart = context.Bindings.Any(binding =>
+                var mayStart = BindingsFor(context.Id).Any(binding =>
                         string.Equals(binding.ActionId, actionId, StringComparison.Ordinal) &&
                         (string.Equals(binding.Control, sourceControl, StringComparison.Ordinal) ||
                          sourceControl == "Mouse/Delta" && binding.Control == "Mouse/Position"));
@@ -397,7 +463,7 @@ internal sealed class InputRuntimeService : IInputRuntime
                 handled |= actionHandled;
                 if (actionHandled && captureOnHandled && !after.IsZero)
                 {
-                    foreach (var binding in context.Bindings.Where(binding => binding.ActionId == actionId))
+                    foreach (var binding in BindingsFor(context.Id).Where(binding => binding.ActionId == actionId))
                         if (_controls.TryGetValue(binding.Control, out var held) && !held.IsZero)
                             _capturedControls[binding.Control] = context.Id;
                     if (sourceControl == "Mouse/Delta")
@@ -419,11 +485,17 @@ internal sealed class InputRuntimeService : IInputRuntime
         if (!IsContextActive(context.Id) || !_routeEnabled[context.Route]) return default;
         var x = 0f;
         var y = 0f;
-        foreach (var binding in context.Bindings.Where(value =>
+        foreach (var binding in BindingsFor(context.Id).Where(value =>
                      string.Equals(value.ActionId, action.Id, StringComparison.Ordinal)))
         {
-            if (_uiSuppressedControls.Contains(binding.Control) ||
-                context.Route == InputRoute.Gameplay && _gameSuppressedControls.Contains(binding.Control) ||
+            // RmlUi ownership suppresses runtime UI and gameplay input, but never the
+            // Editor route: engine shortcuts must keep working while a text field or
+            // any other UI control owns the keyboard.
+            var UiSuppressed = context.Route != InputRoute.Editor &&
+                _uiSuppressedControls.Contains(binding.Control);
+            var GameSuppressed = context.Route == InputRoute.Gameplay &&
+                _gameSuppressedControls.Contains(binding.Control);
+            if (UiSuppressed || GameSuppressed ||
                 (_capturedControls.TryGetValue(binding.Control, out var captured) &&
                  IsBelow(context, _contextsById[captured])) ||
                 binding.Modifiers.Any(modifier => !_controls.TryGetValue(modifier,
@@ -753,3 +825,4 @@ internal sealed class InputRuntimeService : IInputRuntime
         string ObjectId, string FieldPath, string Expected, string Actual,
         ulong StateRevision, bool Retryable, string Message);
 }
+

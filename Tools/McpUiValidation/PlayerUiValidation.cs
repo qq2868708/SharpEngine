@@ -203,11 +203,9 @@ internal static class PlayerUiValidation
             Vector3.Distance(Rotation(TurnedMesh, "player-model-transform"), BeforeModelRotation) < 0.001f,
             "D turns the character root toward camera-right while preserving the model's fixed local rotation");
         Save("mesh-facing", TurnedMesh);
-        Key("down", 0x10, true);
-        Key("down", 0x70, true);
+        Key("down", 0x1B);
         Save("release-key-input", Invoke("input.describe"));
-        Key("up", 0x70, true);
-        Key("up", 0x10);
+        Key("up", 0x1B);
         AwaitCapture(false);
         Save("released-input", Invoke("input.describe"));
         var Released = Position(Components());

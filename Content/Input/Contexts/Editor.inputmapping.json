@@ -55,13 +55,12 @@
     },
     {
       "action": "engine://input/actions/player.release-pointer",
-      "control": "Keyboard/F1",
+      "control": "Keyboard/Escape",
       "scaleX": 1,
       "scaleY": 0,
-      "modifiers": [
-        "Keyboard/Shift"
-      ],
+      "modifiers": [],
       "exactModifiers": true
     }
   ]
 }
+

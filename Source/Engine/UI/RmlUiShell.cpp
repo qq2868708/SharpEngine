@@ -624,6 +624,15 @@ struct RmlUiShell::Impl
         RECT Bounds{};
         if (Requested && GameplayBounds(*Main, Bounds) && GameplayCapture.Acquire(Main->Window, Bounds))
         {
+            // Gameplay owns the pointer now: drop any UI hover and capture state so
+            // dock drags and splitter resizes cannot be driven while Playing.
+            CancelSplitterDrag();
+            CancelDockDrag();
+            ViewportCaptureWindow = nullptr;
+            if (Main->Context)
+            {
+                Main->Context->ProcessMouseLeave();
+            }
             Main->Document->GetElementById("viewportCanvas")->Focus();
             Main->PointerKnown = false;
         }
@@ -637,10 +646,30 @@ struct RmlUiShell::Impl
                     " error=" + std::to_string(GetLastError()));
             }
             GameplayCapture.Release();
+            // A global third-party hotkey on the release gesture can activate another
+            // window while gameplay capture is dropped. The editor is still the window
+            // the user is working in, so take activation back or every later shortcut
+            // would be delivered somewhere else.
+            if (!Requested && IsWindowVisible(Main->Window) && !IsIconic(Main->Window) &&
+                GetForegroundWindow() != Main->Window)
+            {
+                const bool Activated = SetForegroundWindow(Main->Window) != FALSE;
+                SetFocus(Main->Window);
+                EngineLog::Info("Input", "Restored editor activation after gameplay capture release: activated=" +
+                    std::to_string(Activated) +
+                    " foreground=" + std::to_string(GetForegroundWindow() == Main->Window));
+            }
             auto* Focus = Main->Context ? Main->Context->GetFocusElement() : nullptr;
             if (Focus)
             {
                 Focus->Blur();
+            }
+            if (!Requested && Main->Document)
+            {
+                if (auto* Viewport = Main->Document->GetElementById("viewportCanvas"))
+                {
+                    Viewport->Focus();
+                }
             }
             if (InputEvent)
             {
@@ -2799,6 +2828,11 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         message == WM_RBUTTONDBLCLK || message == WM_MBUTTONDBLCLK) SetCapture(window);
     bool pointerRouted = false;
     bool pointerViewport = false;
+    // While gameplay owns the pointer, real Win32 cursor messages belong to the game.
+    // They must not hover UI elements, retarget a dock drag, or resize a splitter.
+    // Injected MCP input still travels the visible RmlUi path for deterministic checks.
+    const bool GameplayPointer = state.GameplayCapture.IsActive() &&
+        state.GameplayCapture.Window() == window && state.InjectedModifiers < 0;
     int pointerX = 0;
     int pointerY = 0;
     float pointerDeltaX = 0;
@@ -2817,7 +2851,8 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
             x = point.x;
             y = point.y;
         }
-        pointerMoveHandled = !host->Context->ProcessMouseMove(x, y, state.ModifierState());
+        if (!GameplayPointer)
+            pointerMoveHandled = !host->Context->ProcessMouseMove(x, y, state.ModifierState());
         POINT screen{x, y};
         ClientToScreen(window, &screen);
         bool viewport = false;
@@ -2836,11 +2871,11 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
             message == WM_MBUTTONDBLCLK || message == WM_XBUTTONDOWN;
         if (buttonDown && viewport)
             state.ViewportCaptureWindow = window;
-        if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK)
+        if (!GameplayPointer && (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK))
         {
             state.BeginPointerDrag(*host, host->Context->GetHoverElement(), screen);
         }
-        if (message == WM_MOUSEMOVE)
+        if (!GameplayPointer && message == WM_MOUSEMOVE)
         {
             if (state.SplitterDrag.Active) state.UpdateSplitterRatio(screen);
             else state.UpdateDockDrag(screen);

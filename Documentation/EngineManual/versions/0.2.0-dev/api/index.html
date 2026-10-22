@@ -102,6 +102,8 @@
       <article class="api-entry">
         <h3><code>SharpEngine.Runtime.Input</code></h3>
         <p>InputAction、InputMappingContext 和统一输入路由。动作回调返回 <code>true</code> 时消费动作；事件顺序和 route 名称属于可观察契约。Win32/RmlUi 修饰键位遵循 <code>Ctrl=1</code>、<code>Shift=2</code>、<code>Alt=4</code>；编辑器 Play 状态下，Host 不再把事件转发到 <code>EditorRuntime</code> 的 Viewport 导航、选择或 Gizmo 入口。</p>
+        <p>RmlUi 消费（<code>uiHandled</code>）只抑制 <code>RuntimeUi</code> 与 <code>Gameplay</code> 路由，不再抑制 <code>Editor</code> 路由；未被 Editor 绑定的输入照常继续传递。引擎快捷键通过 <code>InputRuntimeService.SetContextBindings</code> 在运行时替换单个 context 的 bindings，校验 action 引用、Control 语法、有限 scale 与重复绑定后原子提交，并递增 <code>stateRevision</code>。</p>
+        <p><code>SharpEngine.Editor.EditorShortcutSettings</code>（设置 ID <code>sharpengine.editor-shortcuts</code>，schema v1，Engine 作用域）是引擎快捷键的唯一来源，字段为 <code>playPause</code>、<code>stop</code>、<code>undo</code>、<code>redo</code>、<code>redoAlternate</code>、<code>releasePointer</code>（各为 <code>key</code>/<code>control</code>/<code>shift</code>/<code>alt</code> 对象）以及 <code>navigateForward</code>、<code>navigateBack</code>、<code>navigateLeft</code>、<code>navigateRight</code>、<code>navigateUp</code>、<code>navigateDown</code>、<code>navigateForwardAlternate</code>、<code>navigateBackAlternate</code>、<code>navigateLeftAlternate</code>、<code>navigateRightAlternate</code> 和 <code>navigateSpeedModifier</code> 键值。默认值 F5、F8、Ctrl+Z、Ctrl+Y、Ctrl+Shift+Z、Esc、W/S/A/D/E/Q、Up/Down/Left/Right 与 Shift。每个提交把 <code>engine://input/contexts/editor</code> 的 bindings 重新绑定；重复组合产生 <code>SESHORTCUT_DUPLICATE</code> 诊断并保留已生效的旧绑定，<code>key=None</code> 移除绑定。<code>editor.describe.shortcuts</code> 暴露 schema v1 的 <code>bindings</code>（name/action/gesture/appliedGesture/control/modifiers/bound）、<code>navigation</code> 和 <code>diagnostics</code>；<code>editor.describe.playInputCapture.releaseShortcut</code> 返回当前释放手势。</p>
         <p><code>InputAssetEditorInstance</code> 编辑 schema v1 的 action/context 字段与 binding 数组；每次变更重新校验稳定 ID、枚举、Control 语法、modifier 和 InputAction 引用，再提交文档 revision。</p>
       </article>
       <article class="api-entry">
@@ -210,10 +212,12 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>新增 Engine 作用域的 <code>sharpengine.editor-shortcuts</code>（schema v1）作为引擎快捷键唯一来源，运行时通过 <code>InputRuntimeService.SetContextBindings</code> 重新绑定 <code>engine://input/contexts/editor</code>，并由 <code>editor.describe.shortcuts</code> 暴露 schema v1 快照。Editor 路由不再被 RmlUi 消费抑制。默认释放手势从 Shift+F1 改为 Escape；Play 捕获期间真实指针消息不进入 RmlUi hover/拖拽/分割条路径。</p>
       <p>更新内置 Player 的 FaceMoveDirection 默认配置，并在移动朝向模式下由根节点唯一控制转身，避免子 Mesh 重复旋转。观察相机保持独立；输入、控制、根运动仍走既有路径，组件与资产 Schema 不变。</p>
       <p>骨骼动画与状态机编辑器迁入 SharpEngine.Animation.Editor，由 AnimationEditorModule 注册；Timeline 模块仅注册 Timeline。动画事务与时间轴展示分离，新增通用 Notify 候选编辑 API。骨骼动画状态保持 v2，状态机编辑器状态改为 v3 并去除无内容的 3D 预览字段；源资产 Schema、稳定打开 ID 和原生 ABI 不变。</p>
       <p>新增 UiLayoutInstance、UiElement 基础控件、IUiActionHandler 和 AssetEditorLayoutInstance，实现已有布局上的实例级动态 UI；定义保持只读，事件与原生节点身份按实例隔离，源资产 Schema 与原生 ABI 不变。新增 C# API 的调用方需重建；原生宿主更新需重建并重启 Editor。</p>
       <p>新增专用 SkeletalAnimation 编辑器及 UI 布局组合契约。Viewport3D/TimelineView 的布局由各自 RML 维护；父布局通过 IUiLayoutPart 插槽引用。新增内置布局定义 schema-version 1，不改变源资产 Schema；内置模板修改需重建并重启，相关 C# API 调用方需重建。</p>
+      <p>新增 <a href="../../../../CompositionArchitecture.md">组合式开发架构契约</a>：用各领域能力接口约束组合插槽，组合体可封装并公开自己的契约；复用功能定义与模板，隔离使用实例的数据和资源；拥有的内部实例不重复加入全局 Tick。World/Prefab 当前仅支持 v3，普通实体组件引用在删除时清空，Runtime 普通字段写入采用完整 Tick 观察边界。本次未新增通用组合接口，未修改原生 API 或源资产 Schema。</p>
       <p>通用 3D 视口下移 Runtime UI/Rendering 基础层，World 通过内容适配器接入。原 WorldViewportLayout、IWorldViewportHost 和 WorldViewportVertex 的调用方改用 Viewport3D、IViewport3DHost、ViewportVertex 并重建；UI 动作改为 ui.viewport3d，观察相机独立于 World。原生 API 版本与源资产 Schema 不变。</p>
       <p>新增插件默认项/项目禁用覆盖及依赖变更计划命令；无项目启动改为使用现有引擎 RmlUi 的项目选择器，插件管理位于 Editor。选择器具有显式会话选择和完整 MCP UI/帧观察能力。隔离 Editor 的 projectManifest 改为必填；项目模块产物新增引擎插件默认项指纹，旧产物需要重建。</p>
       <p>增加调用者持有临时 World 的 Viewport 布局复用接口，以及时间轴时间/播放事件与瞬态观察。播放控制统一落到 TimelineView，资产 schema 不变；动画编辑器忽略 Notify 执行。</p>

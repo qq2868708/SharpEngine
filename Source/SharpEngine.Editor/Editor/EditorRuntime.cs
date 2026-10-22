@@ -285,8 +285,9 @@ public sealed partial class EditorRuntime
         {
             requested = PlayInputRequested,
             active = PlayInputCaptured,
-            releaseShortcut = "Shift+F1",
+            releaseShortcut = _shortcutSettings.ReleasePointer.Describe(),
         },
+        shortcuts = JsonNode.Parse(DescribeShortcutsJson()),
         scene = _world?.Describe(),
         isDirty = IsDirty,
         documentRevision = DocumentRevision,
@@ -465,6 +466,7 @@ public sealed partial class EditorRuntime
         SharpLog.Initialize("Editor", _projectRoot, _engineRoot);
         ResetLogFileTail();
         InitializeDevelopmentSettings();
+        ApplyEngineShortcuts(Force: true);
         ReportProgress?.Invoke(43, "AssetRegistry", "Scanning engine and project assets");
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
         ReportProgress?.Invoke(51, "EditorLayout", "Restoring editor layout and content browsers");
@@ -580,6 +582,7 @@ public sealed partial class EditorRuntime
         AssetOpeners.Update(DeltaSeconds);
         DrainLogs();
         PollDevelopmentSettings();
+        ApplyEngineShortcuts();
         PollMcpConfiguration();
         TickProjectPlugins();
         UpdateInputDemo();
@@ -2282,7 +2285,7 @@ public sealed partial class EditorRuntime
         }
         _nativeApi.SetUiProperty("viewportProjection", "display", "block");
         SetText("viewportProjection", "Perspective");
-        SetText("viewportHelp", "WASD/QE Move · RMB Orbit · MMB Pan · Wheel Zoom");
+        SetText("viewportHelp", BuildNavigationHelp());
     }
 
     private void UpdateNavigationMovement(float deltaSeconds)
@@ -2298,16 +2301,20 @@ public sealed partial class EditorRuntime
         var right = Vector3.Normalize(Vector3.Cross(forward, Vector3.UnitY));
         if (!float.IsFinite(right.X) || right.LengthSquared() < 1e-6f) right = Vector3.UnitX;
         var direction = Vector3.Zero;
-        if (IsPressed(0x57) || IsPressed(0x26)) direction += forward; // W / Up
-        if (IsPressed(0x53) || IsPressed(0x28)) direction -= forward; // S / Down
-        if (IsPressed(0x44) || IsPressed(0x27)) direction += right;   // D / Right
-        if (IsPressed(0x41) || IsPressed(0x25)) direction -= right;   // A / Left
-        if (IsPressed(0x45)) direction += Vector3.UnitY;              // E
-        if (IsPressed(0x51)) direction -= Vector3.UnitY;              // Q
+        if (IsPressedShortcut(Shortcuts.NavigateForward) ||
+            IsPressedShortcut(Shortcuts.NavigateForwardAlternate)) direction += forward;
+        if (IsPressedShortcut(Shortcuts.NavigateBack) ||
+            IsPressedShortcut(Shortcuts.NavigateBackAlternate)) direction -= forward;
+        if (IsPressedShortcut(Shortcuts.NavigateRight) ||
+            IsPressedShortcut(Shortcuts.NavigateRightAlternate)) direction += right;
+        if (IsPressedShortcut(Shortcuts.NavigateLeft) ||
+            IsPressedShortcut(Shortcuts.NavigateLeftAlternate)) direction -= right;
+        if (IsPressedShortcut(Shortcuts.NavigateUp)) direction += Vector3.UnitY;
+        if (IsPressedShortcut(Shortcuts.NavigateDown)) direction -= Vector3.UnitY;
         if (direction.LengthSquared() < 1e-6f) return;
         direction = Vector3.Normalize(direction);
         var speed = MathF.Max(_orbitDistance * 0.75f, 1f);
-        if (IsPressed(0x10)) speed *= 4f; // Shift
+        if (IsPressedShortcut(Shortcuts.NavigateSpeedModifier)) speed *= 4f;
         var delta = direction * speed * Math.Clamp(deltaSeconds, 0, 0.1f);
         CommitCameraNavigation(camera, LocalPositionForWorld(camera, EntityWorldPosition(camera) + delta), camera.Rotation);
         _orbitTarget += delta;
