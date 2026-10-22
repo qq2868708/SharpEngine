@@ -3,6 +3,41 @@ using System.Text.Json.Nodes;
 
 internal static class PlayerUiValidation
 {
+    private const string CurrentWorldId = "Content/Worlds/Main.sworld";
+
+    /// <summary>Rejects a supplied project whose startup World is not the current engine
+    /// content. The Player assertions describe the built-in Prefab and World, so an older
+    /// project snapshot would otherwise validate a contract the engine no longer has.</summary>
+    internal static void RequireCurrentWorld(string Root, string ProjectManifest)
+    {
+        var EngineWorld = Path.GetFullPath(Path.Combine(Root, CurrentWorldId));
+        var ProjectRoot = Path.GetDirectoryName(Path.GetFullPath(ProjectManifest))!;
+        var Startup = JsonNode.Parse(File.ReadAllText(ProjectManifest))?["world"]?["startup"]
+            ?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(Startup))
+        {
+            throw new InvalidOperationException(
+                "PLAYER_FIXTURE_STALE: the supplied project declares no startup World");
+        }
+        var ProjectWorld = Path.GetFullPath(Path.Combine(ProjectRoot, Startup));
+        var EngineHash = File.Exists(EngineWorld) ? FileHash(EngineWorld) : "missing";
+        var ProjectHash = File.Exists(ProjectWorld) ? FileHash(ProjectWorld) : "missing";
+        if (!string.Equals(EngineHash, ProjectHash, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "PLAYER_FIXTURE_STALE: " + ProjectManifest + " uses a World snapshot that no longer " +
+                "matches " + EngineWorld + " (engine=" + EngineHash[..8] + " fixture=" +
+                ProjectHash[..Math.Min(8, ProjectHash.Length)] + "). Delete the fixture or unset " +
+                "SHARPENGINE_VALIDATION_PROJECT so --player-only builds it from current content.");
+        }
+    }
+
+    private static string FileHash(string PathValue)
+    {
+        using var Stream = File.OpenRead(PathValue);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Stream));
+    }
+
     internal static void Run(string Root, Action<bool, string> Check,
         Func<int, string, JsonObject, JsonObject> Tool,
         Func<int, string, JsonObject?, JsonObject> Call)
@@ -148,7 +183,11 @@ internal static class PlayerUiValidation
 
         Save("attached-tools", Call(Sequence++, "tools/list", null));
         Save("resource-templates", Call(Sequence++, "resources/templates/list", null));
-        Save("before", Components());
+        var Authored = Components();
+        Save("before", Authored);
+        Check(State(Authored, "player-controller")["FaceMoveDirection"]?.GetValue<bool>() == true,
+            "PLAYER_FIXTURE_STALE: the Player validation requires a World authored with " +
+            "FaceMoveDirection=true; rebuild the fixture from current engine content");
         Click("toolbar-tool-play-pause");
         AwaitCapture(true);
         var Focus = Read();
