@@ -38,6 +38,11 @@ Editor/Game 将 `IInputRuntime` 和当前 host ID 注入 `RuntimeInstance`。Pla
 
 持有权威的实体不再收到引擎内建的根运动写入；同一实体上的 `engine.movement` 被静默并发布 `MOVEMENT_OVERRIDDEN`（每次加载只记一条 warning，不进入错误诊断）。同一实体出现两个权威时报告一次 `MOVEMENT_AUTHORITY_CONFLICT` 并保留组件 ID 较小的一个。权威在模式不可用时可以让 `ConsumeRootMotion` 返回 false，把该帧交还引擎默认路径。
 
+同实体的 NavAgent 也不能绕过移动权威：启用的权威存在时，导航停止写 Transform，
+有目标的 Agent 在观察快照中返回 `Unavailable` / `NAV_MOVEMENT_AUTHORITY`，并只记录一次提示。
+停用或移除权威后，导航从当前位置重新规划并恢复。当前不把导航路径自动转换成 CharacterMovement 意图；
+需要这种组合时由上层明确提供意图适配。
+
 `RootMotionContribution` 提供 animator 组件 ID、目标实体、网格组件、目标世界矩阵、网格相对矩阵、世界增量、世界位移、播放推进量和 DeltaSeconds。接管成功后 animator 帧发布 `ROOT_MOTION_CONSUMED`，并在 `rootMotion.consumedBy` 记录权威类型名。
 
 `Plugins/CharacterMovement`（插件 id `sharpengine.character-movement`，manifest schemaVersion 1）用这套组合点提供完整角色移动。插件为项目级 opt-in：在 `.sharpproject` 的 `plugins` 数组登记 `engine://Plugins/CharacterMovement/CharacterMovement.sharpplugin`，构成工程与运行时会同时加载它；引擎默认 Prefab 与 Main Scene 不引用插件组件，因此两者可以并存，旧内容行为不变。

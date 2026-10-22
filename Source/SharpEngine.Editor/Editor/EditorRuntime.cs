@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
+using SharpEngine.Components;
 using SharpEngine.Editor.Layout;
 using SharpEngine.Logging;
 using SharpEngine.UI;
@@ -179,6 +180,28 @@ public sealed partial class EditorRuntime
         }
     }
     public ulong DocumentRevision => _authoring?.DocumentRevision ?? 0;
+    public WorldEditResult EditWorld(string Kind, ulong ExpectedRevision,
+        Action<SceneData> Edit, string[] AffectedEntityIds)
+    {
+        if (_authoring is null)
+        {
+            return WorldEditResult.Failure("WORLD_UNAVAILABLE", "No Authoring World is available", 0, IsDirty);
+        }
+        if (PlayState != EditorPlayState.Stopped)
+        {
+            return WorldEditResult.Failure("AUTHORING_DISABLED_DURING_PLAY",
+                "Authoring editing requires Stop", DocumentRevision, IsDirty);
+        }
+        var Result = _authoring.Edit(Kind, ExpectedRevision, Edit, AffectedEntityIds);
+        if (Result.Success)
+        {
+            RefreshLists();
+            RefreshInspector();
+            RefreshWorldTitle();
+            MarkExtensionUiDirty();
+        }
+        return Result;
+    }
     public WorldEditResult ReparentEntity(WorldReparentRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

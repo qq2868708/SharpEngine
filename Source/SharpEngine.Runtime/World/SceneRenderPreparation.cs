@@ -19,11 +19,11 @@ public static class SceneRenderPreparation
             World.RenderStates = States;
             return;
         }
-        var Animators = World.Entities.Where(Entity => Entity.ActiveInHierarchy).SelectMany(Entity => Entity.Components)
+        var Animators = World.Entities.Where(Entity => Entity.ActiveInHierarchy).SelectMany(Entity => Entity.Record.Components)
             .Where(Component => Component.TypeId == "engine.animator" && Component.Enabled).ToArray();
         foreach (var Entity in World.Entities.Where(Entity => Entity.ActiveInHierarchy))
         {
-            foreach (var Mesh in Entity.Components.Where(Component => Component.TypeId == "engine.skeletal-mesh" && Component.Enabled))
+            foreach (var Mesh in Entity.Record.Components.Where(Component => Component.TypeId == "engine.skeletal-mesh" && Component.Enabled))
             {
                 var MeshId = Mesh.State["Mesh"]?.GetValue<string>();
                 if (MeshId is null)

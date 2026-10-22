@@ -241,10 +241,8 @@ public sealed class ProjectEditorExtension : IEditorExtension, IMenuExtension,
         Action<WorldEntity> Edit, string Status)
     {
         var Entity = Command.SelectedEntity!;
-        Edit(Entity);
-        Command.MarkDirty();
-        Command.RefreshUi();
-        Command.SetStatus($"{Status}: {Entity.Name}");
+        var Result = Command.EditSelectedEntity(Edit, Status);
+        Command.SetStatus(Result.Success ? $"{Status}: {Entity.Name}" : Result.Message);
     }
 
     private static void Register(List<IDisposable> Registrations,

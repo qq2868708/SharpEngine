@@ -592,7 +592,11 @@ try
     var restored = runtime.World.Entities.First(e => e.Id == playing.Id);
     Require(restored.Rotation == original, "Stop must restore the edit world");
     var editedPosition = new WorldVector3(3, 2, -1);
-    restored.Position = editedPosition;
+    runtime.EditWorld("validation.position", runtime.DocumentRevision, Candidate =>
+    {
+        var View = new WorldDocument(Candidate, runtime.World.Registry);
+        View.Entities.Single(Entity => Entity.Id == restored.Id).Position = editedPosition;
+    }, [restored.Id]);
     runtime.InvokeUiAction("editor.save");
     Require(WorldDocument.Load(worldPath).Entities.First(e => e.Id == restored.Id).Position == editedPosition,
         "Save must write edits to the project-owned world file");

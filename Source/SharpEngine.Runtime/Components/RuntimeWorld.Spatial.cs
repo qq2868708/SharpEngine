@@ -32,6 +32,14 @@ public sealed partial class RuntimeWorld
                 {
                     var Position = Scene.Matrices[Entity.EntityId].Translation;
                     var Active = Component.Enabled && Scene.Active.Contains(Entity.EntityId) && Component.State["HasDestination"]!.GetValue<bool>();
+                    var AuthorityActive = Entity.Components.Any(Record => Record.Enabled &&
+                        typeof(IMovementAuthority).IsAssignableFrom(Registry.Find(Record.TypeId)?.RuntimeType ?? typeof(object)));
+                    if (Active && AuthorityActive)
+                    {
+                        Observations.Add(new(Entity.EntityId, Component.ComponentId,
+                            NavAgentStatus.Unavailable, "NAV_MOVEMENT_AUTHORITY", Position, Vector3.Zero, 0, Array.Empty<Vector3>()));
+                        continue;
+                    }
                     var Found = AgentPaths.TryGetValue(Component.ComponentId, out var State);
                     if (Active && Found && State!.CommittedConfiguration == Configuration(Component.State) && Vector3.DistanceSquared(State.Position, Position) <= 1e-8f)
                     {
@@ -87,6 +95,15 @@ public sealed partial class RuntimeWorld
                 var ConfigurationState = Registry.Read(Agent);
                 Registry.ValidateState(Registry.Get(typeof(NavAgentComponent)), ConfigurationState);
                 State.CommittedConfiguration = Configuration(ConfigurationState);
+                var AuthorityActive = Agent.Entity.MutableComponents.Any(Component =>
+                    Component is IMovementAuthority && Component.IsAlive && Component.EffectiveEnabled);
+                if (AuthorityActive)
+                {
+                    State.Reset(Position, NavAgentStatus.Unavailable, "NAV_MOVEMENT_AUTHORITY");
+                    ReportMovementNote("NAV_MOVEMENT_AUTHORITY", Agent.ComponentId,
+                        "NavAgent movement is suspended while a movement authority owns this entity.");
+                    continue;
+                }
                 if (!Agent.HasDestination)
                 {
                     State.Reset(Position, NavAgentStatus.Idle, "NAV_IDLE");

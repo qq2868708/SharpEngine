@@ -245,6 +245,23 @@ public sealed class EditorCommandContext
     }
     public bool IsDirty => _runtime.IsDirty;
 
+    /// <summary>Edits a detached entity candidate as one validated, undoable Authoring transaction.</summary>
+    public WorldEditResult EditSelectedEntity(Action<WorldEntity> Edit, string Kind = "extension.edit")
+    {
+        var EntityId = SelectedEntityId;
+        var Registry = World?.Registry;
+        if (EntityId is null || Registry is null)
+        {
+            return WorldEditResult.Failure("ENTITY_NOT_FOUND", "No entity is selected",
+                _runtime.DocumentRevision, IsDirty);
+        }
+        return _runtime.EditWorld(Kind, _runtime.DocumentRevision, Candidate =>
+        {
+            var View = new WorldDocument(Candidate, Registry);
+            Edit(View.Entities.Single(Entity => Entity.Id == EntityId));
+        }, [EntityId]);
+    }
+
     public void SetStatus(string text) => _runtime.SetStatusFromExtension(text);
     public void MarkDirty() => _runtime.MarkDirtyFromExtension();
     public void Save() => _runtime.InvokeUiAction("editor.save");

@@ -43,6 +43,7 @@ var PluginAssembly = typeof(CharacterMovementComponent).Assembly;
 Registry.RegisterAssembly(PluginAssembly, "SharpEngine.CharacterMovement.Runtime", "validation");
 Registry.RegisterAssembly(typeof(ProbeMovementAuthorityComponent).Assembly, "validation", "probe");
 Registry.ValidateRegistrations();
+NavigationAuthorityValidation.Run(Registry, Check);
 Check(PluginAssembly.GetCustomAttribute<SharpEngine.Modules.SharpEngineModuleAttribute>() is
     { Type: "Runtime" },
     "the runtime plugin declares a Runtime module identity");

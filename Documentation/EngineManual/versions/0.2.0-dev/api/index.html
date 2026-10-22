@@ -89,6 +89,7 @@
       <article class="api-entry">
         <h3><code>SharpEngine.Editor.EditorRuntime</code></h3>
         <p>提供 Editor 生命周期、场景/资源/编辑器快照、命令注册和项目代码重载的语义入口。编辑器命令同时服务 UI 点击和 MCP 调用；Content Manager 条目使用 <code>editor.content.select-folder:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 选择文件夹，双击动作使用 <code>editor.content.open:&lt;pane&gt;:&lt;source&gt;|&lt;path&gt;</code> 进入文件夹。除 World 外的内置可编辑资源通过 <code>IAssetEditorInstance</code> 和 <code>AssetEditorHost</code> 建立独立顶层编辑器根。</p>
+        <p>Authoring 扩展通过 <code>EditWorld</code> 或命令上下文的 <code>EditSelectedEntity</code> 修改独立候选，成功后统一提交 revision 与 Undo/Redo。已归属 Authoring 会话的实体拒绝直接 setter；<code>WorldDocument.Data</code> 和实体 <code>Components</code> 返回副本。保存仍是独立操作，<code>MarkDirty</code> 不代替事务。</p>
         <p><code>IMenuExtension</code>、<code>IToolBarExtension</code> 和 <code>ICustomBarExtension</code> 分别扩展固定 File 菜单、主 Toolbar 和引擎创建的 <code>viewport</code>/<code>timeline</code> CustomBar。CustomBar 的 <code>Append</code>/<code>Replace</code> 只影响显示，命令注册仍然保留；扩展不能创建或删除顶层 Surface。</p>
       </article>
       <article class="api-entry">
@@ -173,6 +174,7 @@
         <h3><code>SharpEngine.Networking</code></h3>
         <p><code>NetworkSchemaCatalog</code> 登记稳定的组件属性和 RPC 描述；<code>NetworkCommandRouter</code> 只执行显式注册的 Command，并按 <code>ConnectionId + MessageId</code> 缓存幂等结果。</p>
         <p><code>NetworkReplicationFrameBuilder</code> 从不可变 <code>RuntimeFrame</code> 生成完整快照或基于 <code>NetworkReplicationBaseline</code> 的字段差分。<code>DedicatedServerSession</code> 运行权威 Runtime Tick 并返回 <code>NetworkServerFrame</code>。</p>
+        <p>有模块注册的宿主先构造 <code>DedicatedServerSession(Schema, Assets, Engine)</code>，再启动模块，最后调用 <code>StartWorld</code>。启动前 <code>ActiveWorld</code> 为 null；重复启动拒绝。Session 推进自己拥有的 Engine，共享 Engine 由调用者推进一次；运行世界须在模块卸载前释放。</p>
         <p><code>UdpNetworkTransport</code> 基于 LiteNetLib 提供 C# UDP、MTU 分片、CRC32C、连接超时、四种可靠性和四条通道；<code>DedicatedServerNetworkHost</code> 提供 Schema 指纹握手、Command 权限入口、每连接 baseline/ACK；<code>NetworkClientSession</code> 和 <code>NetworkReplicaState</code> 提供客户端握手、Command 发送和原子快照应用。当前协议版本为 <code>NetworkProtocol.SchemaVersion = 1</code>；QUIC、生产认证和客户端预测不属于本阶段公共实现。</p>
         <p><code>INetworkServerRuntime</code> 是 Server Runtime Module 的注册契约，提供 <code>NetworkSchemaCatalog</code>、<code>RegisterCommand</code>、权限和相关性策略入口；Server Target 的原生入口为 <code>DedicatedServer.exe</code>。项目 manifest 的 <code>targets</code> 数组控制生成的 Target；默认值为 <code>["Editor", "Game"]</code>，Project Selector 的 <code>add-target --target Server</code> 和 <code>remove-target --target Server</code> 原子更新该契约。Windows 文件关联的 <code>AddServerTarget</code> 和 <code>RemoveServerTarget</code> shell verb 分别调用这两个命令，随后自动重新生成工程文件。</p>
       </article>
@@ -213,6 +215,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>新增 <code>EditorRuntime.EditWorld(Kind, ExpectedRevision, Edit, AffectedEntityIds)</code> 与 <code>EditorCommandContext.EditSelectedEntity(Edit, Kind)</code>：在独立候选上修改，验证并提交一次 revision/Undo 记录。归属 WorldAuthoringSession 的文档直接 setter 返回 <code>AUTHORING_TRANSACTION_REQUIRED</code>，公开 Data/Components 为脱离活文档的副本；嵌套提交或历史操作返回 <code>TRANSACTION_IN_PROGRESS</code>。新增 <code>DedicatedServerSession(Schema, Assets, Engine)</code> 分阶段启动构造、<code>StartWorld</code> 和可空 <code>ActiveWorld</code>；自有 Engine 由 Session 推进，共享 Engine 由宿主推进。NavAgent 在同实体移动权威启用时发布 <code>NAV_MOVEMENT_AUTHORITY</code> 并停止写 Transform。源资产 Schema、MCP 名称和原生 ABI 不变，C# 扩展调用方需按上述事务入口更新并重建。详见 <a href="../../../../Networking.md">Networking</a>、<a href="../../../../ControlAndMovement.md">ControlAndMovement</a>。</p>
       <p>引擎快捷键改为执行与工具栏/菜单共用的 <code>EditorCommand</code>（<code>EditorShortcutSettings.CommandRoutes()</code> 声明 action→command，全局层派发 <code>editor.command:&lt;id&gt;</code>），可用状态与按钮一致；新增 Ctrl+S（<code>editor.save</code>），并按获得焦点的文档作用域冒泡：资产编辑器以 ScopedPriority 先消费 Save/Undo/Redo，不消费或只读时回落全局层；<code>editor.describe.shortcuts.routing</code> 公开作用域顺序与内容。新增 Engine 作用域的 <code>sharpengine.editor-shortcuts</code>（schema v1）作为引擎快捷键唯一来源，运行时通过 <code>InputRuntimeService.SetContextBindings</code> 重新绑定 <code>engine://input/contexts/editor</code>，并由 <code>editor.describe.shortcuts</code> 暴露 schema v1 快照。Editor 路由不再被 RmlUi 消费抑制。默认释放手势从 Shift+F1 改为 Escape；Play 捕获期间真实指针消息不进入 RmlUi hover/拖拽/分割条路径。</p>
       <p>更新内置 Player 的 FaceMoveDirection 默认配置，并在移动朝向模式下由根节点唯一控制转身，避免子 Mesh 重复旋转。观察相机保持独立；输入、控制、根运动仍走既有路径，组件与资产 Schema 不变。</p>
       <p>骨骼动画与状态机编辑器迁入 SharpEngine.Animation.Editor，由 AnimationEditorModule 注册；Timeline 模块仅注册 Timeline。动画事务与时间轴展示分离，新增通用 Notify 候选编辑 API。骨骼动画状态保持 v2，状态机编辑器状态改为 v3 并去除无内容的 3D 预览字段；源资产 Schema、稳定打开 ID 和原生 ABI 不变。</p>

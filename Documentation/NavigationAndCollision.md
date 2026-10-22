@@ -58,6 +58,10 @@ var Added = World.AddComponent<NavAgentComponent>(EntityId,
 
 所有 FixedUpdate 回调完成后，引擎统一规划并推进本步有资格更新的 Agent，先读取同一份阶段状态，再提交移动。固定调度使用双精度的 1/60 秒间隔，回调 delta 保持现有 float 契约。本帧动态添加的 Agent 从下一帧开始推进。
 
+若同一实体存在启用的 `IMovementAuthority`，NavAgent 暂停位移提交，并以
+`Unavailable` / `NAV_MOVEMENT_AUTHORITY` 暴露有目标但被权威接管的状态。
+停用或移除权威后从当前位置重新规划；不会自动把路径结果作为角色移动意图。
+
 规划先检查直线净空，否则使用四邻接 A*，再做视线简化。每条连接检查整个 Agent 胶囊体的扫掠体，包含半径和身高；移动在路径转角处结束当前步，避免跨过拐角。脚底保留 0.002 世界单位的地面间隙。目标必须位于平面及考虑半径后的表面范围内；阻塞目标或不可达路线返回明确错误，不自动吸附到其他位置。
 
 障碍来自启用的 Box/Sphere/Capsule Collider，要求 `BlocksNavigation = true`、层匹配、不是 Trigger，并排除 Agent 所在实体。其他实体的 Agent 只有带 Collider 时才可能作为障碍；没有人群避让或同时移动碰撞求解。路径缓存可重建，障碍、目标、表面、Agent 配置或外部位置变化会在下一固定步使缓存失效。

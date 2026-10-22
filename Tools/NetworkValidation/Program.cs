@@ -164,6 +164,7 @@ for (var Iteration = 0; Iteration < 200; Iteration++)
 Check(Client.Replica.ToJson()["entities"]![0]!["components"]![0]!["state"]!["transform.position"]![0]!.GetValue<int>() == 9,
     "The client replica must receive the changed authoritative property over UDP");
 
+ServerLifecycleValidation.Run(Check);
 TransportValidation.Run(Check);
 
 Console.WriteLine($"[NetworkValidation] PASS: {Assertions} assertions; schema={Fingerprint}; revision={FirstFrame.RuntimeFrame.Revision}");

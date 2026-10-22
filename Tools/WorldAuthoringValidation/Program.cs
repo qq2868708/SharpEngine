@@ -135,6 +135,7 @@ finally
     if (File.Exists(temporary)) File.Delete(temporary);
 }
 
+AuthoringBoundaryValidation.Run(Check);
 Console.WriteLine($"[WorldAuthoringValidation] PASS: {assertions} assertions");
 
 bool MatrixNear(Matrix4x4 left, Matrix4x4 right)

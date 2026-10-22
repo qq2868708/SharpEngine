@@ -62,10 +62,12 @@ public sealed class WorldAuthoringSession
     private readonly List<HistoryEntry> _history = new();
     private string _savepoint;
     private int _historyCursor;
+    private bool Editing;
 
     public WorldAuthoringSession(WorldDocument document, ulong initialRevision = 1)
     {
         Document = document ?? throw new ArgumentNullException(nameof(document));
+        Document.BindAuthoring();
         DocumentRevision = initialRevision;
         SavepointRevision = initialRevision;
         _savepoint = Serialize(document);
@@ -118,6 +120,7 @@ public sealed class WorldAuthoringSession
     public void Save(string path)
     {
         EnsureOwnerThread();
+        EnsureIdle();
         Document.Save(path);
         MarkSavepoint();
     }
@@ -125,6 +128,7 @@ public sealed class WorldAuthoringSession
     public void MarkSavepoint()
     {
         EnsureOwnerThread();
+        EnsureIdle();
         _savepoint = Serialize(Document);
         SavepointRevision = DocumentRevision;
     }
@@ -152,22 +156,15 @@ public sealed class WorldAuthoringSession
             return Failure("TRANSFORM_NOT_DECOMPOSABLE", transformError);
 
         var order = BuildOrder(source, newParentId, request.Placement, destination.Anchor);
-        var before = Capture();
-        try
+        return Edit("reparent", request.ExpectedRevision, Candidate =>
         {
-            source.ParentId = newParentId;
-            ApplyTransform(source, newTransform);
-            Document.SetEntityOrder(order);
-            ValidateHierarchy();
-        }
-        catch (Exception exception)
-        {
-            Apply(before);
-            return Failure("REPARENT_REJECTED", exception.Message);
-        }
-
-        var after = Capture();
-        return Commit("reparent", before, after, [source.Id]);
+            var Entity = Candidate.Entities.Single(Entity => Entity.EntityId == source.Id);
+            Entity.ParentId = newParentId.Length == 0 ? null : newParentId;
+            ApplyTransform(Entity, newTransform);
+            var Records = Candidate.Entities.ToDictionary(Entity => Entity.EntityId, StringComparer.Ordinal);
+            Candidate.Entities.Clear();
+            Candidate.Entities.AddRange(order.Select(Entity => Records[Entity.Id]));
+        }, [source.Id]);
     }
 
     public WorldEditResult SetTransform(WorldTransformRequest request)
@@ -181,15 +178,19 @@ public sealed class WorldAuthoringSession
         if (!IsValid(request.Transform)) return Failure("INVALID_TRANSFORM",
             "Transform values must be finite and scale must be positive");
 
-        var before = Capture();
-        ApplyTransform(entity, request.Transform);
-        var after = Capture();
-        return Commit("transform", before, after, [entity.Id], request.TransactionGroupId);
+        return Edit("transform", request.ExpectedRevision, Candidate =>
+        {
+            ApplyTransform(Candidate.Entities.Single(Entity => Entity.EntityId == entity.Id), request.Transform);
+        }, [entity.Id], request.TransactionGroupId);
     }
 
     public WorldEditResult Undo(ulong expectedRevision)
     {
         if (!IsOwnerThread()) return WrongThread();
+        if (Editing)
+        {
+            return Failure("TRANSACTION_IN_PROGRESS", "An Authoring transaction is already being prepared");
+        }
         if (expectedRevision != DocumentRevision) return RevisionConflict(expectedRevision);
         if (!CanUndo) return Failure("NOTHING_TO_UNDO", "There is no Authoring transaction to undo");
         var entry = _history[_historyCursor - 1];
@@ -205,6 +206,10 @@ public sealed class WorldAuthoringSession
     public WorldEditResult Redo(ulong expectedRevision)
     {
         if (!IsOwnerThread()) return WrongThread();
+        if (Editing)
+        {
+            return Failure("TRANSACTION_IN_PROGRESS", "An Authoring transaction is already being prepared");
+        }
         if (expectedRevision != DocumentRevision) return RevisionConflict(expectedRevision);
         if (!CanRedo) return Failure("NOTHING_TO_REDO", "There is no Authoring transaction to redo");
         var entry = _history[_historyCursor];
@@ -369,14 +374,40 @@ public sealed class WorldAuthoringSession
     public WorldEditResult Edit(string kind, ulong expectedRevision, Action<SceneData> edit,
         string[] affected, string? transactionGroupId = null)
     {
-        if (!IsOwnerThread()) return WrongThread();
-        if (expectedRevision != DocumentRevision) return RevisionConflict(expectedRevision);
-        var before = Capture();
-        var staging = Document.Data.Clone();
-        try { edit(staging); staging.Validate(Document.Registry); }
-        catch (Exception error) { return Failure("EDIT_REJECTED", error.Message); }
-        Document.Replace(staging);
-        return Commit(kind, before, Capture(), affected, transactionGroupId);
+        if (!IsOwnerThread())
+        {
+            return WrongThread();
+        }
+        if (Editing)
+        {
+            return Failure("TRANSACTION_IN_PROGRESS", "An Authoring transaction is already being prepared");
+        }
+        if (expectedRevision != DocumentRevision)
+        {
+            return RevisionConflict(expectedRevision);
+        }
+        var Before = Capture();
+        var Staging = Document.Data;
+        Editing = true;
+        try
+        {
+            ArgumentNullException.ThrowIfNull(edit);
+            ArgumentNullException.ThrowIfNull(affected);
+            var Affected = affected.ToArray();
+            edit(Staging);
+            Staging.Validate(Document.Registry);
+            var After = new DocumentState(Staging.Serialize());
+            Document.Replace(Staging);
+            return Commit(kind, Before, After, Affected, transactionGroupId);
+        }
+        catch (Exception Error)
+        {
+            return Failure("EDIT_REJECTED", Error.Message);
+        }
+        finally
+        {
+            Editing = false;
+        }
     }
 
     public WorldEditResult PatchComponent(string entityId, string componentId, JsonObject patch,
@@ -386,22 +417,6 @@ public sealed class WorldAuthoringSession
         if (Document.Registry.Find(component.TypeId) is null) throw new InvalidOperationException("Unknown component cannot be edited");
         foreach (var (field, value) in patch) component.State[field] = value?.DeepClone();
     }, [entityId], transactionGroupId);
-
-    private void ValidateHierarchy()
-    {
-        foreach (var entity in Document.Entities)
-        {
-            var visiting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var current = entity;
-            while (current.ParentId.Length != 0)
-            {
-                if (!visiting.Add(current.Id))
-                    throw new InvalidDataException($"World parent cycle includes '{current.Id}'");
-                current = Find(current.ParentId) ?? throw new InvalidDataException(
-                    $"World entity '{current.Id}' references missing parent '{current.ParentId}'");
-            }
-        }
-    }
 
     private bool CreatesCycle(string sourceId, string parentId)
     {
@@ -441,6 +456,14 @@ public sealed class WorldAuthoringSession
             "Authoring mutations must run on the session's editor thread");
     }
 
+    private void EnsureIdle()
+    {
+        if (Editing)
+        {
+            throw new InvalidOperationException("TRANSACTION_IN_PROGRESS: Finish the current edit before saving.");
+        }
+    }
+
     private static string Serialize(WorldDocument document) =>
         document.Serialize();
 
@@ -460,11 +483,12 @@ public sealed class WorldAuthoringSession
         IsFinite(transform.Position) && IsFinite(transform.Rotation) && IsFinite(transform.Scale) &&
         transform.Scale.X > 0 && transform.Scale.Y > 0 && transform.Scale.Z > 0;
 
-    private static void ApplyTransform(WorldEntity entity, WorldLocalTransform transform)
+    private static void ApplyTransform(EntityRecord Entity, WorldLocalTransform Transform)
     {
-        entity.Position = transform.Position;
-        entity.Rotation = transform.Rotation;
-        entity.Scale = transform.Scale;
+        var State = Entity.Components.Single(Component => Component.TypeId == "engine.transform").State;
+        State["Position"] = new JsonArray(Transform.Position.X, Transform.Position.Y, Transform.Position.Z);
+        State["Rotation"] = new JsonArray(Transform.Rotation.X, Transform.Rotation.Y, Transform.Rotation.Z);
+        State["Scale"] = new JsonArray(Transform.Scale.X, Transform.Scale.Y, Transform.Scale.Z);
     }
 
     private static Matrix4x4 Compose(WorldLocalTransform transform) =>

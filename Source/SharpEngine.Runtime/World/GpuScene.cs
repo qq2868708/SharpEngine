@@ -440,7 +440,7 @@ public static class GpuSceneBuilder
         var Instances = new List<GpuSceneInstance>();
         foreach (var Entity in World.Entities)
         {
-            foreach (var Component in Entity.Components.Where(Component =>
+            foreach (var Component in Entity.Record.Components.Where(Component =>
                          WorldEntity.IsMeshComponentType(Component.TypeId) &&
                          Component.Enabled && Entity.ActiveInHierarchy)
                      .OrderBy(Component => Component.ComponentId, StringComparer.Ordinal))

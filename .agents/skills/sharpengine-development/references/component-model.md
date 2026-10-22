@@ -26,6 +26,8 @@ Component authoring uses serialized data records and generated descriptors. Supp
 
 Authoring edits and Inspector/AI edits use shared validated transactions and change tracking. Project Runtime code may directly write ordinary component fields without a mandatory `SetField` API or per-assignment validation. A complete Runtime Tick is the observation boundary; Runtime Inspector edits and structural operations also establish explicit commit boundaries. Do not validate every pre-existing Runtime field when adding an unrelated component. Runtime business invariants remain the component author's responsibility.
 
+A WorldDocument owned by WorldAuthoringSession rejects direct entity setters. Its public Data and component-record reads are detached copies. Use EditorRuntime.EditWorld or EditorCommandContext.EditSelectedEntity for extension authoring; MarkDirty cannot authorize document writes. Transaction candidates must not remain writable aliases after commit, and callbacks cannot nest commits, history operations, or savepoint changes.
+
 Private caches are allowed only when they are reconstructable and cannot change save/load semantics. Mutable global or singleton state that affects behavior, rendering, or AI decisions must instead live in a declared engine service or serialized state scope.
 
 ## Registration And Project Capabilities

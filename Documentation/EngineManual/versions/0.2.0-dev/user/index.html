@@ -145,6 +145,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>收紧编辑文档的事务边界：扩展应通过 EditSelectedEntity 或 EditWorld 修改候选数据，成功后统一进入撤销、重做和保存流程；直接修改已归属编辑会话的实体会被拒绝。Runtime 普通字段赋值保持支持。Dedicated Server 在模块子系统就绪后才创建 World，并按所有者推进和释放生命周期。同实体存在移动权威时 NavAgent 暂停移动并报告 NAV_MOVEMENT_AUTHORITY，停用或移除权威后恢复；导航尚未自动接入角色移动意图。</p>
       <p>引擎快捷键集中到 <code>File &gt; Engine Settings &gt; Shortcuts</code>：F5/F8、Ctrl+S、Ctrl+Z、Ctrl+Y、Ctrl+Shift+Z、Esc 与 Viewport 导航键都可改键并立即生效；编辑器路由不再被 RmlUi 消费吞掉，焦点在文本输入框时 F5 等快捷键仍然可用。快捷键按获得焦点的文档作用域冒泡：资产编辑器先消费 Save/Undo/Redo，不消费才落到全局 World 层。Play 捕获指针后真实鼠标只作用于游戏，不再触发编辑器 hover 与分割条拖拽；释放捕获后编辑器会重新取得激活，避免后续按键落到其他窗口。Esc 取代 Shift+F1 作为默认释放手势。</p>
       <p>内置 Player 改为相机参考移动：站立转动相机不改变人物朝向，WASD 按镜头水平朝向生成移动意图，角色根节点转向该方向，模型保留局部轴修正。现有项目实例可启用 FaceMoveDirection 选择此策略。</p>
       <p>骨骼动画与状态机编辑器由独立 Animation.Editor 模块管理，复用下层 Timeline、Viewport 和布局基础设施。骨骼动画保留播放、预览模型、Root Motion、Notify、撤销与保存；状态机保留只读三面板显示，其布局由独立文件维护。使用新模块需重建并重启 Editor。</p>

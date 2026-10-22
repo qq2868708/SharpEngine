@@ -501,20 +501,24 @@ unregister the contribution when disposed; an extension releases its handles in
 closes, when the extension's handle is disposed, or if `Startup` throws.
 
 ```csharp
-var command = editor.Commands.Register(new EditorCommand(
+var Command = editor.Commands.Register(new EditorCommand(
     "project.reset-position", "Reset Position",
-    context =>
+    Context =>
     {
-        context.SelectedEntity!.Position = SharpEngine.World.WorldVector3.Zero;
-        context.MarkDirty();
-        context.RefreshUi();
+        var Result = Context.EditSelectedEntity(
+            Entity => Entity.Position = SharpEngine.World.WorldVector3.Zero,
+            "project.reset-position");
+        if (!Result.Success)
+        {
+            Context.SetStatus(Result.Message);
+        }
     },
-    context => context.PlayState == EditorPlayState.Stopped &&
-        context.SelectedEntity is not null));
+    Context => Context.PlayState == EditorPlayState.Stopped &&
+        Context.SelectedEntity is not null));
 
-var category = editor.Toolbar.RegisterCategory(
+var Category = editor.Toolbar.RegisterCategory(
     new EditorToolbarCategory("project", order: 500));
-var tool = editor.Toolbar.RegisterTool(new EditorToolbarTool(
+var Tool = editor.Toolbar.RegisterTool(new EditorToolbarTool(
     "project-transform", "project", "Transform",
     ["project.reset-position"]));
 ```
@@ -540,10 +544,14 @@ expose the current world, assets, unified `EditorSelection`, play state, dirty
 state, status, save, and UI refresh operations. Right-clicking first replaces the
 active selection, then evaluates context command state. Retrieve world entities
 through the context when executing. Stop restores the original Authoring document.
-Component Inspector and `components.edit` operations share transactions. Call `MarkDirty` after changing non-transactional extension
-data; saving clears it. Built-in hierarchy and gizmo changes use the shared
-revisioned Undo/Redo layer. Arbitrary project extension field writes are not yet
-automatically converted into transactions.
+Component Inspector, `components.edit`, and extension edits share transactions.
+Use `EditorCommandContext.EditSelectedEntity` for a selection edit or
+`EditorRuntime.EditWorld` with an expected document revision for a general edit.
+The callback receives detached candidate data; validation and commit create one
+Undo/Redo record and refresh the editor. Owned Authoring entities reject direct
+setters with `AUTHORING_TRANSACTION_REQUIRED`; `WorldDocument.Data` and entity
+component records are detached copies. `MarkDirty` is only for extension-owned
+data and does not authorize changes to an engine-owned document.
 
 `CanExecute` is evaluated each frame and rechecked before execution. Optional
 `GetChecked` always reads the owning business state; UI code never caches or

@@ -70,6 +70,8 @@ Instance.Tick(DeltaSeconds);
 ```
 
 Editor/Game 宿主已经接入这些调用。Editor 暂停时只推进 Engine/Editor，单步会推进 Instance 和 World。
+Server 同样先启动模块再创建 World，每帧先推进 Engine，再推进 Instance/World，关闭时先释放运行世界再卸载模块。
+`DedicatedServerSession` 未传入 Engine 时自行推进其私有 Engine；传入共享 Engine 时由调用者统一推进，避免多会话重复 Tick。
 直接构造 `RuntimeWorld` 时会创建其私有的 Instance/Engine 所有者，并在释放 World 时一起释放；
 直接调用 `World.Tick` 只推进该 World。需要跨场景状态时显式持有 `RuntimeInstance`，通过它创建 World。
 

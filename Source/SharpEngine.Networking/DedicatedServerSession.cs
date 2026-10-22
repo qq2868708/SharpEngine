@@ -35,18 +35,43 @@ public sealed class DedicatedServerSession : IDisposable
 {
     private readonly List<NetworkCommandEnvelope> PendingCommands = [];
     private bool Disposed;
+    private readonly bool OwnsEngine;
+    private RuntimeWorld? CurrentWorld;
 
     public DedicatedServerSession(SceneData Scene, ComponentRegistry Registry,
         NetworkSchemaCatalog Schema, AssetRegistry? Assets = null, EngineLifetime? Engine = null)
+        : this(Schema, Assets, Engine)
     {
-        ArgumentNullException.ThrowIfNull(Scene);
-        ArgumentNullException.ThrowIfNull(Registry);
+        try
+        {
+            StartWorld(Scene, Registry);
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Creates the instance scope so modules can register before StartWorld initializes components.</summary>
+    public DedicatedServerSession(NetworkSchemaCatalog Schema, AssetRegistry? Assets = null, EngineLifetime? Engine = null)
+    {
         ArgumentNullException.ThrowIfNull(Schema);
         this.Schema = Schema;
         CommandRouter = new NetworkCommandRouter(Schema);
         Replication = new NetworkReplicationFrameBuilder(Schema);
+        OwnsEngine = Engine is null;
         Instance = new RuntimeInstance(Assets, Engine);
-        World = Instance.CreateWorld(Scene, Registry);
+    }
+
+    public void StartWorld(SceneData Scene, ComponentRegistry Registry)
+    {
+        ObjectDisposedException.ThrowIf(Disposed, this);
+        if (CurrentWorld is not null)
+        {
+            throw new InvalidOperationException("SERVER_WORLD_ALREADY_STARTED: A session starts one World.");
+        }
+        CurrentWorld = Instance.CreateWorld(Scene, Registry);
     }
 
     public NetworkSchemaCatalog Schema
@@ -71,7 +96,18 @@ public sealed class DedicatedServerSession : IDisposable
 
     public RuntimeWorld World
     {
-        get;
+        get
+        {
+            return CurrentWorld ?? throw new InvalidOperationException("SERVER_WORLD_NOT_STARTED: Call StartWorld after module registration.");
+        }
+    }
+
+    public RuntimeWorld? ActiveWorld
+    {
+        get
+        {
+            return CurrentWorld;
+        }
     }
 
     public ulong ServerTick
@@ -92,6 +128,14 @@ public sealed class DedicatedServerSession : IDisposable
     {
         ObjectDisposedException.ThrowIf(Disposed, this);
         World.CheckThread();
+        if (!float.IsFinite(DeltaSeconds) || DeltaSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(DeltaSeconds));
+        }
+        if (OwnsEngine)
+        {
+            Instance.Engine.Update(DeltaSeconds);
+        }
         var Tick = ServerTick + 1;
         var Results = new List<NetworkCommandResult>();
         foreach (var Command in PendingCommands.OrderBy(Command => Command.InputSequence)
@@ -128,9 +172,8 @@ public sealed class DedicatedServerSession : IDisposable
             return;
         }
 
-        World.Dispose();
         Instance.Dispose();
-
+        CurrentWorld = null;
         Disposed = true;
     }
 }

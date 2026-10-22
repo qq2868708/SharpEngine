@@ -18,6 +18,7 @@ public static class HostEntrypoint
     private static DedicatedServerNetworkHost? NetworkHost;
     private static ProjectModuleHost? ProjectModules;
     private static EngineModuleHost? EngineModules;
+    private static EngineLifetime? SubsystemLifetime;
     private static int Updates;
     private static int CommandExecutions;
 
@@ -49,7 +50,8 @@ public static class HostEntrypoint
             var WorldPath = StartupWorld(ProjectManifest, ProjectRoot);
             var Scene = WorldDocument.Load(WorldPath, Registry).Data;
             var Schema = CreateSchema();
-            Session = new DedicatedServerSession(Scene, Registry, Schema);
+            SubsystemLifetime = new EngineLifetime();
+            Session = new DedicatedServerSession(Schema, Engine: SubsystemLifetime);
             var CurrentSession = Session;
             var RuntimeContext = new ServerRuntimeContext(CurrentSession);
             EngineModules = EngineModuleHost.Prepare("Server",
@@ -58,6 +60,7 @@ public static class HostEntrypoint
                 components: RuntimeContext));
             ProjectModules.Start((Id, Type) => new ModuleContext(ProjectRoot, Id, Type,
                 components: RuntimeContext));
+            Session.StartWorld(Scene, Registry);
             var Port = CommandLineInteger("--network-port", 0);
             NetworkHost = new DedicatedServerNetworkHost(Session,
                 new UdpNetworkTransport(new NetworkTransportOptions { LocalPort = Port }))
@@ -89,6 +92,7 @@ public static class HostEntrypoint
     {
         try
         {
+            SubsystemLifetime?.Update(RuntimeWorld.FixedDeltaSeconds);
             var Frame = NetworkHost?.Tick(RuntimeWorld.FixedDeltaSeconds);
             if (Frame is not null)
             {
@@ -124,12 +128,14 @@ public static class HostEntrypoint
         {
             NetworkHost?.Dispose();
             NetworkHost = null;
+            Session?.Dispose();
+            Session = null;
             ProjectModules?.Dispose();
             ProjectModules = null;
             EngineModules?.Dispose();
             EngineModules = null;
-            Session?.Dispose();
-            Session = null;
+            SubsystemLifetime?.Dispose();
+            SubsystemLifetime = null;
         }
         catch (Exception Error)
         {
@@ -196,7 +202,7 @@ public static class HostEntrypoint
         {
             get
             {
-                return Session.World;
+                return Session.ActiveWorld;
             }
         }
 

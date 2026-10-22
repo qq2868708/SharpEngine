@@ -228,10 +228,20 @@ internal static unsafe class EditorExtensionValidation
             runtime.InvokeUiAction("editor.select-entity:player");
             runtime.Update(0);
             var original = runtime.SelectedEntity!;
+            var PositionBeforeCommand = original.Position;
+            var RevisionBeforeCommand = runtime.DocumentRevision;
             runtime.InvokeUiAction("editor.command:validation.reset");
             require(module.Calls == 1 && runtime.IsDirty && original.Position == WorldVector3.Zero &&
                 Text["position"] == "X 0   Y 0   Z 0",
                 "The callback must edit the current world, refresh Inspector, and mark edits dirty");
+            require(runtime.DocumentRevision == RevisionBeforeCommand + 1,
+                "An extension command commits one Authoring revision");
+            runtime.InvokeUiAction("editor.undo");
+            require(original.Position == PositionBeforeCommand,
+                "Extension entity edits participate in shared Undo");
+            runtime.InvokeUiAction("editor.redo");
+            require(original.Position == WorldVector3.Zero,
+                "Extension entity edits participate in shared Redo");
 
             runtime.InvokeUiAction("editor.play");
             runtime.Update(0);
@@ -241,7 +251,7 @@ internal static unsafe class EditorExtensionValidation
             var restored = runtime.SelectedEntity!;
             require(ReferenceEquals(original, restored) && runtime.IsDirty,
                 "Stop must restore simulation transforms without replacing the Authoring document");
-            restored.Position = new WorldVector3(7, 8, 9);
+            runtime.CommandContext.EditSelectedEntity(Entity => Entity.Position = new WorldVector3(7, 8, 9));
             runtime.InvokeUiAction("editor.command:validation.reset");
             require(module.Calls == 2 && restored.Position == WorldVector3.Zero,
                 "Command context must keep resolving the Authoring world after Stop");
@@ -332,9 +342,7 @@ internal static unsafe class EditorExtensionValidation
                 command =>
                 {
                     Calls++;
-                    command.SelectedEntity!.Position = WorldVector3.Zero;
-                    command.MarkDirty();
-                    command.RefreshUi();
+                    command.EditSelectedEntity(Entity => Entity.Position = WorldVector3.Zero);
                 },
                 command => Enabled && command.SelectedEntity is not null &&
                     command.PlayState == EditorPlayState.Stopped,

@@ -80,7 +80,7 @@ public static class SceneRenderer
 
         foreach (var (Entity, ComponentType) in Renderables(world))
         {
-            var ComponentId = Entity.Components.First(Component => Component.TypeId == ComponentType).ComponentId;
+            var ComponentId = Entity.Record.Components.First(Component => Component.TypeId == ComponentType).ComponentId;
             var SkeletonState = world.RenderStates.GetValueOrDefault(ComponentId) as SkeletonFrameState;
             if (SkeletonState is not null && SkeletonState.Code != "SKELETON_READY")
             {
@@ -495,7 +495,7 @@ public static class SceneRenderer
     }
 
     private static JsonObject? ComponentState(WorldEntity entity, string type) =>
-        entity.Components.FirstOrDefault(c => c.TypeId == type)?.State;
+        entity.Record.Components.FirstOrDefault(c => c.TypeId == type)?.State;
 
     private static string StateString(JsonObject? state, string name)
     {
@@ -537,7 +537,7 @@ public static class SceneRenderer
         {
             return Geometry.Positions;
         }
-        var Component = Entity.Components.First(Component => Component.TypeId == ComponentType);
+        var Component = Entity.Record.Components.First(Component => Component.TypeId == ComponentType);
         var State = World.RenderStates.GetValueOrDefault(Component.ComponentId) as SkeletonFrameState;
         if (State is null || State.MeshId != StateString(Component.State, "Mesh") || State.Positions.Count != Geometry.Positions.Length)
         {

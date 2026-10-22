@@ -31,6 +31,16 @@
 4. 返回包含服务器 Tick、RuntimeFrame 和 Command 结果的 `NetworkServerFrame`；
 5. 使用 `BuildSnapshot` 为每个连接生成完整快照或 Delta。
 
+需要模块注册的宿主先使用 `DedicatedServerSession(Schema, Assets, Engine)` 创建 Instance，
+再注册子系统、启动模块，最后调用 `StartWorld(Scene, Registry)`。启动前 `ActiveWorld` 为 null；
+`World` 在尚未启动时报告 `SERVER_WORLD_NOT_STARTED`。原有带 Scene 的构造函数仍可用于已经准备好注册的独立会话。
+Server Target 遵守这一顺序，组件初始化能够查询模块的 WorldSubsystem。
+
+未提供 Engine 的独立 Session 在 Tick 中推进自己拥有的 EngineLifetime，再推进 Instance/World。
+显式提供 Engine 时，调用者每帧推进该共享 Engine 一次，Session 不重复推进它。
+Server Target 关闭时先释放网络、World/Instance，再卸载模块，最后释放 Engine。
+`StartWorld` 只允许成功启动一次；失败不会留下部分 World。
+
 它不启动渲染器或编辑器 UI，也不把 Runtime 状态写回 Authoring 资产。`DedicatedServerNetworkHost` 将 UDP 连接映射到该会话，不能绕过 CommandRouter 和 World 提交边界。
 
 ## C# UDP 传输

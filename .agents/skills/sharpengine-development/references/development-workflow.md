@@ -28,6 +28,8 @@ Select the tuple actually affected. Use `-Scope All` for full-layout claims. Che
 
 Keep evaluated project metadata and manifests authoritative. Do not add hand-maintained parallel project lists. Inspect current project/Plugin build entry points before compiling a Module directly; their output guards require project-aware staging. Verify affected dependency closure, target filtering, and publication failure behavior.
 
+Editor/Game/Server must register module subsystems before creating World components and release World/Instance owners before unloading modules. Server uses a staged DedicatedServerSession followed by StartWorld. A Session with a private Engine advances it; a shared Engine is advanced once by its host. Validate initialization, update and teardown across these ownership modes when changing host startup.
+
 ## Editor Sessions And Reload
 
 For interactive MCP use, list sessions and obtain the user's explicit choice of an existing Editor or isolated Editor before binding. Honor a selection already made in the task. Do not auto-attach to the first or most recent Editor. One connection stays bound to one session.
@@ -58,6 +60,8 @@ Inspect each tool's current arguments before running it. Keep compilation, manag
 ## Input, Motion And Native Resource Review
 
 For input/movement work read `Documentation/ControlAndMovement.md` and the actual host routing. RmlUi consumes first; unhandled semantic input reaches its intended route and host. Focus/capture loss clears held state. Do not add a parallel raw project input path. Verify one movement authority commits a target transform at the defined finalize boundary, including Root Motion consumption and conflict diagnostics.
+
+An active IMovementAuthority also suspends same-entity NavAgent writes, with NAV_MOVEMENT_AUTHORITY observation. Verify navigation resumes after authority disable/removal; do not accidentally reinstate a second Transform writer when adding path-following adapters.
 
 For rendering/interop read `Documentation/RenderBackends.md`. Identify the context/device, thread, owner, lifetime, and invalidation boundary of each retained GPU/native resource. Creation, use, release, document replacement, floating-window closure, and shutdown must honor that ownership. OpenGL context ownership and Vulkan device/synchronization requirements need backend-specific evidence; a managed cache test or one screenshot does not establish correct teardown. Preserve the pinned `External/RmlUi` fork workflow; dependency changes require a reproducible parent pin and available dependency commit.
 

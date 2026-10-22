@@ -8,5 +8,7 @@
   <ItemGroup>
     <Compile Include="../NetworkSample/NetworkSample.cs" Link="NetworkSample.cs" />
     <ProjectReference Include="../../Source/SharpEngine.Networking/SharpEngine.Networking.csproj" />
+    <ProjectReference Include="../../Source/SharpEngine.ComponentGenerator/SharpEngine.ComponentGenerator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

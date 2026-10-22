@@ -53,7 +53,16 @@ public sealed class WorldEntity
     public string ParentId { get => Record.ParentId ?? ""; internal set => Record.ParentId = value.Length == 0 ? null : value; }
     public bool ActiveSelf => Record.ActiveSelf;
     public bool ActiveInHierarchy => ActiveSelf && (Record.ParentId is null || Document?.Entities.First(e => e.Id == Record.ParentId).ActiveInHierarchy == true);
-    public IReadOnlyList<ComponentRecord> Components => Record.Components.AsReadOnly();
+    /// <summary>Authoring records are detached copies; changes require a document transaction.</summary>
+    public IReadOnlyList<ComponentRecord> Components
+    {
+        get
+        {
+            return Document?.IsAuthoring == true
+                ? Array.AsReadOnly(Record.Components.Select(Component => Component.Clone()).ToArray())
+                : Record.Components.AsReadOnly();
+        }
+    }
     public bool HasComponent(string typeId) => Record.Components.Any(c => c.TypeId == typeId);
     public bool HasEnabledComponent(string typeId) => ActiveInHierarchy && Record.Components.Any(c => c.TypeId == typeId && c.Enabled);
     internal IEnumerable<WorldEntity> RenderViews(string typeId) => Record.Components
@@ -76,11 +85,17 @@ public sealed class WorldEntity
                 WorldEntityKind.Light : WorldEntityKind.Empty;
         init { if (value != WorldEntityKind.Empty) Ensure(value == WorldEntityKind.Mesh ? "engine.mesh-renderer" : value == WorldEntityKind.Camera ? "engine.camera" : "engine.directional-light"); }
     }
-    private ComponentRecord Ensure(string typeId)
+    private ComponentRecord Ensure(string TypeId)
     {
-        var component = Record.Components.FirstOrDefault(c => c.TypeId == typeId);
-        if (component is not null) return component;
-        component = ComponentRecord.Create(Defaults.Find(typeId)!, Defaults); Record.Components.Add(component); return component;
+        Document?.CheckDirectMutation();
+        var Component = Record.Components.FirstOrDefault(Component => Component.TypeId == TypeId);
+        if (Component is not null)
+        {
+            return Component;
+        }
+        Component = ComponentRecord.Create(Defaults.Find(TypeId)!, Defaults);
+        Record.Components.Add(Component);
+        return Component;
     }
     private JsonObject State(string typeId) => Component(typeId)!.State;
     internal Vector3 LinearColor(string TypeId)
@@ -94,11 +109,15 @@ public sealed class WorldEntity
         var a = State("engine.transform")[name]!.AsArray();
         return new(a[0]!.Deserialize<float>(), a[1]!.Deserialize<float>(), a[2]!.Deserialize<float>());
     }
-    private void Vector(string name, WorldVector3 value)
+    private void Vector(string Name, WorldVector3 Value)
     {
-        if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z) ||
-            name == "Scale" && (value.X <= 0 || value.Y <= 0 || value.Z <= 0)) throw new ArgumentOutOfRangeException(nameof(value));
-        State("engine.transform")[name] = new JsonArray(value.X, value.Y, value.Z);
+        Document?.CheckDirectMutation();
+        if (!float.IsFinite(Value.X) || !float.IsFinite(Value.Y) || !float.IsFinite(Value.Z) ||
+            Name == "Scale" && (Value.X <= 0 || Value.Y <= 0 || Value.Z <= 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Value));
+        }
+        State("engine.transform")[Name] = new JsonArray(Value.X, Value.Y, Value.Z);
     }
     public WorldVector3 Position { get => Vector("Position"); set => Vector("Position", value); }
     public WorldVector3 Rotation { get => Vector("Rotation"); set => Vector("Rotation", value); }
@@ -175,6 +194,7 @@ public sealed class WorldDocument
     }
     public void ApplyRuntimeFrame(RuntimeFrame Frame)
     {
+        CheckDirectMutation();
         Replace(Frame.Snapshot());
         RuntimeFrame = Frame;
         RenderStates = Frame.Components;
@@ -182,35 +202,79 @@ public sealed class WorldDocument
     public const int CurrentSchemaVersion = 3;
     private readonly List<WorldEntity> _entities = [];
     public ComponentRegistry Registry { get; internal set; }
-    public SceneData Data { get; private set; }
+    private SceneData Scene = null!;
+    internal bool IsAuthoring
+    {
+        get;
+        private set;
+    }
+    /// <summary>Returns detached data for documents owned by an Authoring session.</summary>
+    public SceneData Data
+    {
+        get
+        {
+            return IsAuthoring ? Scene.Clone() : Scene;
+        }
+    }
     public string SourcePath { get; private set; }
-    public string Name => Data.Name;
-    public string ActiveCameraId => Data.ActiveCameraId ?? "";
+    public string Name
+    {
+        get
+        {
+            return Scene.Name;
+        }
+    }
+    public string ActiveCameraId
+    {
+        get
+        {
+            return Scene.ActiveCameraId ?? "";
+        }
+    }
     public WorldEntity? ActiveCamera => Entities.FirstOrDefault(e => e.HasEnabledComponent("engine.camera") && (ActiveCameraId.Length == 0 || e.Id == ActiveCameraId));
     public IReadOnlyList<WorldEntity> Entities => _entities.AsReadOnly();
     public int MeshCount => Entities.Count(e => WorldEntity.MeshComponentTypeIds.Any(e.HasComponent));
     public WorldDocument(SceneData data, ComponentRegistry registry, string sourcePath = "<memory>")
-    { Registry = registry; Data = data; SourcePath = sourcePath; Replace(data); }
+    {
+        Registry = registry;
+        SourcePath = sourcePath;
+        Replace(data);
+    }
+    internal void BindAuthoring()
+    {
+        if (IsAuthoring)
+        {
+            throw new InvalidOperationException("AUTHORING_ALREADY_OWNED: A document has one Authoring session.");
+        }
+        IsAuthoring = true;
+        // Detach references handed out before this document acquired an owner.
+        Replace(Scene);
+    }
+    internal void CheckDirectMutation()
+    {
+        if (IsAuthoring)
+        {
+            throw new InvalidOperationException("AUTHORING_TRANSACTION_REQUIRED: Edit this document through its Authoring session.");
+        }
+    }
     internal void SetSourcePath(string path) => SourcePath = Path.GetFullPath(path);
-    internal void Replace(SceneData data)
+    internal void Replace(SceneData Data)
     {
         RuntimeFrame = null;
         RenderStates = new Dictionary<string, ComponentFrameState>();
-        Data = data;
-        var existing = _entities.ToDictionary(e => e.Id, StringComparer.Ordinal);
+        Scene = IsAuthoring ? Data.Clone() : Data;
+        var Existing = _entities.ToDictionary(Entity => Entity.Id, StringComparer.Ordinal);
         _entities.Clear();
-        foreach (var record in data.Entities)
+        foreach (var Record in Scene.Entities)
         {
-            if (!existing.TryGetValue(record.EntityId, out var entity)) entity = new(record, this);
-            entity.Record = record; _entities.Add(entity);
+            var Found = Existing.TryGetValue(Record.EntityId, out var Entity);
+            if (!Found)
+            {
+                Entity = new(Record, this);
+            }
+            Entity!.Record = Record;
+            _entities.Add(Entity);
         }
-    }
-    internal void SetEntityOrder(IReadOnlyList<WorldEntity> entities)
-    {
-        if (entities.Count != _entities.Count || entities.Distinct().Count() != _entities.Count || entities.Any(e => !_entities.Contains(e)))
-            throw new InvalidOperationException("Entity order must contain every entity exactly once");
-        Data.Entities.Clear(); Data.Entities.AddRange(entities.Select(e => e.Record));
-        _entities.Clear(); _entities.AddRange(entities);
     }
     public Matrix4x4 WorldMatrix(WorldEntity entity)
     {
@@ -233,10 +297,10 @@ public sealed class WorldDocument
         catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException or NullReferenceException)
         { throw new InvalidDataException("Invalid World v3 JSON: " + error.Message, error); }
     }
-    public string Serialize() => Data.Serialize();
+    public string Serialize() => Scene.Serialize();
     public void Save(string path)
     {
-        Data.Validate(Registry);
+        Scene.Validate(Registry);
         var full = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         var temporary = full + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -249,7 +313,7 @@ public sealed class WorldDocument
         return new WorldEntityDescription(e.Id, e.Name, e.Kind.ToString(), e.ParentId, e.Asset, e.Material, e.Position, e.Rotation, e.Scale,
             new(m.M41, m.M42, m.M43), [m.M11,m.M12,m.M13,m.M14,m.M21,m.M22,m.M23,m.M24,m.M31,m.M32,m.M33,m.M34,m.M41,m.M42,m.M43,m.M44],
             e.Color,e.Intensity,e.FieldOfView,e.NearPlane,e.FarPlane,e.ActiveSelf,e.ActiveInHierarchy,
-            e.Components.Where(c => Registry.Find(c.TypeId) is not null).Select(c => c.ToJson()).ToArray());
+            e.Record.Components.Where(c => Registry.Find(c.TypeId) is not null).Select(c => c.ToJson()).ToArray());
     }).ToArray());
     public string ToJson(JsonSerializerOptions? options = null) => JsonSerializer.Serialize(Describe(), options ?? new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 }

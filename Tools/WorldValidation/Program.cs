@@ -27,7 +27,12 @@ void Reject(string xml, string label)
     throw new InvalidOperationException($"Expected rejection: {label}");
 }
 
-Check(world.Entities.Count == 6 && world.MeshCount == 3, "Sample entity counts");
+var ExpectedEntityIds = new HashSet<string>(StringComparer.Ordinal)
+{
+    "ground", "player", "crate", "mainCamera", "sun", "skyLight", "player-model", "player-view",
+};
+Check(ExpectedEntityIds.SetEquals(world.Entities.Select(Entity => Entity.Id)) && world.MeshCount == 3,
+    "Sample entities include the character model and player camera, with three renderable meshes");
 Check(world.ActiveCamera?.Id == "mainCamera", "Scene active camera");
 world.Entities[1].Position = new WorldVector3(0.12345678f, 0.75f, 0);
 var roundTrip = WorldDocument.Parse(world.Serialize());

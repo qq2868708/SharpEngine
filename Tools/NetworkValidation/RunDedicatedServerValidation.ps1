@@ -23,7 +23,7 @@ try
     $Server = Start-Process -FilePath $ServerExe -ArgumentList @(
         '--project', $Project, '--network-port', '28760', '--duration-milliseconds', '8000') `
         -WorkingDirectory $Root -RedirectStandardOutput $ServerOutput `
-        -RedirectStandardError $ServerError -PassThru
+        -RedirectStandardError $ServerError -WindowStyle Hidden -PassThru
     $Deadline = [DateTime]::UtcNow.AddSeconds(10)
     $ServerText = ''
     do
@@ -46,10 +46,10 @@ try
     $Sample = Join-Path $Root 'Tools\NetworkSample\bin\Debug\net8.0\SharpEngine.NetworkSample.dll'
     $First = Start-Process -FilePath 'dotnet' -ArgumentList @(
         $Sample, 'client', '28760', 'player-a', '7') -WorkingDirectory $Root `
-        -RedirectStandardOutput $FirstOutput -RedirectStandardError $FirstError -PassThru
+        -RedirectStandardOutput $FirstOutput -RedirectStandardError $FirstError -WindowStyle Hidden -PassThru
     $Second = Start-Process -FilePath 'dotnet' -ArgumentList @(
         $Sample, 'client', '28760', 'player-b', '11') -WorkingDirectory $Root `
-        -RedirectStandardOutput $SecondOutput -RedirectStandardError $SecondError -PassThru
+        -RedirectStandardOutput $SecondOutput -RedirectStandardError $SecondError -WindowStyle Hidden -PassThru
     if (!$First.WaitForExit(12000) -or !$Second.WaitForExit(12000))
     {
         throw 'Network clients did not finish within 12 seconds'
