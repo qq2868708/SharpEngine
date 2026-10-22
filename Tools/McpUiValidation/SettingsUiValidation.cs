@@ -168,15 +168,17 @@ internal static class SettingsUiValidation
                 .AsArray().Select(node => node!.AsObject())
                 .Single(node => node["id"]!.GetValue<string>() == "sharpengine.editor-shortcuts");
             require(page["scope"]!.GetValue<string>() == "engine" &&
-                page["fields"]!.AsArray().Count == 17,
+                page["fields"]!.AsArray().Count == 18,
                 "Engine Settings must publish every engine shortcut field");
             var shortcut = Result(tool(sequence++, "editor.describe", new()));
-            require(shortcut["shortcuts"]!["bindings"]!.AsArray().Count == 6 &&
+            require(shortcut["shortcuts"]!["bindings"]!.AsArray().Count == 7 &&
                 shortcut["shortcuts"]!["bindings"]![0]!["gesture"]!.GetValue<string>() == "F5" &&
+                shortcut["shortcuts"]!["bindings"]![2]!["gesture"]!.GetValue<string>() == "Ctrl+S" &&
                 shortcut["playInputCapture"]!["releaseShortcut"]!.GetValue<string>() == "Escape",
                 "The described shortcut map must match the live editor bindings");
         }
     }
 }
+
 
 

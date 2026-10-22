@@ -326,6 +326,7 @@ are configured in one place, `File > Engine Settings > Shortcuts`
 | --- | --- | --- |
 | `playPause` | F5 | `editor.play-pause` |
 | `stop` | F8 | `editor.stop` |
+| `save` | Ctrl+S | `editor.save` |
 | `undo` | Ctrl+Z | `editor.undo` |
 | `redo` | Ctrl+Y | `editor.redo` |
 | `redoAlternate` | Ctrl+Shift+Z | `editor.redo` |
@@ -333,6 +334,8 @@ are configured in one place, `File > Engine Settings > Shortcuts`
 | `navigateForward/Back/Left/Right/Up/Down` | W/S/A/D/E/Q | Viewport navigation |
 | `navigate*Alternate` | Up/Down/Left/Right | Secondary navigation keys |
 | `navigateSpeedModifier` | Shift | Viewport navigation speed boost |
+
+Shortcuts are part of the input route, not a parallel hotkey table: handlers are bound on the `Editor` route and ordered by priority. A focused asset editor registers its own Save/Undo/Redo scope at `EditorShortcutSettings.ScopedPriority`, above the global `GlobalPriority`, and only accepts key events whose `HostId` belongs to that window. Consuming stops the gesture immediately; declining (read-only document, or a key from another window) lets the same action bubble to the global layer, which is why Ctrl+S saves the focused asset or the World depending on where focus is. `editor.describe.shortcuts.routing` publishes that order and every live scope.
 
 Each entry is a primary key plus exact Ctrl/Shift/Alt flags. Every committed edit
 rebinds the live `engine://input/contexts/editor` bindings immediately; a

@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Nodes;
+using System.Text.Json.Nodes;
 using SharpEngine.Input;
 using SharpEngine.Settings;
 using SharpEngine.Editor;
@@ -13,6 +13,8 @@ internal static class ShortcutValidation
                 new InputActionDefinition(1, EditorShortcutSettings.PlayPauseActionId,
                     InputActionValueType.Button, false),
                 new InputActionDefinition(1, EditorShortcutSettings.StopActionId,
+                    InputActionValueType.Button, false),
+                new InputActionDefinition(1, EditorShortcutSettings.SaveActionId,
                     InputActionValueType.Button, false),
                 new InputActionDefinition(1, EditorShortcutSettings.UndoActionId,
                     InputActionValueType.Button, false),
@@ -34,7 +36,7 @@ internal static class ShortcutValidation
         var Markup = Runtime.BuildSettingsMarkup(SettingsScope.Engine);
         foreach (var Field in new[]
                  {
-                     "playPause", "stop", "undo", "redo", "redoAlternate", "releasePointer",
+                     "playPause", "stop", "save", "undo", "redo", "redoAlternate", "releasePointer",
                      "navigateForward", "navigateBack", "navigateLeft", "navigateRight",
                      "navigateUp", "navigateDown", "navigateForwardAlternate",
                      "navigateBackAlternate", "navigateLeftAlternate",
@@ -61,7 +63,7 @@ internal static class ShortcutValidation
         Require(Described["bindings"]!.AsArray().Select(Binding =>
                 Binding!["gesture"]!.GetValue<string>()).SequenceEqual(new[]
                 {
-                    "F5", "F8", "Ctrl+Z", "Ctrl+Y", "Ctrl+Shift+Z", "Escape",
+                    "F5", "F8", "Ctrl+S", "Ctrl+Z", "Ctrl+Y", "Ctrl+Shift+Z", "Escape",
                 }),
             "Engine shortcut defaults must serialize in deterministic declaration order");
         Require(Described["navigation"]!["forward"]!.GetValue<string>() == "W" &&
@@ -72,8 +74,32 @@ internal static class ShortcutValidation
 
 
         var ContextId = EditorShortcutSettings.EditorContextId;
-        Require(InputContext.BindingsFor(ContextId).Count == 6,
-            "The editor InputMappingContext must start with the six engine shortcut bindings");
+        Require(InputContext.BindingsFor(ContextId).Count == 7,
+            "The editor InputMappingContext must start with the seven engine shortcut bindings");
+        Require(InputContext.BindingsFor(ContextId).Any(Binding =>
+                Binding.ActionId == EditorShortcutSettings.SaveActionId &&
+                Binding.Control == "Keyboard/S" && Binding.ExactModifiers &&
+                Binding.Modifiers.SequenceEqual(["Keyboard/Control"])),
+            "Ctrl+S must be bound to the editor Save action");
+
+        // Shortcut scopes are part of the input route, not a parallel hotkey table.
+        var Opened = Runtime.OpenAsset("project://materials/validation");
+        Require(Opened.Success, "The shortcut scope check requires an openable asset editor");
+        var DescribedRouting = JsonNode.Parse(Runtime.DescribeShortcutsJson())!["routing"]!;
+        Require(DescribedRouting["order"]!.AsArray().Select(Value => Value!.GetValue<string>())
+            .SequenceEqual(new[] { "focusedHostScope", "globalEditor" }),
+            "Shortcut routing must declare the focused scope before the global layer");
+        var Scopes = DescribedRouting["scopes"]!.AsArray();
+        Require(Scopes.Any(Scope => Scope!["actions"]!.AsArray().Any(Action =>
+                Action!.GetValue<string>() == EditorShortcutSettings.SaveActionId) &&
+            Scope["priority"]!.GetValue<int>() > EditorShortcutSettings.GlobalPriority),
+            "A focused asset editor must publish a Save scope above the global layer");
+        var ScopeHost = Scopes.First(Scope => Scope!["actions"]!.AsArray().Any(Action =>
+            Action!.GetValue<string>() == EditorShortcutSettings.SaveActionId))!["hostId"]!.GetValue<string>();
+        Runtime.InvokeUiAction($"editor.host-action:{ScopeHost}:editor.asset-close");
+        Require(JsonNode.Parse(Runtime.DescribeShortcutsJson())!["routing"]!["scopes"]!
+                .AsArray().Count == 0,
+            "Closing an asset editor must withdraw its shortcut scope");
 
         Runtime.InvokeUiAction($"editor.settings-change:engine:{EditorShortcutSettings.SettingsId}:playPause/key:F6");
         Require(Runtime.Shortcuts.PlayPause.Key == EngineShortcutKey.F6,
@@ -137,11 +163,12 @@ internal static class ShortcutValidation
             Runtime.Shortcuts.NavigateForward == EngineShortcutKey.W &&
             !Runtime.DescribeShortcutsJson().Contains("SESHORTCUT_", StringComparison.Ordinal),
             "Reverting every edit must restore the documented engine shortcut defaults");
-        Require(InputContext.BindingsFor(ContextId).Count == 6,
-            "Restored defaults must leave the live context with six shortcut bindings");
+        Require(InputContext.BindingsFor(ContextId).Count == 7,
+            "Restored defaults must leave the live context with seven shortcut bindings");
         Runtime.InvokeUiAction("editor.settings-page:engine:sharpengine.editor-navigation");
     }
 }
+
 
 
 

@@ -237,6 +237,15 @@
       "tags": ["editor", "input"]
     },
     {
+      "id": "input/actions/editor.save",
+      "type": "InputAction",
+      "name": "Editor Save",
+      "path": "Content/Input/Actions/EditorSave.inputaction.json",
+      "readOnly": true,
+      "importer": "SharpEngine.InputActionJson",
+      "tags": ["editor", "input"]
+    },
+    {
       "id": "input/actions/editor.undo",
       "type": "InputAction",
       "name": "Editor Undo",

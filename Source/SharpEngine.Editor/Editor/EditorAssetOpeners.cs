@@ -242,6 +242,10 @@ public sealed class EditorAssetOpenerRegistry
         };
     }
 
+    internal IReadOnlyList<JsonObject> DescribeShortcutScopes() => Editors.Values
+        .OrderBy(Editor => Editor.AssetId, StringComparer.OrdinalIgnoreCase)
+        .Select(Editor => Editor.DescribeShortcutScope()).ToArray();
+
     internal bool TryHandleHostAction(string HostId, string Action)
     {
         EnsureOwnerThread();

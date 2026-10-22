@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.Input;
 using SharpEngine.World;
 
 namespace SharpEngine.Editor;
@@ -45,6 +46,7 @@ internal sealed class AssetEditorHost : IDisposable
     private readonly Dictionary<string, AssetEditorPaneDefinition> Panes;
     private readonly HashSet<string> LiveFloatingHosts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> PublishedMarkup = new(StringComparer.Ordinal);
+    private readonly List<IDisposable> ShortcutRegistrations = new();
     private bool Disposed;
 
     public AssetEditorHost(EditorRuntime Runtime, EditorAssetOpener Opener,
@@ -81,8 +83,83 @@ internal sealed class AssetEditorHost : IDisposable
                 $"Could not create asset editor window '{RootId}'");
         }
 
+        RegisterShortcuts();
         Refresh(true);
     }
+
+    /// <summary>Editor-route shortcut scope for this asset editor. A shortcut is only
+    /// taken when the key event came from one of this editor's hosts, which is exactly
+    /// the window that currently owns focus. Returning false lets the same action bubble
+    /// to the global editor handlers.</summary>
+    private void RegisterShortcuts()
+    {
+        var Input = Runtime.InputRuntime;
+        if (Input is null || ShortcutRegistrations.Count != 0)
+        {
+            return;
+        }
+
+        ShortcutRegistrations.Add(Input.BindAction(InputRoute.Editor,
+            EditorShortcutSettings.SaveActionId, EditorShortcutSettings.ScopedPriority,
+            Event => HandleScoped(Event, SaveScoped)));
+        ShortcutRegistrations.Add(Input.BindAction(InputRoute.Editor,
+            EditorShortcutSettings.UndoActionId, EditorShortcutSettings.ScopedPriority,
+            Event => HandleScoped(Event, () => ExecuteDocumentCommand("undo"))));
+        ShortcutRegistrations.Add(Input.BindAction(InputRoute.Editor,
+            EditorShortcutSettings.RedoActionId, EditorShortcutSettings.ScopedPriority,
+            Event => HandleScoped(Event, () => ExecuteDocumentCommand("redo"))));
+    }
+
+    private bool HandleScoped(InputActionEvent Event, Func<bool> Execute)
+    {
+        // Only the owning host may take the shortcut, and only once per press.
+        if (Event.Phase != InputActionPhase.Performed || !OwnsHost(Event.HostId))
+        {
+            return false;
+        }
+        return Execute();
+    }
+
+    /// <summary>Read-only documents do not consume the shortcut so it can still reach the
+    /// World; editable documents always consume it once they own the focused window.</summary>
+    private bool SaveScoped()
+    {
+        // A clean document still consumes the gesture: Ctrl+S must not fall through and
+        // save the World just because this editor has nothing to write.
+        if (Instance.IsReadOnly)
+        {
+            return false;
+        }
+        Save();
+        return true;
+    }
+
+    private bool ExecuteDocumentCommand(string CommandId)
+    {
+        if (Instance.IsReadOnly)
+        {
+            return false;
+        }
+        if (Instance.CanExecuteCommand(CommandId))
+        {
+            Instance.ExecuteCommand(CommandId);
+        }
+        Refresh(false);
+        return true;
+    }
+
+    internal JsonObject DescribeShortcutScope() => new()
+    {
+        ["hostId"] = RootId,
+        ["assetId"] = AssetId,
+        ["editorId"] = Instance.EditorId,
+        ["readOnly"] = Instance.IsReadOnly,
+        ["priority"] = EditorShortcutSettings.ScopedPriority,
+        ["actions"] = new JsonArray(
+            EditorShortcutSettings.SaveActionId,
+            EditorShortcutSettings.UndoActionId,
+            EditorShortcutSettings.RedoActionId),
+    };
 
     public void Focus()
     {
@@ -193,6 +270,11 @@ internal sealed class AssetEditorHost : IDisposable
         }
 
         Disposed = true;
+        for (var Index = ShortcutRegistrations.Count - 1; Index >= 0; Index--)
+        {
+            ShortcutRegistrations[Index].Dispose();
+        }
+        ShortcutRegistrations.Clear();
         Runtime.DestroyAssetEditorWindow(RootId);
         Instance.Dispose();
         LiveFloatingHosts.Clear();
@@ -558,3 +640,4 @@ public sealed partial class EditorRuntime
         ViewportFrame Frame) =>
         _nativeApi.SubmitHostViewportFrame(HostId, Kind, Frame);
 }
+

@@ -1,4 +1,4 @@
-using SharpEngine.Input;
+﻿using SharpEngine.Input;
 using System.Runtime.InteropServices;
 using SharpEngine.Editor;
 using SharpEngine.Logging;
@@ -11,6 +11,7 @@ namespace SharpEngine.Host;
 
 public static class HostEntrypoint
 {
+
     private static EditorRuntime? s_runtime;
     private static EngineModuleHost? s_engineModules;
     private static ProjectModuleHost? s_modules;
@@ -281,7 +282,7 @@ public static class HostEntrypoint
         InputRuntimeService input)
     {
         s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/player.release-pointer", int.MaxValue, Event =>
+            "engine://input/actions/player.release-pointer", EditorShortcutSettings.GlobalPriority, Event =>
             {
                 if (Event.Phase != InputActionPhase.Performed || runtime.PlayState == EditorPlayState.Stopped)
                 {
@@ -291,7 +292,7 @@ public static class HostEntrypoint
                 return true;
             }));
         s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.play-pause", int.MaxValue, value =>
+            "engine://input/actions/editor.play-pause", EditorShortcutSettings.GlobalPriority, value =>
             {
                 if (value.Phase != InputActionPhase.Performed) return false;
                 runtime.InvokeUiAction(runtime.PlayState == EditorPlayState.Playing
@@ -299,21 +300,29 @@ public static class HostEntrypoint
                 return true;
             }));
         s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.stop", int.MaxValue, value =>
+            "engine://input/actions/editor.stop", EditorShortcutSettings.GlobalPriority, value =>
             {
                 if (value.Phase != InputActionPhase.Performed) return false;
                 runtime.InvokeUiAction("editor.stop");
                 return true;
             }));
         s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.undo", int.MaxValue, value =>
+            "engine://input/actions/editor.save", EditorShortcutSettings.GlobalPriority, value =>
+            {
+                if (value.Phase != InputActionPhase.Performed) return false;
+                // Reached only when no focused document scope consumed the gesture.
+                runtime.InvokeUiAction("editor.save");
+                return true;
+            }));
+        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
+            "engine://input/actions/editor.undo", EditorShortcutSettings.GlobalPriority, value =>
             {
                 if (value.Phase != InputActionPhase.Performed) return false;
                 runtime.InvokeUiAction("editor.undo");
                 return true;
             }));
         s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.redo", int.MaxValue, value =>
+            "engine://input/actions/editor.redo", EditorShortcutSettings.GlobalPriority, value =>
             {
                 if (value.Phase != InputActionPhase.Performed) return false;
                 runtime.InvokeUiAction("editor.redo");
@@ -328,3 +337,4 @@ public static class HostEntrypoint
         s_inputHandlers.Clear();
     }
 }
+

@@ -83,6 +83,15 @@ public sealed partial class EditorRuntime
             },
             ["diagnostics"] = new JsonArray(_shortcutDiagnostics
                 .Select(Value => (JsonNode?)JsonValue.Create(Value)).ToArray()),
+            // Shortcuts are part of the input route: the focused host's scope consumes
+            // first, then the same action bubbles to the global editor handlers.
+            ["routing"] = new JsonObject
+            {
+                ["route"] = InputRoute.Editor.ToString(),
+                ["order"] = new JsonArray("focusedHostScope", "globalEditor"),
+                ["scopes"] = new JsonArray(AssetOpeners.DescribeShortcutScopes()
+                    .Select(Scope => (JsonNode?)Scope).ToArray()),
+            },
         }.ToJsonString();
     }
 

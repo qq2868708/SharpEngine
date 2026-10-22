@@ -24,7 +24,7 @@ Editor/Game 将 `IInputRuntime` 和当前 host ID 注入 `RuntimeInstance`。Pla
 
 动画资产 Root Motion 开启时由 Animator 提取根增量到角色实体，并从模型姿态剔除根平移和旋转。Player 的根位移通过子 Mesh 朝向转换到实体空间，保留源水平距离和竖直轨迹，根实体的朝向由 Player 所选转向策略控制；无水平移动意图时抑制水平根位移。普通 Animator 使用源轨迹。同一实体的普通输入位移在该帧不重复应用。关闭时仅输出原地姿态，由 Movement 移动。Movement 分别公开意图速度与实际速度，状态机使用意图速度以避免根运动反馈使状态卡死。胶囊 Trace 使用移动后的实体变换；当前 collider 提供查询，不增加阻挡解算。
 
-验证：`dotnet run --project Tools/PrefabMovementValidation -- D:/SharpEngine` 覆盖 Prefab、引用、重建、输入、动画与 Trace；`Tools/AnimationValidation` 覆盖根运动循环、旋转、Seek、冲突和资产重新绑定；`dotnet run --project Tools/McpUiValidation -- Debug --player-only --render-backend=vulkan` 验证真实坐标 Play 和键鼠路径。`--player-only` 的断言描述内置 Prefab/World 配置，因此在未指定项目时每次都从当前引擎内容重建 `Saved/Validation/PlayerUi` 测试项目（含模块构建），始终按最新的 World 校验；当 `SHARPENGINE_VALIDATION_PROJECT` 指向的项目 World 快照与当前 `Content/Worlds/Main.sworld` 不一致（或控制器不是 `FaceMoveDirection=true`）时，会在启动前以 `PLAYER_FIXTURE_STALE` 拒绝，而不是用过期数据得出错误结论。测试创建自己的隔离窗口并在结束时关闭，不连接用户 Editor。
+验证：`dotnet run --project Tools/PrefabMovementValidation -- D:/SharpEngine` 覆盖 Prefab、引用、重建、输入、动画与 Trace；`Tools/AnimationValidation` 覆盖根运动循环、旋转、Seek、冲突和资产重新绑定；`dotnet run --project Tools/McpUiValidation -- Debug --player-only --render-backend=vulkan` 验证真实坐标 Play 和键鼠路径。快捷键（含 `Ctrl+S` 保存）属于 Editor 路由，并按获得焦点的文档作用域冒泡：资产编辑器先消费 Save/Undo/Redo，不消费才落到全局 World 层。`--player-only` 的断言描述内置 Prefab/World 配置，因此在未指定项目时每次都从当前引擎内容重建 `Saved/Validation/PlayerUi` 测试项目（含模块构建），始终按最新的 World 校验；当 `SHARPENGINE_VALIDATION_PROJECT` 指向的项目 World 快照与当前 `Content/Worlds/Main.sworld` 不一致（或控制器不是 `FaceMoveDirection=true`）时，会在启动前以 `PLAYER_FIXTURE_STALE` 拒绝，而不是用过期数据得出错误结论。测试创建自己的隔离窗口并在结束时关闭，不连接用户 Editor。
 
 ## 移动权威与 Character Movement 插件
 

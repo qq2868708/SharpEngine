@@ -243,8 +243,15 @@ public sealed class EditorShortcutSettings : DevelopmentSettings
 {
     public const string SettingsId = "sharpengine.editor-shortcuts";
     public const string EditorContextId = "engine://input/contexts/editor";
+
+    /// <summary>Handler priorities on the Editor route form the shortcut bubbling order:
+    /// a focused document scope consumes first, then the gesture falls through to the
+    /// global editor handlers.</summary>
+    public const int ScopedPriority = 1000;
+    public const int GlobalPriority = 0;
     public const string PlayPauseActionId = "engine://input/actions/editor.play-pause";
     public const string StopActionId = "engine://input/actions/editor.stop";
+    public const string SaveActionId = "engine://input/actions/editor.save";
     public const string UndoActionId = "engine://input/actions/editor.undo";
     public const string RedoActionId = "engine://input/actions/editor.redo";
     public const string ReleasePointerActionId = "engine://input/actions/player.release-pointer";
@@ -256,6 +263,12 @@ public sealed class EditorShortcutSettings : DevelopmentSettings
     [Setting("stop", DisplayName = "Stop",
         Description = "Stop simulation and restore the Authoring world.", Order = 200)]
     public EngineShortcut Stop { get; init; } = EngineShortcut.Of(EngineShortcutKey.F8);
+
+    [Setting("save", DisplayName = "Save",
+        Description = "Save the focused document: the active asset editor first, otherwise the World.",
+        Order = 250)]
+    public EngineShortcut Save { get; init; } =
+        EngineShortcut.Of(EngineShortcutKey.S, Control: true);
 
     [Setting("undo", DisplayName = "Undo",
         Description = "Undo the last Authoring transaction.", Order = 300)]
@@ -319,6 +332,7 @@ public sealed class EditorShortcutSettings : DevelopmentSettings
     {
         yield return (PlayPauseActionId, "playPause", PlayPause);
         yield return (StopActionId, "stop", Stop);
+        yield return (SaveActionId, "save", Save);
         yield return (UndoActionId, "undo", Undo);
         yield return (RedoActionId, "redo", Redo);
         yield return (RedoActionId, "redoAlternate", RedoAlternate);

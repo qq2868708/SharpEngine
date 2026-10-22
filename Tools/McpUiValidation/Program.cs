@@ -203,6 +203,12 @@ try
         Console.WriteLine($"PASS: {assertions} Settings UI integration assertions");
         return;
     }
+    if (args.Contains("--shortcut-scope-only", StringComparer.Ordinal))
+    {
+        ShortcutScopeUiValidation.Run(root, Require, Tool);
+        Console.WriteLine($"PASS: {assertions} shortcut scope integration assertions");
+        return;
+    }
     if (args.Contains("--timeline-only", StringComparer.Ordinal))
     {
         TimelinePreviewValidation.Run(Require, Tool, Call);

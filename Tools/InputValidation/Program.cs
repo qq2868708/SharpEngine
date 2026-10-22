@@ -16,11 +16,17 @@ Check(engineRuntime.Actions.Where(value => value.Id.Contains("/editor.")).Select
 {
     "engine://input/actions/editor.play-pause",
     "engine://input/actions/editor.redo",
+    "engine://input/actions/editor.save",
     "engine://input/actions/editor.stop",
     "engine://input/actions/editor.undo",
 }), "Engine InputActions must load in deterministic ID order");
-Check(engineRuntime.MappingContexts.Single(value => value.Id == "engine://input/contexts/editor").Bindings.Count == 6,
+Check(engineRuntime.MappingContexts.Single(value => value.Id == "engine://input/contexts/editor").Bindings.Count == 7,
     "Engine InputMappingContext must load its validated bindings");
+Check(engineRuntime.MappingContexts.Single(value => value.Id == "engine://input/contexts/editor")
+        .Bindings.Any(binding => binding.ActionId == "engine://input/actions/editor.save" &&
+            binding.Control == "Keyboard/S" && binding.ExactModifiers &&
+            binding.Modifiers.SequenceEqual(["Keyboard/Control"])),
+    "Ctrl+S must be declared as the Editor Save shortcut");
 var undoEvents = new List<InputActionEvent>();
 var redoEvents = new List<InputActionEvent>();
 var PlayEvents = new List<InputActionEvent>();
@@ -86,6 +92,58 @@ Check(PlayEvents.Count > UiHandledPlayCount &&
     "Editor shortcuts must keep working while RmlUi owns the key");
 engineRuntime.ProcessNative("main", NativeInputEventKind.KeyUp, 0x74,
     0, 0, 0, 0, 0, true, false);
+
+// Shortcut scopes are part of the Editor route: the focused host's handler runs first
+// and stops the gesture; declining lets the same action bubble to the global layer.
+var scopeActions = new[]
+{
+    new InputActionDefinition(1, "project://input/actions/scope.save",
+        InputActionValueType.Button, false),
+};
+var scopeContexts = new[]
+{
+    new InputMappingContextDefinition(1, "project://input/contexts/scope.editor",
+        InputRoute.Editor, 1000, true, new[]
+        {
+            new InputBindingDefinition("project://input/actions/scope.save", "Keyboard/S",
+                1, 0, new[] { "Keyboard/Control" }, true),
+        }),
+};
+var scoped = InputRuntimeService.CreateForValidation(scopeActions, scopeContexts);
+var scopeOrder = new List<string>();
+var ScopedAction = "project://input/actions/scope.save";
+using var scopedGlobal = scoped.BindAction(InputRoute.Editor, ScopedAction, 0, value =>
+{
+    if (value.Phase == InputActionPhase.Performed) scopeOrder.Add("global:" + value.HostId);
+    return true;
+});
+var ScopeConsumes = true;
+using var scopedFocus = scoped.BindAction(InputRoute.Editor, ScopedAction, 1000, value =>
+{
+    if (value.HostId != "asset-editor-a" || value.Phase != InputActionPhase.Performed)
+    {
+        return false;
+    }
+    scopeOrder.Add("scope");
+    return ScopeConsumes;
+});
+void PressCtrlS(string Host)
+{
+    scoped.ProcessNative(Host, NativeInputEventKind.KeyDown, 'S', 0, 0, 0, 0, 1, false, true);
+    scoped.ProcessNative(Host, NativeInputEventKind.KeyUp, 'S', 0, 0, 0, 0, 1, false, true);
+}
+PressCtrlS("asset-editor-a");
+Check(scopeOrder.SequenceEqual(new[] { "scope" }),
+    "The focused host scope must consume the shortcut before the global layer");
+scopeOrder.Clear();
+PressCtrlS("main");
+Check(scopeOrder.SequenceEqual(new[] { "global:main" }),
+    "A key event from another host must bubble to the global editor layer");
+scopeOrder.Clear();
+ScopeConsumes = false;
+PressCtrlS("asset-editor-a");
+Check(scopeOrder.SequenceEqual(new[] { "scope", "global:asset-editor-a" }),
+    "A scope that declines must let the same action bubble to the global layer");
 
 var actions = new[]
 {
@@ -276,3 +334,5 @@ try
 }
 finally { temporary.Delete(true); }
 Console.WriteLine($"PASS: {assertions} unified input assertions");
+
+

@@ -23,6 +23,16 @@
       "exactModifiers": false
     },
     {
+      "action": "engine://input/actions/editor.save",
+      "control": "Keyboard/S",
+      "scaleX": 1,
+      "scaleY": 0,
+      "modifiers": [
+        "Keyboard/Control"
+      ],
+      "exactModifiers": true
+    },
+    {
       "action": "engine://input/actions/editor.undo",
       "control": "Keyboard/Z",
       "scaleX": 1,
