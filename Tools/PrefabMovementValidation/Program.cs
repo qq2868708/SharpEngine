@@ -97,6 +97,11 @@ var Player = Runtime.FindEntity("player") ?? throw new InvalidOperationException
 var Transform = Player.GetComponent<TransformComponent>() ??
     throw new InvalidOperationException("Animated player Transform missing");
 var Animator = Player.GetComponent<AnimatorComponent>()!;
+var InitialAnimator = Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson();
+Check(InitialAnimator["controllerId"]?.GetValue<string>() == "engine://animation-state-machines/uefn-mannequin-locomotion" &&
+    InitialAnimator["stateId"]?.GetValue<string>() == "idle" &&
+    InitialAnimator["clipId"]?.GetValue<string>() == "engine://animations/uefn-mannequin-idle",
+    "The current Player starts in the locomotion graph's Idle state and samples its Idle clip");
 var Mesh = Animator.Target!;
 var Collider = Player.GetComponent<CapsuleColliderComponent>()!;
 var InitialSkeleton = Runtime.Frame.Get<SkeletonFrameState>(Mesh.ComponentId)!;
@@ -113,7 +118,11 @@ Check(CollisionHit is not null && CollisionHit.ComponentId ==
 Input.ProcessNative("main", NativeInputEventKind.KeyDown, (uint)'D', 0, 0, 0, 0, 0,
     false, true);
 Runtime.Tick(0.1f);
+Check(Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["stateId"]?.GetValue<string>() == "walk",
+    "The current Player enters Walk while keyboard movement accelerates");
 Runtime.Tick(0.1f);
+Check(Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["stateId"]?.GetValue<string>() == "run",
+    "The current Player enters Run after its movement speed crosses the graph threshold");
 Runtime.Tick(0.1f);
 var AfterMove = Transform.Position;
 Check(AfterMove.X > Start.X && MathF.Abs(AfterMove.Z - Start.Z) < 0.0001f,
@@ -121,6 +130,8 @@ Check(AfterMove.X > Start.X && MathF.Abs(AfterMove.Z - Start.Z) < 0.0001f,
 Input.ProcessNative("main", NativeInputEventKind.KeyUp, (uint)'D', 0, 0, 0, 0, 0,
     false, true);
 Runtime.Tick(0.1f);
+Check(Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["stateId"]?.GetValue<string>() == "walk",
+    "The current Player returns through Walk while released keyboard movement decelerates");
 Check(Transform.Position.X >= AfterMove.X,
     "Released input is consumed by Movement without reversing the animated character");
 var Animation = Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId);
@@ -157,14 +168,22 @@ Check(File.ReadAllText(WorldPath) == SourceText &&
 
 var Controller = Player.GetComponent<PlayerControllerComponent>()!;
 var Camera = Controller.ViewCamera!.Entity.GetComponent<ThirdPersonCameraComponent>()!;
-Check(!Controller.FaceMoveDirection && Runtime.Frame.Snapshot().ActiveCameraId == Camera.Entity.EntityId,
-    "Player selects its third person view and uses the camera-facing strafe policy");
+Check(Controller.FaceMoveDirection && Runtime.Frame.Snapshot().ActiveCameraId == Camera.Entity.EntityId,
+    "Player selects its third person view and turns its root toward camera-relative movement");
 var InitialScale = Transform.Scale;
+var BeforeLookRotation = Transform.Rotation;
+var ModelTransform = Mesh.Entity.GetComponent<TransformComponent>()!;
+var ModelLocalRotation = ModelTransform.Rotation;
 Input.ProcessNative("main", NativeInputEventKind.PointerMove, 0, 100, 30, 100, 30, 0, false, true);
 Runtime.Tick(0.1f);
 Check(Math.Abs(Camera.Yaw + 15) < 0.001f && Math.Abs(Camera.Pitch + 19.5f) < 0.001f &&
-    Math.Abs(Transform.Rotation.Y - Camera.Yaw) < 0.001f,
-    "Look consumes mouse delta once and synchronizes character yaw without tilting the body");
+    Transform.Rotation == BeforeLookRotation && ModelTransform.Rotation == ModelLocalRotation,
+    "Looking around consumes mouse delta once without turning the idle character or changing its model offset");
+var CameraForward = Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ, EntityTransformMath.WorldMatrix(Camera.Entity)));
+var ExpectedCameraForward = Vector3.Transform(-Vector3.UnitZ,
+    Quaternion.CreateFromYawPitchRoll(Camera.Yaw * MathF.PI / 180, Camera.Pitch * MathF.PI / 180, 0));
+Check(Vector3.Dot(CameraForward, ExpectedCameraForward) > 0.999f,
+    "A camera parented to the character retains its independent world view rotation");
 var BeforeStrafe = Transform.Position;
 Input.ProcessNative("main", NativeInputEventKind.KeyDown, 'D', 0, 0, 0, 0, 0, false, true);
 Runtime.Tick(0.2f);
@@ -172,12 +191,62 @@ var Strafe = Transform.Position - BeforeStrafe;
 var Facing = Vector3.Transform(-Vector3.UnitZ,
     Quaternion.CreateFromAxisAngle(Vector3.UnitY, Camera.Yaw * MathF.PI / 180));
 Check(Strafe.Length() > 0.1f && Math.Abs(Vector3.Dot(Strafe, Facing)) < 0.001f &&
-    Math.Abs(Transform.Rotation.Y - Camera.Yaw) < 0.001f,
-    "D strafes perpendicular to the camera direction without turning the character");
+    Vector3.Dot(Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ,
+        EntityTransformMath.WorldMatrix(Player))), Vector3.Normalize(Strafe)) > 0.999f,
+    "D moves to camera-right and turns the character root toward that direction");
 var ModelForward = Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ,
     EntityTransformMath.WorldMatrix(Mesh.Entity)));
-Check(Vector3.Dot(ModelForward, Vector3.Normalize(Strafe)) > 0.999f && Controller.FacingMesh == Mesh,
-    "the independent Mesh turns toward A/D movement while the root keeps camera yaw");
+Check(Vector3.Dot(ModelForward, Vector3.Normalize(Strafe)) > 0.999f && Controller.FacingMesh == Mesh &&
+    ModelTransform.Rotation == ModelLocalRotation,
+    "The model follows the turning character root while preserving its authored local rotation");
+var OriginalTurnSpeed = Controller.TurnSpeed;
+Controller.TurnSpeed = 90;
+var BeforeTurn = SharpEngine.Mathematics.QuaternionMath.Euler(Transform.Rotation);
+Input.ProcessNative("main", NativeInputEventKind.KeyUp, 'D', 0, 0, 0, 0, 0, false, true);
+Input.ProcessNative("main", NativeInputEventKind.KeyDown, 'A', 0, 0, 0, 0, 0, false, true);
+Runtime.Tick(0.1f);
+var AfterTurn = SharpEngine.Mathematics.QuaternionMath.Euler(Transform.Rotation);
+Check(Math.Abs(SharpEngine.Mathematics.QuaternionMath.Angle(BeforeTurn, AfterTurn) - 9) < 0.01f &&
+    ModelTransform.Rotation == ModelLocalRotation,
+    "A gradual root turn does not apply a second independent turn to the model");
+Controller.TurnSpeed = OriginalTurnSpeed;
+Input.ProcessNative("main", NativeInputEventKind.KeyUp, 'A', 0, 0, 0, 0, 0, false, true);
+Runtime.Tick(0.3f);
+(uint Key, Vector3 LocalDirection)[] CameraRelativeDirections =
+[
+    ('W', -Vector3.UnitZ),
+    ('S', Vector3.UnitZ),
+    ('A', -Vector3.UnitX),
+    ('D', Vector3.UnitX),
+];
+foreach (var Direction in CameraRelativeDirections)
+{
+    var ExpectedDirection = Vector3.Transform(Direction.LocalDirection,
+        Quaternion.CreateFromAxisAngle(Vector3.UnitY, Camera.Yaw * MathF.PI / 180));
+    var BeforeDirectionMove = Transform.Position;
+    Input.ProcessNative("main", NativeInputEventKind.KeyDown, Direction.Key, 0, 0, 0, 0, 0, false, true);
+    Runtime.Tick(0.3f);
+    var Displacement = Transform.Position - BeforeDirectionMove;
+    var RootForward = Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ, EntityTransformMath.WorldMatrix(Player)));
+    Check(Displacement.Length() > 0.1f && Vector3.Dot(Vector3.Normalize(Displacement), ExpectedDirection) > 0.999f &&
+        Vector3.Dot(RootForward, ExpectedDirection) > 0.999f && ModelTransform.Rotation == ModelLocalRotation,
+        ((char)Direction.Key) + " moves and turns the character relative to camera yaw while preserving the model offset");
+    Input.ProcessNative("main", NativeInputEventKind.KeyUp, Direction.Key, 0, 0, 0, 0, 0, false, true);
+    Runtime.Tick(0.3f);
+}
+Input.ProcessNative("main", NativeInputEventKind.KeyDown, 'W', 0, 0, 0, 0, 0, false, true);
+Runtime.Tick(0.3f);
+var BeforeHeldLookForward = Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ, EntityTransformMath.WorldMatrix(Player)));
+var BeforeHeldLookPosition = Transform.Position;
+Input.ProcessNative("main", NativeInputEventKind.PointerMove, 0, 200, 0, 200, 0, 0, false, true);
+Runtime.Tick(0.3f);
+var HeldLookDirection = Vector3.Transform(-Vector3.UnitZ,
+    Quaternion.CreateFromAxisAngle(Vector3.UnitY, Camera.Yaw * MathF.PI / 180));
+Check(Vector3.Dot(BeforeHeldLookForward, HeldLookDirection) < 0.95f &&
+    Vector3.Dot(Vector3.Normalize(Transform.Position - BeforeHeldLookPosition), HeldLookDirection) > 0.999f &&
+    Vector3.Dot(Vector3.Normalize(Vector3.TransformNormal(-Vector3.UnitZ, EntityTransformMath.WorldMatrix(Player))), HeldLookDirection) > 0.999f &&
+    ModelTransform.Rotation == ModelLocalRotation,
+    "A held W continuously follows changing camera yaw and turns the root without another key press");
 Input.ProcessNative("main", NativeInputEventKind.GameplayCaptureLost, 0, 0, 0, 0, 0, 0, false, false);
 Runtime.Tick(0.5f);
 var ReleasedPosition = Transform.Position;

@@ -112,6 +112,7 @@
       </article>
       <article class="api-entry">
         <h3>Player、第三人称与 Root Motion</h3>
+        <p><code>FaceMoveDirection=true</code> 时仅有移动输入才按 TurnSpeed 旋转角色根节点，输入始终参考 ViewCamera 的水平 Yaw；FacingMesh 保留已有局部变换，继续提供根运动目标识别。内置角色 Prefab 与 Main World 使用此策略。false 仍显式选择镜头朝向与独立 Mesh 转向模式。组件 schema v2 和源资产格式不变。</p>
         <p><code>engine.player-controller</code> schema v2 追加 <code>InputContext</code>、<code>MoveAction</code>、<code>LookAction</code>、<code>ViewCamera</code>、<code>FacingMesh</code>、<code>FaceMoveDirection</code>、<code>TurnSpeed</code>。v1 显式迁移；<code>RuntimeInstance</code> 接收 <code>IInputRuntime</code>/<code>InputHostId</code>，组件持有 activation/handler 生命周期。<code>engine://input/contexts/player</code> 映射 <code>player.move</code>、<code>player.look</code>、<code>player.release-pointer</code>，新文件后缀为 <code>.sinputaction</code>/<code>.sinputmappingcontext</code>；旧后缀继续读取。</p>
         <p><code>engine.third-person-camera</code> schema v1 字段为 Target、TargetOffset、Distance、Yaw、Pitch、LookSensitivity。相机在根运动和 Movement 提交之后更新，Runtime 活动相机优先使用 LocalPlayerController.ViewCamera。<code>editor.describe.playInputCapture</code> 与 <code>input.describe.capture</code> 公开捕获状态；<code>--mcp-visible</code> 可显示隔离 Editor 进行真实焦点验收。</p>
         <p><code>SkeletalAnimationAsset</code> schema v2 保存 <code>AnimationRootMotionSettings</code>。<code>Sample</code> 保留原始轨道语义，<code>SamplePreview</code>、<code>RootMotionSampler.RemoveRootMotion/Delta</code> 提供开关输出和连续增量；Animator 组件 schema v3 不变，帧 schema v4 增加 rootMotion（含 <code>consumedBy</code>）。<code>RootMotionSampler.Delta</code> 把循环展开为一条绝对曲线，跨周期的一帧按“剩余周期 + 新部分周期”的顺序合成。根设置与 Notify 使用同一资产历史，语义命令为 <code>root-motion</code>；保存使缓存失效。完整约束和诊断见 <a href="../../../../AnimationAndTimeline.md">动画专题</a>。</p>
@@ -209,6 +210,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>更新内置 Player 的 FaceMoveDirection 默认配置，并在移动朝向模式下由根节点唯一控制转身，避免子 Mesh 重复旋转。观察相机保持独立；输入、控制、根运动仍走既有路径，组件与资产 Schema 不变。</p>
       <p>骨骼动画与状态机编辑器迁入 SharpEngine.Animation.Editor，由 AnimationEditorModule 注册；Timeline 模块仅注册 Timeline。动画事务与时间轴展示分离，新增通用 Notify 候选编辑 API。骨骼动画状态保持 v2，状态机编辑器状态改为 v3 并去除无内容的 3D 预览字段；源资产 Schema、稳定打开 ID 和原生 ABI 不变。</p>
       <p>新增 UiLayoutInstance、UiElement 基础控件、IUiActionHandler 和 AssetEditorLayoutInstance，实现已有布局上的实例级动态 UI；定义保持只读，事件与原生节点身份按实例隔离，源资产 Schema 与原生 ABI 不变。新增 C# API 的调用方需重建；原生宿主更新需重建并重启 Editor。</p>
       <p>新增专用 SkeletalAnimation 编辑器及 UI 布局组合契约。Viewport3D/TimelineView 的布局由各自 RML 维护；父布局通过 IUiLayoutPart 插槽引用。新增内置布局定义 schema-version 1，不改变源资产 Schema；内置模板修改需重建并重启，相关 C# API 调用方需重建。</p>

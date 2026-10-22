@@ -8,7 +8,7 @@ internal static class PlayerUiValidation
         Func<int, string, JsonObject?, JsonObject> Call)
     {
         var Sequence = 18000;
-        var Evidence = Path.Combine(Root, "Saved/Validation/Player-20261020");
+        var Evidence = Path.Combine(Root, "Saved/Validation/Player", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Evidence);
         JsonObject Invoke(string Name, JsonObject? Arguments = null)
         {
@@ -79,11 +79,48 @@ internal static class PlayerUiValidation
             Check(Response["accepted"]?.GetValue<bool>() == true, $"Key {Code} {Event}: {Response}");
         }
         JsonObject Components() { return Invoke("components.describe"); }
+        JsonObject Locomotion(JsonObject Snapshot)
+        {
+            return Snapshot["animation"]!["animators"]!.AsArray().Single(Animator =>
+                Animator!["componentId"]!.GetValue<string>() == "player-animator")!.AsObject();
+        }
+        void CheckLocomotion(JsonObject Snapshot, string Expected)
+        {
+            var Animator = Locomotion(Snapshot);
+            Check(Animator["controllerId"]?.GetValue<string>() == "engine://animation-state-machines/uefn-mannequin-locomotion" &&
+                Animator["stateId"]?.GetValue<string>() == Expected && Animator["code"]?.GetValue<string>() == "ANIMATOR_READY" &&
+                Animator["clipId"]?.GetValue<string>() == "engine://animations/uefn-mannequin-" + Expected,
+                "The actual Player uses the locomotion graph and samples its " + Expected + " clip");
+            Save("locomotion-" + Expected, Animator);
+        }
         JsonObject State(JsonObject Snapshot, string Id)
         {
             return Snapshot["document"]!["entities"]!.AsArray().SelectMany(Entity =>
                 Entity!["components"]!.AsArray()).Single(Component =>
                 Component!["componentId"]!.GetValue<string>() == Id)!["state"]!.AsObject();
+        }
+        Vector3 Rotation(JsonObject Snapshot, string Id)
+        {
+            var Values = State(Snapshot, Id)["Rotation"]!;
+            return new(Values[0]!.GetValue<float>(), Values[1]!.GetValue<float>(), Values[2]!.GetValue<float>());
+        }
+        Vector3 Forward(JsonObject Snapshot)
+        {
+            var Angles = Rotation(Snapshot, "player-transform") * (MathF.PI / 180);
+            return Vector3.Transform(-Vector3.UnitZ, Quaternion.CreateFromYawPitchRoll(Angles.Y, Angles.X, Angles.Z));
+        }
+        JsonObject AwaitFacing(Vector3 Expected)
+        {
+            for (var Attempt = 0; Attempt < 30; Attempt++)
+            {
+                var Snapshot = Components();
+                if (Vector3.Dot(Forward(Snapshot), Expected) > 0.999f)
+                {
+                    return Snapshot;
+                }
+                Thread.Sleep(20);
+            }
+            throw new InvalidOperationException("The Player root did not turn toward the camera-relative input direction");
         }
         Vector3 Position(JsonObject Snapshot)
         {
@@ -125,13 +162,25 @@ internal static class PlayerUiValidation
         });
         File.WriteAllBytes(Path.Combine(Evidence, "play-default.png"), Convert.FromBase64String(
             InitialPng["result"]!["contents"]![0]!["blob"]!.GetValue<string>()));
-        var Before = Position(Components());
+        var Initial = Components();
+        CheckLocomotion(Initial, "idle");
+        var Before = Position(Initial);
         Key("down", 'W');
         Thread.Sleep(250);
         var Moving = Components();
         Key("up", 'W');
         Save("moving", Moving);
+        CheckLocomotion(Moving, "run");
         Check(Position(Moving).Z < Before.Z - 0.05f, "W moves immediately after Play without clicking the viewport");
+        var StoppedMoving = Components();
+        for (var Attempt = 0; Attempt < 30 && Locomotion(StoppedMoving)["stateId"]?.GetValue<string>() != "idle"; Attempt++)
+        {
+            Thread.Sleep(20);
+            StoppedMoving = Components();
+        }
+        CheckLocomotion(StoppedMoving, "idle");
+        var BeforeLookRotation = Rotation(StoppedMoving, "player-transform");
+        var BeforeModelRotation = Rotation(StoppedMoving, "player-model-transform");
         Pointer("move", "viewportCanvas");
         Pointer("move", "viewportCanvas", 100, 30);
         Thread.Sleep(80);
@@ -141,15 +190,18 @@ internal static class PlayerUiValidation
             "mouse movement changes the third person camera yaw");
         var Yaw = State(Look, "player-third-person-camera")["Yaw"]!.GetValue<float>();
         Thread.Sleep(80);
-        var Facing = State(Components(), "player-transform")["Rotation"]![1]!.GetValue<float>();
-        Check(Math.Abs(Facing - Yaw) < 0.5f, "character faces the camera direction while standing");
+        var Looking = Components();
+        Check(Vector3.Distance(Rotation(Looking, "player-transform"), BeforeLookRotation) < 0.001f &&
+            Vector3.Distance(Rotation(Looking, "player-model-transform"), BeforeModelRotation) < 0.001f,
+            "Looking around while standing leaves character and model rotations unchanged");
         Key("down", 'D');
         Thread.Sleep(250);
-        var TurnedMesh = Components();
+        var CameraRight = Vector3.Transform(Vector3.UnitX, Quaternion.CreateFromAxisAngle(Vector3.UnitY, Yaw * MathF.PI / 180));
+        var TurnedMesh = AwaitFacing(CameraRight);
         Key("up", 'D');
-        var ModelYaw = State(TurnedMesh, "player-model-transform")["Rotation"]![1]!.GetValue<float>();
-        Check(Math.Abs(ModelYaw + 90) < 1,
-            "A/D turns the independent Mesh toward movement while playing the forward animation");
+        Check(Vector3.Dot(Forward(TurnedMesh), CameraRight) > 0.999f &&
+            Vector3.Distance(Rotation(TurnedMesh, "player-model-transform"), BeforeModelRotation) < 0.001f,
+            "D turns the character root toward camera-right while preserving the model's fixed local rotation");
         Save("mesh-facing", TurnedMesh);
         Key("down", 0x10, true);
         Key("down", 0x70, true);
@@ -189,8 +241,10 @@ internal static class PlayerUiValidation
             ["passed"] = true,
             ["immediateKeyboardCapture"] = true,
             ["cameraLook"] = true,
-            ["cameraFacingStrafe"] = true,
+            ["cameraRelativeCharacterFacing"] = true,
             ["releaseRecapturePauseStop"] = true,
+            ["locomotionStateMachine"] = true,
         });
+        Console.WriteLine("Player UI evidence: " + Evidence);
     }
 }

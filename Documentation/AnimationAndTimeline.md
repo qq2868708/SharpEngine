@@ -128,7 +128,7 @@ SkeletalAnimation schema v2 显式保存 `rootMotion: { enabled, boneId }`；v1 
 
 项目动画的 Details 提供 Root Motion 按钮，工具栏和语义命令 `root-motion` 使用同一修改入口。根设置与 Notify 共用 JsonAssetAuthoringDocument 的 Undo/Redo、documentRevision、dirty 和显式 Save；外部源 hash 冲突拒绝覆盖。保存原子替换后使动画缓存失效。Engine 来源资产仍只读，需使用项目动画变体进行编辑。
 
-`Sample` / `SampleLooped` 始终返回源姿态；`SamplePreview` 与 Playable 输出遵守开关：关闭时根平移/旋转恢复 bind，开启时资产预览显示源根轨迹。Runtime Animator 开启时计算连续根增量并驱动 MovementSource 所在实体（未指定时是 Animator 实体），模型必须属于目标子树；在模型输出中剔除根运动以避免重复位移。模型相对变换及父实体变换参与换算。Player 的 FacingMesh 转向 WASD 方向，根位移沿模型当前朝向应用，保留源距离与竖直轨迹，同时保留由镜头控制的根实体朝向；没有水平意图时不再前进。普通 Animator 不执行这项 Player 定向策略。跳跃的竖直根轨迹同样驱动实体。
+`Sample` / `SampleLooped` 始终返回源姿态；`SamplePreview` 与 Playable 输出遵守开关：关闭时根平移/旋转恢复 bind，开启时资产预览显示源根轨迹。Runtime Animator 开启时计算连续根增量并驱动 MovementSource 所在实体（未指定时是 Animator 实体），模型必须属于目标子树；在模型输出中剔除根运动以避免重复位移。模型相对变换及父实体变换参与换算。内置 Player 的根实体转向相机参考的 WASD 输入方向，FacingMesh 保留固定局部旋转；根位移沿模型当前朝向应用，保留源距离与竖直轨迹，同时保留由 Player 转向策略确定的根实体朝向；没有水平意图时不再前进。普通 Animator 不执行这项 Player 定向策略。跳跃的竖直根轨迹同样驱动实体。
 
 循环支持一次跨越多个周期；非循环在终点停止，暂停与 Seek 不移动实体。`RootMotionSampler.Delta` 把循环展开为一条绝对曲线：从周期中段开始并跨过边界的一帧，按“剩余周期 + 新部分周期”的顺序合成，因此与逐帧累积一致；旧实现只取末帧部分周期，跨边界那一帧会丢失前半段位移。同一实体有多个驱动源时报告 `ROOT_MOTION_CONFLICT`，不按执行顺序选择。Animator 组件 schema 仍为 v3，帧 schema v4 新增 `rootMotion`（enabled、boneId、targetEntityId、applied、redirectedByPlayer、consumedBy、code、worldTranslation）。状态机速度参数使用 Movement 意图速度，实际 LinearVelocity 从已提交位移计算。
 

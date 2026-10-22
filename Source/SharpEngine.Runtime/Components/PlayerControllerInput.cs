@@ -62,7 +62,8 @@ public sealed partial class PlayerControllerComponent
                     Transform.Scale = LocalScale;
                 }
             }
-            if (FacingMesh is not null && FacingMesh.IsAlive && Move.LengthSquared() > 0.000001f)
+            // Movement-facing characters turn at the root; preserve the model's authored local transform.
+            if (!FaceMoveDirection && FacingMesh is not null && FacingMesh.IsAlive && Move.LengthSquared() > 0.000001f)
             {
                 var Model = FacingMesh.Entity;
                 var ModelTransform = Model.GetComponent<TransformComponent>()!;

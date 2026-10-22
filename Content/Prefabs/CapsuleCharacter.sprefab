@@ -112,7 +112,7 @@
             "MoveAction": "engine://input/actions/player.move",
             "LookAction": "engine://input/actions/player.look",
             "ViewCamera": "capsule-character-view-camera",
-            "FaceMoveDirection": false,
+            "FaceMoveDirection": true,
             "TurnSpeed": 720,
             "FacingMesh": "capsule-character-mesh"
           }

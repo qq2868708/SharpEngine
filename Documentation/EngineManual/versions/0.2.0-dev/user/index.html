@@ -114,7 +114,7 @@
       <p>现有 RML 布局可以由代码在当前 UI 实例中增加或删除容器、文本、按钮和输入框，并绑定点击或值变化事件；也可以挂接 Viewport3D、Timeline 等功能提供的子布局。动态内容随实例刷新保留，输入框保留焦点和光标；关闭后释放，不改写原始布局，不改变资产 dirty 或 Save。父级只操作自己的容器，子功能通过公开接口定制。接入示例与限制见 <a href="../../../../RuntimeUiComposition.md">运行实例 UI 组合</a>。</p>
       <p>键盘和鼠标会先交给当前获得焦点的界面。界面可以处理点击、滚动、文本输入和指针捕获；未被界面使用的输入再交给编辑器或游戏逻辑。Ctrl+Z 撤销，Ctrl+Y 或 Ctrl+Shift+Z 重做，F5 播放或暂停，F8 停止。文本输入框获得焦点时优先处理自身的编辑操作。</p>
       <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。Play 或 Pause 时，Viewport 的相机导航、选择和 Gizmo 不再接收游戏输入；输入只作用于运行时逻辑，Stop 后恢复编辑操作。</p>
-      <p>Player Prefab 使用独立第三人称相机和 Player 输入映射。鼠标调整镜头朝向，WASD 移动；默认根实体水平朝向与镜头同步，Mesh 独立转向 WASD 移动方向，A/D 时播放转向后的前向动画。点击 Play 后可直接操作，Shift+F1 释放光标，点击视口重新捕获。暂停、停止、失焦会释放光标并清空按键状态。相机当前不提供遮挡避让。</p>
+      <p>Player Prefab 使用独立第三人称相机和 Player 输入映射。鼠标调整镜头朝向，WASD 移动；默认站立时转动相机不转动人物；WASD 始终按相机水平朝向计算移动方向，角色根节点按该方向转身，Mesh 保留固定局部旋转并随角色一起转动。点击 Play 后可直接操作，Shift+F1 释放光标，点击视口重新捕获。暂停、停止、失焦会释放光标并清空按键状态。相机当前不提供遮挡避让。</p>
       <p>项目动画 Details 中的 Root Motion 开关开启时让根位移驱动角色实体；关闭时显示原地动画并由移动组件控制位移。跳跃高度也随该开关处理，原始轨道不会删除。根设置与 Notify 共用撤销/重做，Save 才写入源资产；引擎内置动画保持只读。详见 <a href="../../../../ControlAndMovement.md">控制与移动</a>和<a href="../../../../AnimationAndTimeline.md">动画</a>。</p>
       <p>StyleSheet 编辑器直接维护 RCSS 文本权威源，显示规则预览、引用该样式的 RML 文档和语法诊断。InputAction 与 InputMappingContext 使用结构化表单；Context 编辑器支持 bindings 的增删以及 action、control、scale、modifier、route 和 priority 编辑。无效引用、非法 Control 或未知枚举不会进入 dirty 文档。</p>
     </section>
@@ -142,6 +142,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>内置 Player 改为相机参考移动：站立转动相机不改变人物朝向，WASD 按镜头水平朝向生成移动意图，角色根节点转向该方向，模型保留局部轴修正。现有项目实例可启用 FaceMoveDirection 选择此策略。</p>
       <p>骨骼动画与状态机编辑器由独立 Animation.Editor 模块管理，复用下层 Timeline、Viewport 和布局基础设施。骨骼动画保留播放、预览模型、Root Motion、Notify、撤销与保存；状态机保留只读三面板显示，其布局由独立文件维护。使用新模块需重建并重启 Editor。</p>
       <p>增加 UI 实例动态组合：在已有布局上通过代码添加/移除基础控件和子布局，绑定事件；共享布局定义保持只读。隔离 Editor 验证覆盖真实点击、连续输入、中部插入、刷新、实例隔离与源文件不变。</p>
       <p>骨骼动画从通用 Timeline 编辑器中分离，专用编辑器以一份逻辑文件和一份布局文件组合 Viewport3D、Timeline 及预览 World。共享 UI 模板支持类型化子布局插槽，每个资产仍拥有独立播放、相机和 Dock 实例。</p>
@@ -151,7 +152,7 @@
       <p>启动入口与插件选择：无项目进入使用引擎 RmlUi 与现有视觉方案的轻量项目选择器；静态预览不运行项目代码。新增默认插件的项目覆盖、依赖变更预览和原子保存；插件分析位于 Editor 内。更改需要重建项目并重启 Editor。</p>
       <p>资产预览统一复用 3D Viewport 布局并渲染编辑器持有的临时 World；时间轴内置播放控件、连续刻度标尺和可拖拽时间箭头，拖拽后保持暂停。动画预览不执行 Notify。</p>
       <ul>
-        <li>Player Prefab 增加第三人称镜头：鼠标旋转镜头，WASD 按镜头水平朝向移动，根实体朝向同步镜头，Mesh 独立朝 WASD 移动方向转身并播放前向动画。点 Play 自动捕获输入，Shift+F1 释放，点击视口恢复；暂停、停止和失焦释放。</li>
+        <li>Player Prefab 增加第三人称镜头：鼠标旋转镜头，WASD 按镜头水平朝向移动，站立转镜头不转人物，有移动输入时根实体朝 WASD 对应的世界方向转身，Mesh 保留固定局部旋转。点 Play 自动捕获输入，Shift+F1 释放，点击视口恢复；暂停、停止和失焦释放。</li>
         <li>项目动画 Details 可开关 Root Motion：开启驱动角色实体及其胶囊与模型，关闭剔除根平移/旋转。根设置与 Notify 共用撤销、重做和显式保存，源轨道完整保留，引擎资产仍只读。</li>
         <li>构建系统增加生成前输出守卫：拒绝非标准 configuration/target 和 binaries/intermediate/shader 路径覆盖；验证产物统一进入 <code>Saved/Validation</code>，全量布局检查继续严格拒绝未知目录。</li>
         <li>UEFN Mannequin 从已保存的 Blender 源工程重新导入，骨骼、网格与四段动画统一为 Y-up、右手系、-Z 前方；保留原始最多 9 个蒙皮影响。源文件、四段 Action 与导入对照报告分别保存在 Resources/SourceAssets 和 Saved/Validation。走跑的前进与跳跃高度保留在 root 骨，现在可在项目动画的 Details 中启用 Root Motion，由角色实体承接根位移；关闭则输出原地姿态。</li>
