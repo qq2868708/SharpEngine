@@ -31,11 +31,19 @@ if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
 {
     settingsProject = DynamicUiValidation.CreateProject(root, configuration);
 }
-if (args.Contains("--player-only", StringComparer.Ordinal) &&
-    !string.IsNullOrWhiteSpace(settingsProject))
+if (args.Contains("--player-only", StringComparer.Ordinal))
 {
-    // Reusing an older project snapshot would validate a World the engine no longer has.
-    PlayerUiValidation.RequireCurrentWorld(root, settingsProject);
+    if (string.IsNullOrWhiteSpace(settingsProject))
+    {
+        // Build the fixture from current engine content so the assertions always
+        // describe the World and Prefab the engine ships right now.
+        settingsProject = PlayerUiValidation.CreateProject(root, configuration);
+    }
+    else
+    {
+        // Reusing an older project snapshot would validate a World the engine no longer has.
+        PlayerUiValidation.RequireCurrentWorld(root, settingsProject);
+    }
 }
 var editorArguments = new List<string> { "--mcp-isolated", "--mcp-session-id", sessionId };
 if (args.Contains("--player-only", StringComparer.Ordinal))

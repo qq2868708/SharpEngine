@@ -1,8 +1,101 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Text.Json.Nodes;
 
 internal static class PlayerUiValidation
 {
+    internal static string CreateProject(string Root, string Configuration)
+    {
+        // Rebuild the fixture from current engine content on every run. The Player
+        // assertions describe the built-in Prefab and World configuration, so reusing
+        // an older project snapshot would silently validate a stale contract.
+        var Folder = Path.Combine(Root, "Saved/Validation/PlayerUi");
+        if (Directory.Exists(Folder))
+        {
+            Directory.Delete(Folder, true);
+        }
+        Directory.CreateDirectory(Path.Combine(Folder, "Content/Assets"));
+        Directory.CreateDirectory(Path.Combine(Folder, "Content/Worlds"));
+        var Manifest = new JsonObject
+        {
+            ["schemaVersion"] = 1,
+            ["assets"] = new JsonArray(),
+        };
+        File.WriteAllText(Path.Combine(Folder, "Content/Assets/assets.json"),
+            Manifest.ToJsonString());
+        File.Copy(Path.Combine(Root, "Content/Worlds/Main.sworld"),
+            Path.Combine(Folder, "Content/Worlds/Main.sworld"), true);
+        var Project = new JsonObject
+        {
+            ["schemaVersion"] = 3,
+            ["projectId"] = "player-ui-validation",
+            ["displayName"] = "Player UI Validation",
+            ["engineVersion"] = "0.2.0-dev",
+            ["engine"] = new JsonObject
+            {
+                ["id"] = "SharpEngine",
+                ["version"] = "0.2.0-dev",
+                ["association"] = "player-ui-validation",
+                ["manifest"] = "engine.json",
+            },
+            ["modules"] = new JsonArray("Source/PlayerValidation/PlayerValidation.csproj"),
+            ["world"] = new JsonObject
+            {
+                ["startup"] = "Content/Worlds/Main.sworld",
+            },
+        };
+        var PathValue = Path.Combine(Folder, "Player.sharpproject");
+        File.WriteAllText(PathValue, Project.ToJsonString());
+        var ModuleFolder = Path.Combine(Folder, "Source/PlayerValidation");
+        Directory.CreateDirectory(ModuleFolder);
+        File.Copy(Path.Combine(Root, "Templates/BasicProject/Directory.Build.props"),
+            Path.Combine(Folder, "Directory.Build.props"), true);
+        var ModuleProject = File.ReadAllText(Path.Combine(Root,
+            "Templates/BasicProject/Source/Runtime/Runtime.csproj.template"))
+            .Replace("__PROJECT_NAMESPACE__", "PlayerValidation", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(ModuleFolder, "PlayerValidation.csproj"), ModuleProject);
+        File.WriteAllText(Path.Combine(ModuleFolder, "Module.cs"), """
+            using SharpEngine.Modules;
+
+            public sealed class PlayerValidationModule : ISharpEngineModule
+            {
+                public void Startup(ModuleContext Context)
+                {
+                }
+
+                public void Shutdown()
+                {
+                }
+            }
+            """);
+        var BuildInfo = new System.Diagnostics.ProcessStartInfo("dotnet")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var Argument in new[]
+        {
+            "run", "--project", Path.Combine(Root, "Tools/ProjectBuild/SharpEngine.ProjectBuild.csproj"),
+            "--", "build", PathValue, "--engine-root", Root,
+            "--target", "Editor", "--configuration", Configuration,
+        })
+        {
+            BuildInfo.ArgumentList.Add(Argument);
+        }
+        using var Build = System.Diagnostics.Process.Start(BuildInfo)!;
+        var Output = Build.StandardOutput.ReadToEndAsync();
+        var Errors = Build.StandardError.ReadToEndAsync();
+        Build.WaitForExit();
+        File.WriteAllText(Path.Combine(Folder, "build.log"), Output.Result + Errors.Result);
+        if (Build.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                "Player validation project build failed: " + Errors.Result);
+        }
+        return PathValue;
+    }
+
     private const string CurrentWorldId = "Content/Worlds/Main.sworld";
 
     /// <summary>Rejects a supplied project whose startup World is not the current engine
@@ -285,3 +378,4 @@ internal static class PlayerUiValidation
         Console.WriteLine("Player UI evidence: " + Evidence);
     }
 }
+
