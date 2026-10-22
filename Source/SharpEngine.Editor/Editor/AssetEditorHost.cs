@@ -99,53 +99,34 @@ internal sealed class AssetEditorHost : IDisposable
             return;
         }
 
+        // A focused document claims the gesture by dispatching the same action its menu
+        // and toolbar emit, so shortcut and click share one handler.
         ShortcutRegistrations.Add(Input.BindAction(InputRoute.Editor,
             EditorShortcutSettings.SaveActionId, EditorShortcutSettings.ScopedPriority,
-            Event => HandleScoped(Event, SaveScoped)));
+            Event => HandleScoped(Event, "editor.asset-save")));
         ShortcutRegistrations.Add(Input.BindAction(InputRoute.Editor,
             EditorShortcutSettings.UndoActionId, EditorShortcutSettings.ScopedPriority,
-            Event => HandleScoped(Event, () => ExecuteDocumentCommand("undo"))));
+            Event => HandleScoped(Event, "editor.asset-command:undo")));
         ShortcutRegistrations.Add(Input.BindAction(InputRoute.Editor,
             EditorShortcutSettings.RedoActionId, EditorShortcutSettings.ScopedPriority,
-            Event => HandleScoped(Event, () => ExecuteDocumentCommand("redo"))));
+            Event => HandleScoped(Event, "editor.asset-command:redo")));
     }
 
-    private bool HandleScoped(InputActionEvent Event, Func<bool> Execute)
+    private bool HandleScoped(InputActionEvent Event, string Action)
     {
         // Only the owning host may take the shortcut, and only once per press.
         if (Event.Phase != InputActionPhase.Performed || !OwnsHost(Event.HostId))
         {
             return false;
         }
-        return Execute();
-    }
-
-    /// <summary>Read-only documents do not consume the shortcut so it can still reach the
-    /// World; editable documents always consume it once they own the focused window.</summary>
-    private bool SaveScoped()
-    {
-        // A clean document still consumes the gesture: Ctrl+S must not fall through and
-        // save the World just because this editor has nothing to write.
+        // A read-only document declines so the same action can bubble to the global layer.
+        // An editable document consumes even when the command is disabled, so Undo inside
+        // a document can never silently undo the World.
         if (Instance.IsReadOnly)
         {
             return false;
         }
-        Save();
-        return true;
-    }
-
-    private bool ExecuteDocumentCommand(string CommandId)
-    {
-        if (Instance.IsReadOnly)
-        {
-            return false;
-        }
-        if (Instance.CanExecuteCommand(CommandId))
-        {
-            Instance.ExecuteCommand(CommandId);
-        }
-        Refresh(false);
-        return true;
+        return TryHandleAction(RootId, Action);
     }
 
     internal JsonObject DescribeShortcutScope() => new()
@@ -155,10 +136,22 @@ internal sealed class AssetEditorHost : IDisposable
         ["editorId"] = Instance.EditorId,
         ["readOnly"] = Instance.IsReadOnly,
         ["priority"] = EditorShortcutSettings.ScopedPriority,
-        ["actions"] = new JsonArray(
-            EditorShortcutSettings.SaveActionId,
-            EditorShortcutSettings.UndoActionId,
-            EditorShortcutSettings.RedoActionId),
+        ["routes"] = new JsonArray(
+            new JsonObject
+            {
+                ["action"] = EditorShortcutSettings.SaveActionId,
+                ["command"] = "editor.asset-save",
+            },
+            new JsonObject
+            {
+                ["action"] = EditorShortcutSettings.UndoActionId,
+                ["command"] = "editor.asset-command:undo",
+            },
+            new JsonObject
+            {
+                ["action"] = EditorShortcutSettings.RedoActionId,
+                ["command"] = "editor.asset-command:redo",
+            }),
     };
 
     public void Focus()

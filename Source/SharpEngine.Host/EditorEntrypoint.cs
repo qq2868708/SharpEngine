@@ -1,4 +1,4 @@
-﻿using SharpEngine.Input;
+using SharpEngine.Input;
 using System.Runtime.InteropServices;
 using SharpEngine.Editor;
 using SharpEngine.Logging;
@@ -291,43 +291,22 @@ public static class HostEntrypoint
                 runtime.ReleasePlayInputCapture();
                 return true;
             }));
-        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.play-pause", EditorShortcutSettings.GlobalPriority, value =>
-            {
-                if (value.Phase != InputActionPhase.Performed) return false;
-                runtime.InvokeUiAction(runtime.PlayState == EditorPlayState.Playing
-                    ? "editor.pause" : "editor.play");
-                return true;
-            }));
-        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.stop", EditorShortcutSettings.GlobalPriority, value =>
-            {
-                if (value.Phase != InputActionPhase.Performed) return false;
-                runtime.InvokeUiAction("editor.stop");
-                return true;
-            }));
-        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.save", EditorShortcutSettings.GlobalPriority, value =>
-            {
-                if (value.Phase != InputActionPhase.Performed) return false;
-                // Reached only when no focused document scope consumed the gesture.
-                runtime.InvokeUiAction("editor.save");
-                return true;
-            }));
-        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.undo", EditorShortcutSettings.GlobalPriority, value =>
-            {
-                if (value.Phase != InputActionPhase.Performed) return false;
-                runtime.InvokeUiAction("editor.undo");
-                return true;
-            }));
-        s_inputHandlers.Add(input.BindAction(InputRoute.Editor,
-            "engine://input/actions/editor.redo", EditorShortcutSettings.GlobalPriority, value =>
-            {
-                if (value.Phase != InputActionPhase.Performed) return false;
-                runtime.InvokeUiAction("editor.redo");
-                return true;
-            }));
+        // Shortcuts execute the same editor commands as the toolbar and menus. A gesture is
+        // consumed even when its command is currently disabled, exactly like a disabled
+        // toolbar button still swallows the click: the editor route owns the key either way.
+        foreach (var (ActionId, CommandId) in new EditorShortcutSettings().CommandRoutes())
+        {
+            s_inputHandlers.Add(input.BindAction(InputRoute.Editor, ActionId,
+                EditorShortcutSettings.GlobalPriority, Event =>
+                {
+                    if (Event.Phase != InputActionPhase.Performed)
+                    {
+                        return false;
+                    }
+                    runtime.InvokeUiAction("editor.command:" + CommandId);
+                    return true;
+                }));
+        }
     }
 
     private static void DisposeInputHandlers()

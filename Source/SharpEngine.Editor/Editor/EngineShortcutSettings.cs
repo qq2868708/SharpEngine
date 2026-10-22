@@ -327,15 +327,34 @@ public sealed class EditorShortcutSettings : DevelopmentSettings
         Description = "Held key that boosts viewport navigation speed.", Order = 840)]
     public EngineShortcutKey NavigateSpeedModifier { get; init; } = EngineShortcutKey.Shift;
 
-    /// <summary>Editor-route action bindings in deterministic declaration order.</summary>
-    public IEnumerable<(string ActionId, string Name, EngineShortcut Shortcut)> Bindings()
+    /// <summary>Editor-route action bindings in deterministic declaration order. Each
+    /// gesture names the editor command it executes, so a shortcut and its toolbar or
+    /// menu entry run through the same <see cref="EditorCommandRegistry"/> entry and obey
+    /// the same CanExecute state. Null means the gesture drives runtime behavior that has
+    /// no command surface, such as releasing gameplay pointer capture.</summary>
+    public IEnumerable<(string ActionId, string Name, string? CommandId, EngineShortcut Shortcut)> Bindings()
     {
-        yield return (PlayPauseActionId, "playPause", PlayPause);
-        yield return (StopActionId, "stop", Stop);
-        yield return (SaveActionId, "save", Save);
-        yield return (UndoActionId, "undo", Undo);
-        yield return (RedoActionId, "redo", Redo);
-        yield return (RedoActionId, "redoAlternate", RedoAlternate);
-        yield return (ReleasePointerActionId, "releasePointer", ReleasePointer);
+        yield return (PlayPauseActionId, "playPause", "core.play-pause", PlayPause);
+        yield return (StopActionId, "stop", "core.stop", Stop);
+        yield return (SaveActionId, "save", "core.save-current-level", Save);
+        yield return (UndoActionId, "undo", "core.undo", Undo);
+        yield return (RedoActionId, "redo", "core.redo", Redo);
+        yield return (RedoActionId, "redoAlternate", "core.redo", RedoAlternate);
+        yield return (ReleasePointerActionId, "releasePointer", null, ReleasePointer);
+    }
+
+    /// <summary>Distinct action-to-command routes, in first-declaration order. Duplicate
+    /// gestures such as Redo and its Shift variant share one route.</summary>
+    public IEnumerable<(string ActionId, string CommandId)> CommandRoutes()
+    {
+        var Seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (ActionId, _, CommandId, _) in Bindings())
+        {
+            if (CommandId is null || !Seen.Add(ActionId))
+            {
+                continue;
+            }
+            yield return (ActionId, CommandId);
+        }
     }
 }

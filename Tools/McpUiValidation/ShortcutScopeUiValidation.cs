@@ -182,13 +182,21 @@ internal static class ShortcutScopeUiValidation
         var Shortcuts = Invoke("editor.describe")["shortcuts"]!;
         Require(Shortcuts["bindings"]!.AsArray().Any(Node =>
                 Node!["name"]!.GetValue<string>() == "save" &&
-                Node["gesture"]!.GetValue<string>() == "Ctrl+S"),
-            "The engine shortcut map must publish the Ctrl+S save gesture");
+                Node["gesture"]!.GetValue<string>() == "Ctrl+S" &&
+                Node["command"]!.GetValue<string>() == "core.save-current-level"),
+            "The engine shortcut map must publish the Ctrl+S save command route");
+        Require(Shortcuts["routing"]!["global"]!.AsArray().Any(Node =>
+                Node!["action"]!.GetValue<string>() ==
+                    "engine://input/actions/editor.save" &&
+                Node["dispatches"]!.GetValue<string>() == "editor.command:core.save-current-level"),
+            "The global layer must dispatch the shared Save command");
         Require(Shortcuts["routing"]!["scopes"]!.AsArray().Any(Node =>
                 Node!["hostId"]!.GetValue<string>() == RootId &&
-                Node["actions"]!.AsArray().Any(Action => Action!.GetValue<string>()
-                    .EndsWith("/editor.save", StringComparison.Ordinal))),
-            "The open asset editor must publish its own Save shortcut scope");
+                Node["routes"]!.AsArray().Any(Route =>
+                    Route!["action"]!.GetValue<string>() ==
+                        "engine://input/actions/editor.save" &&
+                    Route["command"]!.GetValue<string>() == "editor.asset-save")),
+            "The open asset editor must publish its own Save command scope");
         Console.WriteLine("Shortcut scope evidence: " + Evidence);
     }
 }

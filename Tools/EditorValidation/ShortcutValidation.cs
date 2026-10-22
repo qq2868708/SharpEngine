@@ -82,6 +82,24 @@ internal static class ShortcutValidation
                 Binding.Modifiers.SequenceEqual(["Keyboard/Control"])),
             "Ctrl+S must be bound to the editor Save action");
 
+        // Shortcuts execute the same commands as the toolbar, not raw UI actions.
+        var Global = JsonNode.Parse(Runtime.DescribeShortcutsJson())!["routing"]!["global"]!.AsArray();
+        Require(Global.Any(Route => Route!["action"]!.GetValue<string>() ==
+                EditorShortcutSettings.SaveActionId &&
+            Route["command"]!.GetValue<string>() == "core.save-current-level" &&
+            Route["dispatches"]!.GetValue<string>() == "editor.command:core.save-current-level"),
+            "The Save shortcut must dispatch the shared editor command");
+        foreach (var (ActionId, CommandId) in Runtime.Shortcuts.CommandRoutes())
+        {
+            Require(Runtime.Commands.Commands.Any(Command => Command.Id == CommandId),
+                $"Shortcut action '{ActionId}' must name a registered editor command '{CommandId}'");
+        }
+        Require(Runtime.Commands.Commands.Any(Command => Command.Id == "core.play-pause") &&
+            Runtime.Commands.Commands.Any(Command => Command.Id == "core.stop") &&
+            Runtime.Commands.Commands.Any(Command => Command.Id == "core.undo") &&
+            Runtime.Commands.Commands.Any(Command => Command.Id == "core.redo"),
+            "Every command-backed shortcut must have a toolbar/menu command to share");
+
         // Shortcut scopes are part of the input route, not a parallel hotkey table.
         var Opened = Runtime.OpenAsset("project://materials/validation");
         Require(Opened.Success, "The shortcut scope check requires an openable asset editor");
@@ -90,12 +108,14 @@ internal static class ShortcutValidation
             .SequenceEqual(new[] { "focusedHostScope", "globalEditor" }),
             "Shortcut routing must declare the focused scope before the global layer");
         var Scopes = DescribedRouting["scopes"]!.AsArray();
-        Require(Scopes.Any(Scope => Scope!["actions"]!.AsArray().Any(Action =>
-                Action!.GetValue<string>() == EditorShortcutSettings.SaveActionId) &&
+        Require(Scopes.Any(Scope => Scope!["routes"]!.AsArray().Any(Route =>
+                Route!["action"]!.GetValue<string>() == EditorShortcutSettings.SaveActionId &&
+                Route["command"]!.GetValue<string>() == "editor.asset-save") &&
             Scope["priority"]!.GetValue<int>() > EditorShortcutSettings.GlobalPriority),
             "A focused asset editor must publish a Save scope above the global layer");
-        var ScopeHost = Scopes.First(Scope => Scope!["actions"]!.AsArray().Any(Action =>
-            Action!.GetValue<string>() == EditorShortcutSettings.SaveActionId))!["hostId"]!.GetValue<string>();
+        var ScopeHost = Scopes.First(Scope => Scope!["routes"]!.AsArray().Any(Route =>
+            Route!["action"]!.GetValue<string>() == EditorShortcutSettings.SaveActionId))!
+            ["hostId"]!.GetValue<string>();
         Runtime.InvokeUiAction($"editor.host-action:{ScopeHost}:editor.asset-close");
         Require(JsonNode.Parse(Runtime.DescribeShortcutsJson())!["routing"]!["scopes"]!
                 .AsArray().Count == 0,

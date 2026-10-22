@@ -44,13 +44,15 @@ public sealed partial class EditorRuntime
     internal string DescribeShortcutsJson()
     {
         var Bindings = new JsonArray();
-        foreach (var (ActionId, Name, Shortcut) in _shortcutSettings.Bindings())
+        foreach (var (ActionId, Name, CommandId, Shortcut) in _shortcutSettings.Bindings())
         {
             var Applied = _appliedShortcutBindings.TryGetValue(Name, out var Live);
             Bindings.Add(new JsonObject
             {
                 ["name"] = Name,
                 ["action"] = ActionId,
+                ["command"] = CommandId,
+                ["dispatches"] = CommandId is null ? null : "editor.command:" + CommandId,
                 ["gesture"] = Shortcut.Describe(),
                 ["appliedGesture"] = Applied ? EngineShortcut.DescribeOf(Live!) : null,
                 ["control"] = Applied ? Live!.Control : null,
@@ -89,6 +91,13 @@ public sealed partial class EditorRuntime
             {
                 ["route"] = InputRoute.Editor.ToString(),
                 ["order"] = new JsonArray("focusedHostScope", "globalEditor"),
+                ["global"] = new JsonArray(_shortcutSettings.CommandRoutes()
+                    .Select(Route => (JsonNode?)new JsonObject
+                    {
+                        ["action"] = Route.ActionId,
+                        ["command"] = Route.CommandId,
+                        ["dispatches"] = "editor.command:" + Route.CommandId,
+                    }).ToArray()),
                 ["scopes"] = new JsonArray(AssetOpeners.DescribeShortcutScopes()
                     .Select(Scope => (JsonNode?)Scope).ToArray()),
             },
@@ -119,7 +128,7 @@ public sealed partial class EditorRuntime
         var Applied = new Dictionary<string, InputBindingDefinition>(StringComparer.Ordinal);
         var Gestures = new Dictionary<string, string>(StringComparer.Ordinal);
         var Defaults = new EditorShortcutSettings();
-        foreach (var (ActionId, Name, Shortcut) in Settings.Bindings())
+        foreach (var (ActionId, Name, _, Shortcut) in Settings.Bindings())
         {
             var Binding = Shortcut.ToBinding(ActionId);
             if (Binding is null)
