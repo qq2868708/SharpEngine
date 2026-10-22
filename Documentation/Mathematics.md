@@ -40,7 +40,7 @@ var Hit = Bounds.IntersectRay(Ray, out var Distance, 100);
 验证入口：
 
 ```powershell
-dotnet run --project Tools/MathematicsValidation/SharpEngine.MathematicsValidation.csproj -p:SharpEngineTarget=AnimationValidation
+dotnet run --project Tools/MathematicsValidation/SharpEngine.MathematicsValidation.csproj
 ```
 
 覆盖标量和几何边界、极大/极小向量、pitch 极点、镜像 TRS、shear/奇异矩阵，

@@ -4,17 +4,17 @@
 
 Editor assets are readable text and are the authoritative source. A special suffix, container, or encryption layer may make a file appear binary, but the editor contract remains a structured, readable text representation before Cook.
 
-AI-facing contracts use versioned JSON. Storage does not have to use JSON: World XML, RML/RCSS, and other domain text formats may remain when their adapters are deterministic and lossless for authoritative semantics.
+AI-facing contracts use versioned JSON. Current World/Prefab source documents use strict v3 JSON. Other domain storage, including RML/RCSS, may remain in its deterministic text format when its adapters are lossless for authoritative semantics. Do not infer support for legacy World XML from this storage flexibility.
 
 Do not serialize native handles, GPU objects, threads, delegates, open streams, or caches. Serialize stable descriptors, IDs, URIs, settings, and provenance needed to rebuild them.
 
 ## Versions And Migration
 
-Every root object carries `schemaVersion`. Support older readable versions through a deterministic migration chain to the current version. Forward reading by an old engine is not required.
+Every root object carries `schemaVersion`. Determine the supported versions from that format's current reader and confirmed design before changing it. The pre-stable World/Prefab contract accepts v3 only; components accept their registered schema version only. Do not add v2 compatibility, automatic repair, or component migration hooks to these contracts. Other formats can have explicit supported legacy readers; preserve those within their documented scope. Compatibility is a per-format decision, not an engine-wide default.
 
 Reject unknown future versions, unknown required types, invalid known fields, and failed migrations with structured diagnostics. Never hide incompatibility with silent defaults or field deletion.
 
-Changing a stable component type ID, asset ID, or other serialized identity requires an explicit redirect and migration. Preserve established IDs when semantics have not changed.
+Preserve stable component type IDs, asset IDs, and other serialized identities when semantics have not changed. An identity change requires an explicitly designed content/reference update or supported redirect; a schema version bump alone does not repair references. Do not invent compatibility paths for a current-only format.
 
 Save every authoritative field explicitly, including values equal to current defaults. Defaults create new state and assist migration; they must not reinterpret an existing saved asset after an engine upgrade.
 
@@ -27,7 +27,7 @@ State edits commit to live memory and mark their authoritative document dirty. T
 Detect external edits to authoritative text assets. Hot reload uses:
 
 1. parse into a staging representation;
-2. migrate and completely validate it;
+2. apply only the format's explicitly supported conversions and completely validate it;
 3. atomically replace the live state on the world/editor thread;
 4. update revisions and diagnostics.
 
@@ -72,7 +72,7 @@ For engine-owned formats and built-in components, test applicable invariants:
 - default and non-default values serialize explicitly;
 - save/load and Authoring-to-Runtime round trips preserve authoritative semantics;
 - repeated serialization is deterministic;
-- every supported old version migrates correctly;
+- current-only formats reject unsupported versions; explicitly supported old versions read or migrate correctly;
 - invalid and unknown required data produces structured diagnostics;
 - external hot reload is atomic and retains the prior valid state on failure;
 - revisions, dirty state, transactions, Undo/Redo, and explicit Save behave independently;

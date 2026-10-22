@@ -77,7 +77,7 @@ var Observations = Navigation.Agents;
 ## 验证
 
 ```powershell
-dotnet run --project Tools/SpatialValidation/SharpEngine.SpatialValidation.csproj -p:SharpEngineTarget=SpatialValidation
+dotnet run --project Tools/SpatialValidation/SharpEngine.SpatialValidation.csproj
 ```
 
 专项验证覆盖默认/非默认序列化、确定性、版本拒绝、非法数据诊断、Authoring 事务与 Undo/Redo、显式保存、Runtime 重建、Prefab 引用重映射、shape 组合重叠、层级变换、射线、导航净空、动态障碍重规划、父子 Agent、动态添加和固定步长。另有 600 组固定随机种子的解析几何对照查询。

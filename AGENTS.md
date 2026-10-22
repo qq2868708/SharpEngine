@@ -22,6 +22,12 @@ new projects; keep their naming policy aligned with this one.
 
 For engine development and project-side engine extensions, follow
 [sharpengine-development](.agents/skills/sharpengine-development/SKILL.md).
+Feature boundaries and nesting follow the
+[composition architecture](Documentation/CompositionArchitecture.md): acyclic
+dependencies, encapsulated capabilities, reusable definitions with per-use data,
+and domain-typed composition slots. Apply
+[engine-code-style](.agents/skills/engine-code-style/SKILL.md) to changed engine
+source and code examples.
 For every observable engine feature or public contract change, also follow
 [engine-manual](.agents/skills/engine-manual/SKILL.md) and update the current
 versioned HTML manual under `Documentation/EngineManual`.

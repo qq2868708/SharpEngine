@@ -31,9 +31,9 @@ UI and AI authoring operations converge on a shared semantic command layer. MCP 
 
 The engine provides generic schema-driven component read and atomic patch operations. Use these for direct authoritative field changes. A patch is an AI-decided engine operation, not AI reasoning and not a direct file edit. It identifies the target object and context, includes `expectedRevision`, and carries only allowed changes. The engine validates type, constraints, references, permissions, and current revision before an all-or-nothing commit.
 
-Use project MCP capabilities for domain operations whose invariants exceed a generic field patch. Project MCP exposure is optional. Internal project behavior does not need MCP schemas or MCP result envelopes, but it still cannot bypass engine tracking when it changes engine-managed authoritative state.
+Use project MCP capabilities for domain operations whose invariants exceed a generic field patch. Project MCP exposure is optional. Internal project behavior does not need MCP schemas or MCP result envelopes. Authoring and external Inspector/AI edits use engine tracking; ordinary project Runtime field writes follow the complete-Tick observation boundary described in the component model.
 
-Successful authoritative edits:
+Successful Authoring edits:
 
 - update the relevant revisions and dirty state;
 - join the shared user/AI Undo/Redo history;
@@ -41,6 +41,8 @@ Successful authoritative edits:
 - treat a multi-field or cascading operation as one transaction.
 
 Patch does not automatically save. Save is explicit and separate. Runtime-only or external operations may be non-reversible, but their capability descriptions must say so and must not present them as normal authoring edits.
+
+Runtime edits have their own revisions and must not dirty Authoring, enter its Undo/Redo history, or save back implicitly.
 
 Engine mutation results include transaction ID, before/after revisions, affected objects and fields, created/deleted IDs, diagnostics, and dirty state. Large diffs may be a summary plus a readable diff resource URI.
 

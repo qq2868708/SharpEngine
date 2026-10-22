@@ -23,3 +23,11 @@ file and `.editorconfig` together when choosing a different project convention.
 Runtime Modules reference only SharpEngine.Runtime; Editor Modules may also
 reference SharpEngine.Editor. Use the engine's unified project build entry point
 documented in README.md. Keep serialized IDs and schema versions stable.
+
+Compose reusable functionality through domain-specific public contracts and
+acyclic dependencies. Composite features encapsulate their children; reusable
+definitions and templates keep per-use mutable data in instances. Owned child
+instances are driven by their composite, while World-managed components retain
+engine lifecycle ownership. A type may enter a composition slot only when it
+implements that slot's capability contract. Follow the associated engine's
+Documentation/CompositionArchitecture.md for the full development baseline.

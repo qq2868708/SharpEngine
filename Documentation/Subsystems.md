@@ -97,7 +97,7 @@ World 的子系统快照随 `RuntimeWorld.Frame` 一起冻结；Editor 的 `comp
 验证入口：
 
 ```powershell
-dotnet run --project Tools/SubsystemValidation/SharpEngine.SubsystemValidation.csproj -p:SharpEngineTarget=SubsystemValidation -- D:\SharpEngine
+dotnet run --project Tools/SubsystemValidation/SharpEngine.SubsystemValidation.csproj -- D:\SharpEngine
 ```
 
 覆盖作用域隔离、自动模块注册、失败回滚、卸载与重新注册、线程限制、冻结快照、

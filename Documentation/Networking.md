@@ -95,7 +95,7 @@ while (Running)
 运行：
 
 ```powershell
-dotnet run --project Tools/NetworkValidation/SharpEngine.NetworkValidation.csproj -p:SharpEngineTarget=NetworkValidation
+dotnet run --project Tools/NetworkValidation/SharpEngine.NetworkValidation.csproj
 ```
 
 该验证覆盖 Schema 指纹、完整快照、字段 Delta、Server Tick、重复 Command 的幂等结果、未知 Command 拒绝、相关性过滤，以及两个独立 UDP transport 实例之间的握手、快照 ACK、Command 和属性回传。示例 DS 脚本另外覆盖原生 Server Target 的模块加载和双客户端运行。它不代表 QUIC、生产认证、客户端预测、客户端渲染或生产规模 DS 验收。

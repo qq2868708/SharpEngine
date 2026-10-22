@@ -29,9 +29,15 @@ manual pages remain stale.
    the observable change and, for API work, the contract/version impact. Do not
    claim compile, Editor, Runtime, Cook, or production validation that was not
    actually run.
-6. Run `scripts/Validate-EngineManual.ps1` from the repository root. It checks
-   the manifest, current-version entry points, required headings, and local
-   links.
+6. Run `scripts/Validate-EngineManual.ps1` from the repository root. This is the
+   single implementation for manifest, entry-point, heading, and local-link
+   checks; the skill's script entry delegates to it. It is a structural check,
+   not evidence that an API example compiles or a CLI example executes.
+7. When changing a command, public API, schema policy, or development entry
+   point, inspect affected examples and linked detailed documentation. Validate
+   changed examples with a suitable build/evaluation or bounded execution when
+   applicable. Keep commands aligned with current supported targets and output
+   guards. Report example execution separately from structural manual validation.
 
 ## Versioning
 
