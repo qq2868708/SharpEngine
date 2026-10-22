@@ -1,4 +1,5 @@
 # IDE state
+after.*.sln.targets
 .vs/
 .idea/
 *.suo

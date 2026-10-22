@@ -12,6 +12,13 @@ Read `Documentation/ProjectOrganization.md` and `Build/README.md` for build/modu
 
 Engine build targets are Editor, Game, and Server; tool roles select the Tools output target. Validation suite names are not engine targets. Do not pass `SharpEngineTarget=SpatialValidation` or another suite name into engine dependencies. Ordinary validation executables may keep their existing .NET tool output layout; their fixtures, captures, logs, and reports belong under `Saved/Validation`.
 
+Generated IDE launch Targets bind a fixed Configuration/Target tuple. Keep their
+build command, solution ActiveCfg mapping, bootstrap executable path, and private
+launchSettings.json aligned. Solution Build enables only the globally selected
+tuple; explicitly building a launch Target must retain its own tuple even when
+the solution configuration differs. Validate this with
+`Tools/ProjectSelectorValidation --launch-configuration-only`.
+
 `Build/SharpEngine.Build.props` owns engine binaries/intermediates. Use `Binaries/<Platform>/<Configuration>/<Target>` and the matching `Intermediate` tuple. Do not redirect engine `OutputPath`, `OutDir`, or intermediate properties to bypass a lock or guard. Inspect the current supported isolation options or build a separate checkout. Do not terminate the user's Editor to unlock binaries.
 
 Run a read-only layout check when changing build metadata, generators, publication, or output paths:
@@ -21,6 +28,14 @@ Run a read-only layout check when changing build metadata, generators, publicati
 ```
 
 Select the tuple actually affected. Use `-Scope All` for full-layout claims. Check is distinct from Apply/Clean; a layout failure does not authorize cleanup of unrelated outputs. `Tools/LayoutValidation.ps1` covers the build-layout contract.
+
+Render builds select `OpenGL` or `Both` through `-RenderBackends`, the project's
+optional `renderBackends`, and native `SharpEngineRenderBackends`. New templates
+select OpenGL; omitted settings preserve Both. Keep runtime `--render-backend`
+separate from compiled capabilities. Validate OpenGL without an SDK, Vulkan
+rejection in that build, and Both with the SDK when touching this boundary.
+Modes share canonical target outputs, so rebuild and restart after switching.
+Follow `Documentation/RenderBackends.md`; do not add alternative output roots.
 
 ## Module And Plugin Boundaries
 

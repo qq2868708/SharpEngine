@@ -3,6 +3,7 @@
   "schemaVersion": 3,
   "projectId": "__PROJECT_ID__",
   "displayName": "__DISPLAY_NAME__",
+  "renderBackends": "OpenGL",
   "engine": {
     "id": "SharpEngine",
     "version": "0.2.0-dev",

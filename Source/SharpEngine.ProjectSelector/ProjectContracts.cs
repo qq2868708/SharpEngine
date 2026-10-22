@@ -23,7 +23,8 @@ internal sealed record SharpProjectDescriptor(
     string EngineManifest,
     IReadOnlyList<string> Modules,
     IReadOnlyList<string> Plugins,
-    IReadOnlyList<string> Targets);
+    IReadOnlyList<string> Targets,
+    string RenderBackends = "Both");
 
 internal sealed record ResolvedSharpProject(
     SharpProjectDescriptor Project,
@@ -88,7 +89,8 @@ internal static class ProjectContracts
             OptionalString(engine, "manifest") ?? "engine.json",
             modules,
             plugins,
-            ProjectTargets.Read(root));
+            ProjectTargets.Read(root),
+            RenderBuildOptions.Read(root));
     }
 
     internal static EngineDescriptor ReadEngine(string root, string manifestRelative = "engine.json")

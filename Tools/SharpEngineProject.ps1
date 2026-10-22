@@ -13,6 +13,7 @@ param(
     [ValidateSet('Debug', 'Development', 'Shipping')][string]$Configuration = 'Debug',
     [ValidateSet('Win64')][string]$Platform = 'Win64',
     [ValidateSet('opengl', 'vulkan')][string]$RenderBackend,
+    [ValidateSet('OpenGL', 'Both')][string]$RenderBackends,
     [switch]$Json
 )
 
@@ -268,7 +269,22 @@ function Invoke-Doctor([string]$Path) {
 
 function Invoke-Build([string]$Path) {
     $resolved = Resolve-ProjectManifest $Path
-    & (Join-Path $resolved.EngineRoot 'Tools/SharpEngineBuild.ps1') -EngineRoot $resolved.EngineRoot -Target $Target -Configuration $Configuration -Platform $Platform
+    $Manifest = Get-Content -Raw -LiteralPath $resolved.ProjectManifest | ConvertFrom-Json
+    $SelectedBackends = 'Both'
+    if ($null -ne $Manifest.PSObject.Properties['renderBackends'])
+    {
+        if ($Manifest.renderBackends -isnot [string] -or
+            @('OpenGL', 'Both') -cnotcontains $Manifest.renderBackends)
+        {
+            throw 'renderBackends must be OpenGL or Both'
+        }
+        $SelectedBackends = $Manifest.renderBackends
+    }
+    if ($RenderBackends)
+    {
+        $SelectedBackends = $RenderBackends
+    }
+    & (Join-Path $resolved.EngineRoot 'Tools/SharpEngineBuild.ps1') -EngineRoot $resolved.EngineRoot -Target $Target -Configuration $Configuration -Platform $Platform -RenderBackends $SelectedBackends
     if ($LASTEXITCODE) { throw 'Engine Target build failed' }
     $layout = Join-Path $resolved.EngineRoot 'Tools\SharpEngineLayout.ps1'
     if (!(Test-Path -LiteralPath $layout -PathType Leaf)) {

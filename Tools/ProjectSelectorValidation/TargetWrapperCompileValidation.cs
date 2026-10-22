@@ -1,16 +1,15 @@
 using System.Diagnostics;
+using SharpEngine.ProjectSelector;
 
 internal static class TargetWrapperCompileValidation
 {
-    internal static void Run(string EditorProject, IReadOnlyList<string> Targets,
+    internal static void Run(GeneratedSolution Generated, string Name, IReadOnlyList<string> Targets,
         Action<bool, string> Check)
     {
         foreach (var Target in Targets)
         {
-            var Project = EditorProject.Replace(".Editor.Target.csproj",
-                $".{Target}.Target.csproj", StringComparison.Ordinal);
-            // A unique output directory also makes the launcher's inferred configuration
-            // unavailable, so the missing-engine diagnostic can be exercised safely.
+            var Project = SolutionGenerator.TargetFiles(Path.GetDirectoryName(Generated.StampPath)!,
+                Name, Target, "Debug").Project;
             var OutputDirectory = Path.Combine(Path.GetDirectoryName(Project)!, "bin",
                 "BootstrapCheck-" + Guid.NewGuid().ToString("N"));
             var Build = RunDotnet("build", Project, "-c", "Debug", "--nologo", "-v:minimal",
@@ -18,14 +17,6 @@ internal static class TargetWrapperCompileValidation
                 "-p:OutputPath=" + OutputDirectory + Path.DirectorySeparatorChar);
             Check(Build.ExitCode == 0,
                 $"Generated {Target} Target must compile before engine binaries exist: {Build.Output}");
-            var AssemblyPath = Path.Combine(OutputDirectory, Path.GetFileNameWithoutExtension(Project) + ".dll");
-            var Launch = RunDotnet(AssemblyPath);
-            var ExecutableName = Target == "Server" ? "DedicatedServer.exe" : "Engine.exe";
-            Check(Launch.ExitCode == 1 &&
-                Launch.Output.Contains("Build this Target first:", StringComparison.Ordinal) &&
-                Launch.Output.Contains(Path.Combine("Win64", Path.GetFileName(OutputDirectory), Target, ExecutableName),
-                    StringComparison.Ordinal),
-                $"Generated {Target} Target must report a missing engine executable: {Launch.Output}");
         }
     }
 

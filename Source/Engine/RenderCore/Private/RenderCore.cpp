@@ -1,38 +1,44 @@
 #include "RenderCore/Public/RenderCore.h"
 #include "RenderBackend.h"
 #include "OpenGL/RenderBackend_OpenGL.h"
+#if !defined(SHARPENGINE_WITH_VULKAN) || SHARPENGINE_WITH_VULKAN
 #include "Vulkan/RenderBackend_Vulkan.h"
+#endif
 #include "RenderBackend_Offscreen.h"
 #include "RenderBackend_NullRHI.h"
 
 static std::unique_ptr<RenderBackend> GBackend;
 static RenderBackendType GBackendType = RenderBackendType::OpenGL;
 
-std::unique_ptr<RenderBackend> CreateRenderBackend(const RenderInitDesc& desc)
+std::unique_ptr<RenderBackend> CreateRenderBackend(const RenderInitDesc& Desc)
 {
-    std::unique_ptr<RenderBackend> backend;
-    switch (desc.Backend)
+    std::unique_ptr<RenderBackend> Backend;
+    switch (Desc.Backend)
     {
     case RenderBackendType::Vulkan:
-        backend = std::make_unique<RenderBackend_Vulkan>();
+#if !defined(SHARPENGINE_WITH_VULKAN) || SHARPENGINE_WITH_VULKAN
+        Backend = std::make_unique<RenderBackend_Vulkan>();
         break;
+#else
+        return nullptr;
+#endif
     case RenderBackendType::Offscreen:
-        backend = std::make_unique<RenderBackend_Offscreen>();
+        Backend = std::make_unique<RenderBackend_Offscreen>();
         break;
     case RenderBackendType::NullRHI:
-        backend = std::make_unique<RenderBackend_NullRHI>();
+        Backend = std::make_unique<RenderBackend_NullRHI>();
         break;
     case RenderBackendType::OpenGL:
-        backend = std::make_unique<RenderBackend_OpenGL>();
+        Backend = std::make_unique<RenderBackend_OpenGL>();
         break;
     default:
         return nullptr;
     }
-    if (!backend->Initialize(&desc))
+    if (!Backend->Initialize(&Desc))
     {
         return nullptr;
     }
-    return backend;
+    return Backend;
 }
 
 RenderBackend* GetActiveRenderBackend() { return GBackend.get(); }

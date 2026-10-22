@@ -314,10 +314,11 @@ internal static class Program
         return 0;
     }
 
-    private static int BuildEngine(string[] args)
+    private static int BuildEngine(string[] Args)
     {
-        EngineBuildGraph.Build(RequiredOption(args, "--engine-root"), Option(args, "--target") ?? "Editor",
-            Option(args, "--configuration") ?? "Debug", Option(args, "--platform") ?? "Win64");
+        EngineBuildGraph.Build(RequiredOption(Args, "--engine-root"), Option(Args, "--target") ?? "Editor",
+            Option(Args, "--configuration") ?? "Debug", Option(Args, "--platform") ?? "Win64",
+            Option(Args, "--render-backends") ?? "Both");
         return 0;
     }
 

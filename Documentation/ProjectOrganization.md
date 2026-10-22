@@ -125,8 +125,8 @@ solution. Use `Tools/SharpEngineProject.ps1 -Command GenerateProjectFiles
 the Targets enabled by the project manifest. `Editor` and `Game` are enabled by
 default; `Server` is opt-in. The generated solution keeps three roots: `Engine` contains engine
 source and Plugins, `Project` contains project `Source`, project `Plugins`, and
-`Config`, and `BuildTarget` contains the generated `Editor`/`Game` build
-wrappers and any explicitly enabled additional Targets. In Windows Explorer,
+`Config`, and `BuildTarget` contains the generated configuration-specific
+`Editor`/`Game` build wrappers and any explicitly enabled additional Targets. In Windows Explorer,
 right-click the project's `.sharpproject` and select `Add Server Target`
 (`Show more options` first on Windows 11). This updates the manifest and
 automatically regenerates the solution, Server wrapper, and launch profiles.
@@ -154,7 +154,26 @@ Only the selected generated Target wrapper participates in Solution Build. It in
 the same build pipeline as the CLI, which builds engine dependencies before user Modules.
 The other projects remain visible for editing and design-time analysis.
 
-`SharpEngine.sln`, user solutions, Target wrappers, launch profiles and Generated.props
+Each generated launch Target binds one configuration and host, such as
+`Debug Editor Target`. Its build command, bootstrap launcher, solution mapping,
+and private `Properties/launchSettings.json` all use that same tuple. Selecting
+the Debug Editor launch profile in Rider therefore builds Debug Editor even if
+the active solution configuration is Development Editor. Solution Build still
+builds only the Target matching the active solution configuration.
+The generated `after.<Solution>.sln.targets` beside the solution forwards explicit
+Rider project builds to their fixed Target even when it is unchecked in the
+active solution configuration. Keep this file with the generated solution.
+Regenerate and reload old solutions, then choose the new configuration-specific
+launch Target once; old shared Target projects and profiles are removed.
+Close the running target before rebuilding its executable.
+
+The optional project `renderBackends` property selects `OpenGL` or `Both` at
+build time. New templates choose OpenGL; omitted values preserve Both.
+Regenerate the solution after changing it. Generated Targets forward
+`SharpEngineRenderBackends` to the unified build. See
+[RenderBackends](RenderBackends.md) for SDK requirements and shared-output behavior.
+
+`SharpEngine.sln`, user solutions, `after.*.sln.targets`, Target wrappers, launch profiles and Generated.props
 are derived files. Do not add project entries or dependency lists by hand. Generated
 project cache stamps include the discovered engine project definitions.
 

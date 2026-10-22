@@ -135,6 +135,10 @@ struct RenderOptions
         }
         else if (value == L"vulkan")
         {
+#if defined(SHARPENGINE_WITH_VULKAN) && !SHARPENGINE_WITH_VULKAN
+            error = "RENDER_BACKEND_UNAVAILABLE: rebuild with RenderBackends Both to enable Vulkan";
+            return true;
+#endif
             SelectedBackend = RenderBackendType::Vulkan;
         }
         else

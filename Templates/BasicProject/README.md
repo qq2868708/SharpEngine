@@ -4,6 +4,13 @@ This project references a registered SharpEngine distribution from the root
 schema 3 `__DISPLAY_NAME__.sharpproject` file. `SHARPENGINE_ROOT` may explicitly
 override its Engine association for CI and automation.
 
+The manifest selects `"renderBackends": "OpenGL"`, which builds without the
+Vulkan SDK. Set it to `"Both"` and regenerate project files to include Vulkan,
+or pass `-RenderBackends Both` to a build command for a one-time override.
+Both modes launch OpenGL by default; `--render-backend=vulkan` requires a Both
+build. Changing modes replaces the shared engine target binaries and requires
+restarting the Editor. See the engine's `Documentation/RenderBackends.md`.
+
 `AGENTS.md` and `.editorconfig` define the default C# naming convention: PascalCase
 for types, members (including private fields), parameters, local variables and
 lambda parameters, with no `_`, `m_` or `s_` field prefixes. AI code guidance and
@@ -36,6 +43,13 @@ remove or replace that extension when the project needs a different editor workf
 associated source Engine and the project Modules even when they are in unrelated
 directories. Build from the generated Editor or Game Target, or use
 the engine-owned project builder:
+
+In Rider, choose a configuration-specific launch Target, such as
+`__DISPLAY_NAME__.Debug.Editor.Target: Debug Editor`. It builds and launches
+Debug Editor even when the active solution configuration is Development.
+Solution Build still follows the active solution configuration. After upgrading
+older generated files, reload the solution and choose the new launch Target once.
+Stop that target's running Editor before rebuilding it.
 
 ```powershell
 & "$env:SHARPENGINE_ROOT\Tools\SharpEngineProject.ps1" -Command Build `

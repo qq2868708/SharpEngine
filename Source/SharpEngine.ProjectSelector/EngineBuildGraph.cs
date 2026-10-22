@@ -66,30 +66,38 @@ internal static class EngineBuildGraph
             Encoding.UTF8.GetBytes(string.Join('\n', files))));
     }
 
-    internal static void Build(string root, string target, string configuration, string platform)
+    internal static void Build(string Root, string Target, string Configuration, string Platform,
+        string RenderBackends = "Both")
     {
-        if (!Targets.Contains(target) || !Configurations.Contains(configuration) || platform != "Win64")
-            throw new ArgumentException("Build requires Editor|Game|Server, Debug|Development|Shipping, Win64");
-        root = Path.GetFullPath(root);
-        var projects = Discover(root);
-        if (projects.Count == 0)
+        if (!Targets.Contains(Target) || !Configurations.Contains(Configuration) || Platform != "Win64")
         {
-            var executable = target == "Server" ? "DedicatedServer.exe" : "Engine.exe";
-            var path = Path.Combine(root, "Binaries", platform, configuration, target, executable);
-            if (!File.Exists(path)) throw new FileNotFoundException("Installed engine target is unavailable", path);
+            throw new ArgumentException("Build requires Editor|Game|Server, Debug|Development|Shipping, Win64");
+        }
+        RenderBackends = RenderBuildOptions.Validate(RenderBackends);
+        Root = Path.GetFullPath(Root);
+        var Projects = Discover(Root);
+        if (Projects.Count == 0)
+        {
+            var Executable = Target == "Server" ? "DedicatedServer.exe" : "Engine.exe";
+            var PathValue = Path.Combine(Root, "Binaries", Platform, Configuration, Target, Executable);
+            if (!File.Exists(PathValue))
+            {
+                throw new FileNotFoundException("Installed engine target is unavailable", PathValue);
+            }
             return;
         }
-        var host = projects.Single(project => project.Role == "Host");
-        var native = projects.Single(project => project.Role == "NativeHost");
-        var state = Path.Combine(root, "Intermediate", platform, configuration, target);
-        Directory.CreateDirectory(state);
-        using var lease = new FileStream(Path.Combine(state, "engine-build.lock"), FileMode.OpenOrCreate,
+        var Host = Projects.Single(Project => Project.Role == "Host");
+        var Native = Projects.Single(Project => Project.Role == "NativeHost");
+        var State = Path.Combine(Root, "Intermediate", Platform, Configuration, Target);
+        Directory.CreateDirectory(State);
+        using var Lease = new FileStream(Path.Combine(State, "engine-build.lock"), FileMode.OpenOrCreate,
             FileAccess.ReadWrite, FileShare.None);
-        Run("dotnet", ["build", host.Path, "-c", configuration, $"-p:SharpEngineTarget={target}",
-            $"-p:SharpEnginePlatform={platform}"], root);
-        Run(FindMSBuild(), [native.Path, "/t:Build", "/m:1", "/nologo", "/v:minimal",
-            $"/p:SharpEngineRoot={Path.TrimEndingDirectorySeparator(root)}{Path.DirectorySeparatorChar}",
-            $"/p:Configuration={configuration}", "/p:Platform=x64", $"/p:SharpEngineTarget={target}"], root);
+        Run("dotnet", ["build", Host.Path, "-c", Configuration, $"-p:SharpEngineTarget={Target}",
+            $"-p:SharpEnginePlatform={Platform}"], Root);
+        Run(FindMSBuild(), [Native.Path, "/t:Build", "/m:1", "/nologo", "/v:minimal",
+            $"/p:SharpEngineRoot={Path.TrimEndingDirectorySeparator(Root)}{Path.DirectorySeparatorChar}",
+            $"/p:Configuration={Configuration}", "/p:Platform=x64", $"/p:SharpEngineTarget={Target}",
+            $"/p:SharpEngineRenderBackends={RenderBackends}"], Root);
     }
 
     internal static void Run(string executable, IEnumerable<string> arguments, string directory)

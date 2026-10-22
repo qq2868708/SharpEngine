@@ -87,7 +87,7 @@
       <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
       <p>World 是主编辑器当前文档。双击另一个 World 会先处理当前 World 的未保存修改，再替换主 Viewport、Hierarchy、Inspector 和 Play 上下文；World 不创建独立资产编辑器。Prefab 则始终打开自己的顶层资产编辑器，不替换主 World。</p>
       <p>Mesh、StaticMesh 和 SkeletalMesh 编辑器提供真实 3D Preview、几何统计、Source 和 Diagnostics。项目 Mesh 只允许修改默认 Material；顶点、索引、骨骼和蒙皮权重保持只读。Skeleton 编辑器显示骨骼树与兼容 Preview Mesh，项目 Skeleton 只允许修改 <code>previewMeshId</code>。Material 编辑器提供预览球并编辑 shader、baseColor、metallic 和 roughness。引擎来源资产统一只读。</p>
-      <p>主 Viewport 和独立 Game 共用 retained GPU scene。OpenGL 是默认后端，也可以在启动时使用 <code>--render-backend vulkan</code>；静态网格会按资源复用 vertex buffer 并自动实例化，骨骼网格由 GPU skinning。网格、骨骼 section、Bounds 和拾取 BVH 缓存在 <code>Intermediate/RenderCache</code>，它们都是可删除、可重建的派生数据，不会覆盖源资产。</p>
+      <p>主 Viewport 和独立 Game 共用 retained GPU scene。OpenGL 是默认后端，<code>renderBackends: Both</code> 构建也可以在启动时使用 <code>--render-backend vulkan</code>；静态网格会按资源复用 vertex buffer 并自动实例化，骨骼网格由 GPU skinning。网格、骨骼 section、Bounds 和拾取 BVH 缓存在 <code>Intermediate/RenderCache</code>，它们都是可删除、可重建的派生数据，不会覆盖源资产。</p>
       <p>场景环境照明由 <code>Sky Light</code> 组件提供，可以在 Inspector 中编辑 <code>Color</code> 和 <code>Intensity</code>。所有已启用且层级激活的 Sky Light 会线性累加；场景没有有效 Sky Light 时不会自动补光，未被其他光源照亮的表面保持黑色。Sky Light 只表示照明，不创建天空盒或可见天空背景。</p>
       <p>骨骼网格每个顶点最多保留 12 个蒙皮影响；单个骨骼 section 最多引用 256 根实际使用的骨骼，超出时引擎自动切分 section，资产本身没有 256 根骨骼上限。GPU 场景提交失败时会在日志和 Editor Console 中明确提示并回退到 CPU；无效资产仍报告错误，设备丢失不会被当作普通 fallback。CPU 继续负责拾取和 Gizmo，静态网格拾取使用派生 BVH。</p>
       <p>通过只读 MCP 工具 <code>render.describe</code> 或资源 <code>sharpengine://render</code> 可以查看当前后端、实际 VSync/validation 状态、GPU 提交/CPU fallback、派生缓存命中和驻留字节，以及最近 240 帧的平均值和 P95。帧 timing 使用单调时钟。Editor 和 Game 默认启用 VSync；性能基准或明确接受画面撕裂时可以使用 <code>--render-vsync=off</code>，OpenGL 和 Vulkan 都会验证该请求确实生效，不能生效时启动失败而不是静默保留同步。Vulkan validation 默认关闭，只能在 Debug 构建通过 <code>--render-validation=on</code> 显式启用；OpenGL 或非 Debug 请求会直接失败。</p>
@@ -145,6 +145,8 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>修复 Rider 启动与构建配置脱节：每个 Debug、Development、Shipping 启动项现在拥有固定配置的 Target 与独立启动文件。选择 Debug Editor 会构建并启动 Debug Editor，即使全局解决方案选择 Development；普通 Build Solution 仍遵循全局配置。旧项目重新生成并加载解决方案后，选择新的配置专属启动 Target。重新构建前先停止占用该输出的编辑器。</p>
+      <p>新增构建后端选项：项目顶层 <code>renderBackends</code> 可设为 <code>OpenGL</code> 或 <code>Both</code>。新项目默认只编译 OpenGL，无需 Vulkan SDK；已有项目省略配置时保留双后端。修改后重新生成 Rider 项目文件，或通过构建命令 <code>-RenderBackends</code> 临时覆盖。两种构建均默认以 OpenGL 启动；只有 Both 构建接受 Vulkan 启动参数。切换构建会替换共享引擎输出，需重新构建并重启。详见 <a href="../../../../RenderBackends.md">渲染后端与构建选择</a>。</p>
       <p>收紧编辑文档的事务边界：扩展应通过 EditSelectedEntity 或 EditWorld 修改候选数据，成功后统一进入撤销、重做和保存流程；直接修改已归属编辑会话的实体会被拒绝。Runtime 普通字段赋值保持支持。Dedicated Server 在模块子系统就绪后才创建 World，并按所有者推进和释放生命周期。同实体存在移动权威时 NavAgent 暂停移动并报告 NAV_MOVEMENT_AUTHORITY，停用或移除权威后恢复；导航尚未自动接入角色移动意图。</p>
       <p>引擎快捷键集中到 <code>File &gt; Engine Settings &gt; Shortcuts</code>：F5/F8、Ctrl+S、Ctrl+Z、Ctrl+Y、Ctrl+Shift+Z、Esc 与 Viewport 导航键都可改键并立即生效；编辑器路由不再被 RmlUi 消费吞掉，焦点在文本输入框时 F5 等快捷键仍然可用。快捷键按获得焦点的文档作用域冒泡：资产编辑器先消费 Save/Undo/Redo，不消费才落到全局 World 层。Play 捕获指针后真实鼠标只作用于游戏，不再触发编辑器 hover 与分割条拖拽；释放捕获后编辑器会重新取得激活，避免后续按键落到其他窗口。Esc 取代 Shift+F1 作为默认释放手势。</p>
       <p>内置 Player 改为相机参考移动：站立转动相机不改变人物朝向，WASD 按镜头水平朝向生成移动意图，角色根节点转向该方向，模型保留局部轴修正。现有项目实例可启用 FaceMoveDirection 选择此策略。</p>

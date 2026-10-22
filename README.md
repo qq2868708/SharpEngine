@@ -167,9 +167,13 @@ project `Plugins`, and `Config`. `BuildTarget` contains the generated build-entr
 wrappers. Plugin Modules are nested below their owning
 `Plugins/<Name>/Source` folder instead of being mixed with ordinary project
 Modules. An Engine-only solution omits the empty `Project` root.
-The generated SDK-style `MyGame.Editor Target` and `MyGame.Game Target` invoke the
-unified build pipeline. The selected Target owns the entire build; other projects
-remain visible for editing and IntelliSense and are not built a second time by the solution.
+The generated SDK-style `Debug Editor Target`, `Development Editor Target`, and
+matching Game/Server Targets invoke the unified build pipeline with a fixed
+configuration. Each has its own launch profile, so selecting Debug Editor builds
+and starts Debug even when the active solution configuration is Development.
+The generated `after.MyGame.sln.targets` forwards explicit Rider builds to the
+selected Target. Ordinary Solution Build builds only its active tuple; other
+projects remain visible for editing and IntelliSense.
 
 Each project Module is one `.csproj`, one DLL, and one `ISharpEngineModule` entry.
 Module ID/type come from evaluated MSBuild properties; dependencies come from

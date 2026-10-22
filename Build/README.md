@@ -19,6 +19,13 @@ declare `SharpEngineRole` before SDK props. Tool and Generator roles use the Too
 output directory; Runtime and Host follow the selected Target. `EngineBuildGraph`
 discovers engine projects and invokes their real project-reference graph.
 
+`-RenderBackends OpenGL|Both` selects native graphics capabilities. Project
+builds read the optional manifest `renderBackends`; generated Rider targets use
+`SharpEngineRenderBackends`. OpenGL excludes Vulkan sources, SDK paths, libraries,
+and SPIR-V generation; Both requires the Vulkan SDK. Modes replace the same
+canonical target outputs, not separate directories. Runtime still defaults to
+OpenGL. See [RenderBackends](../Documentation/RenderBackends.md).
+
 Use `Tools/SharpEngineLayout.ps1` to inspect or maintain this structure:
 
 ```powershell

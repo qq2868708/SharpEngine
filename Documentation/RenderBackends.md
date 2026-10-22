@@ -1,6 +1,6 @@
 # Graphics backend selection
 
-Editor and Game both support OpenGL and Vulkan. Select one graphics backend for
+Editor and Game support OpenGL and, in a dual-backend build, Vulkan. Select one graphics backend for
 the entire process, including scene rendering, RmlUi, and Editor Dock windows:
 
 ```powershell
@@ -15,8 +15,50 @@ before window/device creation; there is no silent backend fallback.
 
 The ProjectSelector `open-editor` and `run-game` commands forward this same
 option. The PowerShell launcher exposes it as `-RenderBackend opengl|vulkan`.
-This is runtime selection: each target builds both graphics implementations.
+This is runtime selection within the graphics implementations compiled into the target.
 Game continues to exclude the managed Editor assemblies.
+
+## Build selection
+
+Schema 3 `.sharpproject` files accept the optional top-level property
+`"renderBackends": "OpenGL"` or `"renderBackends": "Both"`. New projects explicitly
+select `OpenGL`; an omitted property retains `Both` for existing projects.
+Other values and non-string values are rejected. Regenerate project files after
+changing this property so Rider's generated Targets use the selected setting.
+
+`OpenGL` excludes Vulkan engine and RmlUi sources, Vulkan SDK include/library
+paths, `vulkan-1.lib`, and SPIR-V generation. OpenGL GLSL is embedded as source
+and compiled by the graphics driver at runtime; this mode requires no Vulkan SDK.
+`Both` builds both implementations and requires `VULKAN_SDK` with the Vulkan
+headers/libraries, `glslc`, `spirv-val`, and `glslangValidator`. The build launcher
+also reads the persisted user/machine SDK variable when the IDE was opened before
+SDK installation. The SDK supplies build tools; it does not change the default
+runtime backend, which remains OpenGL in both modes.
+
+The project command uses the manifest by default; an explicit build override takes
+precedence. Engine-only builds default to `Both`:
+
+```powershell
+./Tools/SharpEngineProject.ps1 -Command Build -ProjectFile D:/Games/Demo/Demo.sharpproject -RenderBackends OpenGL
+./Tools/SharpEngineBuild.ps1 -Target Editor -Configuration Development -RenderBackends Both
+```
+
+The corresponding native MSBuild property is `SharpEngineRenderBackends`.
+Generated Rider Targets forward this property to the unified builder. Build mode
+is not a new output-layout dimension: the selected mode replaces the same
+Platform/Configuration/Target output, so projects sharing that engine output must
+rebuild their selected mode and restart the executable when switching.
+Server remains free of graphics dependencies.
+
+An OpenGL build rejects `--render-backend=vulkan` before creating a graphics
+device with `RENDER_BACKEND_UNAVAILABLE`; it never silently falls back.
+The four-backend integration check below requires `Both` builds.
+
+For OpenGL builds, run the same validation script with
+`--render-backends OpenGL`; it checks Vulkan rejection, the default backend,
+rendered frames and headless modes. Configuration parsing and generated Target
+propagation can be checked with
+`dotnet run --project Tools/ProjectSelectorValidation -- --render-build-only`.
 
 The backend owns the window graphics context, UI render interface, GPU frame
 boundaries, presentation, and frame readback. UI hosts own RmlUi contexts,

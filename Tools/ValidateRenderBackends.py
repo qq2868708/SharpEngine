@@ -12,10 +12,12 @@ def main():
     parser.add_argument("--project", type=Path, required=True)
     parser.add_argument("--editor-executable", type=Path)
     parser.add_argument("--configuration", default="Debug", choices=["Debug", "Development", "Shipping"])
+    parser.add_argument("--render-backends", default="Both", choices=["OpenGL", "Both"])
+    parser.add_argument("--target", default="Both", choices=["Editor", "Game", "Both"])
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     project = args.project.resolve(strict=True)
-    evidence = root / "Saved/Validation/RenderBackends"
+    evidence = root / "Saved/Validation/RenderBackends" / args.configuration / args.render_backends
     evidence.mkdir(parents=True, exist_ok=True)
     startup = subprocess.STARTUPINFO()
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -37,14 +39,20 @@ def main():
         print(f"PASS {target}/{name}", flush=True)
         return result, output
 
-    for target in ("Editor", "Game"):
+    targets = ("Editor", "Game") if args.target == "Both" else (args.target,)
+    for target in targets:
         run(target, "invalid", ["--render-backend=invalid"], 2, "RENDER_BACKEND_INVALID")
         run(target, "missing", ["--render-backend"], 2, "RENDER_BACKEND_REQUIRED")
-        run(target, "conflict", ["--render-backend=opengl", "--render-backend=vulkan"], 2, "RENDER_BACKEND_CONFLICT")
-        base = ["--project", str(project), "--hidden"] if target == "Game" else ["--mcp-isolated"]
+        run(target, "conflict", ["--render-backend=opengl", "--render-backend=vulkan"], 2,
+            "RENDER_BACKEND_CONFLICT" if args.render_backends == "Both" else "RENDER_BACKEND_UNAVAILABLE")
+        if args.render_backends == "OpenGL":
+            run(target, "unavailable", ["--render-backend=vulkan"], 2, "RENDER_BACKEND_UNAVAILABLE")
+        base = ["--project", str(project), "--hidden" if target == "Game" else "--mcp-isolated"]
         for name, selection, expected in (("opengl", ["--render-backend=opengl"], "opengl"),
                                           ("vulkan", ["--render-backend", "vulkan"], "vulkan"),
                                           ("default", [], "opengl")):
+            if name == "vulkan" and args.render_backends == "OpenGL":
+                continue
             screenshot = evidence / f"{target}-{name}.bmp"
             screenshot.unlink(missing_ok=True)
             result, output = run(target, name, base + selection + ["--frames", "12", "--screenshot", str(screenshot)],
@@ -58,8 +66,8 @@ def main():
             assert len(data) == offset + width * height * 4 and len(set(data[offset:])) > 32
             result.update(backend=expected, width=width, height=height, screenshot=str(screenshot))
 
-    for mode in ("--render-offscreen", "--null-rhi"):
-        run("Game", mode[2:] + "-conflict", ["--render-backend=vulkan", mode], 2, "RENDER_BACKEND_CONFLICT")
+    for mode in (("--render-offscreen", "--null-rhi") if "Game" in targets else ()):
+        run("Game", mode[2:] + "-conflict", ["--render-backend=opengl", mode], 2, "RENDER_BACKEND_CONFLICT")
         run("Game", mode[2:], ["--project", str(project), mode, "--frames", "1"], contains="completed frames=1 submitted=1")
     (evidence / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     print(f"PASS {len(results)} host/backend integration cases; evidence: {evidence}")

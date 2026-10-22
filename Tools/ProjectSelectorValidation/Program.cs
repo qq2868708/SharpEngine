@@ -11,6 +11,18 @@ var registryPath = @"Software\SharpEngine\Tests\" + Guid.NewGuid().ToString("N")
 var temporary = Directory.CreateTempSubdirectory("SharpEngine-ProjectSelectorValidation-");
 try
 {
+    if (args.Contains("--launch-configuration-only", StringComparer.OrdinalIgnoreCase))
+    {
+        LaunchConfigurationValidation.Run(engineRoot, temporary.FullName, Check);
+        Console.WriteLine($"PASS: {assertions} launch configuration assertions");
+        return 0;
+    }
+    RenderBuildValidation.Run(engineRoot, temporary.FullName, Check);
+    if (args.Contains("--render-build-only", StringComparer.OrdinalIgnoreCase))
+    {
+        Console.WriteLine($"PASS: {assertions} render build configuration assertions");
+        return 0;
+    }
     McpBootstrapValidation.Run(Check);
     var NativeConfigurationIndex = Array.IndexOf(args, "--native-configuration");
     var NativeConfiguration = NativeConfigurationIndex >= 0 ? args[NativeConfigurationIndex + 1] : "Debug";
@@ -161,7 +173,7 @@ try
     foreach (var target in project.Targets)
         Check(firstSolution.Contains(componentGeneratorGuid + "." + configuration +
                 " " + target + "|Win64.ActiveCfg = " + configuration + "|Any CPU", StringComparison.Ordinal) &&
-            firstSolution.Contains(SolutionId(target + " Target") + "." + configuration +
+            firstSolution.Contains(SolutionId(configuration + " " + target + " Target") + "." + configuration +
                 " " + target + "|Win64.Build.0", StringComparison.Ordinal),
             "Each configuration must select its own unified Target: " + configuration + " " + target);
     Check(!firstSolution.Contains("Server Target", StringComparison.Ordinal) &&
@@ -171,7 +183,7 @@ try
     var nativeEngineDocument = XDocument.Load(nativeEnginePath);
     var nativeEngineGuid = nativeEngineDocument.Descendants().First(element =>
         element.Name.LocalName == "ProjectGuid").Value.ToUpperInvariant();
-    var targetStart = firstSolution.IndexOf("\"Editor Target\"",
+    var targetStart = firstSolution.IndexOf("\"Debug Editor Target\"",
         StringComparison.Ordinal);
     var targetEnd = firstSolution.IndexOf("EndProject", targetStart, StringComparison.Ordinal);
     var targetBlock = firstSolution[targetStart..targetEnd];
@@ -198,7 +210,7 @@ try
             StringComparison.Ordinal) &&
           firstSolution.Contains(projectModuleGuid + " = " + projectSourceFolderGuid,
             StringComparison.Ordinal) &&
-          firstSolution.Contains(SolutionId("Editor Target") + " = " + buildTargetFolderGuid,
+          firstSolution.Contains(SolutionId("Debug Editor Target") + " = " + buildTargetFolderGuid,
             StringComparison.Ordinal),
         "Engine Modules, project Modules, and build Targets must be nested in separate Solution folders");
     Check(firstSolution.Contains(SolutionId("EngineTestPlugin.Runtime") + " = " + enginePluginFolderGuid,
@@ -216,9 +228,9 @@ try
           !firstWrapper.Contains("MakeFileProj", StringComparison.Ordinal),
         "SDK Editor Target must own unified Build without NMake");
     Check(launchSettings.Contains("Debug Editor", StringComparison.Ordinal) &&
-          launchSettings.Contains("Development Editor", StringComparison.Ordinal) &&
-          launchSettings.Contains("Shipping Editor", StringComparison.Ordinal),
-        "Editor Target must publish launch profiles for every approved configuration");
+          !launchSettings.Contains("Development Editor", StringComparison.Ordinal) &&
+          !launchSettings.Contains("Debug Game", StringComparison.Ordinal),
+        "Debug Editor Target must publish only its matching launch profile");
     var props = File.ReadAllText(generated.GeneratedPropsPath);
     Check(props.Contains("SharpEngineEditorApi", StringComparison.Ordinal) &&
           props.Contains("SharpEngineRuntimeApi", StringComparison.Ordinal) &&
@@ -261,28 +273,32 @@ try
         "Server",
     })
     {
-        var LegacySource = generated.TargetSourcePath.Replace(".Editor.Target.cs",
-            $".{Target}.Target.cs", StringComparison.Ordinal);
+        var LegacySource = Path.Combine(Path.GetDirectoryName(generated.StampPath)!,
+            $"{project.DisplayName}.{Target}.Target.cs");
         File.WriteAllText(LegacySource, "SharpLog.Error(\"ProjectSelector\", \"Build this Target first\");");
     }
     _ = SolutionGenerator.EnsureCurrent(new ResolvedSharpProject(project, engine));
-    TargetWrapperCompileValidation.Run(generated.WrapperProjectPath, project.Targets, Check);
+    Check(!File.Exists(Path.Combine(Path.GetDirectoryName(generated.StampPath)!,
+            $"{project.DisplayName}.Editor.Target.cs")),
+        "Regeneration must remove legacy shared Target source files");
+    TargetWrapperCompileValidation.Run(generated, project.DisplayName, project.Targets, Check);
     _ = ProjectTargets.UpdateManifest(manifestPath, "Server", Add: true);
     var serverProject = ProjectContracts.ReadProject(manifestPath);
     var serverGenerated = SolutionGenerator.Generate(new ResolvedSharpProject(serverProject, engine));
     var serverSolution = File.ReadAllText(serverGenerated.SolutionPath);
-    var serverLaunchSettings = File.ReadAllText(serverGenerated.LaunchSettingsPath);
+    var ServerFiles = SolutionGenerator.TargetFiles(Path.GetDirectoryName(serverGenerated.StampPath)!,
+        serverProject.DisplayName, "Server", "Debug");
+    var serverLaunchSettings = File.ReadAllText(ServerFiles.LaunchSettings);
     Check(serverProject.Targets.SequenceEqual(new[] { "Editor", "Game", "Server" }) &&
           serverSolution.Contains("Server Target", StringComparison.Ordinal) &&
           serverSolution.Contains("Debug Server|Win64", StringComparison.Ordinal) &&
           serverLaunchSettings.Contains("Debug Server", StringComparison.Ordinal),
         "Adding Server target must persist the manifest and regenerate Rider/solution launch entries");
-    TargetWrapperCompileValidation.Run(serverGenerated.WrapperProjectPath, serverProject.Targets, Check);
+    TargetWrapperCompileValidation.Run(serverGenerated, serverProject.DisplayName, serverProject.Targets, Check);
     _ = ProjectTargets.UpdateManifest(manifestPath, "Server", Add: false);
     var restoredProject = ProjectContracts.ReadProject(manifestPath);
     var restoredGenerated = SolutionGenerator.Generate(new ResolvedSharpProject(restoredProject, engine));
-    Check(!File.Exists(restoredGenerated.WrapperProjectPath.Replace(".Editor.Target.csproj",
-              ".Server.Target.csproj", StringComparison.Ordinal)) &&
+    Check(!File.Exists(ServerFiles.Project) &&
           !File.ReadAllText(restoredGenerated.SolutionPath).Contains("Server Target",
               StringComparison.Ordinal),
         "Removing Server target must remove generated Server files and configurations");
