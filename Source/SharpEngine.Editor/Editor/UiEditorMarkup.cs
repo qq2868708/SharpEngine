@@ -34,6 +34,12 @@ internal static class UiEditorMarkup
         }
         else
         {
+            if (Document.IsTemplate)
+            {
+                Builder.Append("<div class=\"ui-design-template-note\">TEMPLATE · " +
+                    "placeholder values are shown; slots are filled by the using screen" +
+                    "</div>");
+            }
             foreach (var Element in Body.Elements())
             {
                 AppendNode(Builder, Document, Element);
@@ -342,9 +348,19 @@ internal static class UiEditorMarkup
     private static void AppendNode(StringBuilder Builder, UiEditorDocument Document,
         XElement Element)
     {
+        var AuthoredTag = Element.Name.LocalName.ToLowerInvariant();
+        // Condition and repeat blocks are resolved when the screen is presented, so the
+        // canvas shows one representative expansion instead of the directive element.
+        if (AuthoredTag is "ui-if" or "ui-repeat")
+        {
+            foreach (var Child in Element.Elements())
+            {
+                AppendNode(Builder, Document, Child);
+            }
+            return;
+        }
         var Key = UiEditorDocument.KeyOf(Element);
         var Selected = string.Equals(Key, Document.SelectedKey, StringComparison.Ordinal);
-        var AuthoredTag = Element.Name.LocalName.ToLowerInvariant();
         var Tag = MapTag(AuthoredTag);
         var Classes = new List<string>
         {
@@ -358,6 +374,10 @@ internal static class UiEditorMarkup
         {
             Classes.Add("ui-design-replaced");
         }
+        if (AuthoredTag == "ui-slot")
+        {
+            Classes.Add("ui-design-slot-node");
+        }
         foreach (var ClassName in UiEditorDocument.ClassList(Element))
         {
             Classes.Add(ClassName);
@@ -369,7 +389,8 @@ internal static class UiEditorMarkup
             .Append("\" style=\"").Append(Escape(Style)).Append('"');
         Builder.Append(" data-ui-node=\"").Append(Escape(Key)).Append('"');
         Builder.Append(" data-action=\"editor.ui-select:").Append(Escape(Key)).Append('"');
-        if (!Document.IsReadOnly)
+        // A slot has no authored geometry to drag; the using screen decides its size.
+        if (!Document.IsReadOnly && AuthoredTag != "ui-slot")
         {
             Builder.Append(" data-ui-gesture=\"move\"");
         }
@@ -378,7 +399,15 @@ internal static class UiEditorMarkup
             Builder.Append(" data-ui-selected=\"true\"");
         }
         Builder.Append('>');
-        if (Element.HasElements)
+        // A template slot is a composition point, not an element: show it as a labelled
+        // placeholder so authors can see where the using screen injects a part.
+        if (AuthoredTag == "ui-slot")
+        {
+            Builder.Append("<div class=\"ui-design-slot\">slot: ")
+                .Append(Escape(UiEditorDocument.AttributeOf(Element, "name")))
+                .Append("</div>");
+        }
+        else if (Element.HasElements)
         {
             foreach (var Child in Element.Elements())
             {
@@ -387,26 +416,29 @@ internal static class UiEditorMarkup
         }
         else if (AuthoredTag == "input")
         {
-            var Placeholder = UiEditorDocument.AttributeOf(Element, "placeholder");
-            var Value = UiEditorDocument.AttributeOf(Element, "value");
+            var Placeholder = UiEditorDocument.SampleText(
+                UiEditorDocument.AttributeOf(Element, "placeholder"));
+            var Value = UiEditorDocument.SampleText(
+                UiEditorDocument.AttributeOf(Element, "value"));
             Builder.Append("<span class=\"ui-design-replaced-text\">")
                 .Append(Escape(Value.Length != 0 || Placeholder.Length != 0
                     ? Value + Placeholder : "input")).Append("</span>");
         }
         else if (AuthoredTag == "img")
         {
-            var Source = UiEditorDocument.AttributeOf(Element, "src");
+            var Source = UiEditorDocument.SampleText(
+                UiEditorDocument.AttributeOf(Element, "src"));
             Builder.Append("<img class=\"ui-design-image\" src=\"")
-                .Append(Escape(Source.Length == 0
+                .Append(Escape(Source.Length == 0 || UiEditorDocument.HasPlaceholder(Source)
                     ? "sharpengine-resource://engine/Resources/Editor/Icons/image.tga"
                     : Source))
                 .Append("\" />");
         }
         else
         {
-            Builder.Append(Escape(Element.Value));
+            Builder.Append(Escape(UiEditorDocument.SampleText(Element.Value)));
         }
-        if (Selected && !Document.IsReadOnly)
+        if (Selected && !Document.IsReadOnly && AuthoredTag != "ui-slot")
         {
             AppendSelectionChrome(Builder);
         }

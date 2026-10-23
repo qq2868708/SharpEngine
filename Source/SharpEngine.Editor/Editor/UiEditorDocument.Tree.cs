@@ -9,9 +9,29 @@ internal sealed partial class UiEditorDocument
 
     public XElement? BodyElement => Body();
 
-    internal static string KeyOf(XElement Element) => ElementId(Element).Length != 0
-        ? "#" + ElementId(Element)
-        : "path:" + PathOf(Element);
+    /// <summary>Selection key. An element with a plain id is addressed by that id; an
+    /// anonymous element, or a template element whose id contains a <c>${}</c>
+    /// placeholder (so it is not unique across instances), by its structural path.</summary>
+    internal static string KeyOf(XElement Element)
+    {
+        var Id = ElementId(Element);
+        return Id.Length != 0 && !HasPlaceholder(Id)
+            ? "#" + Id
+            : "path:" + PathOf(Element);
+    }
+
+    internal static bool HasPlaceholder(string Value) =>
+        Value.Contains("${", StringComparison.Ordinal);
+
+    /// <summary>Preview text for one authored value. A template placeholder has no value
+    /// until a using screen binds it, so it is shown by name rather than as literal
+    /// <c>${...}</c> syntax.</summary>
+    internal static string SampleText(string Value) =>
+        PlaceholderPattern.Replace(Value, Match => Match.Groups[1].Value);
+
+    private static readonly System.Text.RegularExpressions.Regex PlaceholderPattern = new(
+        @"\$\{([A-Za-z][A-Za-z0-9_.]*)\}",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     internal static string ElementIdOf(XElement Element) => ElementId(Element);
 
@@ -37,8 +57,21 @@ internal sealed partial class UiEditorDocument
         return Result;
     }
 
-    private XElement? Body() => Document.Root?.Elements()
-        .FirstOrDefault(Element => Element.Name.LocalName == "body");
+    /// <summary>Content root: a template's own element, otherwise the RML body. Both are
+    /// the container whose direct children are the screen/template elements.</summary>
+    private XElement? Body()
+    {
+        var Root = Document.Root;
+        if (Root is null)
+        {
+            return null;
+        }
+        if (Root.Name.LocalName == "template")
+        {
+            return Root;
+        }
+        return Root.Elements().FirstOrDefault(Element => Element.Name.LocalName == "body");
+    }
 
     private IEnumerable<XElement> EnumerateBody() =>
         Body()?.Descendants() ?? Enumerable.Empty<XElement>();
@@ -68,6 +101,10 @@ internal sealed partial class UiEditorDocument
         }
         var Current = Source.Root?.Elements()
             .FirstOrDefault(Element => Element.Name.LocalName == "body");
+        if (Current is null && Source.Root?.Name.LocalName == "template")
+        {
+            Current = Source.Root;
+        }
         if (Current is null)
         {
             return null;
@@ -107,7 +144,7 @@ internal sealed partial class UiEditorDocument
                 return string.Empty;
             }
             Indexes.Add(Parent.Elements().ToList().IndexOf(Current));
-            if (Parent.Name.LocalName == "body")
+            if (Parent.Name.LocalName is "body" or "template")
             {
                 break;
             }
@@ -126,7 +163,7 @@ internal sealed partial class UiEditorDocument
         for (var Current = Element.Parent; Current is not null;
              Current = Current.Parent)
         {
-            if (Current.Name.LocalName is "rml" or "head" or "body")
+            if (Current.Name.LocalName is "rml" or "head" or "body" or "template")
             {
                 break;
             }

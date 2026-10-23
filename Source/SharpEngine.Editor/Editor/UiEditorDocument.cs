@@ -53,6 +53,14 @@ internal sealed partial class UiEditorDocument
 
     private static readonly Regex IdPattern = new("^[A-Za-z_][A-Za-z0-9._-]*$",
         RegexOptions.CultureInvariant);
+    /// <summary>Tags whose content is text only. <c>button</c> and <c>input</c> are leaf
+    /// controls for nesting purposes but may legitimately contain icons, so they are not
+    /// reported for holding children.</summary>
+    private static readonly HashSet<string> TextOnlyTags = new(
+        StringComparer.OrdinalIgnoreCase)
+    {
+        "span", "label", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+    };
     private static readonly HashSet<string> LeafTags = new(
         StringComparer.OrdinalIgnoreCase)
     {
@@ -63,6 +71,13 @@ internal sealed partial class UiEditorDocument
         StringComparer.OrdinalIgnoreCase)
     {
         "div", "panel", "section", "ul", "ol", "li", "form",
+    };
+    /// <summary>Composition directives are valid template content even though RmlUi never
+    /// sees them: they are resolved before the document is presented.</summary>
+    private static readonly HashSet<string> DirectiveTags = new(
+        StringComparer.OrdinalIgnoreCase)
+    {
+        "ui-slot", "ui-if", "ui-repeat",
     };
 
     private readonly string OwnerRoot;
@@ -77,7 +92,8 @@ internal sealed partial class UiEditorDocument
     private UiEditorGesture? Gesture;
 
     private UiEditorDocument(AssetDescriptor Asset, string Path, string OwnerRoot,
-        XDocument Document, UiDocumentFormat Format, string PackageName)
+        XDocument Document, UiDocumentFormat Format, string PackageName,
+        IReadOnlyList<string> StyleSheets)
     {
         this.Asset = Asset;
         this.Path = Path;
@@ -85,6 +101,8 @@ internal sealed partial class UiEditorDocument
         this.Document = Document;
         this.Format = Format;
         this.PackageName = PackageName;
+        this.PackageStyleSheets = StyleSheets;
+        this.IsTemplate = Document.Root?.Name.LocalName == "template";
         this.SavedState = Canonical(Document);
         this.SourceHash = HashSource();
         var First = EnumerateBody().FirstOrDefault();
@@ -97,6 +115,11 @@ internal sealed partial class UiEditorDocument
     public UiDocumentFormat Format { get; }
     /// <summary>Package name for a <c>.sui</c> asset; the asset name for a bare RML file.</summary>
     public string PackageName { get; }
+    /// <summary>Stylesheets declared by a <c>.sui</c> package rather than by a link.</summary>
+    public IReadOnlyList<string> PackageStyleSheets { get; }
+    /// <summary>True when this asset is a reusable <c>&lt;template&gt;</c> definition. The
+    /// editor presents its content with placeholder values; it has no screen size or body.</summary>
+    public bool IsTemplate { get; }
     public string? SelectedKey => SelectionKey;
     public long Revision { get; private set; }
     public bool IsReadOnly => Asset.ReadOnly || Asset.Source == AssetSource.Engine;
@@ -130,13 +153,13 @@ internal sealed partial class UiEditorDocument
             var Rml = XDocument.Load(Full,
                 LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
             return new UiEditorDocument(Asset, Full, OwnerRoot, Rml,
-                UiDocumentFormat.RmlFile, Asset.Name);
+                UiDocumentFormat.RmlFile, Asset.Name, []);
         }
         var Package = UiDocumentAsset.Load(Full);
         var Document = XDocument.Parse(Package.Rml,
             LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
         return new UiEditorDocument(Asset, Full, OwnerRoot, Document,
-            UiDocumentFormat.Package, Package.Name);
+            UiDocumentFormat.Package, Package.Name, Package.StyleSheets);
     }
 
     /// <summary>A package is recognized by its asset type or, for unregistered sources,
@@ -1044,17 +1067,43 @@ internal sealed partial class UiEditorDocument
     {
         var Diagnostics = new List<UiEditorDiagnostic>();
         var Root = Document.Root;
-        if (Root is null || Root.Name.LocalName != "rml")
+        if (IsTemplate)
+        {
+            // A template is a reusable definition, not a screen: it has no <body> and no
+            // fixed size. It is only reachable through a screen that binds its slots.
+            if (Root is null || Root.Name.LocalName != "template")
+            {
+                Diagnostics.Add(new("error", "UI_TEMPLATE_ROOT",
+                    "The template document root must be <template>"));
+            }
+            foreach (var Slot in Document.Descendants().Where(Element =>
+                         Element.Name.LocalName == "ui-slot"))
+            {
+                if (Slot.Attribute("name") is null)
+                {
+                    Diagnostics.Add(new("error", "UI_TEMPLATE_SLOT_NAME",
+                        "A <ui-slot> requires a non-empty 'name' attribute"));
+                }
+                if (Slot.HasElements)
+                {
+                    Diagnostics.Add(new("error", "UI_TEMPLATE_SLOT_CONTENT",
+                        $"<ui-slot name=\"{Slot.Attribute("name")?.Value}\"> cannot contain " +
+                        "elements; the bound part supplies them"));
+                }
+            }
+        }
+        else if (Root is null || Root.Name.LocalName != "rml")
         {
             Diagnostics.Add(new("error", "UI_RML_ROOT", "The document root must be <rml>"));
         }
         var BodyElement = Body();
-        if (BodyElement is null)
+        if (BodyElement is null && !IsTemplate)
         {
             Diagnostics.Add(new("error", "UI_RML_BODY", "The document requires one <body>"));
         }
         var Elements = EnumerateBody().ToArray();
-        foreach (var Element in Elements.Where(Value => ElementId(Value).Length == 0))
+        foreach (var Element in Elements.Where(Value => ElementId(Value).Length == 0 &&
+                     !IsTemplate))
         {
             Diagnostics.Add(new("warning", "UI_ELEMENT_ID_MISSING",
                 $"<{Element.Name.LocalName}> has no id; it is selected by its tree position"));
@@ -1068,19 +1117,21 @@ internal sealed partial class UiEditorDocument
                 $"Element id '{Duplicate.Key}' occurs more than once"));
         }
         foreach (var Leaf in Elements.Where(Value => Value.HasElements &&
-                     LeafTags.Contains(Value.Name.LocalName)))
+                     TextOnlyTags.Contains(Value.Name.LocalName)))
         {
             Diagnostics.Add(new("warning", "UI_ELEMENT_LEAF_HAS_CHILDREN",
                 $"<{Leaf.Name.LocalName}> is a leaf element but contains children"));
         }
         foreach (var Unknown in Elements.Where(Value => !LeafTags.Contains(
                      Value.Name.LocalName) && !ContainerTags.Contains(
+                     Value.Name.LocalName) && !DirectiveTags.Contains(
                      Value.Name.LocalName)))
         {
             Diagnostics.Add(new("warning", "UI_ELEMENT_TAG_UNKNOWN",
                 $"<{Unknown.Name.LocalName}> is not a known RML layout element"));
         }
-        StyleSheet = UiStyleSheet.Load(Document, Path, OwnerRoot, Diagnostics);
+        StyleSheet = UiStyleSheet.Load(Document, Path, OwnerRoot, Diagnostics,
+            PackageStyleSheets);
         DiagnosticList = Diagnostics;
         if (SelectedKey is not null && Find(SelectedKey) is null)
         {

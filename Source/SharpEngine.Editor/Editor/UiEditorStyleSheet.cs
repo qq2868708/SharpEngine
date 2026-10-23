@@ -69,7 +69,8 @@ internal sealed class UiStyleSheet
     }
 
     public static UiStyleSheet Load(XDocument Document, string DocumentPath,
-        string OwnerRoot, List<UiEditorDiagnostic> Diagnostics)
+        string OwnerRoot, List<UiEditorDiagnostic> Diagnostics,
+        IReadOnlyList<string>? PackageStyleSheets = null)
     {
         var Rules = new List<UiStyleRule>();
         var Classes = new SortedSet<string>(StringComparer.Ordinal);
@@ -84,6 +85,16 @@ internal sealed class UiStyleSheet
             System.IO.Path.DirectorySeparatorChar;
         var Head = Document.Root?.Elements()
             .FirstOrDefault(Element => Element.Name.LocalName == "head");
+        // A template has no <head>, so a .sui package lists its stylesheets instead.
+        // They load first, like the runtime does, so document order still decides ties.
+        foreach (var Href in PackageStyleSheets ?? [])
+        {
+            if (!TryLoadFile(Href, DocumentDirectory, OwnerPrefix, Files, Diagnostics,
+                    ref Order, ref Skipped))
+            {
+                continue;
+            }
+        }
         // RmlUi pushes <link type="text/rcss|text/css"> and inline <style> text into
         // one ordered stylesheet list, so the preview must read both in document
         // order. Reading only links silently dropped every inline declaration.
@@ -113,45 +124,8 @@ internal sealed class UiStyleSheet
             {
                 continue;
             }
-            string FullPath;
-            try
-            {
-                FullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(
-                    DocumentDirectory,
-                    Href.Replace('/', System.IO.Path.DirectorySeparatorChar)));
-            }
-            catch (Exception Exception) when (Exception is ArgumentException or
-                NotSupportedException or System.IO.PathTooLongException)
-            {
-                Diagnostics.Add(new("error", "UI_STYLE_PATH", Exception.Message));
-                continue;
-            }
-            if (!FullPath.StartsWith(OwnerPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                Diagnostics.Add(new("error", "UI_STYLE_ESCAPE",
-                    $"Stylesheet '{Href}' escapes its owning content root"));
-                continue;
-            }
-            if (!File.Exists(FullPath))
-            {
-                Diagnostics.Add(new("error", "UI_STYLE_MISSING",
-                    $"Stylesheet '{Href}' does not exist"));
-                continue;
-            }
-            string Source;
-            try
-            {
-                Source = File.ReadAllText(FullPath);
-            }
-            catch (Exception Exception) when (Exception is IOException or
-                UnauthorizedAccessException)
-            {
-                Diagnostics.Add(new("error", "UI_STYLE_READ",
-                    $"Stylesheet '{Href}' cannot be read: {Exception.Message}"));
-                continue;
-            }
-            Files.Add(Href);
-            AddRules(Source, ref Order, ref Skipped);
+            _ = TryLoadFile(Href, DocumentDirectory, OwnerPrefix, Files, Diagnostics,
+                ref Order, ref Skipped);
         }
         if (Skipped != 0)
         {
@@ -176,6 +150,52 @@ internal sealed class UiStyleSheet
                     Tags.Add(TagName);
                 }
             }
+        }
+
+        bool TryLoadFile(string Href, string DirectoryPath, string OwnerPrefix,
+            List<string> Files, List<UiEditorDiagnostic> Diagnostics,
+            ref int NextOrder, ref int NextSkipped)
+        {
+            string FullPath;
+            try
+            {
+                FullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                    DirectoryPath,
+                    Href.Replace('/', System.IO.Path.DirectorySeparatorChar)));
+            }
+            catch (Exception Exception) when (Exception is ArgumentException or
+                NotSupportedException or System.IO.PathTooLongException)
+            {
+                Diagnostics.Add(new("error", "UI_STYLE_PATH", Exception.Message));
+                return false;
+            }
+            if (!FullPath.StartsWith(OwnerPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                Diagnostics.Add(new("error", "UI_STYLE_ESCAPE",
+                    $"Stylesheet '{Href}' escapes its owning content root"));
+                return false;
+            }
+            if (!File.Exists(FullPath))
+            {
+                Diagnostics.Add(new("error", "UI_STYLE_MISSING",
+                    $"Stylesheet '{Href}' does not exist"));
+                return false;
+            }
+            string Source;
+            try
+            {
+                Source = File.ReadAllText(FullPath);
+            }
+            catch (Exception Exception) when (Exception is IOException or
+                UnauthorizedAccessException)
+            {
+                Diagnostics.Add(new("error", "UI_STYLE_READ",
+                    $"Stylesheet '{Href}' cannot be read: {Exception.Message}"));
+                return false;
+            }
+            Files.Add(Href);
+            AddRules(Source, ref NextOrder, ref NextSkipped);
+            return true;
         }
     }
 

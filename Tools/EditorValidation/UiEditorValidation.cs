@@ -233,6 +233,77 @@ internal static class UiEditorValidation
 
         RunPackageChecks(Root, Check);
         RunInlineStyleChecks(Root, Check);
+        RunTemplateChecks(Root, Check);
+    }
+
+    /// <summary>A reusable <c>&lt;template&gt;</c> package is valid UI source: the editor
+    /// must present it instead of reporting a missing &lt;rml&gt; root and body.</summary>
+    private static void RunTemplateChecks(string Root, Action<bool, string> Check)
+    {
+        var Project = Path.Combine(Root, "UiTemplateValidation");
+        var UiDirectory = Directory.CreateDirectory(Path.Combine(Project, "Content", "UI"));
+        File.WriteAllText(Path.Combine(UiDirectory.FullName, "Card.rcss"),
+            ".card { padding: 10px; border: 2px #3aa78f; }");
+        var PackagePath = Path.Combine(UiDirectory.FullName, "Card.sui");
+        File.WriteAllText(PackagePath, UiDocumentAsset.Create("Card", """
+            <template>
+            <div id="card-${Id}" class="card">
+            <img id="card-${Id}-icon" src="${Icon}" />
+            <span id="card-${Id}-title">${Title}</span>
+            <ui-slot name="Extra" />
+            </div>
+            </template>
+            """, ["Card.rcss"]).Serialize());
+        var Asset = new AssetDescriptor
+        {
+            Id = "project://ui/card",
+            Type = "UiDocument",
+            Name = "Card",
+            RelativePath = "Content/UI/Card.sui",
+            Source = AssetSource.Project,
+        };
+        var Template = UiEditorDocument.Load(Asset, PackagePath, Project);
+        Check(Template.IsTemplate,
+            "A <template> package is recognized as a reusable definition");
+        Check(Template.Diagnostics.Count == 0,
+            $"A valid template opens without diagnostics: " +
+            string.Join("; ", Template.Diagnostics.Select(Value => Value.Code)));
+        Check(Template.BodyElement?.Name.LocalName == "template" &&
+            Template.ElementCount == 4,
+            "A template's own element is its content root");
+        Check(Template.SelectedKey is not null &&
+            Template.SelectedKey.StartsWith("path:", StringComparison.Ordinal),
+            "Template elements are addressed by path because ids hold placeholders");
+        Check(UiEditorDocument.SampleText("card-${Id}") == "card-Id" &&
+            UiEditorDocument.HasPlaceholder("${Title}"),
+            "Preview values substitute placeholders by name");
+        Check(Template.Sheet.Files.Count == 1 && Template.Sheet.Rules.Count == 1,
+            "A package styleSheets entry feeds the template preview cascade");
+
+        var Slot = Template.Source.Descendants()
+            .Single(Element => Element.Name.LocalName == "ui-slot");
+        Check(Template.Select(UiEditorDocument.KeyOf(Slot)) &&
+            Template.SelectedElement()?.Name.LocalName == "ui-slot",
+            "A composition slot is selectable inside its template");
+        Check(Template.AddElement("span", out var Message) && Template.IsDirty,
+            $"Template content participates in document editing: {Message}");
+        Template.Undo();
+
+        var InvalidPath = Path.Combine(UiDirectory.FullName, "Bad.sui");
+        File.WriteAllText(InvalidPath, UiDocumentAsset.Create("Bad", """
+            <template><div><ui-slot /></div></template>
+            """).Serialize());
+        var Invalid = UiEditorDocument.Load(new AssetDescriptor
+        {
+            Id = "project://ui/bad-template",
+            Type = "UiDocument",
+            Name = "Bad",
+            RelativePath = "Content/UI/Bad.sui",
+            Source = AssetSource.Project,
+        }, InvalidPath, Project);
+        Check(Invalid.Diagnostics.Any(Value => Value.Code == "UI_TEMPLATE_SLOT_NAME" &&
+                Value.Severity == "error"),
+            "A <ui-slot> without a name is an error diagnostic");
     }
 
     /// <summary>RmlUi merges &lt;link&gt; and inline &lt;style&gt; into one ordered style
