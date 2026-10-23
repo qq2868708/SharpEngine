@@ -2,6 +2,7 @@ using SharpEngine.Modules;
 using SharpEngine.Assets;
 using SharpEngine.Logging;
 using SharpEngine.World;
+using SharpEngine.UI;
 
 namespace SharpEngine.Editor;
 
@@ -190,7 +191,14 @@ public sealed record EditorMenuItem
     public int Order { get; }
 }
 
-public enum EditorContextMenuKind : byte { Scene, Object, Asset, Folder }
+public enum EditorContextMenuKind : byte
+{
+    Scene,
+    Object,
+    Asset,
+    Folder,
+    Content,
+}
 
 public sealed record EditorContextMenuCategory
 {
@@ -226,24 +234,79 @@ public sealed record EditorContextMenuItem
 public sealed class EditorCommandContext
 {
     private readonly EditorRuntime _runtime;
-    private readonly ContentManager? _contentPane;
+    private readonly ContentManager? ContentPane;
+    private readonly EditorSelection? BoundSelection;
 
     internal EditorCommandContext(EditorRuntime runtime) => _runtime = runtime;
+    internal EditorCommandContext(EditorRuntime Runtime, EditorSelection Selection, string? PaneId, string HostId)
+    {
+        _runtime = Runtime;
+        BoundSelection = Selection;
+        ContentPaneId = PaneId;
+        this.HostId = HostId;
+    }
+
+    public string? ContentPaneId
+    {
+        get;
+    }
+    public string HostId
+    {
+        get;
+    } = "main";
 
     /// <summary>Context scoped to one content browser. Only the selection is resolved from
     /// that pane; every other member still reports the editor, so a pane command can read
     /// its own selection without becoming a second view of global editor state.</summary>
-    internal EditorCommandContext(EditorRuntime runtime, ContentManager contentPane)
-        : this(runtime) => _contentPane = contentPane;
+    internal EditorCommandContext(EditorRuntime Runtime, ContentManager ContentPane)
+        : this(Runtime)
+    {
+        this.ContentPane = ContentPane;
+        ContentPaneId = ContentPane.PaneId;
+    }
 
     public EditorRuntime Runtime => _runtime;
     public WorldDocument? World => _runtime.World;
     public AssetRegistry? Assets => _runtime.Assets;
-    public EditorSelection Selection => _runtime.Selection;
-    public WorldEntity? SelectedEntity => _runtime.SelectedEntity;
-    public string? SelectedEntityId => _runtime.SelectedEntityId;
-    public AssetDescriptor? SelectedAsset => _contentPane?.SelectedAsset ?? _runtime.SelectedAsset;
-    public string? SelectedFolderPath => _runtime.SelectedFolderPath;
+    public EditorSelection Selection
+    {
+        get
+        {
+            return BoundSelection ?? _runtime.Selection;
+        }
+    }
+    public WorldEntity? SelectedEntity
+    {
+        get
+        {
+            return World?.Entities.FirstOrDefault(Entity => string.Equals(Entity.Id, SelectedEntityId, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+    public string? SelectedEntityId
+    {
+        get
+        {
+            return Selection.Kind == EditorSelectionKind.Entity ? Selection.Id : null;
+        }
+    }
+    public AssetDescriptor? SelectedAsset
+    {
+        get
+        {
+            if (ContentPane is not null)
+            {
+                return ContentPane.SelectedAsset;
+            }
+            return Selection.Kind == EditorSelectionKind.Asset && Selection.Id is not null ? Assets?.Find(Selection.Id) : null;
+        }
+    }
+    public string? SelectedFolderPath
+    {
+        get
+        {
+            return Selection.Kind == EditorSelectionKind.Folder ? Selection.Path : null;
+        }
+    }
     public EditorPlayState PlayState => _runtime.PlayState;
     public bool TransformSnapEnabled
     {
@@ -299,6 +362,13 @@ public sealed class EditorContext
     public EditorMenuRegistry Menus { get; }
     public EditorToolbarRegistry Toolbar { get; }
     public EditorContextMenuRegistry ContextMenus { get; }
+    public UiContextMenuRouter ContextMenuRouter
+    {
+        get
+        {
+            return Runtime.ContextMenuRouter;
+        }
+    }
     public EditorCustomBarRegistry CustomBars { get; }
     public EditorAssetOpenerRegistry AssetOpeners => Runtime.AssetOpeners;
     public EditorSelection Selection => Runtime.Selection;
@@ -338,13 +408,19 @@ public sealed class EditorCommandRegistry
 
     public IReadOnlyList<EditorCommand> Commands => _commands.Values.ToArray();
 
-    public IDisposable Register(EditorCommand command)
+    public IDisposable Register(EditorCommand command) { return Register(command, true); }
+
+    internal IDisposable RegisterOwned(EditorCommand Command) { return Register(Command, false); }
+
+    private IDisposable Register(EditorCommand Command, bool TrackModule)
     {
-        ArgumentNullException.ThrowIfNull(command);
-        if (!_commands.TryAdd(command.Id, command))
-            throw new InvalidOperationException($"Editor command '{command.Id}' is already registered");
+        ArgumentNullException.ThrowIfNull(Command);
+        if (!_commands.TryAdd(Command.Id, Command))
+        {
+            throw new InvalidOperationException($"Editor command '{Command.Id}' is already registered");
+        }
         _changed();
-        return new EditorRegistration(() => Unregister(command));
+        return new EditorRegistration(() => Unregister(Command), TrackModule);
     }
 
     public bool Remove(string id)
@@ -611,30 +687,60 @@ public sealed class EditorContextMenuRegistry
     public IReadOnlyList<EditorContextMenuCategory> Categories => _categories.ToArray();
     public IReadOnlyList<EditorContextMenuItem> Items => _items.ToArray();
 
-    public IDisposable RegisterCategory(EditorContextMenuCategory category)
+    public IDisposable RegisterCategory(EditorContextMenuCategory category) { return RegisterCategory(category, true); }
+
+    internal IDisposable RegisterOwnedCategory(EditorContextMenuCategory Category) { return RegisterCategory(Category, false); }
+
+    private IDisposable RegisterCategory(EditorContextMenuCategory Category, bool TrackModule)
     {
-        ArgumentNullException.ThrowIfNull(category);
-        if (_categories.Any(value => value.Context == category.Context &&
-                value.Id.Equals(category.Id, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException($"Context menu category '{category.Context}/{category.Id}' is already registered");
-        _categories.Add(category); _changed();
-        return new EditorRegistration(() => { if (_categories.Remove(category)) _changed(); });
+        ArgumentNullException.ThrowIfNull(Category);
+        if (_categories.Any(Value => Value.Context == Category.Context &&
+                Value.Id.Equals(Category.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"Context menu category '{Category.Context}/{Category.Id}' is already registered");
+        }
+        _categories.Add(Category);
+        _changed();
+        return new EditorRegistration(() =>
+        {
+            if (_categories.Remove(Category))
+            {
+                _changed();
+            }
+        }, TrackModule);
     }
 
-    public IDisposable RegisterItem(EditorContextMenuItem item)
+    public IDisposable RegisterItem(EditorContextMenuItem item) { return RegisterItem(item, true); }
+
+    internal IDisposable RegisterOwnedItem(EditorContextMenuItem Item) { return RegisterItem(Item, false); }
+
+    private IDisposable RegisterItem(EditorContextMenuItem Item, bool TrackModule)
     {
-        ArgumentNullException.ThrowIfNull(item);
-        if (!_categories.Any(value => value.Context == item.Context &&
-                value.Id.Equals(item.CategoryId, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException($"Context menu category '{item.Context}/{item.CategoryId}' is not registered");
-        if (!_commands.TryGet(item.CommandId, out _))
-            throw new InvalidOperationException($"Editor command '{item.CommandId}' is not registered");
-        if (_items.Any(value => value.Context == item.Context &&
-                value.CategoryId.Equals(item.CategoryId, StringComparison.OrdinalIgnoreCase) &&
-                value.CommandId.Equals(item.CommandId, StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException($"Context menu item '{item.CommandId}' is already registered in '{item.Context}/{item.CategoryId}'");
-        _items.Add(item); _changed();
-        return new EditorRegistration(() => { if (_items.Remove(item)) _changed(); });
+        ArgumentNullException.ThrowIfNull(Item);
+        if (!_categories.Any(Value => Value.Context == Item.Context &&
+                Value.Id.Equals(Item.CategoryId, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"Context menu category '{Item.Context}/{Item.CategoryId}' is not registered");
+        }
+        if (!_commands.TryGet(Item.CommandId, out _))
+        {
+            throw new InvalidOperationException($"Editor command '{Item.CommandId}' is not registered");
+        }
+        if (_items.Any(Value => Value.Context == Item.Context &&
+                Value.CategoryId.Equals(Item.CategoryId, StringComparison.OrdinalIgnoreCase) &&
+                Value.CommandId.Equals(Item.CommandId, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"Context menu item '{Item.CommandId}' is already registered in '{Item.Context}/{Item.CategoryId}'");
+        }
+        _items.Add(Item);
+        _changed();
+        return new EditorRegistration(() =>
+        {
+            if (_items.Remove(Item))
+            {
+                _changed();
+            }
+        }, TrackModule);
     }
 
     internal IReadOnlyList<EditorContextMenuCategory> OrderedCategories(EditorContextMenuKind context) =>
@@ -652,10 +758,13 @@ public sealed class EditorContextMenuRegistry
 internal sealed class EditorRegistration : IDisposable
 {
     private Action? _dispose;
-    public EditorRegistration(Action dispose)
+    public EditorRegistration(Action dispose, bool TrackModule = true)
     {
         _dispose = dispose;
-        ModuleRegistrationScope.Track(this);
+        if (TrackModule)
+        {
+            ModuleRegistrationScope.Track(this);
+        }
     }
     public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
 }
@@ -704,6 +813,27 @@ internal static class EditorExtensionIds
 /// </summary>
 internal static class EditorResourceUris
 {
+    internal static string ItemIcon(string Type)
+    {
+        var Name = Type.ToLowerInvariant() switch
+        {
+            "folder" => "folder",
+            "mesh" => "mesh",
+            "material" => "material",
+            "world" => "world",
+            "rmldocument" or "uidocument" => "ui",
+            "stylesheet" => "style",
+            "texture" => "texture",
+            "audio" => "audio",
+            "json" or "xml" => "data",
+            "camera" => "camera",
+            "light" => "light",
+            "empty" => "all",
+            _ => "file",
+        };
+        return $"<img class=\"icon item-icon\" src=\"{IconSource(Name)}\" />";
+    }
+
     internal const string Scheme = "sharpengine-resource://";
     internal const string EngineIconRoot = Scheme + "engine/Resources/Editor/Icons/";
 

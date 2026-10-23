@@ -2,18 +2,69 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.UI;
 
 namespace SharpEngine.Editor;
 
 /// <summary>Owns the four independent content browsers and routes external
 /// browse operations to the most recently active instance.</summary>
-public sealed class ContentManagerCoordinator
+public sealed class ContentManagerCoordinator : IDisposable
 {
     private readonly Dictionary<string, ContentManager> _managers =
         new(StringComparer.Ordinal);
     private readonly LinkedList<string> _mostRecentlyUsed = [];
     private readonly Dictionary<string, (ContentManager Pane,
-        Func<EditorCommandContext, bool> Handler)> _commandHandlers = new(StringComparer.Ordinal);
+        Func<EditorCommandContext, bool> Handler)> CommandHandlers = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ContentManagerView> Views = new(StringComparer.Ordinal);
+    private readonly List<IDisposable> CommandRegistrations = [];
+
+    internal void AttachUi(IContentManagerMenuHost Host, EditorCommandRegistry Commands,
+        EditorContextMenuRegistry Extensions, EditorPopupMenu Popup, UiContextMenuRouter Routing)
+    {
+        if (Views.Count != 0)
+        {
+            throw new InvalidOperationException("Content Manager views are already attached");
+        }
+        try
+        {
+            foreach (var PaneId in EditorPaneIds.ContentManagers)
+            {
+                Views.Add(PaneId, new ContentManagerView(PaneId, Get(PaneId), Host, Commands, Extensions, Popup, Routing));
+            }
+            CommandRegistrations.AddRange(ContentManagerContextMenus.RegisterCommands(Commands,
+                Context => Views[Context.ContentPaneId ?? ActivePaneId].Menu));
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+    }
+
+    internal bool SelectFolder(string PaneId, AssetSource Source, string Path)
+    {
+        return Views[PaneId].Menu.SelectFolder(Source, Path);
+    }
+
+    internal string BuildEntries(string PaneId, AssetSource Source)
+    {
+        return Views[PaneId].BuildEntries(Source);
+    }
+
+    public void Dispose()
+    {
+        foreach (var View in Views.Values)
+        {
+            View.Dispose();
+        }
+        Views.Clear();
+        foreach (var Registration in CommandRegistrations.AsEnumerable().Reverse())
+        {
+            Registration.Dispose();
+        }
+        CommandRegistrations.Clear();
+        CommandHandlers.Clear();
+    }
 
     public ContentManagerCoordinator(AssetRegistry registry,
         IReadOnlyList<ContentManagerLayoutState> states, string activePaneId)
@@ -26,8 +77,8 @@ public sealed class ContentManagerCoordinator
             var state = states.Single(item => item.PaneId == paneId);
             Restore(manager, state);
             var Owner = manager;
-            manager.PublishCommands((action, handler) =>
-                _commandHandlers[action] = (Owner, handler));
+            manager.PublishCommands((Action, Handler) =>
+                CommandHandlers[Action] = (Owner, Handler));
             manager.DeleteRequested += asset => DeleteRequested?.Invoke(asset);
             _managers.Add(paneId, manager);
         }
@@ -46,7 +97,8 @@ public sealed class ContentManagerCoordinator
     {
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(createContext);
-        if (!_commandHandlers.TryGetValue(action, out var Entry))
+        var Found = CommandHandlers.TryGetValue(action, out var Entry);
+        if (!Found)
         {
             return false;
         }

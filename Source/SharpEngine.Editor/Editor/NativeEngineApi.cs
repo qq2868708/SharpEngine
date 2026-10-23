@@ -60,6 +60,13 @@ internal unsafe readonly struct NativeEngineApi
         _setHostMarkup != null;
     public bool HasUiObservability => _getUiSnapshot != null && _uiPointer != null &&
         _uiKey != null && _readUiFrame != null;
+    internal bool HasHostMarkup
+    {
+        get
+        {
+            return _setHostMarkup != null;
+        }
+    }
 
     public NativeEngineApi(nint table)
     {

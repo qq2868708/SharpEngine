@@ -215,6 +215,7 @@ internal static class EditorDockMarkup
             $"editor.content.{operation}:{paneId}{(value is null ? string.Empty : $":{value}")}";
         markup.Append("<div id=\"").Append(Id("pane")).Append("\" class=\"content-manager-pane")
             .Append(active ? " active-content-manager" : string.Empty)
+            .Append("\" data-ui-context-scope=\"").Append(ContentManagerView.ScopeId(paneId))
             .Append("\" data-action=\"").Append(Action("activate")).Append("\">")
             .Append("<div class=\"pane-toolbar content-pane-toolbar\"><div class=\"search-field\"><img class=\"icon\" src=\"sharpengine-resource://engine/Resources/Editor/Icons/search.tga\" /><input type=\"text\" id=\"")
             .Append(Id("search")).Append("\" value=\"").Append(Escape(state.Search))
@@ -239,13 +240,15 @@ internal static class EditorDockMarkup
             .Append(ContentIconButton(Id("type-material"), Action("type", "Material"), "material", "Materials"))
             .Append(ContentIconButton(Id("type-world"), Action("type", "World"), "world", "Worlds"))
             .Append("</div><div id=\"").Append(Id("summary"))
-            .Append("\" class=\"content-summary\">Content</div></div><div class=\"content-results-slot\"><div id=\"").Append(Id("results")).Append("\" class=\"content-results\"><div id=\"")
+            .Append("\" class=\"content-summary\">Content</div></div><div class=\"content-results-slot\"><div id=\"")
+            .Append(Id("results")).Append("\" class=\"content-results\" data-ui-context=\"")
+            .Append(ContentManagerView.ContextAttribute("content", "", null)).Append("\"><div id=\"")
             .Append(Id("project-section")).Append("\" class=\"content-section\"><div id=\"").Append(Id("project-label")).Append("\" class=\"section-label\">PROJECT CONTENT</div><div id=\"")
-            .Append(Id("project-items")).Append("\" class=\"content-items\" data-context-kind=\"folder\" data-context-manager=\"")
-            .Append(paneId).Append("\" data-context-source=\"project\" /></div><div id=\"")
+            .Append(Id("project-items")).Append("\" class=\"content-items\" data-ui-context=\"")
+            .Append(ContentManagerView.ContextAttribute("content", "project", null)).Append("\" /></div><div id=\"")
             .Append(Id("engine-section")).Append("\" class=\"content-section\"><div id=\"").Append(Id("engine-label")).Append("\" class=\"section-label\">ENGINE CONTENT</div><div id=\"")
-            .Append(Id("engine-items")).Append("\" class=\"content-items\" data-context-kind=\"folder\" data-context-manager=\"")
-            .Append(paneId).Append("\" data-context-source=\"engine\" /></div></div></div><div id=\"")
+            .Append(Id("engine-items")).Append("\" class=\"content-items\" data-ui-context=\"")
+            .Append(ContentManagerView.ContextAttribute("content", "engine", null)).Append("\" /></div></div></div><div id=\"")
             .Append(Id("path")).Append("\" class=\"path content-path\">Content</div></div></div>");
     }
 

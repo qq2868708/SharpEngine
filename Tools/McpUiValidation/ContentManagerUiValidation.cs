@@ -1,10 +1,52 @@
 using System.Text.Json.Nodes;
+using System.Diagnostics;
 
 internal static class ContentManagerUiValidation
 {
+    internal static string CreateProject(string Root, string Configuration)
+    {
+        var Folder = Path.Combine(Root, "Saved/Validation/ContentManager/Projects", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Folder);
+        const string Name = "ContentMenuValidation";
+        var Manifest = Path.Combine(Folder, Name, Name + ".sharpproject");
+        void RunProcess(string Executable, string[] Arguments, string LogName)
+        {
+            var Start = new ProcessStartInfo(Executable)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Root,
+            };
+            Start.Environment["SHARPENGINE_REGISTER_ON_FIRST_USE"] = "0";
+            foreach (var Argument in Arguments)
+            {
+                Start.ArgumentList.Add(Argument);
+            }
+            using var Process = System.Diagnostics.Process.Start(Start)!;
+            var Output = Process.StandardOutput.ReadToEndAsync();
+            var Errors = Process.StandardError.ReadToEndAsync();
+            Process.WaitForExit();
+            File.WriteAllText(Path.Combine(Folder, LogName), Output.Result + Errors.Result);
+            if (Process.ExitCode != 0)
+            {
+                throw new InvalidOperationException("Content menu fixture failed: " + Output.Result + Errors.Result);
+            }
+        }
+        RunProcess("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            Path.Combine(Root, "Tools/SharpEngineProject.ps1"), "-Command", "New", "-Name", Name,
+            "-Directory", Folder, "-EngineRoot", Root, "-EngineAssociation", "content-menu-validation",
+            "-Configuration", Configuration], "create.log");
+        RunProcess("dotnet", ["run", "--project", Path.Combine(Root, "Tools/ProjectBuild/SharpEngine.ProjectBuild.csproj"),
+            "--", "build", Manifest, "--engine-root", Root, "--target", "Editor", "--configuration", Configuration],
+            "build.log");
+        return Manifest;
+    }
+
     internal static void Run(string root,
         Func<int, string, JsonObject, JsonObject> tool,
-        Func<int, string, JsonObject?, JsonObject> call)
+        Func<int, string, JsonObject?, JsonObject> call, bool ContextMenusOnly = false)
     {
         var requestId = 1000;
         var assertions = 0;
@@ -116,6 +158,75 @@ internal static class ContentManagerUiValidation
                 frame = up["frameId"]!.GetValue<ulong>();
             }
         }
+        void CheckContextMenu(string HostId, bool Background = false)
+        {
+            var Ui = Snapshot();
+            var Menu = Elements(Ui).Single(Pair => Pair.Host["hostId"]!.GetValue<string>() == HostId &&
+                Match(Pair.Element, "contextMenu"));
+            var Bounds = Menu.Element["bounds"]!;
+            var Contained = Menu.Element["visible"]!.GetValue<bool>() &&
+                Bounds["x"]!.GetValue<double>() >= 0 && Bounds["y"]!.GetValue<double>() >= 0 &&
+                Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>() <= Menu.Host["bounds"]!["width"]!.GetValue<double>() &&
+                Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() <= Menu.Host["bounds"]!["height"]!.GetValue<double>();
+            if (!Contained)
+            {
+                SaveFrames("context-menu-failure");
+            }
+            Require(Contained, "The popup must be visible and contained by its actual host window: " +
+                Menu.Element.ToJsonString() + "; context=" + Content().ToJsonString());
+            Require(Elements(Ui).Any(Pair => Pair.Host["hostId"]!.GetValue<string>() == HostId &&
+                Match(Pair.Element, Background ? "context-command-core.content-refresh" : "context-command-core.content-open") &&
+                Pair.Element["visible"]!.GetValue<bool>() && Pair.Element["hitTarget"]!.GetValue<bool>()),
+                "The popup must contain its real clickable primary command");
+            foreach (var Command in new[] { "refresh", "view-tile", "view-list", "up", "clear-filters" })
+            {
+                var Visible = Elements(Ui).Any(Pair => Pair.Host["hostId"]!.GetValue<string>() == HostId &&
+                    Match(Pair.Element, "context-command-core.content-" + Command) && Pair.Element["visible"]!.GetValue<bool>());
+                Require(Visible == Background, "Browser-level operations belong only to the background menu");
+            }
+        }
+        string RightClickBackground(string Pane)
+        {
+            var Ui = Snapshot();
+            var Area = Elements(Ui).Single(Pair => Match(Pair.Element, Pane + "-results") &&
+                Pair.Element["visible"]!.GetValue<bool>());
+            var HostId = Area.Host["hostId"]!.GetValue<string>();
+            var Bounds = Area.Element["bounds"]!;
+            var Pointer = new JsonObject
+            {
+                ["hostId"] = HostId,
+                ["event"] = "move",
+                ["button"] = "none",
+                ["x"] = (int)(Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>() - 8),
+                ["y"] = (int)(Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() - 8),
+                ["buttons"] = new JsonArray(),
+                ["modifiers"] = new JsonArray(),
+                ["pointerId"] = 0,
+            };
+            JsonObject Moved = new();
+            for (var Attempt = 0; Attempt < 8; Attempt++)
+            {
+                Pointer["expectedFrameId"] = Snapshot()["frameId"]!.DeepClone();
+                Moved = Invoke("ui.pointer", Pointer);
+                if (Moved["accepted"]!.GetValue<bool>())
+                {
+                    break;
+                }
+            }
+            Require(Moved["accepted"]!.GetValue<bool>(), "Background hit testing must accept the pointer");
+            Pointer["event"] = "down";
+            Pointer["button"] = "right";
+            Pointer["expectedElementId"] = Moved["targetElementId"]!.DeepClone();
+            Pointer["expectedFrameId"] = Moved["frameId"]!.DeepClone();
+            var Down = Invoke("ui.pointer", Pointer);
+            Require(Down["accepted"]!.GetValue<bool>(), "Background right-button down must be accepted");
+            Pointer["event"] = "up";
+            Pointer["expectedFrameId"] = Down["frameId"]!.DeepClone();
+            var Up = Invoke("ui.pointer", Pointer);
+            Require(Up["accepted"]!.GetValue<bool>(), "Background right-button up must be accepted");
+            CheckContextMenu(HostId, true);
+            return HostId;
+        }
         JsonObject MovePointer(string id)
         {
             var snap = Snapshot();
@@ -163,6 +274,7 @@ internal static class ContentManagerUiValidation
 
         // Existing user layout is loaded read-only; Reset affects this isolated session only.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
+        Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
         SaveFrames("initial-tile");
         var tiles = Entries("content");
         Require(tiles.Count >= 2, "Root must display at least two entries");
@@ -172,6 +284,36 @@ internal static class ContentManagerUiValidation
                 tiles[1]["bounds"]!["x"]!.GetValue<double>(),
             "Tile view must arrange entries horizontally before wrapping");
         var RootFolder = State("content")["currentFolder"]!.GetValue<string>();
+        Search("content", "no-content-menu-match");
+        RightClickBackground("content");
+        Click("context-command-core.content-view-list");
+        Require(State("content")["viewMode"]!.GetValue<string>() == "List",
+            "A background right-click changes its own browser to List view");
+        RightClickBackground("content");
+        Click("context-command-core.content-view-tile");
+        Require(State("content")["viewMode"]!.GetValue<string>() == "Tile",
+            "A background right-click changes its own browser to Tile view");
+        RightClickBackground("content");
+        SaveFrames("background-context-menu");
+        Click("context-command-core.content-clear-filters");
+        Require(State("content")["search"]!.GetValue<string>() == "" &&
+            Elements(Snapshot()).Single(Pair => Match(Pair.Element, "content-search")).Element["value"]!.GetValue<string>() == "",
+            "Background Clear Filters restores both the listing and the displayed input value");
+        var FolderMenuHost = Click("editor.content.select-folder:content:engine|Assets", "right");
+        CheckContextMenu(FolderMenuHost["hostId"]!.GetValue<string>());
+        Require(State("content")["currentFolder"]!.GetValue<string>() == RootFolder,
+            "Opening a folder menu must not navigate before command execution");
+        SaveFrames("folder-context-menu");
+        Click("context-command-core.content-open");
+        Require(State("content")["currentFolder"]!.GetValue<string>() == "Assets",
+            "The folder context Open command must navigate through real input");
+        Search("content", "no-content-menu-match");
+        RightClickBackground("content");
+        Click("context-command-core.content-up");
+        Require(State("content")["currentFolder"]!.GetValue<string>() == RootFolder,
+            "Go Up executes only from the background menu and navigates its owner");
+        RightClickBackground("content");
+        Click("context-command-core.content-clear-filters");
         Click("editor.content.select-folder:content:engine|Assets");
         Require(State("content")["currentFolder"]!.GetValue<string>() == RootFolder &&
             State("content")["selectedPath"]!.GetValue<string>() == "Assets" &&
@@ -241,6 +383,7 @@ internal static class ContentManagerUiValidation
         {
             Click("menu-root-view");
             Click("editor.command:view." + pane);
+            Invoke("editor.action", new() { ["action"] = "editor.content.source:" + pane + ":engine" });
             Require(Content()["activePaneId"]!.GetValue<string>() == pane,
                 "Opening a manager must activate it");
         }
@@ -253,6 +396,35 @@ internal static class ContentManagerUiValidation
         Require(State("content")["selected"]!.GetValue<string>() == "engine://meshes/cube" &&
             State("content-2")["selected"]!.GetValue<string>() == "engine://worlds/main",
             "Selecting in manager 2 must preserve manager 1 selection");
+        var AssetMenuHost = Click("editor.content.select:content-2:engine://worlds/main", "right");
+        CheckContextMenu(AssetMenuHost["hostId"]!.GetValue<string>());
+        SaveFrames("floating-asset-context-menu");
+        Click("context-command-core.content-browse-parent");
+        Require(State("content-2")["currentFolder"]!.GetValue<string>() == "Worlds" &&
+            State("content")["selected"]!.GetValue<string>() == "engine://meshes/cube",
+            "A floating asset menu must browse its own manager without changing manager 1");
+        AssetMenuHost = Click("editor.content.select:content-2:engine://worlds/main", "right");
+        var Escape = Invoke("ui.key", new JsonObject
+        {
+            ["hostId"] = AssetMenuHost["hostId"]!.DeepClone(),
+            ["event"] = "down",
+            ["key"] = 27,
+            ["modifiers"] = new JsonArray(),
+            ["expectedFrameId"] = Snapshot()["frameId"]!.DeepClone(),
+        });
+        Require(Escape["accepted"]!.GetValue<bool>(), "Escape must be accepted by the popup host");
+        Invoke("ui.key", new JsonObject
+        {
+            ["hostId"] = AssetMenuHost["hostId"]!.DeepClone(),
+            ["event"] = "up",
+            ["key"] = 27,
+            ["modifiers"] = new JsonArray(),
+            ["expectedFrameId"] = Snapshot()["frameId"]!.DeepClone(),
+        });
+        Require(!Elements(Snapshot()).Any(Pair => Pair.Host["hostId"]!.GetValue<string>() == AssetMenuHost["hostId"]!.GetValue<string>() &&
+            Match(Pair.Element, "contextMenu") &&
+            Pair.Element["visible"]!.GetValue<bool>()),
+            "Escape must dismiss the popup through the native input path");
         Click("content-search");
         Require(Content()["activePaneId"]!.GetValue<string>() == "content" &&
             Invoke("editor.describe")["extensions"]!["selection"]!["id"]!.GetValue<string>() ==
@@ -276,8 +448,12 @@ internal static class ContentManagerUiValidation
         // Set up a narrow, four-pane dock arrangement, then operate each view
         // switch through the same coordinate input path used above.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
-        foreach (var pane in new[] { "content-2", "content-3", "content-4" })
-            Invoke("editor.action", new() { ["action"] = "editor.dock-toggle:" + pane });
+        Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
+        foreach (var Pane in new[] { "content-2", "content-3", "content-4" })
+        {
+            Invoke("editor.action", new() { ["action"] = "editor.dock-toggle:" + Pane });
+            Invoke("editor.action", new() { ["action"] = "editor.content.source:" + Pane + ":engine" });
+        }
         Invoke("editor.action", new() { ["action"] = "editor.dock-resize:main:main.center=0.42" });
         Invoke("editor.action", new() { ["action"] = "editor.dock-drop:content-2:unused:main:main.content:right:0" });
         string PaneNode(JsonObject node, string pane)
@@ -316,10 +492,28 @@ internal static class ContentManagerUiValidation
         Click("content-2-view-list");
         Click("content-4-view-list");
         SaveFrames("four-docked");
+        if (ContextMenusOnly)
+        {
+            Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
+            Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
+            Search("content", "cube");
+            var OpenHost = Click("editor.content.select:content:engine://meshes/cube", "right");
+            CheckContextMenu(OpenHost["hostId"]!.GetValue<string>());
+            Click("context-command-core.content-open");
+            var AssetRoot = Invoke("editor.describe")["assetTools"]!["editors"]!.AsArray()
+                .Single(Node => Node!["assetId"]!.GetValue<string>() == "engine://meshes/cube")!
+                ["rootId"]!.GetValue<string>();
+            Require(Snapshot()["hosts"]!.AsArray().Any(Node => Node!["hostId"]!.GetValue<string>() == AssetRoot),
+                "The asset context Open command creates the owning asset editor through real input");
+            SaveFrames("asset-context-open");
+            Console.WriteLine($"PASS: {assertions} rendered Content Manager context-menu assertions; evidence: {output}");
+            return;
+        }
 
         // Double-click through the native pointer path. The asset editor must
         // create a separate top-level editor root rather than a main Dock pane.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
+        Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
         DoubleClick("editor.content.select-folder:content:engine|Assets");
         DoubleClick("editor.content.select-folder:content:engine|Assets/AnimationControllers");
         const string StateMachineAction =

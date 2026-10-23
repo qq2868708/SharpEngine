@@ -431,6 +431,7 @@ struct RmlUiShell::Impl
         Rml::ElementDocument* Document{};
         TextInputMethodEditor_Win32 Ime;
         Rml::Element* OpenPopup{};
+        bool ContextMenuNeedsLayout = false;
         bool OwnsWindow{};
         bool TopLevelEditor{};
         bool Reported{};
@@ -1200,9 +1201,43 @@ struct RmlUiShell::Impl
             host.OpenPopup->SetProperty("display", "none");
             host.OpenPopup = nullptr;
         }
-        if (host.Document)
-            if (auto* menu = host.Document->GetElementById("contextMenu"))
-                menu->SetProperty("display", "none");
+        auto* Menu = host.Document ? host.Document->GetElementById("contextMenu") : nullptr;
+        if (Menu)
+        {
+            auto* Content = Menu->GetNumChildren() > 0 ? Menu->GetChild(0) : nullptr;
+            const auto Session = Attribute(Content, "data-menu-session");
+            if (!Session.empty())
+            {
+                QueueAction(host, "editor.menu-closed:" + Session);
+            }
+            Menu->SetProperty("display", "none");
+            host.ContextMenuNeedsLayout = false;
+        }
+    }
+
+    void PositionContextMenu(Host& Host, int Width, int Height)
+    {
+        if (!Host.ContextMenuNeedsLayout || !Host.Document)
+        {
+            return;
+        }
+        Host.ContextMenuNeedsLayout = false;
+        auto* Menu = Host.Document->GetElementById("contextMenu");
+        auto* Content = Menu && Menu->GetNumChildren() > 0 ? Menu->GetChild(0) : nullptr;
+        if (!Content)
+        {
+            return;
+        }
+        Menu->SetProperty("max-width", std::to_string((std::max)(0, Width - 16)) + "px");
+        Menu->SetProperty("max-height", std::to_string((std::max)(0, Height - 16)) + "px");
+        Menu->SetProperty("overflow-y", "auto");
+        Host.Context->Update();
+        const auto Size = Menu->GetBox().GetSize(Rml::BoxArea::Border);
+        const int X = Content->GetAttribute<int>("data-anchor-x", 0);
+        const int Y = Content->GetAttribute<int>("data-anchor-y", 0);
+        Menu->SetProperty("left", std::to_string(std::clamp(X, 0, (std::max)(0, Width - static_cast<int>(std::ceil(Size.x)) - 4))) + "px");
+        Menu->SetProperty("top", std::to_string(std::clamp(Y, 0, (std::max)(0, Height - static_cast<int>(std::ceil(Size.y)) - 4))) + "px");
+        Host.Context->Update();
     }
 
     void ClearHierarchyDrop(Host& host)
@@ -1970,6 +2005,18 @@ struct RmlUiShell::Impl
     void ProcessEvent(Host& host, Rml::Event& event)
     {
         if (host.MarkupDepth != 0) return;
+        if (event.GetId() == Rml::EventId::Keydown &&
+            event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE)
+        {
+            auto* Menu = host.Document ? host.Document->GetElementById("contextMenu") : nullptr;
+            auto* Content = Menu && Menu->GetNumChildren() > 0 ? Menu->GetChild(0) : nullptr;
+            if (Content && Content->HasAttribute("data-menu-session"))
+            {
+                HidePopups(host);
+                event.StopPropagation();
+                return;
+            }
+        }
         std::string ColorCommand;
         if (host.ColorPicker.ProcessEvent(event, host.Document, ColorCommand))
         {
@@ -2132,6 +2179,39 @@ struct RmlUiShell::Impl
         if (event.GetId() == Rml::EventId::Mouseup &&
             event.GetParameter<int>("button", -1) == 1)
         {
+            std::string Payload;
+            std::vector<std::string> Route;
+            for (auto* Element = target; Element; Element = Element->GetParentNode())
+            {
+                if (Payload.empty())
+                {
+                    Payload = Attribute(Element, "data-ui-context");
+                }
+                const auto Scope = Attribute(Element, "data-ui-context-scope");
+                if (!Scope.empty())
+                {
+                    Route.push_back(Scope);
+                }
+            }
+            if (!Payload.empty() || !Route.empty())
+            {
+                std::ostringstream Request;
+                Request << "ui.context-menu:{\"route\":[";
+                for (size_t Index = 0; Index < Route.size(); ++Index)
+                {
+                    if (Index > 0)
+                    {
+                        Request << ',';
+                    }
+                    Request << JsonString(Route[Index]);
+                }
+                Request << "],\"x\":" << event.GetParameter<int>("mouse_x", 0)
+                        << ",\"y\":" << event.GetParameter<int>("mouse_y", 0)
+                        << ",\"payload\":" << JsonString(Payload) << '}';
+                HidePopups(host);
+                EmitAction(host, Request.str());
+                return;
+            }
             for (auto* element = target; element; element = element->GetParentNode())
             {
                 const auto kind = element->GetAttribute<Rml::String>(
@@ -2793,6 +2873,10 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         }
         return DefWindowProcW(window, message, wParam, lParam);
     }
+    if (message == WM_KILLFOCUS)
+    {
+        state.HidePopups(*host);
+    }
     if (message == WM_KILLFOCUS && host->Id == "main")
     {
         state.GameplayCaptureRequest = -1;
@@ -3064,6 +3148,7 @@ bool RmlUiShell::Render(bool ObserveUi)
         }
         host.Context->SetDimensions({client.right, client.bottom});
         host.Context->Update();
+        state.PositionContextMenu(host, client.right, client.bottom);
         host.ColorPicker.AfterLayout(host.Document);
         RmlControlTooltip::Update(*host.Context, *host.Document);
         host.Surface->Resize(static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom));
@@ -3266,6 +3351,11 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
     auto RuntimeNodes = RmlRuntimeUi::Capture(*element, *host->Context);
     element->SetInnerRML(markup);
     RmlRuntimeUi::Restore(*element, RuntimeNodes);
+    if (strcmp(elementId, "contextMenu") == 0)
+    {
+        element->SetProperty("display", *markup ? "block" : "none");
+        host->ContextMenuNeedsLayout = *markup != '\0';
+    }
     auto* Placeholder = Inspector ? element->GetElementById("inspectorContent") : nullptr;
     if (Placeholder && Placeholder->GetParentNode())
     {

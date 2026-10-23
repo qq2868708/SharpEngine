@@ -155,7 +155,7 @@ public sealed partial class EditorRuntime
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
         var contentStates = _contentManagers?.Capture() ?? EditorLayoutDocument.CreateDefaultContentManagers();
         var activeContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
-        _contentManagers = new ContentManagerCoordinator(_assets, contentStates, activeContent);
+        SetContentManagers(new ContentManagerCoordinator(_assets, contentStates, activeContent));
         RefreshAssets();
         return (_projectRoot is null ? "engine://" : "project://") + id;
     }

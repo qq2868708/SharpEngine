@@ -427,111 +427,46 @@ public sealed partial class EditorRuntime
         markup.Append("</span><span>").Append(Escape(label)).Append("</span></button>");
     }
 
-    private void HandleContextRequest(string action)
+    private void HandleContextRequest(string HostId, string Action)
     {
-        var payload = action["editor.context:".Length..].Split(':', 6);
-        if (payload.Length is not (5 or 6) || !int.TryParse(payload[0], out var x) ||
-            !int.TryParse(payload[1], out var y)) return;
-        var source = payload[3].Equals("engine", StringComparison.OrdinalIgnoreCase)
-            ? AssetSource.Engine : AssetSource.Project;
-        var hasManager = payload.Length == 6 &&
-            (payload[4].Length == 0 || EditorPaneIds.IsContentManager(payload[4]));
-        var managerId = hasManager ? payload[4] :
-            _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
-        var id = hasManager ? payload[5] : string.Join(':', payload.Skip(4));
-        if (payload[2] is "asset" or "folder" &&
-            EditorPaneIds.IsContentManager(managerId)) ActivateContentManager(managerId);
-        EditorContextMenuKind kind;
-        switch (payload[2].ToLowerInvariant())
+        var Payload = Action["editor.context:".Length..].Split(':', 6);
+        if (Payload.Length is not (5 or 6) || Payload[2] is not ("object" or "scene"))
+        {
+            return;
+        }
+        var ParsedX = int.TryParse(Payload[0], out var X);
+        var ParsedY = int.TryParse(Payload[1], out var Y);
+        if (!ParsedX || !ParsedY)
+        {
+            return;
+        }
+        var Id = string.Join(':', Payload.Skip(4));
+        EditorContextMenuKind Kind;
+        switch (Payload[2])
         {
             case "object":
-                kind = EditorContextMenuKind.Object;
-                SelectEntity(id);
-                break;
-            case "asset":
-                kind = EditorContextMenuKind.Asset;
-                if (_assets?.Find(id) is not null) SelectAsset(id);
-                else SelectContentFile(managerId, source, id);
-                break;
-            case "folder":
-                kind = EditorContextMenuKind.Folder;
-                SelectContentFolder(managerId, source, id);
+                Kind = EditorContextMenuKind.Object;
+                SelectEntity(Id);
                 break;
             default:
-                kind = EditorContextMenuKind.Scene;
+                Kind = EditorContextMenuKind.Scene;
                 InvokeUiAction("editor.select-scene");
                 break;
         }
-        // Asset and folder menus are raised from a browser, so that browser owns them.
-        var pane = payload[2] is "asset" or "folder" &&
-            EditorPaneIds.IsContentManager(managerId)
-            ? _contentManagers?.Get(managerId) : null;
-        ShowContextMenu(kind, x, y, pane);
+        ShowContextMenu(Kind, X, Y, HostId);
     }
 
-    private void SelectContentFolder(string managerId, AssetSource source, string path)
+    private void ShowContextMenu(EditorContextMenuKind Kind, int X, int Y, string HostId = "main")
     {
-        var manager = ActivateContentManager(managerId);
-        manager?.SelectFolder(source, path);
-        _selection = new EditorSelection(EditorSelectionKind.Folder, Path: path, Source: source);
-        MarkExtensionUiDirty();
-        RefreshHierarchy();
-        CommitContentManagerState($"Selected Content/{path}");
-        RefreshViewportModeUi();
-        SetText("selectedObject", Path.GetFileName(path));
-        SetText("selectedKind", $"Folder · {source}");
-        SetText("parent", "Content");
-        SetText("position", path);
-        SetText("rotation", "-");
-        SetText("scale", "Available");
-    }
-
-    private void SelectContentFile(string managerId, AssetSource source, string path)
-    {
-        var manager = ActivateContentManager(managerId);
-        manager?.SelectFile(source, path);
-        _selection = new EditorSelection(EditorSelectionKind.Asset, Path: path, Source: source);
-        MarkExtensionUiDirty();
-        RefreshHierarchy();
-        CommitContentManagerState($"Selected Content/{path}");
-        RefreshViewportModeUi();
-    }
-
-    /// <summary>Renders one context menu. A pane owns the entries for its own selection; the
-    /// global registry only contributes entries a project explicitly registered, so UI never
-    /// mirrors the MCP-facing global command table.</summary>
-    private void ShowContextMenu(EditorContextMenuKind kind, int x, int y,
-        ContentManager? pane = null)
-    {
-        var markup = new StringBuilder();
-        var wroteCategory = false;
-        if (pane is not null)
-        {
-            pane.AppendContextMenu(kind, markup, new EditorCommandContext(this, pane));
-            wroteCategory = markup.Length > 0;
-        }
-        foreach (var category in _contextMenus.OrderedCategories(kind))
-        {
-            var commands = _contextMenus.OrderedItems(kind, category.Id)
-                .Select(item => _commands.TryGet(item.CommandId, out var command) ? command : null)
-                .Where(command => command is not null).Cast<EditorCommand>().ToArray();
-            if (commands.Length == 0) continue;
-            if (wroteCategory) markup.Append("<div class=\"menu-divider\" />");
-            foreach (var command in commands)
-                AppendCommandMenuItem(markup, command,
-                    $"context-{kind.ToString().ToLowerInvariant()}-category-{category.Id}");
-            wroteCategory = true;
-        }
-        if (!wroteCategory)
-        {
-            _nativeApi.SetUiProperty("contextMenu", "display", "none");
-            return;
-        }
-        _nativeApi.SetUiMarkup("contextMenu", markup.ToString());
-        _nativeApi.SetUiProperty("contextMenu", "left",
-            $"{Math.Clamp(x, 0, Math.Max(0, (int)_windowWidth - 250))}px");
-        _nativeApi.SetUiProperty("contextMenu", "top",
-            $"{Math.Clamp(y, 0, Math.Max(0, (int)_windowHeight - 260))}px");
-        _nativeApi.SetUiProperty("contextMenu", "display", "block");
+        var World = _world;
+        var Selection = _selection;
+        var Context = new EditorCommandContext(this, Selection, null, HostId);
+        var Sections = _contextMenus.OrderedCategories(Kind).Select(Category =>
+            (Category.Id, (IReadOnlyList<EditorCommand>)_contextMenus.OrderedItems(Kind, Category.Id)
+                .Select(Item => _commands.TryGet(Item.CommandId, out var Command) ? Command : null)
+                .OfType<EditorCommand>().ToArray()));
+        PopupMenus.Show(HostId, X, Y, Context, Sections,
+            () => ReferenceEquals(_world, World) &&
+                (Selection.Kind != EditorSelectionKind.Entity || World?.Entities.Any(Entity => Entity.Id == Selection.Id) == true));
     }
 }

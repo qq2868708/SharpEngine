@@ -572,9 +572,19 @@ vertical rules and may align Left, Center, or Right. A tool with one command run
 directly, while a tool with multiple commands renders a dropdown. The built-in
 Level category contains Save Current Level and Browse Current Level, and Playback
 contains the stateful Play/Pause and Stop tools. `EditorContextMenuRegistry`
-places commands in Scene, Object, Asset, and Folder contexts.
+places commands in Scene, Object, Asset, Folder, and Content (browser background) contexts.
+Content Manager owns its target resolution and built-in Open, Browse Containing
+Folder, navigation, refresh and view commands. Navigation, refresh, filter and
+view commands appear only in its background menu. Each `ContentManagerView`
+constructs its own menu and registers its layout scope with `UiContextMenuRouter`;
+EditorRuntime forwards the UI event without resolving the clicked domain target.
+Menu command contexts retain the
+clicked target, `ContentPaneId` and `HostId`; they do not follow later global
+selection changes. See [Content Manager context menus](Documentation/ContentManagerContextMenus.md).
 
-Both UI clicks and MCP use `editor.command:<id>` actions. `editor.describe`
+Commands remain available through `editor.command:<id>`. Context menu clicks use
+one-shot `editor.menu:<sessionId>:<commandId>` bindings before invoking the same
+command registry. `editor.describe`
 includes commands, current checked/enabled state, menu placements, Toolbar
 categories/tools, context placements, and unified selection. Registration IDs
 are case-insensitive and must be unique in their owning registry. The former

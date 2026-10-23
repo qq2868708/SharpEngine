@@ -68,6 +68,7 @@
       <p>编辑器提供视口、层级、资源浏览、属性检查、界面编辑和日志查看等面板。播放会使用当前已保存的内容创建独立的运行副本；停止后，运行期间的临时变化会被清除。</p>
       <p>层级、变换、资源选择和设置编辑都支持撤销、重做和恢复。编辑器会在内容变化后重新载入可用结果；如果载入失败，会保留当前编辑状态并显示诊断信息。</p>
       <p>资源浏览器支持按文件夹、名称、来源和类型查找内容，多个浏览器可以分别保留自己的位置、筛选条件和选择。单击文件夹只选择它并保持当前目录，双击文件夹才进入目录；文件夹图标和名称遵循相同规则。资源仍然是单击选择、双击打开。</p>
+      <p>Content Manager 的资产和文件夹右键菜单提供对应目标操作。返回上级、刷新、清除筛选及 Tile/List 视图切换只在浏览区空白处右键出现；空白处右键保留原选择。每个浏览器视图自行创建菜单并通过布局 scope 接收冒泡事件；浮动窗口的菜单在本窗口内显示。Escape、点击外部或窗口失焦会关闭菜单。详见 <a href="../../../../ContentManagerContextMenus.md">Content Manager 右键菜单</a>。</p>
       <p>主编辑器和顶层资产编辑器是两个不同的编辑器根：两者都有自己的菜单、工具栏和 Dock 布局。主编辑器负责当前 World；动画、UI、Prefab、Mesh、Skeleton、Material、StyleSheet、Input 和项目 DataAsset 会按资产打开独立顶层编辑器。顶层编辑器内部的普通窗口只能在所属编辑器根内停靠，也可以脱离为仍归原根所有的游离 Tab；它们不能停靠到主编辑器或另一个资产编辑器。关闭有未保存修改的顶层编辑器时会先要求保存、放弃或取消；关闭主编辑器也会依次检查所有打开的脏资产编辑器，任一取消都会阻止退出。</p>
     </section>
     <section class="section-card" id="animation-editor">
@@ -119,7 +120,7 @@
       <p>编辑器界面和运行时界面都可以使用统一的操作映射，因此同一个操作在不同界面中能够保持一致的响应方式。Play 或 Pause 时，Viewport 的相机导航、选择和 Gizmo 不再接收游戏输入；输入只作用于运行时逻辑，Stop 后恢复编辑操作。</p>
       <p>Player Prefab 使用独立第三人称相机和 Player 输入映射。鼠标调整镜头朝向，WASD 移动；默认站立时转动相机不转动人物；WASD 始终按相机水平朝向计算移动方向，角色根节点按该方向转身，Mesh 保留固定局部旋转并随角色一起转动。点击 Play 后可直接操作，Esc 释放光标（默认值，可在 Shortcuts 中改键），点击视口重新捕获。暂停、停止、失焦会释放光标并清空按键状态。游戏捕获指针期间，真实鼠标移动只驱动游戏，不再让编辑器界面产生 hover、拖拽或分割条缩放；Click Play 时也会清除编辑器残留的悬停与捕获状态。相机当前不提供遮挡避让。</p>
       <p>项目动画 Details 中的 Root Motion 开关开启时让根位移驱动角色实体；关闭时显示原地动画并由移动组件控制位移。跳跃高度也随该开关处理，原始轨道不会删除。根设置与 Notify 共用撤销/重做，Save 才写入源资产；引擎内置动画保持只读。详见 <a href="../../../../ControlAndMovement.md">控制与移动</a>和<a href="../../../../AnimationAndTimeline.md">动画</a>。</p>
-      <p>Content Manager 的右键菜单由该浏览器实例自己提供：选中项目资产后可以删除它。删除只对该面板自己的选中生效，引擎资产、插件声明资产、只读资产、Play 期间以及当前打开的 World 都会被拒绝（菜单项显示为不可用）。执行前会弹出确认对话框，默认按钮是取消；完成后同时移除清单条目和源文件，失败时清单恢复原样。</p>
+      <p>Content Manager 的右键菜单由该浏览器实例自己提供：右击项目资产后可以删除它。删除绑定右击时的资产，之后切换选择不会改变删除目标。引擎资产、插件声明资产、只读资产及 Play 期间菜单项不可用；执行时还会拒绝当前打开的 World 和存在未保存修改的资产编辑器。执行前会弹出确认对话框，默认按钮是取消；完成后同时移除清单条目和源文件，文件删除失败时恢复清单原文。</p>
       <p>StyleSheet 编辑器直接维护 RCSS 文本权威源，显示规则预览、引用该样式的 RML 文档和语法诊断。InputAction 与 InputMappingContext 使用结构化表单；Context 编辑器支持 bindings 的增删以及 action、control、scale、modifier、route 和 priority 编辑。无效引用、非法 Control 或未知枚举不会进入 dirty 文档。</p>
     </section>
     <section class="section-card" id="settings-modules">
@@ -146,8 +147,11 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>合并浏览器私有删除命令与视图拥有的右键菜单。Delete Asset 保留面板隔离，并绑定右击时的目标；资产列表重载后释放旧菜单并重新绑定各浏览器视图。</p>
+      <p>Content Manager 的 Go Up、Refresh、Clear Filters、Tile View、List View 只在浏览区空白处右键出现；资产和文件夹菜单只包含对应目标操作。空白处右键保留已有选择。每个浏览器视图拥有自己的菜单和事件绑定，右键沿实际 UI 布局冒泡到所属视图处理。</p>
       <p>修复 Rider 启动与构建配置脱节：每个 Debug、Development、Shipping 启动项现在拥有固定配置的 Target 与独立启动文件。选择 Debug Editor 会构建并启动 Debug Editor，即使全局解决方案选择 Development；普通 Build Solution 仍遵循全局配置。旧项目重新生成并加载解决方案后，选择新的配置专属启动 Target。重新构建前先停止占用该输出的编辑器。</p>
       <p>新增构建后端选项：项目顶层 <code>renderBackends</code> 可设为 <code>OpenGL</code> 或 <code>Both</code>。新项目默认只编译 OpenGL，无需 Vulkan SDK；已有项目省略配置时保留双后端。修改后重新生成 Rider 项目文件，或通过构建命令 <code>-RenderBackends</code> 临时覆盖。两种构建均默认以 OpenGL 启动；只有 Both 构建接受 Vulkan 启动参数。切换构建会替换共享引擎输出，需重新构建并重启。详见 <a href="../../../../RenderBackends.md">渲染后端与构建选择</a>。</p>
+      <p>增加 Content Manager 内置右键菜单，并将资源/文件夹右键逻辑移出 EditorRuntime。菜单按窗口和浏览器实例隔离，目标失效、命令卸载或菜单关闭后拒绝旧操作；浮动 Dock 补齐菜单容器。使用本次功能需重建并重启 Editor。</p>
       <p>收紧编辑文档的事务边界：扩展应通过 EditSelectedEntity 或 EditWorld 修改候选数据，成功后统一进入撤销、重做和保存流程；直接修改已归属编辑会话的实体会被拒绝。Runtime 普通字段赋值保持支持。Dedicated Server 在模块子系统就绪后才创建 World，并按所有者推进和释放生命周期。同实体存在移动权威时 NavAgent 暂停移动并报告 NAV_MOVEMENT_AUTHORITY，停用或移除权威后恢复；导航尚未自动接入角色移动意图。</p>
       <p>Content Manager 的资产删除成为该面板自己拥有的命令：命令与右键菜单项由浏览器实例注册，只对该实例的选中求值，不进入全局命令表；执行仍由拥有资产清单的编辑器工作流完成。判定拒绝、清单与文件同事务提交、失败回滚。全局命令保留给 MCP 与显式 UI 注册使用。</p>
       <p>引擎快捷键集中到 <code>File &gt; Engine Settings &gt; Shortcuts</code>：F5/F8、Ctrl+S、Ctrl+Z、Ctrl+Y、Ctrl+Shift+Z、Esc 与 Viewport 导航键都可改键并立即生效；编辑器路由不再被 RmlUi 消费吞掉，焦点在文本输入框时 F5 等快捷键仍然可用。快捷键按获得焦点的文档作用域冒泡：资产编辑器先消费 Save/Undo/Redo，不消费才落到全局 World 层。Play 捕获指针后真实鼠标只作用于游戏，不再触发编辑器 hover 与分割条拖拽；释放捕获后编辑器会重新取得激活，避免后续按键落到其他窗口。Esc 取代 Shift+F1 作为默认释放手势。</p>

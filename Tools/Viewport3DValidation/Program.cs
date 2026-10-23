@@ -14,6 +14,7 @@ void Check(bool Condition, string Message)
 }
 UiLayoutTemplateValidation.Run(Check);
 UiLayoutInstanceValidation.Run(Check);
+UiContextMenuRoutingValidation.Run(Check);
 var Content = new TriangleContent("triangle");
 var Viewport = new Viewport3D("surface", "generic");
 var Host = new RecordingHost();

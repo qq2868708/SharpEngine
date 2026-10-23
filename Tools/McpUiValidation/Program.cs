@@ -23,6 +23,11 @@ void Require(bool condition, string message)
 
 var sessionId = Guid.NewGuid().ToString("N");
 var settingsProject = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
+if ((args.Contains("--content-only", StringComparer.Ordinal) || args.Contains("--context-menus-only", StringComparer.Ordinal)) &&
+    string.IsNullOrWhiteSpace(settingsProject))
+{
+    settingsProject = ContentManagerUiValidation.CreateProject(root, configuration);
+}
 if (args.Contains("--root-motion-only", StringComparer.Ordinal))
 {
     settingsProject = RootMotionUiValidation.CreateProject(root);
@@ -251,9 +256,9 @@ try
             "sharpengine://ui/frames/{frameId}/{hostId}.png"),
         "Frame resource template must be discoverable");
 
-    if (args.Contains("--content-only", StringComparer.Ordinal))
+    if (args.Contains("--content-only", StringComparer.Ordinal) || args.Contains("--context-menus-only", StringComparer.Ordinal))
     {
-        ContentManagerUiValidation.Run(root, Tool, Call);
+        ContentManagerUiValidation.Run(root, Tool, Call, args.Contains("--context-menus-only", StringComparer.Ordinal));
         return;
     }
 

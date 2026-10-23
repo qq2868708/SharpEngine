@@ -53,6 +53,8 @@ public sealed partial class EditorRuntime
     private AssetRegistry? _assets;
     private DataAssetTypeRegistry DataAssetTypes = new();
     private ContentManagerCoordinator? _contentManagers;
+    private readonly EditorPopupMenu PopupMenus;
+    private readonly UiContextMenuRouter ContextMenuRouting = new();
     private WorldDocument? _world;
     private string _engineRoot = string.Empty;
     private string? _projectRoot;
@@ -126,6 +128,7 @@ public sealed partial class EditorRuntime
         CustomBarRegistry = new EditorCustomBarRegistry(this, MarkExtensionUiDirty);
         AssetOpeners = new EditorAssetOpenerRegistry(this);
         _commandContext = new EditorCommandContext(this);
+        PopupMenus = new EditorPopupMenu(_nativeApi, _commands);
         _context = new EditorContext(this, _commands, _menus, _toolbar, _contextMenus,
             CustomBarRegistry);
         EditorSubsystems = SubsystemLifetime.CreateEditorScope(this);
@@ -144,6 +147,13 @@ public sealed partial class EditorRuntime
     public EditorMenuRegistry Menus => _menus;
     public EditorToolbarRegistry Toolbar => _toolbar;
     public EditorContextMenuRegistry ContextMenus => _contextMenus;
+    public UiContextMenuRouter ContextMenuRouter
+    {
+        get
+        {
+            return ContextMenuRouting;
+        }
+    }
     public EditorCustomBarRegistry CustomBars
     {
         get
@@ -242,7 +252,13 @@ public sealed partial class EditorRuntime
             WriteIndented = true,
         });
     }
-    public string DescribeContentJson() => _contentManagers?.ToJson() ?? "{}";
+    public string DescribeContentJson()
+    {
+        var Snapshot = JsonNode.Parse(_contentManagers?.ToJson() ?? "{}")!.AsObject();
+        Snapshot["contextMenus"] = PopupMenus.Describe();
+        Snapshot["contextRouting"] = ContextMenuRouting.Describe();
+        return Snapshot.ToJsonString();
+    }
     public string DescribeInputJson() => _inputRuntime?.DescribeJson() ??
         "{\"schemaVersion\":1,\"available\":false}";
 
@@ -370,7 +386,7 @@ public sealed partial class EditorRuntime
             manifest = plugin.ManifestPath,
         }),
         content = _contentManagers is null ? null :
-            JsonNode.Parse(_contentManagers.ToJson()),
+            JsonNode.Parse(DescribeContentJson()),
         extensions = new
         {
             selection = new
@@ -507,9 +523,8 @@ public sealed partial class EditorRuntime
             _layout = new EditorLayoutSession(_defaultLayout);
         }
         var contentLayout = _layout.Document;
-        _contentManagers = new ContentManagerCoordinator(_assets,
-            contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
-        AttachContentCommands(_contentManagers);
+        SetContentManagers(new ContentManagerCoordinator(_assets,
+            contentLayout.ContentManagers, contentLayout.ActiveContentManagerId));
         // The content browser normalizes unavailable sources/folders on load.
         // Adopt that initial state before exposing revisions so the first Dock
         // edit does not also commit an unrelated browser correction.
@@ -897,6 +912,16 @@ public sealed partial class EditorRuntime
             actionHostId = action[hostPrefix.Length..separator];
             action = action[(separator + 1)..];
         }
+        if (PopupMenus.TryHandleAction(actionHostId, action))
+        {
+            MarkExtensionUiDirty();
+            return;
+        }
+        if (ContextMenuRouting.TryHandleAction(actionHostId, action))
+        {
+            MarkExtensionUiDirty();
+            return;
+        }
         if (HandleSourceAction(actionHostId, action)) return;
         if (AssetOpeners.TryHandleHostAction(actionHostId, action)) return;
         // Pane-owned commands dispatch by their published action before the global registry
@@ -946,7 +971,10 @@ public sealed partial class EditorRuntime
         if (HandleComponentAction(action) || HandlePrefabAction(action)) return;
         if (_world is null || _assets is null) return;
         if (action.StartsWith("editor.context:", StringComparison.Ordinal))
-        { HandleContextRequest(action); return; }
+        {
+            HandleContextRequest(actionHostId, action);
+            return;
+        }
         if (action.StartsWith("editor.select-entity:", StringComparison.Ordinal))
         { SelectEntity(action["editor.select-entity:".Length..]); return; }
         if (action.StartsWith("editor.select-asset:", StringComparison.Ordinal))
@@ -1074,7 +1102,7 @@ public sealed partial class EditorRuntime
             if (Separator <= 0) return;
             var Source = contentValue[..Separator].Equals("engine",
                 StringComparison.OrdinalIgnoreCase) ? AssetSource.Engine : AssetSource.Project;
-            SelectContentFolder(contentPaneId, Source, contentValue[(Separator + 1)..]);
+            _contentManagers?.SelectFolder(contentPaneId, Source, contentValue[(Separator + 1)..]);
             return;
         }
         if (TryContentAction(action, "open-asset", out contentPaneId, out contentValue))
@@ -1242,12 +1270,14 @@ public sealed partial class EditorRuntime
 
     public void Shutdown()
     {
+        PopupMenus.Clear();
         StopRuntimeInstance();
         ShutdownMcp();
         foreach (var registration in _extensions.Values.Reverse().ToArray())
             registration.Dispose();
         ShutdownDevelopmentSettings();
         SubsystemLifetime.Dispose();
+        _contentManagers?.Dispose();
         _contextMenus.Clear();
         _toolbar.Clear();
         _menus.Clear();
@@ -1591,21 +1621,7 @@ public sealed partial class EditorRuntime
     {
         if (_contentManagers is null) return;
         var manager = _contentManagers.Active;
-        var asset = manager.SelectedAsset;
-        if (asset is not null)
-            _selection = new EditorSelection(EditorSelectionKind.Asset, asset.Id,
-                manager.SelectedPath, asset.Source);
-        else if (manager.SelectedPath is not null && manager.SelectedSource is not null)
-        {
-            var root = manager.SelectedSource == AssetSource.Engine ? _engineRoot : _projectRoot;
-            var fullPath = root is null ? string.Empty : Path.Combine(root, "Content",
-                manager.SelectedPath.Replace('/', Path.DirectorySeparatorChar));
-            _selection = new EditorSelection(Directory.Exists(fullPath)
-                    ? EditorSelectionKind.Folder : EditorSelectionKind.Asset,
-                Path: manager.SelectedPath, Source: manager.SelectedSource);
-        }
-        else
-            _selection = EditorSelection.None;
+        _selection = ContentManagerContextMenus.SelectionOf(manager);
         MarkExtensionUiDirty();
         RefreshHierarchy();
         RefreshInspector();
@@ -1618,8 +1634,16 @@ public sealed partial class EditorRuntime
         _layout?.UpdateContentManagers(_contentManagers.Capture(),
             _contentManagers.ActivePaneId);
         MarkExtensionUiDirty();
-        if (rebuildDock) RefreshDockUiAndContents();
-        else RefreshAssets();
+        if (rebuildDock)
+        {
+            // A user-edited input can differ from the last generated markup even when the model returns to it.
+            _dockMarkup.Clear();
+            RefreshDockUiAndContents();
+        }
+        else
+        {
+            RefreshAssets();
+        }
         SetStatus(status);
     }
 
@@ -1662,9 +1686,8 @@ public sealed partial class EditorRuntime
         {
             _layout.ResetToEngineDefault(_defaultLayout!);
             var contentLayout = _layout.Document;
-            _contentManagers = new ContentManagerCoordinator(_assets!,
-                contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
-            AttachContentCommands(_contentManagers);
+            SetContentManagers(new ContentManagerCoordinator(_assets!,
+                contentLayout.ContentManagers, contentLayout.ActiveContentManagerId));
             ApplyActiveContentSelection();
             RefreshDockUiAndContents();
             SetStatus("Engine default layout restored for this session");
@@ -1845,6 +1868,7 @@ public sealed partial class EditorRuntime
 
     private void RefreshDockUiAndContents()
     {
+        PopupMenus.Clear();
         RefreshDockUi();
         // Invalidate generated content for rebuilt or moved panes. The native
         // host retains the Inspector subtree during same-host dock rebuilding
@@ -1913,10 +1937,9 @@ public sealed partial class EditorRuntime
                     EditorLayoutDocument.CreateDefaultContentManagers();
                 var activeContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
                 _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
-                _contentManagers = new ContentManagerCoordinator(_assets, contentStates,
-                    activeContent);
+                SetContentManagers(new ContentManagerCoordinator(_assets, contentStates,
+                    activeContent));
                 _authoring.MarkSavepoint();
-                AttachContentCommands(_contentManagers);
             }
             else
             {
@@ -2040,7 +2063,7 @@ public sealed partial class EditorRuntime
                     .Append("\" data-context-kind=\"object\" data-context-id=\"")
                     .Append(Escape(entity.Id)).Append("\" data-hierarchy-entity=\"")
                     .Append(Escape(entity.Id)).Append("\">")
-                    .Append(EditorIcon(entity.Kind.ToString())).Append("<span class=\"tree-label\">")
+                    .Append(EditorResourceUris.ItemIcon(entity.Kind.ToString())).Append("<span class=\"tree-label\">")
                     .Append(Escape(entity.Name)).Append("</span><span class=\"item-kind\">")
                     .Append(entity.Kind).Append("</span></button></div>");
                 if (!collapsed) Append(entity.Id, depth + 1);
@@ -2106,8 +2129,7 @@ public sealed partial class EditorRuntime
         var ContentStates = _contentManagers?.Capture() ??
             EditorLayoutDocument.CreateDefaultContentManagers();
         var ActiveContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
-        _contentManagers = new ContentManagerCoordinator(_assets, ContentStates, ActiveContent);
-        AttachContentCommands(_contentManagers);
+        SetContentManagers(new ContentManagerCoordinator(_assets, ContentStates, ActiveContent));
         RefreshAssets();
     }
 
@@ -2120,7 +2142,11 @@ public sealed partial class EditorRuntime
     }
 
     private void RefreshAssets()
-    {        if (_contentManagers is null) return;
+    {
+        if (_contentManagers is null)
+        {
+            return;
+        }
         foreach (var paneId in EditorPaneIds.ContentManagers)
             RefreshContentManager(paneId, _contentManagers.Get(paneId));
     }
@@ -2128,69 +2154,13 @@ public sealed partial class EditorRuntime
     private void RefreshContentManager(string paneId, ContentManager manager)
     {
         string Id(string local) => $"{paneId}-{local}";
-        var viewClass = manager.ViewMode == ContentViewMode.Tile ? "tile-view" : "list-view";
-        var itemClass = manager.ViewMode == ContentViewMode.Tile ? "tile-item" : "list-item";
         foreach (var source in new[] { AssetSource.Engine, AssetSource.Project })
         {
             var sourceName = source.ToString().ToLowerInvariant();
             _nativeApi.SetUiProperty(Id(sourceName + "-label"), "display",
                 manager.SourceFilter == ContentSourceFilter.All ? "block" : "none");
-            var markup = new StringBuilder();
-            markup.Append("<div class=\"content-context ").Append(viewClass)
-                .Append("\" data-context-kind=\"folder\" data-context-manager=\"")
-                .Append(paneId).Append("\" data-context-source=\"").Append(sourceName)
-                .Append("\" data-context-id=\"").Append(Escape(manager.CurrentFolder))
-                .Append("\">");
-            var itemCount = 0;
-            foreach (var entry in manager.VisibleEntries.Where(entry => entry.Source == source))
-            {
-                itemCount++;
-                var selected = manager.SelectedSource == source &&
-                    string.Equals(manager.SelectedPath, entry.RelativePath,
-                        StringComparison.OrdinalIgnoreCase) ? " selected" : string.Empty;
-                var icon = EditorIcon(entry.IsDirectory ? "Folder" : entry.Type);
-                var action = entry.IsDirectory
-                    ? $"editor.content.select-folder:{paneId}:{sourceName}|{Escape(entry.RelativePath)}"
-                    : entry.AssetId is null
-                    ? $"editor.content.open:{paneId}:{sourceName}|{Escape(entry.RelativePath)}"
-                    : $"editor.content.select:{paneId}:{Escape(entry.AssetId)}";
-                var missing = entry.Exists ? string.Empty : " missing";
-                var kind = $"<span class=\"item-kind\">{Escape(entry.IsDirectory ? "Folder" : entry.Type)}</span>";
-                var contextKind = entry.IsDirectory ? "folder" : "asset";
-                var contextId = entry.AssetId ?? entry.RelativePath;
-                var readOnly = entry.ReadOnly
-                    ? $"<img class=\"readonly-icon\" src=\"{EditorResourceUris.IconSource("lock")}\" />"
-                    : string.Empty;
-                markup.Append("<button ").Append(entry.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase)
-                        ? "draggable=\"true\" data-prefab-asset=\"" + Escape(entry.AssetId ?? "") + "\" " : "")
-                    .Append("class=\"asset-item ").Append(itemClass)
-                    .Append(selected).Append(missing).Append("\" data-action=\"")
-                    .Append(action).Append('"');
-                if (entry.IsDirectory)
-                {
-                    markup.Append(" data-double-click-action=\"editor.content.open:")
-                        .Append(paneId).Append(':').Append(sourceName).Append('|')
-                        .Append(Escape(entry.RelativePath)).Append('"');
-                }
-                else if (entry.AssetId is not null)
-                {
-                    markup.Append(" data-double-click-action=\"editor.content.open-asset:")
-                        .Append(paneId).Append(':').Append(Escape(entry.AssetId)).Append('"');
-                }
-                markup.Append(" data-context-kind=\"").Append(contextKind)
-                    .Append("\" data-context-manager=\"").Append(paneId)
-                    .Append("\" data-context-id=\"").Append(Escape(contextId))
-                    .Append("\" data-context-source=\"").Append(sourceName)
-                    .Append("\" title=\"").Append(Escape(entry.RelativePath)).Append(" (")
-                    .Append(Escape(entry.Type)).Append(")\">").Append(icon)
-                    .Append("<span class=\"asset-name\">").Append(Escape(entry.Name))
-                    .Append("</span>").Append(kind).Append(readOnly).Append("</button>");
-            }
-            if (itemCount == 0)
-                markup.Append("<div class=\"empty-list\">Folder is empty</div>");
-            markup.Append("</div>");
             var targetId = Id(source == AssetSource.Engine ? "engine-items" : "project-items");
-            var value = markup.ToString();
+            var value = _contentManagers!.BuildEntries(paneId, source);
             if (!_contentMarkup.TryGetValue(targetId, out var previous) || previous != value)
             {
                 _nativeApi.SetUiMarkup(targetId, value);
@@ -2246,27 +2216,6 @@ public sealed partial class EditorRuntime
             isActive ? "#68a9f2" : "transparent");
         _nativeApi.SetUiProperty($"dock-tab-{paneId}", "color",
             isActive ? "#f2f7ff" : "#a7b3c4");
-    }
-
-    private static string EditorIcon(string type)
-    {
-        var name = type.ToLowerInvariant() switch
-        {
-            "folder" => "folder",
-            "mesh" => "mesh",
-            "material" => "material",
-            "world" => "world",
-            "rmldocument" or "uidocument" => "ui",
-            "stylesheet" => "style",
-            "texture" => "texture",
-            "audio" => "audio",
-            "json" or "xml" => "data",
-            "camera" => "camera",
-            "light" => "light",
-            "empty" => "all",
-            _ => "file",
-        };
-        return $"<img class=\"icon item-icon\" src=\"{EditorResourceUris.IconSource(name)}\" />";
     }
 
     private void RefreshInspector()

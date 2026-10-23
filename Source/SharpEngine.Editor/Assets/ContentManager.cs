@@ -98,6 +98,21 @@ public sealed class ContentManager
     public AssetRegistry Registry => _registry;
     public IReadOnlyList<EditorCommand> Commands => _commands.Commands;
     public IReadOnlyList<EditorContextMenuItem> ContextItems => _contextMenus.Items;
+    internal EditorCommandRegistry MenuCommands
+    {
+        get
+        {
+            return _commands;
+        }
+    }
+
+    internal IEnumerable<(string Id, IReadOnlyList<EditorCommand> Commands)> MenuSections(EditorContextMenuKind Kind)
+    {
+        return _contextMenus.OrderedCategories(Kind).Select(Category =>
+            (Category.Id, (IReadOnlyList<EditorCommand>)_contextMenus.OrderedItems(Kind, Category.Id)
+                .Select(Item => _commands.TryGet(Item.CommandId, out var Command) ? Command : null)
+                .OfType<EditorCommand>().ToArray()));
+    }
     public string SearchText => _search;
     public ContentSourceFilter SourceFilter => _source;
     public string? TypeFilter => _type;
@@ -146,21 +161,21 @@ public sealed class ContentManager
     /// or leak into menus that have no browser context.</summary>
     private void RegisterCommands()
     {
-        _commands.Register(new EditorCommand(DeleteAssetCommandId, "Delete Asset",
-            _ => RequestDeleteSelected(),
+        _commands.RegisterOwned(new EditorCommand(DeleteAssetCommandId, "Delete Asset",
+            Context => RequestDelete(Context.SelectedAsset),
             Context => Context.SelectedAsset is
                 { Source: AssetSource.Project, OwnerId: null, ReadOnly: false } &&
                 Context.PlayState == EditorPlayState.Stopped,
             "Remove the asset's manifest entry and its source file"));
-        _contextMenus.RegisterCategory(new EditorContextMenuCategory(
+        _contextMenus.RegisterOwnedCategory(new EditorContextMenuCategory(
             EditorContextMenuKind.Asset, "asset", 100));
-        _contextMenus.RegisterItem(new EditorContextMenuItem(
+        _contextMenus.RegisterOwnedItem(new EditorContextMenuItem(
             EditorContextMenuKind.Asset, "asset", DeleteAssetCommandId, 100));
     }
 
-    private void RequestDeleteSelected()
+    private void RequestDelete(AssetDescriptor? Asset)
     {
-        if (SelectedAsset is not { } Asset)
+        if (Asset is null)
         {
             return;
         }
@@ -335,6 +350,16 @@ public sealed class ContentManager
         _selectedId = null;
         _selectedPath = null;
         _selectedSource = null;
+    }
+
+    internal bool IsFolder(AssetSource Source, string Path)
+    {
+        return Directory.Exists(ResolveBrowsePath(Source, NormalizeFolder(Path)));
+    }
+
+    internal bool IsFile(AssetSource Source, string Path)
+    {
+        return File.Exists(ResolveBrowsePath(Source, NormalizeFolder(Path)));
     }
 
     // Restoring layout is not a navigation command: retain saved references even

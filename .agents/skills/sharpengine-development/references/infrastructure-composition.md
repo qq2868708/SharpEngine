@@ -42,3 +42,21 @@ public API. Mounts borrow `IUiLayoutPart` instances and do not dispose or Tick
 them. Route events through `IUiActionHandler` and preserve native widget identity
 on refresh. Usage and the real-input validation entry point are maintained in
 [RuntimeUiComposition.md](../../../../Documentation/RuntimeUiComposition.md).
+
+## Context Menus
+
+Follow [ContentManagerContextMenus.md](../../../../Documentation/ContentManagerContextMenus.md).
+Keep menu rendering independent of editor domains and popup sessions scoped to hosts.
+Each feature view constructs and disposes its own context-menu handler and UI-scope
+registration. Native input collects the actual target-to-root layout scope chain;
+the generic UI router bubbles it until consumed without interpreting domain payloads.
+EditorRuntime creates feature roots and shared services, never their private menu
+instances or domain-specific event dispatch branches. Keep data models UI-independent.
+Browser-wide commands belong only to background menus, not asset/folder targets.
+Bind command contexts to the requested
+target and pane; never replace them with a later global selection. Revalidate
+targets, command registrations and host ownership at execution, and invalidate
+closed sessions. Reuse domain commands instead of putting mutations in menu widgets.
+When combining pane-private and shared commands, retain each command's owning
+registry in its popup binding. Never copy private commands into the global table.
+Asset registry replacement must recreate the owned views and invalidate old menus.

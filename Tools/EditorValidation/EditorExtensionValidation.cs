@@ -198,7 +198,7 @@ internal static unsafe class EditorExtensionValidation
             require(runtime.Selection.Kind == EditorSelectionKind.Entity &&
                 runtime.Selection.Id == "player" &&
                 ContextMenu().Descendants("button").Any(element =>
-                    (string?)element.Attribute("data-action") == "editor.command:validation.reset") &&
+                    (string?)element.Attribute("id") == "context-command-validation.reset") &&
                 Properties["contextMenu.left"] == "120px" &&
                 Properties["contextMenu.top"] == "140px" &&
                 Properties["contextMenu.display"] == "block",
