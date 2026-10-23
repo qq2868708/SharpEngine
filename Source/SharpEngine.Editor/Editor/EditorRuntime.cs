@@ -509,6 +509,7 @@ public sealed partial class EditorRuntime
         var contentLayout = _layout.Document;
         _contentManagers = new ContentManagerCoordinator(_assets,
             contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
+        AttachContentCommands(_contentManagers);
         // The content browser normalizes unavailable sources/folders on load.
         // Adopt that initial state before exposing revisions so the first Dock
         // edit does not also commit an unrelated browser correction.
@@ -898,6 +899,16 @@ public sealed partial class EditorRuntime
         }
         if (HandleSourceAction(actionHostId, action)) return;
         if (AssetOpeners.TryHandleHostAction(actionHostId, action)) return;
+        // Pane-owned commands dispatch by their published action before the global registry
+        // is consulted, so a content browser never needs a global command entry.
+        if (_contentManagers is not null && action.StartsWith("editor.content-command:",
+                StringComparison.Ordinal))
+        {
+            if (_contentManagers.TryHandleCommand(action, Pane => new EditorCommandContext(this, Pane)))
+            {
+                return;
+            }
+        }
         if (HandleMcpAction(actionHostId, action))
         {
             return;
@@ -1653,6 +1664,7 @@ public sealed partial class EditorRuntime
             var contentLayout = _layout.Document;
             _contentManagers = new ContentManagerCoordinator(_assets!,
                 contentLayout.ContentManagers, contentLayout.ActiveContentManagerId);
+            AttachContentCommands(_contentManagers);
             ApplyActiveContentSelection();
             RefreshDockUiAndContents();
             SetStatus("Engine default layout restored for this session");
@@ -1904,6 +1916,7 @@ public sealed partial class EditorRuntime
                 _contentManagers = new ContentManagerCoordinator(_assets, contentStates,
                     activeContent);
                 _authoring.MarkSavepoint();
+                AttachContentCommands(_contentManagers);
             }
             else
             {
@@ -2085,9 +2098,29 @@ public sealed partial class EditorRuntime
         SetStatus($"Hierarchy updated · revision {result.AfterRevision}");
     }
 
-    private void RefreshAssets()
+    /// <summary>Rebuilds the asset registry and the content browsers after the manifest
+    /// changed, preserving each browser's folders, filters and selection.</summary>
+    internal void ReloadAssetRegistry()
     {
-        if (_contentManagers is null) return;
+        _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
+        var ContentStates = _contentManagers?.Capture() ??
+            EditorLayoutDocument.CreateDefaultContentManagers();
+        var ActiveContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
+        _contentManagers = new ContentManagerCoordinator(_assets, ContentStates, ActiveContent);
+        AttachContentCommands(_contentManagers);
+        RefreshAssets();
+    }
+
+    /// <summary>Connects a browser aggregate's delete intent to the asset workflow that owns
+    /// the project manifest. The browser states what the user asked for; this side decides and
+    /// performs it.</summary>
+    private void AttachContentCommands(ContentManagerCoordinator ContentManagers)
+    {
+        ContentManagers.DeleteRequested += Asset => DeleteAsset(Asset.Id);
+    }
+
+    private void RefreshAssets()
+    {        if (_contentManagers is null) return;
         foreach (var paneId in EditorPaneIds.ContentManagers)
             RefreshContentManager(paneId, _contentManagers.Get(paneId));
     }

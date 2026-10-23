@@ -462,7 +462,11 @@ public sealed partial class EditorRuntime
                 InvokeUiAction("editor.select-scene");
                 break;
         }
-        ShowContextMenu(kind, x, y);
+        // Asset and folder menus are raised from a browser, so that browser owns them.
+        var pane = payload[2] is "asset" or "folder" &&
+            EditorPaneIds.IsContentManager(managerId)
+            ? _contentManagers?.Get(managerId) : null;
+        ShowContextMenu(kind, x, y, pane);
     }
 
     private void SelectContentFolder(string managerId, AssetSource source, string path)
@@ -493,10 +497,19 @@ public sealed partial class EditorRuntime
         RefreshViewportModeUi();
     }
 
-    private void ShowContextMenu(EditorContextMenuKind kind, int x, int y)
+    /// <summary>Renders one context menu. A pane owns the entries for its own selection; the
+    /// global registry only contributes entries a project explicitly registered, so UI never
+    /// mirrors the MCP-facing global command table.</summary>
+    private void ShowContextMenu(EditorContextMenuKind kind, int x, int y,
+        ContentManager? pane = null)
     {
         var markup = new StringBuilder();
         var wroteCategory = false;
+        if (pane is not null)
+        {
+            pane.AppendContextMenu(kind, markup, new EditorCommandContext(this, pane));
+            wroteCategory = markup.Length > 0;
+        }
         foreach (var category in _contextMenus.OrderedCategories(kind))
         {
             var commands = _contextMenus.OrderedItems(kind, category.Id)

@@ -293,6 +293,27 @@ public sealed class EditorAssetOpenerRegistry
             .Select(Editor => Editor.Describe().DeepClone().AsObject()).ToArray();
     }
 
+    /// <summary>True when an open document for this asset still has unsaved changes, which a
+    /// deletion must never discard silently.</summary>
+    internal bool IsDirty(string AssetId)
+    {
+        EnsureOwnerThread();
+        return Editors.TryGetValue(AssetId, out var Editor) && Editor.Instance.IsDirty;
+    }
+
+    /// <summary>Withdraws the editor for an asset whose manifest record is being removed. The
+    /// caller has already established that the document has no unsaved changes.</summary>
+    internal bool CloseAsset(string AssetId)
+    {
+        EnsureOwnerThread();
+        if (!Editors.Remove(AssetId, out var Editor))
+        {
+            return false;
+        }
+        Editor.Dispose();
+        return true;
+    }
+
     internal void Clear()
     {
         foreach (var Editor in Editors.Values.ToArray())

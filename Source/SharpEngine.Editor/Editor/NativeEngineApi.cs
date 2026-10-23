@@ -476,6 +476,17 @@ internal unsafe readonly struct NativeEngineApi
             result == No ? UnsavedWorldChoice.DontSave : UnsavedWorldChoice.Cancel;
     }
 
+    /// <summary>Confirms an irreversible editor operation. Any dismissal resolves to the safe
+    /// answer, so closing the dialog never performs the operation.</summary>
+    public static bool ConfirmDestructive(nint ownerWindow, string message)
+    {
+        const uint YesNo = 0x00000004;
+        const uint Warning = 0x00000030;
+        const uint DefaultNo = 0x00000100;
+        const int Yes = 6;
+        return MessageBoxW(ownerWindow, message, "SharpEngine", YesNo | Warning | DefaultNo) == Yes;
+    }
+
     public static void ExitMessageLoop(int exitCode = 0) => PostQuitMessage(exitCode);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

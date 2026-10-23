@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using SharpEngine.Editor;
 
 namespace SharpEngine.Assets;
 
@@ -35,7 +37,14 @@ public sealed record ContentBrowserEntry(
 /// </summary>
 public sealed class ContentManager
 {
+    /// <summary>Stable short id of this pane's delete command. It is deliberately not
+    /// prefixed: the command belongs to one browser instance, so two browsers may expose
+    /// the same id without conflicting.</summary>
+    internal const string DeleteAssetCommandId = "asset-delete";
+
     private readonly AssetRegistry _registry;
+    private readonly EditorCommandRegistry _commands;
+    private readonly EditorContextMenuRegistry _contextMenus;
     private string _search = string.Empty;
     private ContentSourceFilter _source;
     private string? _type;
@@ -45,15 +54,50 @@ public sealed class ContentManager
     private string _currentFolder = string.Empty;
     private ContentViewMode _viewMode;
 
-    public ContentManager(AssetRegistry registry)
+    public ContentManager(string paneId, AssetRegistry registry)
     {
+        PaneId = string.IsNullOrWhiteSpace(paneId)
+            ? throw new ArgumentException("A content pane id is required", nameof(paneId))
+            : paneId;
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _source = registry.ProjectRoot is null
             ? ContentSourceFilter.Engine
             : ContentSourceFilter.Project;
+        _commands = new EditorCommandRegistry(() => { });
+        _contextMenus = new EditorContextMenuRegistry(_commands, () => { });
+        RegisterCommands();
     }
 
+    /// <summary>Stable identity of this browser instance. It only namespaces the actions
+    /// this pane publishes; nothing parses it back out of an action string.</summary>
+    public string PaneId { get; }
+
+    /// <summary>Raised when this pane's own command asks to remove the selected asset. The
+    /// pane states the intent with the resolved descriptor, so the consumer needs no lookup;
+    /// performing it belongs to the editor workflow that owns the asset manifest, so the
+    /// browser never gains a second write path.</summary>
+    internal Action<AssetDescriptor>? DeleteRequested;
+
+    /// <summary>Publishes this pane's command handlers so the host can dispatch an action
+    /// string straight to the instance closure that already captured its own state.</summary>
+    internal void PublishCommands(Action<string, Func<EditorCommandContext, bool>> Publish)
+    {
+        ArgumentNullException.ThrowIfNull(Publish);
+        foreach (var Command in _commands.OrderedCommands())
+        {
+            var CommandId = Command.Id;
+            Publish(CommandAction(CommandId), Context => TryExecuteCommand(CommandId, Context));
+        }
+    }
+
+    /// <summary>Action string this pane publishes for one of its own commands. It is unique
+    /// per instance so two browsers never collide, and opaque to the dispatcher.</summary>
+    internal string CommandAction(string CommandId) =>
+        $"editor.content-command:{PaneId}:{CommandId}";
+
     public AssetRegistry Registry => _registry;
+    public IReadOnlyList<EditorCommand> Commands => _commands.Commands;
+    public IReadOnlyList<EditorContextMenuItem> ContextItems => _contextMenus.Items;
     public string SearchText => _search;
     public ContentSourceFilter SourceFilter => _source;
     public string? TypeFilter => _type;
@@ -96,6 +140,101 @@ public sealed class ContentManager
         .ToArray();
 
     public void SetSearch(string? value) => _search = value?.Trim() ?? string.Empty;
+
+    /// <summary>Commands belong to this browser, not to the global editor registry: they are
+    /// evaluated against this pane's selection, so they must not be shared with another pane
+    /// or leak into menus that have no browser context.</summary>
+    private void RegisterCommands()
+    {
+        _commands.Register(new EditorCommand(DeleteAssetCommandId, "Delete Asset",
+            _ => RequestDeleteSelected(),
+            Context => Context.SelectedAsset is
+                { Source: AssetSource.Project, OwnerId: null, ReadOnly: false } &&
+                Context.PlayState == EditorPlayState.Stopped,
+            "Remove the asset's manifest entry and its source file"));
+        _contextMenus.RegisterCategory(new EditorContextMenuCategory(
+            EditorContextMenuKind.Asset, "asset", 100));
+        _contextMenus.RegisterItem(new EditorContextMenuItem(
+            EditorContextMenuKind.Asset, "asset", DeleteAssetCommandId, 100));
+    }
+
+    private void RequestDeleteSelected()
+    {
+        if (SelectedAsset is not { } Asset)
+        {
+            return;
+        }
+        DeleteRequested?.Invoke(Asset);
+    }
+
+    /// <summary>Renders this pane's own context menu entries for one lifecycle kind. A pane
+    /// owns both its commands and the markup that exposes them, so no host-side table has to
+    /// describe what a content browser can do.</summary>
+    internal void AppendContextMenu(EditorContextMenuKind Kind, StringBuilder Markup,
+        EditorCommandContext Context)
+    {
+        var Wrote = false;
+        foreach (var Category in _contextMenus.OrderedCategories(Kind))
+        {
+            var Active = _contextMenus.OrderedItems(Kind, Category.Id)
+                .Select(Item => _commands.TryGet(Item.CommandId, out var Command) ? Command : null)
+                .Where(Command => Command is not null)
+                .Cast<EditorCommand>()
+                .ToArray();
+            if (Active.Length == 0)
+            {
+                continue;
+            }
+            if (Wrote)
+            {
+                Markup.Append("<div class=\"menu-divider\" />");
+            }
+            foreach (var Command in Active)
+            {
+                AppendCommandItem(Markup, Command, Kind, Category.Id, Context);
+            }
+            Wrote = true;
+        }
+    }
+
+    private void AppendCommandItem(StringBuilder Markup, EditorCommand Command,
+        EditorContextMenuKind Kind, string CategoryId, EditorCommandContext Context)
+    {
+        var Enabled = _commands.CanExecute(Command, Context);
+        var SurfaceId = $"context-{Kind.ToString().ToLowerInvariant()}-category-{CategoryId}";
+        Markup.Append("<button id=\"").Append(System.Net.WebUtility.HtmlEncode(SurfaceId))
+            .Append("-command-").Append(System.Net.WebUtility.HtmlEncode(Command.Id))
+            .Append("\" class=\"menu-command")
+            .Append(Enabled ? "\"" : " disabled\" disabled=\"true\"")
+            .Append(" data-action=\"")
+            .Append(System.Net.WebUtility.HtmlEncode(CommandAction(Command.Id))).Append('"');
+        if (Command.Tooltip is not null)
+        {
+            Markup.Append(" title=\"")
+                .Append(System.Net.WebUtility.HtmlEncode(Command.Tooltip)).Append('"');
+        }
+        Markup.Append("><span class=\"menu-check\"></span><span>")
+            .Append(System.Net.WebUtility.HtmlEncode(Command.Label)).Append("</span></button>");
+    }
+
+    /// <summary>Runs one of this pane's commands. Enablement is re-evaluated here so a stale
+    /// menu cannot execute a command the current selection no longer permits.</summary>
+    internal bool TryExecuteCommand(string CommandId, EditorCommandContext Context)
+    {
+        if (!_commands.TryGet(CommandId, out var Command))
+        {
+            return false;
+        }
+        if (!_commands.CanExecute(Command, Context))
+        {
+            return false;
+        }
+        Command.Execute(Context);
+        return true;
+    }
+
+    internal bool CanExecuteCommand(string CommandId, EditorCommandContext Context) =>
+        _commands.TryGet(CommandId, out var Command) && _commands.CanExecute(Command, Context);
 
     public void SetSource(ContentSourceFilter source)
     {

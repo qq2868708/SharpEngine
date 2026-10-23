@@ -226,8 +226,15 @@ public sealed record EditorContextMenuItem
 public sealed class EditorCommandContext
 {
     private readonly EditorRuntime _runtime;
+    private readonly ContentManager? _contentPane;
 
     internal EditorCommandContext(EditorRuntime runtime) => _runtime = runtime;
+
+    /// <summary>Context scoped to one content browser. Only the selection is resolved from
+    /// that pane; every other member still reports the editor, so a pane command can read
+    /// its own selection without becoming a second view of global editor state.</summary>
+    internal EditorCommandContext(EditorRuntime runtime, ContentManager contentPane)
+        : this(runtime) => _contentPane = contentPane;
 
     public EditorRuntime Runtime => _runtime;
     public WorldDocument? World => _runtime.World;
@@ -235,7 +242,7 @@ public sealed class EditorCommandContext
     public EditorSelection Selection => _runtime.Selection;
     public WorldEntity? SelectedEntity => _runtime.SelectedEntity;
     public string? SelectedEntityId => _runtime.SelectedEntityId;
-    public AssetDescriptor? SelectedAsset => _runtime.SelectedAsset;
+    public AssetDescriptor? SelectedAsset => _contentPane?.SelectedAsset ?? _runtime.SelectedAsset;
     public string? SelectedFolderPath => _runtime.SelectedFolderPath;
     public EditorPlayState PlayState => _runtime.PlayState;
     public bool TransformSnapEnabled

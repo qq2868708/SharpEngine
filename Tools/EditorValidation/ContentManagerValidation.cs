@@ -65,5 +65,66 @@ internal static class ContentManagerValidation
             coordinator.Active.SelectedId == "project://worlds/main" &&
             runtime.DescribeEditorJson().Contains("float.content", StringComparison.Ordinal),
             "External browse must reopen manager 1 when every manager is closed");
+
+        // Pane commands are owned and scoped by each browser instance.
+        foreach (var pane in EditorPaneIds.ContentManagers)
+        {
+            var manager = coordinator.Get(pane);
+            require(manager.Commands.Count == 1 &&
+                manager.Commands[0].Id == ContentManager.DeleteAssetCommandId &&
+                manager.ContextItems.Count == 1 &&
+                manager.ContextItems[0].CommandId == ContentManager.DeleteAssetCommandId,
+                $"Content pane {pane} must own its own command and context item");
+        }
+        require(!ReferenceEquals(coordinator.Get("content").Commands[0],
+                coordinator.Get("content-2").Commands[0]),
+            "Two content panes must not share one command instance");
+        require(runtime.Commands.Commands.All(command =>
+                command.Id != ContentManager.DeleteAssetCommandId),
+            "Pane commands must stay out of the global editor command registry");
+
+        // A pane publishes its own action; the host dispatches it without parsing the key.
+        var manifestPath = Path.Combine(projectRoot, "Content", "Assets", "assets.json");
+        var deletablePath = Path.Combine(projectRoot, "Content", "Assets", "Materials",
+            "DeleteMe.material.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(deletablePath)!);
+        File.WriteAllText(deletablePath,
+            """{"schemaVersion":1,"name":"Delete Me","shader":"Standard","baseColor":[1,0,0,1],"metallic":0,"roughness":1}""");
+        var manifest = System.Text.Json.Nodes.JsonNode.Parse(
+            File.ReadAllText(manifestPath))!.AsObject();
+        manifest["assets"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject
+        {
+            ["id"] = "materials/delete-me",
+            ["type"] = "Material",
+            ["path"] = "Content/Assets/Materials/DeleteMe.material.json",
+        });
+        File.WriteAllText(manifestPath, manifest.ToJsonString(
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        runtime.ReloadAssetRegistry();
+        // Reloading replaces the browser aggregate; re-acquire the pane that owns the
+        // refreshed registry before dispatching its command.
+        coordinator = runtime.ContentManagers!;
+        var BrowsePane = coordinator.Get("content");
+        runtime.InvokeUiAction("editor.content.source:content:project");
+        BrowsePane.Select("project://materials/delete-me");
+        require(BrowsePane.SelectedId == "project://materials/delete-me",
+            "The pane must hold its own selection before its command runs");
+        // Engine-owned assets are not deletable, and the pane decides that locally.
+        runtime.InvokeUiAction("editor.content.source:content:engine");
+        BrowsePane.Select("engine://meshes/cube");
+        var engineAction = BrowsePane.CommandAction(ContentManager.DeleteAssetCommandId);
+        runtime.InvokeUiAction(engineAction);
+        require(runtime.Assets!.Find("engine://meshes/cube") is not null,
+            "A pane command must not delete an engine-owned asset");
+        runtime.InvokeUiAction("editor.content.source:content:project");
+        BrowsePane.Select("project://materials/delete-me");
+        runtime.InvokeUiAction(BrowsePane.CommandAction(ContentManager.DeleteAssetCommandId));
+        require(runtime.Assets!.Find("project://materials/delete-me") is null,
+            "A dispatched pane command must remove the registry entry");
+        require(!File.Exists(deletablePath),
+            "A dispatched pane command must remove the source file");
+        require(!File.ReadAllText(manifestPath).Contains("materials/delete-me",
+                StringComparison.Ordinal),
+            "A dispatched pane command must remove the manifest entry");
     }
 }
