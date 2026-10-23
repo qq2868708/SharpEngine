@@ -73,10 +73,9 @@ public sealed class EditorCustomBarContext
         var Markup = new StringBuilder("<button class=\"")
             .Append(Escape(Classes))
             .Append(Checked ? " checked" : string.Empty)
-            .Append(Enabled ? "\"" : " disabled\" disabled=\"true\"")
-            .Append(" data-action=\"editor.command:")
-            .Append(Escape(Command.Id))
-            .Append("\" title=\"")
+            .AppendAvailability(Enabled)
+            .AppendAction("editor.command:" + Command.Id, Enabled)
+            .Append(" title=\"")
             .Append(Escape(Tooltip ?? Command.Tooltip ?? ResolvedLabel))
             .Append("\">");
         if (Icon is not null)

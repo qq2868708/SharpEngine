@@ -211,9 +211,14 @@ internal static unsafe class EditorExtensionValidation
                 "An unchanged command state must preserve the existing native UI controls");
             module.Enabled = false;
             runtime.Update(0);
+            // A disabled control has no data-action by contract, so it is located by its
+            // stable id and asserted to expose neither an action nor a clickable state.
             require(Toolbar().Descendants("button").Single(element =>
-                    (string?)element.Attribute("data-action") == "editor.command:validation.reset")
-                .Attribute("disabled") is not null,
+                    (string?)element.Attribute("id") == "toolbar-tool-validation.reset")
+                .Attribute("disabled") is not null &&
+                Toolbar().Descendants("button").Single(element =>
+                    (string?)element.Attribute("id") == "toolbar-tool-validation.reset")
+                .Attribute("data-action") is null,
                 "CanExecute must react to project C# state without a UI action");
             runtime.InvokeUiAction("editor.command:validation.reset");
             require(module.Calls == 0, "Disabled commands must also reject programmatic actions");
@@ -222,7 +227,7 @@ internal static unsafe class EditorExtensionValidation
             runtime.InvokeUiAction("editor.select-scene");
             runtime.Update(0);
             require(Toolbar().Descendants("button").Single(element =>
-                    (string?)element.Attribute("data-action") == "editor.command:validation.reset")
+                    (string?)element.Attribute("id") == "toolbar-tool-validation.reset")
                 .Attribute("disabled") is not null,
                 "Clearing selection must disable a selection-dependent command");
             runtime.InvokeUiAction("editor.select-entity:player");

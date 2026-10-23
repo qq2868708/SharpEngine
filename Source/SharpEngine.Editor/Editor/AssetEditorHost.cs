@@ -418,9 +418,9 @@ internal sealed class AssetEditorHost : IDisposable
         foreach (var Item in Items)
         {
             Markup.Append("<button class=\"menu-command")
-                .Append(Item.Enabled ? "\"" : " disabled\" disabled=\"true\"")
-                .Append(" data-action=\"").Append(WebUtility.HtmlEncode(Item.Action))
-                .Append("\"><span>").Append(WebUtility.HtmlEncode(Item.Label))
+                .AppendAvailability(Item.Enabled)
+                .AppendAction(Item.Action, Item.Enabled)
+                .Append("><span>").Append(WebUtility.HtmlEncode(Item.Label))
                 .Append("</span></button>");
         }
         Markup.Append("</div></div>");
@@ -445,9 +445,9 @@ internal sealed class AssetEditorHost : IDisposable
         string Label, string? Icon, bool Enabled, string Tooltip)
     {
         Markup.Append("<button class=\"toolbar-button")
-            .Append(Enabled ? "\"" : " disabled\" disabled=\"true\"")
-            .Append(" data-action=\"").Append(WebUtility.HtmlEncode(Action))
-            .Append("\" title=\"").Append(WebUtility.HtmlEncode(Tooltip)).Append("\">");
+            .AppendAvailability(Enabled)
+            .AppendAction(Action, Enabled)
+            .Append(" title=\"").Append(WebUtility.HtmlEncode(Tooltip)).Append("\">");
         if (Icon is not null)
         {
             Markup.Append("<img class=\"icon\" src=\"")

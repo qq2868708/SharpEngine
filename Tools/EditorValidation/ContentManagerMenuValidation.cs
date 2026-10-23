@@ -49,9 +49,13 @@ internal static unsafe class ContentManagerMenuValidation
             }
             string Command(string Id, string Host = "main")
             {
-                return Menu(Host).Descendants("button").Single(Button =>
-                    (string?)Button.Attribute("id") == "context-command-" + Id)
-                    .Attribute("data-action")!.Value;
+                var Button = Menu(Host).Descendants("button").Single(Item =>
+                    (string?)Item.Attribute("id") == "context-command-" + Id);
+                // A disabled entry carries no action by contract: availability removes
+                // dispatchability instead of only greying the entry out.
+                return Button.Attribute("data-action")?.Value ??
+                    throw new InvalidOperationException(
+                        $"Command '{Id}' is disabled and must not expose an action");
             }
             void Request(string Kind, string Source, string Target, string Pane = "content", string Host = "main")
             {
@@ -304,8 +308,10 @@ internal static unsafe class ContentManagerMenuValidation
             Items.Clear();
             var Layout = XElement.Parse(Ui.BuildLayout(new UiLayoutContext(100, 100)));
             Check(Layout.Descendants("button").Single().Value.Contains("<Label & text>") &&
-                Layout.Descendants("button").Single().Attribute("disabled") is not null,
-                "Generic menu rendering escapes labels and snapshots definitions without World dependencies");
+                Layout.Descendants("button").Single().Attribute("disabled") is not null &&
+                Layout.Descendants("button").Single().Attribute("data-action") is null,
+                "Generic menu rendering escapes labels, snapshots definitions without World " +
+                "dependencies, and gives a disabled entry no action to dispatch");
             Runtime.InvokeUiAction("editor.play");
             Runtime.Shutdown();
             Check(Runtime.ContextMenuRouter.Describe()["scopes"]!.AsArray().Count == 0,

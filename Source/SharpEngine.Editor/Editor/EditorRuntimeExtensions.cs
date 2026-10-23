@@ -335,9 +335,9 @@ public sealed partial class EditorRuntime
         var popupId = $"toolbar-popup-{tool.Id}";
         markup.Append("<div class=\"toolbar-tool\"><button id=\"toolbar-tool-")
             .Append(Escape(tool.Id)).Append("\" class=\"toolbar-button")
-            .Append(enabled ? "\"" : " disabled\" disabled=\"true\"");
+            .AppendAvailability(enabled);
         if (commands.Length == 1)
-            markup.Append(" data-action=\"editor.command:").Append(Escape(commands[0].Id)).Append("\"");
+            markup.AppendAction("editor.command:" + commands[0].Id, enabled);
         else
             markup.Append(" data-popup-id=\"").Append(Escape(popupId)).Append("\"");
         markup.Append(" title=\"").Append(Escape(tool.Tooltip ?? label)).Append("\">");
@@ -418,8 +418,8 @@ public sealed partial class EditorRuntime
         markup.Append("<button id=\"").Append(Escape(surfaceId))
             .Append("-command-").Append(Escape(command.Id))
             .Append("\" class=\"menu-command")
-            .Append(enabled ? "\"" : " disabled\" disabled=\"true\"")
-            .Append(" data-action=\"editor.command:").Append(Escape(command.Id)).Append("\"");
+            .AppendAvailability(enabled)
+            .AppendAction("editor.command:" + command.Id, enabled);
         if (command.Tooltip is not null)
             markup.Append(" title=\"").Append(Escape(command.Tooltip)).Append("\"");
         markup.Append("><span class=\"menu-check\">");
