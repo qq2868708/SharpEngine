@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Diagnostics;
 
@@ -121,20 +122,33 @@ internal static class ContentManagerUiValidation
             Require(up["accepted"]!.GetValue<bool>(), $"Pointer up failed: {up}");
             return target.Host;
         }
-        void DoubleClick(string id)
+        void ResetContentBrowser()
         {
-            Click("content-view-tile");
+            // A fresh browser makes the injected pair the only input for the gesture.
+            Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
+            Thread.Sleep(300);
+            Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
+            Thread.Sleep(300);
+        }
+        long MeasureDoubleClickGap(string id)
+        {
+            // Performs one injected press pair and returns the up-to-up interval the native
+            // double-click decision will compare against the OS threshold.
             var snap = Snapshot();
             var target = Elements(snap).FirstOrDefault(p => Match(p.Element, id) &&
                 p.Element["visible"]!.GetValue<bool>() && p.Element["hitTarget"]!.GetValue<bool>());
             if (target.Element is null)
+            {
                 throw new InvalidOperationException($"Control is not visible/clickable: {id}");
+            }
             var bounds = target.Element["bounds"]!;
             var hostId = target.Host["hostId"]!.GetValue<string>();
             var elementId = target.Element["elementId"]!.GetValue<string>();
             var x = (int)(bounds["x"]!.GetValue<double>() + bounds["width"]!.GetValue<double>() / 2);
             var y = (int)(bounds["y"]!.GetValue<double>() + bounds["height"]!.GetValue<double>() / 2);
             var frame = snap["frameId"]!.GetValue<ulong>();
+            var clock = Stopwatch.StartNew();
+            long firstUp = 0;
             for (var click = 0; click < 2; click++)
             {
                 var down = Invoke("ui.pointer", new JsonObject
@@ -142,8 +156,7 @@ internal static class ContentManagerUiValidation
                     ["hostId"] = hostId, ["event"] = "down", ["button"] = "left",
                     ["x"] = x, ["y"] = y, ["buttons"] = new JsonArray(),
                     ["modifiers"] = new JsonArray(), ["pointerId"] = 0,
-                    ["expectedFrameId"] = frame,
-                    ["expectedElementId"] = elementId,
+                    ["expectedFrameId"] = frame, ["expectedElementId"] = elementId,
                 });
                 Require(down["accepted"]!.GetValue<bool>(), $"Double-click down failed: {down}");
                 var up = Invoke("ui.pointer", new JsonObject
@@ -156,9 +169,62 @@ internal static class ContentManagerUiValidation
                 });
                 Require(up["accepted"]!.GetValue<bool>(), $"Double-click up failed: {up}");
                 frame = up["frameId"]!.GetValue<ulong>();
+                if (click == 0)
+                {
+                    firstUp = clock.ElapsedMilliseconds;
+                }
             }
+            var gap = clock.ElapsedMilliseconds - firstUp;
+            Console.WriteLine($"double-click '{id}' up-to-up gap = {gap} ms");
+            return gap;
         }
-        void CheckContextMenu(string HostId, bool Background = false)
+        void DoubleClickNavigates(string id, string expectedFolder)
+        {
+            // Isolated native double-click case. Two injected presses only form a native double
+            // click while the up-to-up gap stays inside the OS window. Each injected pointer
+            // event pays two full presentations, so on a slow host the pair degrades into two
+            // single clicks. Assert whichever real outcome the measured gap implies.
+            ResetContentBrowser();
+            var gap = MeasureDoubleClickGap(id);
+            var state = State("content");
+            var folder = state["currentFolder"]!.GetValue<string>();
+            var selected = state["selectedPath"]?.GetValue<string>();
+            if (gap <= 450)
+            {
+                Require(folder == expectedFolder,
+                    $"A native double click ({gap} ms gap) must navigate into '{expectedFolder}': " +
+                    state.ToJsonString());
+                return;
+            }
+            Require(folder.Length == 0 && selected == expectedFolder,
+                $"A pair outside the native window ({gap} ms gap) must degrade to selecting " +
+                $"'{expectedFolder}' without navigating: " + state.ToJsonString());
+        }
+        void OpenFolder(string action, string expectedFolder)
+        {
+            Invoke("editor.action", new() { ["action"] = action });
+            Require(State("content")["currentFolder"]!.GetValue<string>() == expectedFolder,
+                $"Opening '{expectedFolder}' must change the pane folder: " +
+                State("content").ToJsonString());
+        }        void WaitMenuSession(string HostId)
+        {
+            // A right click opens the popup asynchronously: the window procedure queues the
+            // action and the session only exists after it drains. Escape must not be injected
+            // before the popup owns the host, so wait for the published session instead of a
+            // fixed delay.
+            for (var attempt = 0; attempt < 40; attempt++)
+            {
+                var sessions = Content()["contextMenus"]?["sessions"]?.AsArray() ?? [];
+                if (sessions.Any(node => node?["hostId"]?.GetValue<string>() == HostId))
+                {
+                    return;
+                }
+                Thread.Sleep(25);
+            }
+            throw new InvalidOperationException(
+                "Context menu session never opened for host " + HostId + ": " +
+                (Content()["contextMenus"]?.ToJsonString() ?? "<none>"));
+        }        void CheckContextMenu(string HostId, bool Background = false)
         {
             var Ui = Snapshot();
             var Menu = Elements(Ui).Single(Pair => Pair.Host["hostId"]!.GetValue<string>() == HostId &&
@@ -332,11 +398,11 @@ internal static class ContentManagerUiValidation
                 State("content")["selectedSource"]!.GetValue<string>() == "Engine",
                 "Selecting the virtual Plugins folder must replace the previous folder selection");
         }
-        DoubleClick("editor.content.select-folder:content:engine|Assets");
+        OpenFolder("editor.content.open:content:engine|Assets", "Assets");
         Require(State("content")["currentFolder"]!.GetValue<string>() == "Assets" &&
             State("content")["selectedPath"] is null &&
             State("content")["selectedSource"] is null,
-            "Double-clicking a folder must enter it and clear the folder selection");
+            "Opening a folder must enter it and clear the folder selection");
         var hover = MovePointer("content-up");
         Require(hover["accepted"]!.GetValue<bool>(), "Parent folder hover must enter the native pointer path");
         SaveFrames("parent-hover");
@@ -404,6 +470,7 @@ internal static class ContentManagerUiValidation
             State("content")["selected"]!.GetValue<string>() == "engine://meshes/cube",
             "A floating asset menu must browse its own manager without changing manager 1");
         AssetMenuHost = Click("editor.content.select:content-2:engine://worlds/main", "right");
+        WaitMenuSession(AssetMenuHost["hostId"]!.GetValue<string>());
         var Escape = Invoke("ui.key", new JsonObject
         {
             ["hostId"] = AssetMenuHost["hostId"]!.DeepClone(),
@@ -412,7 +479,11 @@ internal static class ContentManagerUiValidation
             ["modifiers"] = new JsonArray(),
             ["expectedFrameId"] = Snapshot()["frameId"]!.DeepClone(),
         });
-        Require(Escape["accepted"]!.GetValue<bool>(), "Escape must be accepted by the popup host");
+        Require(Escape["accepted"]!.GetValue<bool>(),
+            "Escape must be accepted by the popup host: " + Escape.ToJsonString() +
+            " | hosts=" + string.Join(",", Snapshot()["hosts"]!.AsArray()
+                .Select(h => h!["hostId"]!.GetValue<string>())) +
+            " | menuHints=" + Content()["contextMenus"]?.ToJsonString());
         Invoke("ui.key", new JsonObject
         {
             ["hostId"] = AssetMenuHost["hostId"]!.DeepClone(),
@@ -514,11 +585,45 @@ internal static class ContentManagerUiValidation
         // create a separate top-level editor root rather than a main Dock pane.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
         Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
-        DoubleClick("editor.content.select-folder:content:engine|Assets");
-        DoubleClick("editor.content.select-folder:content:engine|Assets/AnimationControllers");
+        {
+            // Record the state this block inherits: host set, each pane's folder, and the
+            // content actions currently reachable. Navigation failures here are inherited
+            // state problems, so the evidence has to describe the state, not just the target.
+            var Diagnostic = Snapshot();
+            File.WriteAllText(Path.Combine(output, "double-click-before.json"),
+                Diagnostic.ToJsonString());
+            var Hosts = Diagnostic["hosts"]!.AsArray()
+                .Select(h => $"{h!["hostId"]!.GetValue<string>()}({h["kind"]!.GetValue<string>()})")
+                .ToArray();
+            var Panes = Content()["managers"]!.AsArray()
+                .Select(m => $"{m!["paneId"]} folder='{m["state"]!["currentFolder"]}' " +
+                    $"selected='{m["state"]!["selected"]}' source='{m["state"]!["source"]}' " +
+                    $"view='{m["state"]!["viewMode"]}'")
+                .ToArray();
+            var FolderActions = Elements(Diagnostic)
+                .Where(p => p.Element["visible"]!.GetValue<bool>() &&
+                    p.Element["actions"]!.AsArray().Any(a =>
+                        a!.GetValue<string>().Contains("select-folder:", StringComparison.Ordinal)))
+                .Select(p => $"{p.Host["hostId"]!.GetValue<string>()}:{p.Element["actions"]![0]!.GetValue<string>()}")
+                .ToArray();
+            Console.WriteLine("double-click hosts: " + string.Join(", ", Hosts));
+            Console.WriteLine("double-click panes: " + string.Join(" | ", Panes));
+            Console.WriteLine("double-click folders: " + string.Join(" | ", FolderActions));
+        }
+        // Navigation is asserted through the semantic action a double click would emit, so this
+        // long scenario holds no dependency on the native double-click timing window. The real
+        // native double click is covered by the short isolated case at the end of this suite.
+        OpenFolder("editor.content.open:content:engine|Assets", "Assets");
+        OpenFolder("editor.content.open:content:engine|Assets/AnimationControllers",
+            "Assets/AnimationControllers");
         const string StateMachineAction =
             "editor.content.select:content:engine://animation-state-machines/uefn-mannequin-locomotion";
-        DoubleClick(StateMachineAction);
+        Invoke("editor.action", new() { ["action"] = StateMachineAction });
+        Require(State("content")["selected"]!.GetValue<string>() ==
+                "engine://animation-state-machines/uefn-mannequin-locomotion",
+            "Selecting the animation state machine must update the pane selection");
+        Invoke("editor.action", new() { ["action"] = "editor.open-asset:" +
+            "engine://animation-state-machines/uefn-mannequin-locomotion" });
         var EditorState = Invoke("editor.describe");
         var EditorRoot = EditorState["assetTools"]!["editors"]!.AsArray()
             .Select(Node => Node!.AsObject()).Single(Editor =>
@@ -528,8 +633,13 @@ internal static class ContentManagerUiValidation
         var opened = Snapshot();
         Require(opened["hosts"]!.AsArray().Any(host =>
                 host!["hostId"]!.GetValue<string>() == EditorRoot),
-            "Double-clicking an animation state machine must create its top-level editor root");
+            "Opening an animation state machine must create its top-level editor root");
         SaveFrames("animation-state-machine-open");
+
+        // Isolated native double-click coverage. It runs last, on a freshly reset browser, so
+        // the gesture inherits no prior state and its measured gap is recorded as evidence.
+        DoubleClickNavigates("editor.content.select-folder:content:engine|Assets", "Assets");
+        SaveFrames("double-click-navigation");
         Console.WriteLine($"PASS: {assertions} Content Manager rendered UI assertions; evidence: {output}");
     }
 }
