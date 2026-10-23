@@ -32,15 +32,21 @@ public sealed class UiMenu : IUiLayoutPart
             {
                 var Button = new XElement("button",
                     new XAttribute("id", Item.Id),
-                    new XAttribute("class", "menu-command"),
-                    new XAttribute("data-action", Item.Action),
-                    new XElement("span", new XAttribute("class", "menu-check"),
-                        Item.Checked is null ? "" : Item.Checked.Value ? "[x]" : "[ ]"),
-                    new XElement("span", Item.Label));
-                if (!Item.Enabled)
+                    new XAttribute("class", "menu-command"));
+                // A disabled entry must not carry an action: the native dispatcher emits the
+                // element's action regardless of the disabled attribute, so leaving it in place
+                // lets a greyed item execute and report a misleading unavailable state.
+                if (Item.Enabled)
+                {
+                    Button.SetAttributeValue("data-action", Item.Action);
+                }
+                else
                 {
                     Button.SetAttributeValue("disabled", "true");
                 }
+                Button.Add(new XElement("span", new XAttribute("class", "menu-check"),
+                    Item.Checked is null ? "" : Item.Checked.Value ? "[x]" : "[ ]"),
+                    new XElement("span", Item.Label));
                 if (Item.Tooltip is not null)
                 {
                     Button.SetAttributeValue("title", Item.Tooltip);
