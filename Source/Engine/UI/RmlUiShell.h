@@ -31,6 +31,10 @@ public:
     bool DestroyEditorWindow(std::string_view rootId);
     bool SetHostMarkup(std::string_view hostId, const char* elementId,
                        const char* markup);
+    // Updates one RCSS property on an element of a specific host without replacing
+    // markup, so a live design gesture keeps the native element identity it captured.
+    bool SetHostUiProperty(std::string_view hostId, const char* elementId,
+                           const char* name, const char* value);
     HWND GetHostWindow(std::string_view hostId) const;
     bool CaptureScreenshot(const std::filesystem::path& path);
     std::string DescribeUi(uint64_t layoutRevision, uint64_t documentRevision,

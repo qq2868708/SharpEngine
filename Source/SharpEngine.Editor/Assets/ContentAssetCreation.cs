@@ -38,7 +38,8 @@ internal sealed class ContentAssetCreation(AssetRegistry Assets, string Manifest
             new("World", "World", "Basic Assets", ".sworld", "SharpEngine.WorldJson"),
             new("Prefab", "Prefab", "Basic Assets", ".sprefab", "SharpEngine.PrefabJson"),
             new("Material", "Material", "Basic Assets", ".smaterial", "SharpEngine.MaterialJson"),
-            new("RmlDocument", "UI Document", "User Interface", ".rml", "RmlUi.Document"),
+            new("UiDocument", "UI Screen", "User Interface", ".sui", "SharpEngine.UiDocumentJson"),
+            new("RmlDocument", "RML Document", "User Interface", ".rml", "RmlUi.Document"),
             new("StyleSheet", "Style Sheet", "User Interface", ".rcss", "RmlUi.StyleSheet"),
             new("InputAction", "Input Action", "Input", ".sinputaction", "SharpEngine.InputActionJson"),
             new("InputMappingContext", "Input Mapping Context", "Input", ".sinputmappingcontext", "SharpEngine.InputMappingContextJson"),
@@ -225,6 +226,12 @@ internal sealed class ContentAssetCreation(AssetRegistry Assets, string Manifest
                 Scene.CreateEntity(Components, "Root");
             }
             return Scene.Serialize();
+        }
+        if (Type == "UiDocument")
+        {
+            var Title = System.Net.WebUtility.HtmlEncode(Name);
+            var Rml = $"<rml><head><title>{Title}</title><style>body {{ background-color: #20252c; color: #e0e6ef; font-family: Segoe UI; }}</style></head><body><div id=\"root\"></div></body></rml>";
+            return UiDocumentAsset.Create(Name, Rml).Serialize() + Environment.NewLine;
         }
         if (Type == "RmlDocument")
         {

@@ -35,7 +35,7 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
     public WorldDocument World { get; private set; } = null!;
 
     public GameSession(string engineRoot, string manifestPath,
-        params Assembly[] engineModuleAssemblies)
+        IUiScreenHost? screenHost, params Assembly[] engineModuleAssemblies)
     {
         if (string.IsNullOrWhiteSpace(manifestPath))
             throw new InvalidDataException("GAME_PROJECT_REQUIRED: Game requires --project <file.sharpproject>");
@@ -55,6 +55,9 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
         Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifestPath);
         Assets = AssetRegistry.Load(engineRoot, projectRoot, manifestPath);
         Input = InputRuntimeService.Load(Assets);
+        // Project Modules choose the visible screen; bind the native presentation and
+        // asset source before any Module starts so ModuleContext.Ui is usable.
+        Ui.AttachScreenHost(screenHost, Assets);
         try
         {
             Instance = new RuntimeInstance(Assets, SubsystemLifetime, Input, "game");
@@ -97,6 +100,21 @@ internal sealed class GameSession : IComponentRuntime, ISubsystemRuntime, IDispo
         SubsystemLifetime.Update(Seconds);
         Instance!.Tick(Seconds);
         World.ApplyRuntimeFrame(RuntimeWorld!.Frame);
+    }
+
+    /// <summary>Routes one native UI action (for example a click on a composed screen
+    /// part) to the runtime UI. Runs on the engine thread during the frame's UI update.</summary>
+    public bool HandleScreenAction(string Action)
+    {
+        try
+        {
+            return Ui.HandleScreenAction(Action);
+        }
+        catch (Exception Error)
+        {
+            SharpLog.Error("Game", $"UI action '{Action}' failed", Error);
+            return false;
+        }
     }
 
     public void Dispose()

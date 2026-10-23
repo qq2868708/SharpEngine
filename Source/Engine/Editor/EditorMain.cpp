@@ -134,6 +134,12 @@ namespace
         return GUi && hostId && id && markup &&
             GUi->SetHostMarkup(hostId,id,markup) ? 1 : 0;
     }
+    uint8_t __cdecl SetHostUiProperty(const char* hostId, const char* id,
+                                      const char* name, const char* value)
+    {
+        return GUi && hostId && id && name && value &&
+            GUi->SetHostUiProperty(hostId,id,name,value) ? 1 : 0;
+    }
     uint8_t __cdecl GetViewportRect(float* x,float* y,float* w,float* h)
     {
         UiViewportRect r{};
@@ -428,6 +434,7 @@ int wmain(int argc,wchar_t** argv)
     api.GetRenderStats = GetRenderStats;
     api.SetGameplayInputCapture = SetGameplayInputCapture;
     api.GetGameplayInputCapture = GetGameplayInputCapture;
+    api.SetHostUiProperty = SetHostUiProperty;
     Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
     const auto ManagedDirectory = BrowserMode ? executableDirectory.parent_path() / L"Tools" : executableDirectory;
     const bool loaded=managed.Initialize(

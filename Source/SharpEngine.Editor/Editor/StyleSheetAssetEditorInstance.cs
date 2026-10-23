@@ -292,7 +292,10 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
         var FileName = Path.GetFileName(Context.Path);
         return Assets.Assets.Where(Candidate =>
         {
-            if (!Candidate.Type.Equals("RmlDocument", StringComparison.OrdinalIgnoreCase))
+            var IsUiDocument = Candidate.Type.Equals("UiDocument",
+                StringComparison.OrdinalIgnoreCase);
+            if (!IsUiDocument &&
+                !Candidate.Type.Equals("RmlDocument", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }

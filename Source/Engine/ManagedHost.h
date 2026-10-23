@@ -53,6 +53,16 @@ using ManagedDestroyDockWindowFn = uint8_t(__cdecl*)(const char* hostIdUtf8);
 using ManagedSetHostMarkupFn = uint8_t(__cdecl*)(const char* hostIdUtf8,
                                                   const char* elementIdUtf8,
                                                   const char* markupUtf8);
+using ManagedSetHostUiPropertyFn = uint8_t(__cdecl*)(const char* hostIdUtf8,
+                                                     const char* elementIdUtf8,
+                                                     const char* nameUtf8,
+                                                     const char* valueUtf8);
+// Runtime UI screens are chosen by game code. The managed host reads the project
+// asset, then hands the RML text and its source path to the native shell so
+// relative stylesheet links keep resolving against the authoritative file.
+using ManagedSetUiDocumentFn = uint8_t(__cdecl*)(const char* rmlUtf8,
+                                                 const char* sourcePathUtf8);
+using ManagedClearUiDocumentFn = uint8_t(__cdecl*)();
 using ManagedChooseWorldSavePathFn = uint8_t(__cdecl*)(void* ownerWindow,
                                                         const char* contentRootUtf8,
                                                         char* resultUtf8,
@@ -110,7 +120,7 @@ using ManagedGetGameplayInputCaptureFn = uint8_t(__cdecl*)();
 
 struct ManagedHostApi
 {
-    uint32_t Version = 17;
+    uint32_t Version = 19;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -159,6 +169,12 @@ struct ManagedHostApi
     // Version 17 appends foreground gameplay focus and bounded relative mouse capture.
     ManagedSetGameplayInputCaptureFn SetGameplayInputCapture = nullptr;
     ManagedGetGameplayInputCaptureFn GetGameplayInputCapture = nullptr;
+    // Version 18 appends host-scoped RCSS property updates so live design gestures
+    // can move an element without replacing the markup that owns its identity.
+    ManagedSetHostUiPropertyFn SetHostUiProperty = nullptr;
+    // Version 19 appends code-driven runtime UI screens for the Game target.
+    ManagedSetUiDocumentFn SetUiDocument = nullptr;
+    ManagedClearUiDocumentFn ClearUiDocument = nullptr;
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

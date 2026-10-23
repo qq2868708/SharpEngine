@@ -105,6 +105,18 @@ namespace
     {
         return Ui ? CopyUtf8Result(Ui->DescribeUi(layoutRevision, documentRevision), result, capacity) : 0;
     }
+    uint8_t __cdecl SetUiDocument(const char* rml, const char* sourcePath)
+    {
+        if (!Ui || !rml)
+        {
+            return 0;
+        }
+        return Ui->SetDocument(rml, sourcePath ? sourcePath : "") ? 1 : 0;
+    }
+    uint8_t __cdecl ClearUiDocument()
+    {
+        return Ui && Ui->ClearDocument() ? 1 : 0;
+    }
     uint32_t __cdecl UiPointer(const char* hostId, uint32_t event, int32_t x, int32_t y, uint32_t button, uint32_t buttons,
                                uint32_t modifiers, uint32_t pointerId, uint64_t expectedFrameId, float wheelX, float wheelY,
                                const char* expectedElementId, char* result, uint32_t capacity)
@@ -513,9 +525,22 @@ int wmain(int argc, wchar_t** argv)
     api.UiPointer = Ui ? UiPointer : nullptr;
     api.UiKey = Ui ? UiKey : nullptr;
     api.ReadUiFrame = Ui ? ReadUiFrame : nullptr;
+    api.SetUiDocument = Ui ? SetUiDocument : nullptr;
+    api.ClearUiDocument = Ui ? ClearUiDocument : nullptr;
     if (Ui)
     {
         Ui->SetPresentHandler(RenderGameFrame);
+        // Managed UI actions reuse the existing managed action entry point. The shell
+        // defers them out of event dispatch, so a recomposed document is never loaded
+        // while RmlUi is dispatching the click that requested it.
+        Ui->SetActionHandler([](const char* hostId, const char* action)
+        {
+            (void)hostId;
+            if (Managed && action)
+            {
+                Managed->InvokeUiAction(action);
+            }
+        });
     }
     if (!managed.Initialize((directory / L"SharpEngine.Host.runtimeconfig.json").wstring(),
                             (directory / L"SharpEngine.Host.dll").wstring()) ||

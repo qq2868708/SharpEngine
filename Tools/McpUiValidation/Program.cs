@@ -36,6 +36,10 @@ if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
 {
     settingsProject = DynamicUiValidation.CreateProject(root, configuration);
 }
+if (args.Contains("--ui-editor-only", StringComparer.Ordinal))
+{
+    settingsProject = UiEditorUiValidation.CreateProject(root);
+}
 if (args.Contains("--player-only", StringComparer.Ordinal))
 {
     if (string.IsNullOrWhiteSpace(settingsProject))
@@ -75,6 +79,14 @@ if (RenderValidation is not null)
 }
 var McpValidationPath = args.Contains("--mcp-only", StringComparer.Ordinal)
     ? McpUiValidation.CreateConfiguration(root) : null;
+// The Game UI mode owns its own process pair and never starts the Editor, so it
+// runs before the editor launch below.
+if (args.Contains("--game-ui-only", StringComparer.Ordinal))
+{
+    GameUiValidation.Run(root, configuration, Require);
+    Console.WriteLine($"PASS: {assertions} Game UI runtime screen assertions");
+    return;
+}
 using var editor = Start(executable, editorArguments.ToArray(), McpValidationPath);
 var editorErrors = editor.StandardError.ReadToEndAsync();
 var editorOutput = editor.StandardOutput.ReadToEndAsync();
@@ -218,6 +230,12 @@ try
     {
         TimelinePreviewValidation.Run(Require, Tool, Call);
         Console.WriteLine($"PASS: {assertions} Timeline preview integration assertions");
+        return;
+    }
+    if (args.Contains("--ui-editor-only", StringComparer.Ordinal))
+    {
+        UiEditorUiValidation.Run(root, Require, Tool, Call);
+        Console.WriteLine($"PASS: {assertions} formal UI editor rendered assertions");
         return;
     }
     if (args.Contains("--asset-editors-only", StringComparer.Ordinal))

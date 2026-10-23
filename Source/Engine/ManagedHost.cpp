@@ -453,14 +453,17 @@ bool ManagedHost::Initialize(const std::wstring& runtimeConfigPath,
         ManagedPointerDownFunction = nullptr;
     }
 
-    loadManagedFunction(L"InvokeUiAction", &ManagedInvokeUiActionFunction);
     // ViewportInput is optional so older public managed assemblies remain loadable.
     if (!loadManagedFunction(L"ViewportInput", &ManagedViewportInputFunction))
         ManagedViewportInputFunction = nullptr;
     if (!loadManagedFunction(L"ViewportKey", &ManagedViewportKeyFunction))
         ManagedViewportKeyFunction = nullptr;
 #endif
-#ifndef SHARPENGINE_SERVER
+#if !defined(SHARPENGINE_SERVER)
+    // Runtime UI screens route their semantic actions through this same entry point,
+    // so the Game target must load it too. It stays optional for older assemblies.
+    if (!loadManagedFunction(L"InvokeUiAction", &ManagedInvokeUiActionFunction))
+        ManagedInvokeUiActionFunction = nullptr;
     if (!loadManagedFunction(L"InputEvent", &ManagedInputEventFunction))
     {
         ResetRuntime();

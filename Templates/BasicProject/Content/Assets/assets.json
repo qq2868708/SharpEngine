@@ -4,10 +4,10 @@
   "assets": [
     {
       "id": "ui/main",
-      "type": "RmlDocument",
+      "type": "UiDocument",
       "name": "Main UI",
-      "path": "Content/UI/Main.rml",
-      "importer": "RmlUi.Document",
+      "path": "Content/UI/Main.sui",
+      "importer": "SharpEngine.UiDocumentJson",
       "tags": ["ui"]
     },
     {

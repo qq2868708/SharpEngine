@@ -5,10 +5,14 @@ using SharpEngine.Editor.Layout;
 
 namespace SharpEngine.Editor;
 
-internal sealed class UiAssetEditorInstance : IAssetEditorInstance
+/// <summary>Formal RML UI asset editor. The authored RML source stays authoritative;
+/// selection, resolved styles, diagnostics and drag transactions are editor state.</summary>
+internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview
 {
     private readonly EditorAssetOpenContext Context;
     private readonly UiEditorDocument Document;
+    private readonly List<AssetEditorLiveProperty> PendingLiveProperties = [];
+    private bool MarkupRefreshRequested;
 
     public UiAssetEditorInstance(EditorAssetOpenContext Context)
     {
@@ -25,26 +29,35 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance
 
     public AssetDescriptor Asset => Document.Asset;
     public string EditorId => "ui-editor";
-    public string Title => Document.Asset.Name;
+    public string Title => Document.Title;
     public string PrimaryPaneId => "design";
     public bool IsDirty => Document.IsDirty;
     public bool IsReadOnly => Document.IsReadOnly;
+    public bool SuppressMarkupRefresh => Document.IsGesturing && !Document.IsReadOnly;
+
     public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; } =
     [
         new("design", "Design", false),
         new("elements", "Elements"),
         new("inspector", "Inspector"),
-        new("source", "Source"),
+        new("style", "Styles"),
         new("diagnostics", "Diagnostics"),
+        new("source", "Source"),
     ];
+
     public IReadOnlyList<AssetEditorCommandDefinition> Commands { get; } =
     [
         new("undo", "Undo", "Edit", 100, "reset", true),
         new("redo", "Redo", "Edit", 110, "reset", true),
         new("add-div", "Add Container", "Elements", 100, "add", true),
-        new("add-span", "Add Text", "Elements", 110, "add", true),
-        new("add-button", "Add Button", "Elements", 120, "add", true),
-        new("delete", "Delete Element", "Elements", 200, null, false),
+        new("add-span", "Add Text", "Elements", 110, "add"),
+        new("add-button", "Add Button", "Elements", 120, "add"),
+        new("add-input", "Add Input", "Elements", 130, "add"),
+        new("add-img", "Add Image", "Elements", 140, "add"),
+        new("duplicate", "Duplicate Element", "Elements", 200, null, true),
+        new("delete", "Delete Element", "Elements", 210, null, true),
+        new("move-up", "Move Earlier", "Elements", 300),
+        new("move-down", "Move Later", "Elements", 310),
     ];
 
     public EditorLayoutDocument CreateDefaultLayout()
@@ -66,16 +79,16 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance
                         NodeId = "ui.main",
                         Kind = DockNodeKind.Split,
                         Orientation = DockSplitOrientation.Horizontal,
-                        Ratio = 0.76f,
+                        Ratio = 0.74f,
                         First = new DockNodeState
                         {
                             NodeId = "ui.center",
                             Kind = DockNodeKind.Split,
                             Orientation = DockSplitOrientation.Vertical,
-                            Ratio = 0.72f,
+                            Ratio = 0.74f,
                             First = Tabs("ui.design", "ui.design.tabs", "design"),
-                            Second = Tabs("ui.bottom", "ui.bottom.tabs", "source",
-                                "diagnostics"),
+                            Second = Tabs("ui.bottom", "ui.bottom.tabs", "style",
+                                "diagnostics", "source"),
                         },
                         Second = Tabs("ui.inspector", "ui.inspector.tabs", "inspector"),
                     },
@@ -93,56 +106,175 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance
         {
             "undo" => !IsReadOnly && Document.CanUndo,
             "redo" => !IsReadOnly && Document.CanRedo,
-            "add-div" or "add-span" or "add-button" or "delete" => !IsReadOnly,
+            "add-div" or "add-span" or "add-button" or "add-input" or "add-img" =>
+                !IsReadOnly,
+            "duplicate" or "delete" or "move-up" or "move-down" =>
+                !IsReadOnly && Document.SelectedKey is not null,
             _ => false,
         };
     }
 
     public void ExecuteCommand(string CommandId)
     {
-        string Message;
-        var Changed = CommandId switch
+        switch (CommandId)
         {
-            "undo" => Document.Undo(),
-            "redo" => Document.Redo(),
-            "add-div" => Document.AddElement("div", out Message),
-            "add-span" => Document.AddElement("span", out Message),
-            "add-button" => Document.AddElement("button", out Message),
-            "delete" => Document.DeleteSelected(out Message),
-            _ => false,
-        };
-        if (Changed)
+            case "undo":
+                Document.Undo();
+                break;
+            case "redo":
+                Document.Redo();
+                break;
+            case "add-div":
+                Report(Document.AddElement("div", out var DivMessage), DivMessage);
+                break;
+            case "add-span":
+                Report(Document.AddElement("span", out var SpanMessage), SpanMessage);
+                break;
+            case "add-button":
+                Report(Document.AddElement("button", out var ButtonMessage), ButtonMessage);
+                break;
+            case "add-input":
+                Report(Document.AddElement("input", out var InputMessage), InputMessage);
+                break;
+            case "add-img":
+                Report(Document.AddElement("img", out var ImageMessage), ImageMessage);
+                break;
+            case "duplicate":
+                Report(Document.DuplicateSelected(out var DuplicateMessage),
+                    DuplicateMessage);
+                break;
+            case "delete":
+                Report(Document.DeleteSelected(out var DeleteMessage), DeleteMessage);
+                break;
+            case "move-up":
+                Report(Document.MoveSelected(-1, out var UpMessage), UpMessage);
+                break;
+            case "move-down":
+                Report(Document.MoveSelected(1, out var DownMessage), DownMessage);
+                break;
+            default:
+                Context.SetStatus($"Unknown UI editor command '{CommandId}'");
+                return;
+        }
+        if (!Document.IsGesturing)
         {
-            Context.SetStatus($"UI Editor · {Document.Asset.Name} · revision {Document.Revision}");
+            Context.SetStatus($"{Document.Asset.Name} / revision {Document.Revision}");
         }
     }
 
     public bool TryHandleAction(string Action)
     {
+        if (Action == "editor.ui-select-parent")
+        {
+            Document.SelectParent();
+            return true;
+        }
+        if (Action == "editor.ui-duplicate")
+        {
+            ExecuteCommand("duplicate");
+            return true;
+        }
+        if (Action == "editor.ui-move-up")
+        {
+            ExecuteCommand("move-up");
+            return true;
+        }
+        if (Action == "editor.ui-move-down")
+        {
+            ExecuteCommand("move-down");
+            return true;
+        }
+        if (Action == "editor.ui-indent")
+        {
+            Report(Document.IndentSelected(out var IndentMessage), IndentMessage);
+            return true;
+        }
+        if (Action == "editor.ui-outdent")
+        {
+            Report(Document.OutdentSelected(out var OutdentMessage), OutdentMessage);
+            return true;
+        }
+        if (Action == "editor.ui-drag-end")
+        {
+            Document.CommitGesture();
+            MarkupRefreshRequested = true;
+            Context.SetStatus(Document.IsDirty
+                ? "Element moved / unsaved changes"
+                : "Element geometry restored");
+            return true;
+        }
+        if (Action is "editor.ui-drag-cancel" or "editor.ui-drag-discard")
+        {
+            Document.CancelGesture();
+            MarkupRefreshRequested = true;
+            Context.SetStatus("Element gesture canceled");
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-drag-start:", StringComparison.Ordinal))
+        {
+            BeginGesture(Action["editor.ui-drag-start:".Length..]);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-drag:", StringComparison.Ordinal))
+        {
+            ApplyGesture(Action["editor.ui-drag:".Length..]);
+            return true;
+        }
         if (Action.StartsWith("editor.ui-select:", StringComparison.Ordinal))
         {
             Document.Select(Action["editor.ui-select:".Length..]);
             return true;
         }
+        if (Action.StartsWith("editor.ui-add:", StringComparison.Ordinal))
+        {
+            var Tag = Action["editor.ui-add:".Length..];
+            Report(Document.AddElement(Tag, out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-style-clear:", StringComparison.Ordinal))
+        {
+            var Name = Action["editor.ui-style-clear:".Length..];
+            Report(Document.RemoveStyle(Name, out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-style:", StringComparison.Ordinal))
+        {
+            ApplyStyle(Action["editor.ui-style:".Length..]);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-class-add:", StringComparison.Ordinal))
+        {
+            var Name = Uri.UnescapeDataString(Action["editor.ui-class-add:".Length..]);
+            Report(Document.AddClass(Name, out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-class-remove:", StringComparison.Ordinal))
+        {
+            var Name = Uri.UnescapeDataString(Action["editor.ui-class-remove:".Length..]);
+            Report(Document.RemoveClass(Name, out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-class-toggle:", StringComparison.Ordinal))
+        {
+            var Name = Uri.UnescapeDataString(Action["editor.ui-class-toggle:".Length..]);
+            Report(Document.ToggleClass(Name, out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-field:", StringComparison.Ordinal))
+        {
+            ApplyField(Action["editor.ui-field:".Length..]);
+            return true;
+        }
         if (Action.StartsWith("editor.ui-change:", StringComparison.Ordinal))
         {
-            var Payload = Action["editor.ui-change:".Length..];
-            var Separator = Payload.IndexOf(':');
-            if (Separator > 0 && !Document.SetField(Payload[..Separator],
-                    Payload[(Separator + 1)..], out var Message) && Message.Length != 0)
-            {
-                Context.SetStatus(Message);
-            }
+            // Documented legacy form kept for automation and saved editor state.
+            ApplyField(Action["editor.ui-change:".Length..]);
             return true;
         }
         if (Action == "editor.ui-position:flex" ||
             Action == "editor.ui-position:absolute")
         {
-            if (!Document.SetPositionMode(Action.EndsWith("absolute",
-                    StringComparison.Ordinal), out var Message) && Message.Length != 0)
-            {
-                Context.SetStatus(Message);
-            }
+            SetPositionMode(Action.EndsWith("absolute", StringComparison.Ordinal));
             return true;
         }
         if (Action == "editor.ui-delete")
@@ -150,7 +282,6 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance
             ExecuteCommand("delete");
             return true;
         }
-
         return false;
     }
 
@@ -158,11 +289,17 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance
     {
         return PaneId switch
         {
-            "design" => "<div class=\"ui-editor-canvas-shell asset-ui-design\"><div class=\"ui-canvas-rulers\"><span>SCREEN PREVIEW</span><div class=\"grow\" /><span>1280 x 720</span></div><div class=\"ui-editor-canvas-scroll\"><div class=\"ui-editor-canvas\">" + Document.BuildPreviewMarkup() + "</div></div></div>",
-            "elements" => "<div class=\"ui-panel-title\">ELEMENTS</div><div class=\"ui-element-hierarchy\">" + Document.BuildHierarchyMarkup() + "</div>",
-            "inspector" => "<div class=\"ui-panel-title\">UI INSPECTOR</div><div class=\"ui-element-inspector\">" + Document.BuildInspectorMarkup() + Document.BuildAssetSummaryMarkup() + "</div>",
-            "source" => Document.BuildSourceMarkup(),
-            "diagnostics" => "<div class=\"ui-diagnostics-pane\">" + Document.BuildDiagnosticsMarkup() + "</div>",
+            "design" => UiEditorMarkup.BuildCanvas(Document),
+            "elements" => "<div class=\"ui-panel-title\">ELEMENTS</div>" +
+                UiEditorMarkup.BuildHierarchy(Document),
+            "inspector" => "<div class=\"ui-panel-title\">UI INSPECTOR</div>" +
+                "<div id=\"uiInspectorBody\" class=\"ui-element-inspector\">" +
+                UiEditorMarkup.BuildInspector(Document) + "</div>",
+            "style" => "<div class=\"ui-panel-title\">STYLES</div>" +
+                UiEditorMarkup.BuildStylePane(Document),
+            "diagnostics" => "<div class=\"ui-panel-title\">DIAGNOSTICS</div>" +
+                UiEditorMarkup.BuildDiagnostics(Document),
+            "source" => UiEditorMarkup.BuildSource(Document),
             _ => string.Empty,
         };
     }
@@ -170,39 +307,223 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance
     public void Save()
     {
         Document.Save();
+        MarkupRefreshRequested = true;
     }
 
     public void Update(float DeltaSeconds)
     {
+        _ = DeltaSeconds;
+    }
+
+    public bool ConsumeMarkupRefreshRequest()
+    {
+        var Requested = MarkupRefreshRequested;
+        MarkupRefreshRequested = false;
+        return Requested;
+    }
+
+    public IReadOnlyList<AssetEditorLiveProperty> DrainLiveProperties()
+    {
+        if (PendingLiveProperties.Count == 0)
+        {
+            return Array.Empty<AssetEditorLiveProperty>();
+        }
+        var Result = PendingLiveProperties.ToArray();
+        PendingLiveProperties.Clear();
+        return Result;
     }
 
     public JsonObject Describe()
     {
-        return new JsonObject
-        {
-            ["schemaVersion"] = 1,
-            ["assetId"] = Asset.Id,
-            ["editorRootId"] = Context.EditorRootId,
-            ["dirty"] = IsDirty,
-            ["readOnly"] = IsReadOnly,
-            ["revision"] = Document.Revision,
-            ["selectedElement"] = Document.SelectedElementId,
-            ["viewModelContract"] = Document.ViewModelContract,
-            ["viewModelContractAvailable"] = Document.ViewModelContract.Length == 0 ||
-                Context.Runtime.UiRuntime.ViewModelContracts.Any(Contract =>
-                    Contract.Key.Equals(Document.ViewModelContract, StringComparison.Ordinal)),
-            ["diagnostics"] = new JsonArray(Document.Diagnostics.Select(Diagnostic =>
-                (JsonNode)new JsonObject
-                {
-                    ["severity"] = Diagnostic.Severity,
-                    ["code"] = Diagnostic.Code,
-                    ["message"] = Diagnostic.Message,
-                }).ToArray()),
-        };
+        var State = Document.Describe();
+        State["editorRootId"] = Context.EditorRootId;
+        State["viewModelContractAvailable"] = Document.ViewModelContract.Length == 0 ||
+            Context.Runtime.UiRuntime.ViewModelContracts.Any(Contract =>
+                Contract.Key.Equals(Document.ViewModelContract, StringComparison.Ordinal));
+        State["panes"] = new JsonArray(Panes.Select(Pane => (JsonNode)Pane.PaneId).ToArray());
+        return State;
     }
 
     public void Dispose()
     {
+        PendingLiveProperties.Clear();
+    }
+
+    private void BeginGesture(string Payload)
+    {
+        var Separator = Payload.IndexOf('|');
+        var Handle = Separator < 0 ? Payload : Payload[..Separator];
+        var NodeKey = Separator < 0 ? string.Empty : Payload[(Separator + 1)..];
+        if (NodeKey.Length != 0 && !Document.Select(NodeKey))
+        {
+            Context.SetStatus($"Unknown design node '{NodeKey}'");
+            return;
+        }
+        var Bounds = CanvasRelativeSelectionRect();
+        var Started = Document.BeginGesture(Handle, Bounds.X, Bounds.Y, Bounds.Width,
+            Bounds.Height, out var Message);
+        MarkupRefreshRequested = false;
+        if (!Started)
+        {
+            if (Message.Length != 0)
+            {
+                Context.SetStatus(Message);
+            }
+            return;
+        }
+        Context.SetStatus($"Drag <{Document.SelectedTag}>; Shift snaps to 10px, release to commit");
+    }
+
+    /// <summary>Selection bounds in design-canvas space. The document stores left/top
+    /// relative to the authored screen, so window coordinates must be rebased on the
+    /// canvas origin before they become authored offsets.</summary>
+    private (int X, int Y, int Width, int Height) CanvasRelativeSelectionRect()
+    {
+        if (!Context.TryGetElementRect(SelectedPreviewId, out var Element))
+        {
+            return (0, 0, 0, 0);
+        }
+        var OriginX = 0f;
+        var OriginY = 0f;
+        if (Context.TryGetElementRect("uiDesignCanvas", out var Canvas))
+        {
+            OriginX = Canvas.X;
+            OriginY = Canvas.Y;
+        }
+        return ((int)MathF.Round(Element.X - OriginX),
+            (int)MathF.Round(Element.Y - OriginY),
+            (int)MathF.Round(Element.Width), (int)MathF.Round(Element.Height));
+    }
+
+    private void ApplyGesture(string Payload)
+    {
+        var Parts = Payload.Split(':', 4);
+        if (Parts.Length != 4 ||
+            !int.TryParse(Parts[1], System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out var DeltaX) ||
+            !int.TryParse(Parts[2], System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out var DeltaY))
+        {
+            return;
+        }
+        var Snap = Parts[3] == "snap";
+        var Applied = Parts[0] == "move"
+            ? Document.ApplyGestureMove(Parts[0], DeltaX, DeltaY, Snap, out var Message)
+            : Document.ApplyGestureResize(Parts[0], DeltaX, DeltaY, Snap, out Message);
+        if (!Applied)
+        {
+            if (Message.Length != 0)
+            {
+                Context.SetStatus(Message);
+            }
+            return;
+        }
+        PublishLiveStyle();
+        Context.SetStatus($"Drag {Parts[0]} {DeltaX}, {DeltaY} px" +
+            (Snap ? " (10px steps)" : string.Empty));
+    }
+
+    private void PublishLiveStyle()
+    {
+        var ElementId = SelectedPreviewId;
+        if (ElementId.Length == 0)
+        {
+            return;
+        }
+        foreach (var (Name, Value) in Document.LiveStyleProperties())
+        {
+            PendingLiveProperties.Add(new(ElementId, Name, Value));
+        }
+    }
+
+    private string SelectedPreviewId =>
+        Document.SelectedElement() is { } Element
+            ? UiEditorDocument.PreviewNodeIdOf(Element)
+            : string.Empty;
+
+    private void ApplyStyle(string Payload)
+    {
+        var Separator = Payload.IndexOf(':');
+        if (Separator <= 0)
+        {
+            return;
+        }
+        var Name = Payload[..Separator];
+        var Value = Payload[(Separator + 1)..];
+        Report(Document.SetStyle(Name, Value, out var Message), Message);
+    }
+
+    private void ApplyField(string Payload)
+    {
+        var Separator = Payload.IndexOf(':');
+        if (Separator <= 0)
+        {
+            return;
+        }
+        var Field = Payload[..Separator];
+        var Value = Payload[(Separator + 1)..];
+        var Changed = Field switch
+        {
+            "id" => Document.RenameId(Value, out var IdMessage)
+                ? ReportMessage(true, IdMessage) : ReportMessage(false, IdMessage),
+            "text" => Document.SetText(Value, out var TextMessage)
+                ? ReportMessage(true, TextMessage) : ReportMessage(false, TextMessage),
+            "class" => Document.SetAttribute("class", Value, out var ClassMessage)
+                ? ReportMessage(true, ClassMessage) : ReportMessage(false, ClassMessage),
+            "binding" or "data-bind" => Document.SetAttribute("data-bind", Value,
+                out var BindMessage)
+                ? ReportMessage(true, BindMessage) : ReportMessage(false, BindMessage),
+            "command" or "data-command" => Document.SetAttribute("data-command", Value,
+                out var CommandMessage)
+                ? ReportMessage(true, CommandMessage) : ReportMessage(false, CommandMessage),
+            "view-model" => Document.SetViewModel(Value, out var ViewModelMessage)
+                ? ReportMessage(true, ViewModelMessage)
+                : ReportMessage(false, ViewModelMessage),
+            "class-add" => Document.AddClass(Value, out var AddMessage)
+                ? ReportMessage(true, AddMessage) : ReportMessage(false, AddMessage),
+            _ => UnknownField(Field),
+        };
+        if (!Changed)
+        {
+            return;
+        }
+        MarkupRefreshRequested = true;
+        Context.SetStatus($"{Document.Asset.Name} / revision {Document.Revision}");
+    }
+
+    private bool ReportMessage(bool Changed, string Message)
+    {
+        if (!Changed && Message.Length != 0)
+        {
+            Context.SetStatus(Message);
+        }
+        return Changed;
+    }
+
+    private bool UnknownField(string Field)
+    {
+        Context.SetStatus($"Unknown UI field '{Field}'");
+        return false;
+    }
+
+    private void SetPositionMode(bool Absolute)
+    {
+        var Bounds = CanvasRelativeSelectionRect();
+        var X = Math.Max(0, Bounds.X);
+        var Y = Math.Max(0, Bounds.Y);
+        Report(Document.SetPositionMode(Absolute, X, Y, out var Message), Message);
+    }
+
+    private void Report(bool Changed, string Message)
+    {
+        if (Changed)
+        {
+            Context.SetStatus($"{Document.Asset.Name} / revision {Document.Revision}");
+        }
+        else if (Message.Length != 0)
+        {
+            Context.SetStatus(Message);
+        }
     }
 
     private static DockNodeState Tabs(string NodeId, string GroupId,

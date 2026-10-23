@@ -41,7 +41,7 @@ internal static class ContentCreationValidation
         Check(FolderResult.Success && Directory.Exists(Path.Combine(DirectoryPath, "Nested")),
             "Folder creation uses the requested project Content directory");
         var StaleRevision = Revision();
-        foreach (var Type in new[] { "World", "Prefab", "Material", "RmlDocument", "StyleSheet", "InputAction", "InputMappingContext", "validation.creation-data" })
+        foreach (var Type in new[] { "World", "Prefab", "Material", "UiDocument", "RmlDocument", "StyleSheet", "InputAction", "InputMappingContext", "validation.creation-data" })
         {
             var Name = Type.Replace('.', '_');
             var Result = Create(Type, Name);
@@ -74,9 +74,19 @@ internal static class ContentCreationValidation
                 Check(InputRuntimeService.ParseMappingContextAsset(Source, Asset, []).Bindings.Count == 0,
                     "New input contexts have an explicit empty binding set");
             }
-            else if (Type == "RmlDocument")
+            else if (Type is "RmlDocument" or "UiDocument")
             {
-                Check(XDocument.Parse(Source).Root!.Name == "rml", "New UI document is valid RML text");
+                // The generated default uses an inline <style> block, so the design
+                // surface must read it; otherwise a new screen previews unstyled.
+                var Package = Type == "UiDocument"
+                    ? UiDocumentAsset.Parse(Source, Result.Path!) : null;
+                var Rml = Package?.Rml ?? Source;
+                Check(XDocument.Parse(Rml).Root!.Name == "rml",
+                    $"New {Type} source is valid RML text");
+                var Opened = UiEditorDocument.Load(Asset, Result.Path!, Runtime.EngineRoot);
+                Check(Opened.Sheet.InlineBlocks == 1 && Opened.Sheet.Rules.Count > 0 &&
+                    Opened.Sheet.Compute(Opened.BodyElement!).ContainsKey("background-color"),
+                    $"New {Type} inline <style> feeds the design surface cascade");
             }
             else if (Type == "validation.creation-data")
             {

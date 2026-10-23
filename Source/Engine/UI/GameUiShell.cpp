@@ -60,7 +60,9 @@ namespace
     class GameUiEvents final : public Rml::EventListener
     {
     public:
-        explicit GameUiEvents(Rml::ElementDocument** document) : Document(document) {}
+        explicit GameUiEvents(Rml::ElementDocument** document,
+                              std::vector<std::string>* pending)
+            : Document(document), Pending(pending) {}
 
         void ProcessEvent(Rml::Event& event) override
         {
@@ -69,40 +71,72 @@ namespace
                 return;
             }
 
-            const auto* target = event.GetTargetElement();
-            const std::string id = target ? target->GetId().c_str() : std::string{};
-            if (id == "continueButton")
+            // Resolve the semantic action from the nearest ancestor exactly like the
+            // editor shell does, so nested markup inside a composed part works.
+            for (auto* element = event.GetTargetElement(); element;
+                 element = element->GetParentNode())
             {
-                SetStatus("RUNNING");
-            }
-            else if (id == "settingsButton")
-            {
-                SetStatus("SETTINGS");
+                auto action = element->GetAttribute<Rml::String>("action", "");
+                if (action.empty())
+                {
+                    action = element->GetAttribute<Rml::String>("data-action", "");
+                }
+                if (!action.empty())
+                {
+                    Pending->push_back(action.c_str());
+                    return;
+                }
             }
         }
 
     private:
-        void SetStatus(const char* value)
+        Rml::ElementDocument** Document = nullptr;
+        std::vector<std::string>* Pending = nullptr;
+    };
+
+    // RmlUi's font-family default is empty, and an unresolved family produces
+    // zero-width text. A project screen therefore needs a host default the way a
+    // browser needs a user-agent stylesheet. The block is inserted BEFORE the
+    // document's own styles, so any property the project declares wins by order.
+    constexpr const char* UserAgentStyle =
+        "<style>body { font-family: Segoe UI; }</style>";
+
+    std::string InjectUserAgentStyle(std::string_view rml)
+    {
+        const std::string text(rml);
+        const auto head = text.find("<head");
+        if (head != std::string::npos)
         {
-            if (auto* status = (*Document)->GetElementById("status"))
+            const auto end = text.find('>', head);
+            if (end != std::string::npos)
             {
-                status->SetInnerRML(value);
-                EngineLog::Info("GameUI", std::string("status=") + value);
+                std::string result = text;
+                result.insert(end + 1, UserAgentStyle);
+                return result;
             }
         }
-
-        Rml::ElementDocument** Document = nullptr;
-    };
+        const auto body = text.find("<body");
+        if (body != std::string::npos)
+        {
+            std::string result = text;
+            result.insert(body, std::string("<head>") + UserAgentStyle + "</head>");
+            return result;
+        }
+        return text;
+    }
 
 } // namespace
 
 struct GameUiShell::Impl
 {
-    explicit Impl(const std::filesystem::path& root) : Files(root), Events(&Document) {}
+    explicit Impl(const std::filesystem::path& root)
+        : Files(root), Events(&Document, &PendingActions) {}
     SystemInterface_Win32 System;
     TextInputMethodEditor_Win32 Ime;
     GameFileInterface Files;
+    std::vector<std::string> PendingActions;
     GameUiEvents Events;
+    std::function<void(const char*, const char*)> ActionHandler;
     Rml::Context* Context = nullptr;
     Rml::ElementDocument* Document = nullptr;
     HWND Window = nullptr;
@@ -230,19 +264,82 @@ bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml
     {
         return false;
     }
+    // The engine sample screen is only a fallback. Game code owns which project UI
+    // asset is visible through SetDocument, so a missing sample must not be fatal.
     const auto documentPath = root / "Content/UI/Main.rml";
-    const auto utf8Path = documentPath.u8string();
-    state.Document = state.Context->LoadDocument(Rml::String(reinterpret_cast<const char*>(utf8Path.data()), utf8Path.size()));
+    if (std::filesystem::exists(documentPath))
+    {
+        const auto utf8Path = documentPath.u8string();
+        state.Document = state.Context->LoadDocument(
+            Rml::String(reinterpret_cast<const char*>(utf8Path.data()), utf8Path.size()));
+    }
+    if (state.Document)
+    {
+        state.Document->AddEventListener(Rml::EventId::Click, &state.Events);
+        state.Document->Show();
+        EngineLog::Info("RmlUi", "Game UI initialized document=" + documentPath.generic_string());
+    }
+    else
+    {
+        EngineLog::Info("RmlUi",
+            "Game UI started without a document; game code selects the screen");
+    }
+    Update(client.right, client.bottom);
+    return true;
+}
+
+bool GameUiShell::SetDocument(std::string_view rml, std::string_view sourcePath)
+{
+    if (!State || !State->Context || rml.empty())
+    {
+        return false;
+    }
+    auto& state = *State;
+    if (state.Document)
+    {
+        state.Context->UnloadDocument(state.Document);
+        state.Document = nullptr;
+    }
+    // The source URL keeps relative stylesheet links next to the authoritative
+    // asset, which for a .sui package is the package file itself.
+    const Rml::String source(sourcePath.data(), sourcePath.size());
+    const auto Rml = InjectUserAgentStyle(rml);
+    state.Document = state.Context->LoadDocumentFromMemory(
+        Rml::String(Rml.data(), Rml.size()), source.empty() ? "[runtime screen]" : source);
     if (!state.Document)
     {
         return false;
     }
     state.Document->AddEventListener(Rml::EventId::Click, &state.Events);
     state.Document->Show();
-    Update(client.right, client.bottom);
-    EngineLog::Info("RmlUi", "Game UI initialized document=" + documentPath.generic_string());
+    state.Semantic.clear();
+    ++state.StateRevision;
+    // No Update() here: when this runs from the action flush, the caller's Update is
+    // already in progress and the new document is laid out immediately afterwards.
+    EngineLog::Info("RmlUi", "Game UI document set source=" + std::string(sourcePath));
     return true;
 }
+
+bool GameUiShell::ClearDocument()
+{
+    if (!State || !State->Context)
+    {
+        return false;
+    }
+    auto& state = *State;
+    if (!state.Document)
+    {
+        return true;
+    }
+    state.Context->UnloadDocument(state.Document);
+    state.Document = nullptr;
+    state.Semantic.clear();
+    ++state.StateRevision;
+    EngineLog::Info("RmlUi", "Game UI document cleared");
+    return true;
+}
+
+bool GameUiShell::HasDocument() const { return State && State->Document; }
 
 void GameUiShell::Shutdown()
 {
@@ -260,10 +357,27 @@ void GameUiShell::Update(uint32_t width, uint32_t height)
     {
         return;
     }
-    State->Context->SetDimensions(Rml::Vector2i(static_cast<int>(width), static_cast<int>(height)));
-    if (auto* resolution = State->Document->GetElementById("resolution"))
+    // Actions are flushed before the context update so a recomposed document is
+    // loaded outside RmlUi's event dispatch, never in the middle of it.
+    if (!State->PendingActions.empty())
     {
-        resolution->SetInnerRML(std::to_string(width) + " x " + std::to_string(height));
+        auto pending = std::move(State->PendingActions);
+        State->PendingActions.clear();
+        if (State->ActionHandler)
+        {
+            for (const auto& action : pending)
+            {
+                State->ActionHandler("game", action.c_str());
+            }
+        }
+    }
+    State->Context->SetDimensions(Rml::Vector2i(static_cast<int>(width), static_cast<int>(height)));
+    if (State->Document)
+    {
+        if (auto* resolution = State->Document->GetElementById("resolution"))
+        {
+            resolution->SetInnerRML(std::to_string(width) + " x " + std::to_string(height));
+        }
     }
     State->Context->Update();
 }
@@ -323,6 +437,14 @@ uint32_t GameUiShell::InputModifiers(uint32_t nativeModifiers) const
 
 void GameUiShell::SetPresentHandler(std::function<bool()> handler) { State->Present = std::move(handler); }
 
+void GameUiShell::SetActionHandler(std::function<void(const char*, const char*)> handler)
+{
+    if (State)
+    {
+        State->ActionHandler = std::move(handler);
+    }
+}
+
 void GameUiShell::CommitPresentation()
 {
     if (!State || !State->Context || !GetActiveRenderBackend()->WasPresented())
@@ -330,7 +452,9 @@ void GameUiShell::CommitPresentation()
         return;
     }
     auto& state = *State;
-    const auto semantic = UiObservation::DescribeHost(*state.Context, state.Document);
+    const auto semantic = state.Document
+                              ? UiObservation::DescribeHost(*state.Context, state.Document)
+                              : std::string{};
     if (semantic != state.Semantic)
     {
         state.Semantic = semantic;

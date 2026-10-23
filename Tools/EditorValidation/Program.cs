@@ -29,6 +29,7 @@ try
 {
     DevelopmentSettingsValidation.Run(temporary.FullName, Require);
     McpConfigurationValidation.Run(temporary.FullName, Require);
+    SharpEngine.EditorValidation.UiEditorValidation.Run(temporary.FullName, Require);
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
     var ui = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "UI"));
@@ -73,6 +74,14 @@ try
         """);
     File.WriteAllText(Path.Combine(ui.FullName, "Main.rcss"),
         ".screen { display: flex; flex-direction: column; } .headline { color: #ffffff; }");
+    // Runtime screen fixtures: one .sui package and one bare RML document.
+    File.WriteAllText(Path.Combine(ui.FullName, "Screen.sui"),
+        SharpEngine.Assets.UiDocumentAsset.Create("Runtime Screen", """
+            <rml><head><link type="text/rcss" href="Main.rcss" /></head>
+            <body><div id="screen" class="screen"><span id="label">Runtime screen</span></div></body></rml>
+            """).Serialize());
+    File.WriteAllText(Path.Combine(ui.FullName, "Plain.rml"),
+        "<rml><body><div id=\"root\"><span id=\"label\">Plain screen</span></div></body></rml>");
     var materialPath = Path.Combine(materialDirectory.FullName, "Validation.material.json");
     File.WriteAllText(materialPath, """
         {"schemaVersion":1,"name":"Validation Material","shader":"Standard","baseColor":[0.2,0.4,0.7,1],"metallic":0.1,"roughness":0.6}
@@ -100,6 +109,8 @@ try
           {"id":"worlds/main","type":"World","path":"Content/Worlds/Main.sworld"},
           {"id":"ui/main","type":"RmlDocument","path":"Content/UI/Main.rml"},
           {"id":"ui/main-style","type":"StyleSheet","path":"Content/UI/Main.rcss"},
+          {"id":"ui/screen","type":"UiDocument","path":"Content/UI/Screen.sui","importer":"SharpEngine.UiDocumentJson"},
+          {"id":"ui/plain","type":"RmlDocument","path":"Content/UI/Plain.rml"},
           {"id":"materials/validation","type":"Material","path":"Content/Assets/Materials/Validation.material.json"},
           {"id":"meshes/validation","type":"Mesh","path":"Content/Assets/Meshes/Validation.mesh.json"},
           {"id":"input/actions/validation-move","type":"InputAction","path":"Content/Input/Actions/ValidationMove.inputaction.json"},
@@ -115,6 +126,8 @@ try
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    SharpEngine.EditorValidation.UiScreenValidation.Run(temporary.FullName,
+        runtime.Assets!, runtime.UiRuntime, Require);
     DataAssetModuleReloadValidation.Run(runtime, Require);
     if (args.Contains("--data-assets-only", StringComparer.Ordinal))
     {
@@ -173,7 +186,7 @@ try
         runtime.Menus.Items.Any(item => item.CommandId == "view.logs"),
         "View menu must expose independent Console and Logs commands");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
-    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 9,
+    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 11,
         "Public, project, and Plugin Content assets must both be available to a project editor");
     var pluginAsset = runtime.Assets.Find("project://plugins/validation.plugin/sample");
     Require(pluginAsset?.OwnerId == "validation.plugin" &&
@@ -436,6 +449,26 @@ try
     Require(File.ReadAllText(uiPath).Contains("Saved UI headline", StringComparison.Ordinal) &&
         !AssetEditorDirty("project://ui/main"),
         "UI Save must validate and atomically replace the authoritative RML source");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectUiRoot}:editor.ui-style:font-size:19px");
+    Require(AssetEditorDirty("project://ui/main"),
+        "UI style edits must participate in the document transaction history");
+    using (var UiState = System.Text.Json.JsonDocument.Parse(runtime.DescribeUiEditorJson()))
+    {
+        var EditorState = UiState.RootElement.GetProperty("editors").EnumerateArray()
+            .Single(Editor => Editor.GetProperty("assetId").GetString() == "project://ui/main")
+            .GetProperty("state");
+        Require(EditorState.GetProperty("schemaVersion").GetInt32() == 3 &&
+            EditorState.GetProperty("selectedKey").GetString() == "#headline" &&
+            EditorState.GetProperty("elements").GetArrayLength() == 3 &&
+            EditorState.GetProperty("styleSheet").GetProperty("files")
+                .GetArrayLength() == 1,
+            "UI editor state must describe identity, elements and linked stylesheets");
+    }
+    runtime.InvokeUiAction(
+        $"editor.host-action:{ProjectUiRoot}:editor.asset-command:undo");
+    Require(!AssetEditorDirty("project://ui/main"),
+        "Undo must revert a UI style edit to the saved source");
 
     foreach (var AssetId in new[]
     {

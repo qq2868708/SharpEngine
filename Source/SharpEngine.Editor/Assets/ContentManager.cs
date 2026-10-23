@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using SharpEngine.Editor;
 
@@ -595,6 +595,7 @@ public sealed class ContentManager
         if (name.EndsWith(".sworld", StringComparison.OrdinalIgnoreCase)) return "World";
         return Path.GetExtension(path).ToLowerInvariant() switch
         {
+            ".sui" => "UiDocument",
             ".rml" => "RmlDocument",
             ".rcss" => "StyleSheet",
             ".xml" => "Xml",

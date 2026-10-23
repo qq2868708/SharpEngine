@@ -17,6 +17,30 @@ public sealed record AssetEditorCommandDefinition(string CommandId, string Label
     string Menu, int Order, string? Icon = null, bool ShowInToolbar = false,
     string? Tooltip = null);
 
+/// <summary>One live RCSS property update for an element of an asset editor host.
+/// Transported without replacing markup, so a design gesture keeps native element
+/// identity, pointer capture and focus.</summary>
+public readonly record struct AssetEditorLiveProperty(string ElementId, string Name,
+    string Value);
+
+/// <summary>Optional asset editor capability for direct manipulation. While a transient
+/// gesture is active the host must not republish markup, otherwise the native element
+/// the gesture captured would be replaced mid-drag.</summary>
+public interface IAssetEditorLivePreview
+{
+    bool SuppressMarkupRefresh
+    {
+        get;
+    }
+
+    /// <summary>True once when a transient gesture or direct edit changed native element
+    /// state that the published markup no longer describes, so the host must republish
+    /// even if the rendered markup string happens to match its cached copy.</summary>
+    bool ConsumeMarkupRefreshRequest();
+
+    IReadOnlyList<AssetEditorLiveProperty> DrainLiveProperties();
+}
+
 public interface IAssetEditorInstance : IDisposable
 {
     AssetDescriptor Asset { get; }
@@ -328,12 +352,25 @@ internal sealed class AssetEditorHost : IDisposable
 
     private void Refresh(bool Force)
     {
+        var Live = Instance as IAssetEditorLivePreview;
+        var LiveRefresh = Live is not null && Live.ConsumeMarkupRefreshRequest();
+        if (Live is not null)
+        {
+            foreach (var Property in Live.DrainLiveProperties())
+            {
+                ApplyLiveProperty(Property);
+            }
+        }
         Publish(RootId, "assetEditorTitle", WebUtility.HtmlEncode(WindowTitle()), Force);
-        Publish(RootId, "assetEditorMenus", BuildMenus(), Force);
-        Publish(RootId, "assetEditorToolbar", BuildToolbar(), Force);
         Publish(RootId, "assetEditorStatus",
             WebUtility.HtmlEncode(Instance.IsDirty ? "Unsaved changes" : "Saved"), Force);
-        PublishDockHost("main", Layout.Document.MainHost.Root, Force);
+        Publish(RootId, "assetEditorMenus", BuildMenus(), Force);
+        Publish(RootId, "assetEditorToolbar", BuildToolbar(), Force);
+        if (Live is { SuppressMarkupRefresh: true })
+        {
+            return;
+        }
+        PublishDockHost("main", Layout.Document.MainHost.Root, Force || LiveRefresh);
 
         var Desired = new HashSet<string>(StringComparer.Ordinal);
         foreach (var Floating in Layout.FloatingHosts)
@@ -360,6 +397,23 @@ internal sealed class AssetEditorHost : IDisposable
         foreach (var HostId in Desired)
         {
             LiveFloatingHosts.Add(HostId);
+        }
+    }
+
+    private void ApplyLiveProperty(AssetEditorLiveProperty Property)
+    {
+        if (Runtime.SetAssetEditorElementProperty(RootId, Property.ElementId,
+                Property.Name, Property.Value))
+        {
+            return;
+        }
+        foreach (var HostId in LiveFloatingHosts)
+        {
+            if (Runtime.SetAssetEditorElementProperty(HostId, Property.ElementId,
+                    Property.Name, Property.Value))
+            {
+                return;
+            }
         }
     }
 
@@ -628,6 +682,10 @@ public sealed partial class EditorRuntime
     internal bool TryGetAssetEditorElementRect(string HostId, string ElementId,
         out SharpEngine.UI.UiRect Bounds) =>
         _nativeApi.TryGetHostUiElementRect(HostId, ElementId, out Bounds);
+
+    internal bool SetAssetEditorElementProperty(string HostId, string ElementId,
+        string Name, string Value) =>
+        _nativeApi.SetHostUiProperty(HostId, ElementId, Name, Value);
 
     internal void SubmitAssetEditorViewportFrame(string HostId, string Kind,
         ViewportFrame Frame) =>

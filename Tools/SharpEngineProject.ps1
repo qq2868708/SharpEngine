@@ -196,7 +196,7 @@ function Invoke-NewProject {
         @{ Source = 'Source\Editor\Editor.csproj.template'; Target = "Source\$namespace.Editor\$namespace.Editor.csproj" },
         @{ Source = 'Source\Editor\EditorModule.cs'; Target = "Source\$namespace.Editor\${namespace}EditorModule.cs" },
         @{ Source = 'Source\Editor\ProjectEditorExtension.cs'; Target = "Source\$namespace.Editor\ProjectEditorExtension.cs" },
-        @{ Source = 'Content\UI\Main.rml'; Target = 'Content\UI\Main.rml' },
+        @{ Source = 'Content\UI\Main.sui'; Target = 'Content\UI\Main.sui' },
         @{ Source = 'Content\UI\Main.rcss'; Target = 'Content\UI\Main.rcss' },
         @{ Source = 'Content\Assets\assets.json'; Target = 'Content\Assets\assets.json' },
         @{ Source = 'Content\Input\Actions\Move.inputaction.json'; Target = 'Content\Input\Actions\Move.inputaction.json' },

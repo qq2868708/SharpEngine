@@ -578,6 +578,22 @@ struct RmlUiShell::Impl
         bool Active{};
     } SplitterDrag;
 
+    // One direct manipulation of an authored UI element on a design surface. The
+    // shell owns the pointer math; the managed editor owns the document mutation
+    // and the Undo transaction.
+    struct ElementGestureState
+    {
+        Host* SourceHost{};
+        Rml::Element* Element{};
+        std::string Handle;
+        std::string NodeKey;
+        POINT StartScreen{};
+        int LastX{};
+        int LastY{};
+        bool Pending{};
+        bool Active{};
+    } ElementGesture;
+
     HWND ViewportCaptureWindow{};
     SharpEngine::Windows::GameplayInputCapture GameplayCapture;
     int GameplayCaptureRequest = -1;
@@ -1814,11 +1830,90 @@ struct RmlUiShell::Impl
         return nullptr;
     }
 
+    void ClearElementGesture()
+    {
+        if (ElementGesture.Element)
+            ElementGesture.Element->SetClass("ui-gesture-active", false);
+        ElementGesture = {};
+    }
+
+    void UpdateElementGesture(POINT screen, bool snap)
+    {
+        if (!ElementGesture.Pending && !ElementGesture.Active) return;
+        if (ElementGesture.Pending)
+        {
+            const int thresholdX = GetSystemMetrics(SM_CXDRAG);
+            const int thresholdY = GetSystemMetrics(SM_CYDRAG);
+            if (std::abs(screen.x - ElementGesture.StartScreen.x) < thresholdX &&
+                std::abs(screen.y - ElementGesture.StartScreen.y) < thresholdY) return;
+            ElementGesture.Pending = false;
+            ElementGesture.Active = true;
+            if (ElementGesture.Element)
+                ElementGesture.Element->SetClass("ui-gesture-active", true);
+            if (ElementGesture.SourceHost)
+                QueueAction(*ElementGesture.SourceHost,
+                    Rml::String("editor.ui-drag-start:") + ElementGesture.Handle + "|" +
+                        ElementGesture.NodeKey);
+        }
+        auto* host = ElementGesture.SourceHost;
+        if (!host || !host->Context) return;
+        // Authored offsets are document pixels. Convert the screen-space gesture with
+        // the same density ratio the document layout uses, so the committed value
+        // matches what the user dragged instead of the context's raw dp ratio.
+        const float ratio = (std::max)(0.01f,
+            Rml::ElementUtilities::GetDensityIndependentPixelRatio(host->Document));
+        const int dx = static_cast<int>(std::lround(
+            (screen.x - ElementGesture.StartScreen.x) / ratio));
+        const int dy = static_cast<int>(std::lround(
+            (screen.y - ElementGesture.StartScreen.y) / ratio));
+        if (dx == ElementGesture.LastX && dy == ElementGesture.LastY) return;
+        ElementGesture.LastX = dx;
+        ElementGesture.LastY = dy;
+        QueueAction(*host, Rml::String("editor.ui-drag:") + ElementGesture.Handle + ":" +
+            std::to_string(dx) + ":" + std::to_string(dy) +
+            (snap ? ":snap" : ":free"));
+    }
+
+    void FinishElementGesture()
+    {
+        if (!ElementGesture.Pending && !ElementGesture.Active) return;
+        auto* host = ElementGesture.SourceHost;
+        if (host) QueueAction(*host, ElementGesture.Active
+            ? "editor.ui-drag-end" : "editor.ui-drag-cancel");
+        ClearElementGesture();
+    }
+
+    void CancelElementGesture()
+    {
+        if (!ElementGesture.Pending && !ElementGesture.Active) return;
+        auto* host = ElementGesture.SourceHost;
+        if (host) QueueAction(*host, ElementGesture.Active
+            ? "editor.ui-drag-cancel" : "editor.ui-drag-discard");
+        ClearElementGesture();
+    }
+
     void BeginPointerDrag(Host& host, Rml::Element* target, POINT screen)
     {
         // A close control is a click target, not a tab drag handle.
         for (auto* element = target; element; element = element->GetParentNode())
             if (element->IsClassSet("dock-tab-close")) return;
+        // A new press always ends the previous element gesture before another one can
+        // start, so one drag can never leak its offsets into the next edit.
+        if (ElementGesture.Pending || ElementGesture.Active) FinishElementGesture();
+        if (auto* gesture = FindAttributeElement(target, "data-ui-gesture"))
+        {
+            ElementGesture.SourceHost = &host;
+            ElementGesture.Element = gesture;
+            ElementGesture.Handle = Attribute(gesture, "data-ui-gesture");
+            ElementGesture.NodeKey = Attribute(
+                FindAttributeElement(gesture, "data-ui-node"), "data-ui-node");
+            ElementGesture.StartScreen = screen;
+            ElementGesture.LastX = 0;
+            ElementGesture.LastY = 0;
+            ElementGesture.Pending = !ElementGesture.Handle.empty();
+            if (ElementGesture.Pending) SetCapture(host.Window);
+            return;
+        }
         if (auto* splitter = FindAttributeElement(
                 target, "data-dock-splitter-node"))
         {
@@ -2124,6 +2219,14 @@ struct RmlUiShell::Impl
                 return;
             }
         }
+        if (event.GetId() == Rml::EventId::Keydown &&
+            event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE &&
+            (ElementGesture.Pending || ElementGesture.Active))
+        {
+            CancelElementGesture();
+            event.StopPropagation();
+            return;
+        }
         std::string ColorCommand;
         if (host.ColorPicker.ProcessEvent(event, host.Document, ColorCommand))
         {
@@ -2282,7 +2385,10 @@ struct RmlUiShell::Impl
                 "data-change-action", "");
             if (!changeAction.empty())
             {
-                if (changeAction.find("editor.component-") == 0) QueueAction(host, changeAction + value);
+                // Editor-authoring changes replace their own markup, so they must run
+                // after this event dispatch instead of inside it.
+                if (changeAction.find("editor.component-") == 0 ||
+                    changeAction.find("editor.ui-") == 0) QueueAction(host, changeAction + value);
                 else EmitAction(host, changeAction + value);
                 return;
             }
@@ -2472,6 +2578,8 @@ struct RmlUiShell::Impl
             CancelDockDrag();
         if (SplitterDrag.HostWindow == &host)
             CancelSplitterDrag();
+        if (ElementGesture.SourceHost == &host)
+            CancelElementGesture();
         SetCurrentHost(host);
         if (host.Context)
         {
@@ -3092,11 +3200,15 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         if (!GameplayPointer && message == WM_MOUSEMOVE)
         {
             if (state.SplitterDrag.Active) state.UpdateSplitterRatio(screen);
+            else if (state.ElementGesture.Pending || state.ElementGesture.Active)
+                state.UpdateElementGesture(screen, (wParam & MK_SHIFT) != 0);
             else state.UpdateDockDrag(screen);
         }
         if (message == WM_LBUTTONUP)
         {
             if (state.SplitterDrag.Active) state.FinishSplitterDrag(screen);
+            else if (state.ElementGesture.Pending || state.ElementGesture.Active)
+                state.FinishElementGesture();
             else
             {
                 state.UpdateDockDrag(screen);
@@ -3154,6 +3266,7 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         state.ViewportCaptureWindow = nullptr;
         state.CancelDockDrag();
         state.CancelSplitterDrag();
+        state.CancelElementGesture();
         if (state.InputEvent)
             state.InputEvent(host->Id.c_str(), 7, 0, 0, 0, 0, 0, 0,
                 static_cast<uint32_t>(state.ModifierState()), true, false);
@@ -3516,6 +3629,18 @@ void RmlUiShell::SetProperty(const char* id, const char* name, const char* value
         element->SetProperty(name, value);
 }
 
+bool RmlUiShell::SetHostUiProperty(std::string_view hostId, const char* elementId,
+                                   const char* name, const char* value)
+{
+    if (!elementId || !name || !value) return false;
+    auto* host = State->FindHost(hostId);
+    if (!host || !host->Document) return false;
+    auto* element = host->Document->GetElementById(elementId);
+    if (!element) return false;
+    element->SetProperty(name, value);
+    return true;
+}
+
 HWND RmlUiShell::GetHostWindow(std::string_view hostId) const
 {
     if (auto* host = State->FindHost(hostId)) return host->Window;
@@ -3717,6 +3842,8 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     const bool continuingCapture = state.McpButtons != 0 &&
         (host->TimelineScrubbing || host->ViewportInput.IsCapturing() ||
          (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host) ||
+         ((state.ElementGesture.Active || state.ElementGesture.Pending) &&
+          state.ElementGesture.SourceHost == host) ||
          ((state.DockDrag.Active || state.DockDrag.Pending) &&
           state.DockDrag.SourceHost == host));
     if ((!expectedFrame && !(event == 3 && continuingCapture)) ||
@@ -3754,6 +3881,11 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     else if (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host)
     {
         target = state.SplitterDrag.Element;
+    }
+    else if ((state.ElementGesture.Active || state.ElementGesture.Pending) &&
+             state.ElementGesture.SourceHost == host && state.ElementGesture.Element)
+    {
+        target = state.ElementGesture.Element;
     }
     else if ((state.DockDrag.Active || state.DockDrag.Pending) &&
              state.DockDrag.SourceHost == host)

@@ -32,7 +32,7 @@ public static unsafe class HostEntrypoint
             RenderTelemetryService = new RenderTelemetry(NativeApi);
             Game = new GameSession(Environment.GetEnvironmentVariable("SHARPENGINE_ROOT")!,
                 Environment.GetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST") ?? "",
-                typeof(TimelineRuntimeModule).Assembly);
+                new NativeUiScreenHost(NativeApi), typeof(TimelineRuntimeModule).Assembly);
             ReleasePointerBinding = Game.Input.BindAction(InputRoute.Gameplay,
                 "engine://input/actions/player.release-pointer", int.MaxValue, Event =>
                 {
@@ -162,6 +162,30 @@ public static unsafe class HostEntrypoint
         catch (Exception Error)
         {
             SharpLog.Error("Input", "Input event failed", Error);
+        }
+    }
+
+    // Native UI actions (clicks on runtime screen parts) reuse the existing managed
+    // action entry point. Native defers them out of event dispatch, so presenting a
+    // recomposed document here can never unload a document mid-dispatch.
+    [UnmanagedCallersOnly]
+    public static void InvokeUiAction(nint ActionUtf8)
+    {
+        if (Game is null)
+        {
+            return;
+        }
+        try
+        {
+            var Action = Marshal.PtrToStringUTF8(ActionUtf8) ?? string.Empty;
+            if (Action.Length != 0)
+            {
+                Game.HandleScreenAction(Action);
+            }
+        }
+        catch (Exception Error)
+        {
+            SharpLog.Error("Game", "UI action dispatch failed", Error);
         }
     }
 

@@ -1,4 +1,4 @@
-div { display: block; }
+﻿div { display: block; }
 .plugins-main { padding: 24px; overflow: auto; }
 .plugins-note { color: #91a0b4; margin: 8px 0px 16px; font-size: 12px; line-height: 20px; }
 .plugins-row { display: flex; align-items: center; padding: 12px 0px; border-bottom: 1px #303743; }
@@ -281,6 +281,64 @@ viewport { display: block; }
 .ui-tree-row.selected { color: #f1f7ff; background-color: #285348; }
 .ui-tree-row.invalid { color: #c58c92; }
 .ui-tree-tag { width: 58px; flex-shrink: 0; color: #58b9a2; font-size: 10px; }
+.ui-design-pane { display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; background-color: #101419; }
+.ui-design-ruler { display: flex; height: 26px; flex-shrink: 0; align-items: center; padding: 0px 10px; color: #66768a; background-color: #171c22; border-bottom: 1px #262e38; font-size: 9px; }
+.ui-design-ruler-label { color: #7f93a9; }
+.ui-design-hint { color: #5d6d80; }
+.ui-design-scroll { display: flex; flex-grow: 1; min-width: 0px; min-height: 0px; overflow: auto; padding: 28px; background-color: #0d1116; }
+.ui-design-canvas { position: relative; flex-shrink: 0; overflow: hidden; background-color: #202833; border: 1px #4b5766; }
+.ui-design-empty { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 24px; color: #718096; font-size: 11px; }
+.ui-design-node { min-width: 1px; min-height: 1px; }
+.ui-design-selected { border: 1px #72b7f2; }
+.ui-design-outline { position: absolute; left: -1px; top: -1px; right: -1px; bottom: -1px; border: 1px #72b7f2; pointer-events: none; }
+.ui-design-size-tag { position: absolute; left: 0px; top: -18px; height: 16px; padding: 0px 5px; color: #0d1116; background-color: #72b7f2; border-radius: 2px; font-size: 9px; pointer-events: none; }
+.ui-design-handle { position: absolute; width: 8px; height: 8px; background-color: #dbe9f7; border: 1px #2c6f9f; border-radius: 1px; cursor: pointer; }
+.ui-design-handle:hover { background-color: #ffffff; border-color: #72b7f2; }
+.ui-design-active { border-color: #f2c072; }
+.ui-gesture-active { border: 1px #f2c072; }
+.ui-handle-nw { left: -5px; top: -5px; cursor: move; }
+.ui-handle-ne { right: -5px; top: -5px; }
+.ui-handle-sw { left: -5px; bottom: -5px; }
+.ui-handle-se { right: -5px; bottom: -5px; }
+.ui-handle-e { right: -5px; top: 50%; margin-top: -4px; }
+.ui-handle-s { left: 50%; bottom: -5px; margin-left: -4px; }
+.ui-design-image { width: 64px; height: 64px; }
+.ui-design-replaced { display: flex; align-items: center; justify-content: center; min-width: 60px; min-height: 22px; padding: 3px 8px; background-color: #1b222b; border: 1px #465363; border-radius: 3px; }
+.ui-design-replaced-text { color: #8fa3b8; font-size: 10px; }
+.ui-element-tools { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px; border-bottom: 1px #2b333d; }
+.ui-tool-button { height: 22px; padding: 2px 6px; color: #9fb0c3; background-color: #232b34; border: 1px #39434f; border-radius: 3px; font-size: 9px; }
+.ui-tool-button:hover { color: #ffffff; background-color: #2f3d4c; }
+.ui-tree-label { flex-grow: 1; min-width: 0px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ui-class-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.ui-class-chip { flex-shrink: 0; height: 21px; padding: 2px 7px; color: #9db4c9; background-color: #242d37; border: 1px #3a4653; border-radius: 10px; font-size: 9px; }
+.ui-class-chip.styled { color: #8fe0cb; border-color: #3d7a6c; }
+.ui-class-chip:hover { color: #ffffff; background-color: #3a2b31; border-color: #7a3f4a; }
+.ui-class-chip-remove { margin-left: 5px; color: #c98b93; }
+.ui-class-suggestions { display: flex; flex-wrap: wrap; gap: 4px; max-height: 96px; overflow: auto; }
+.ui-class-suggestion { flex-shrink: 0; height: 20px; padding: 1px 6px; color: #8296ab; background-color: transparent; border: 1px #333d48; border-radius: 10px; font-size: 9px; }
+.ui-class-suggestion:hover { color: #e8f1fa; border-color: #4e6178; }
+.ui-inspector-group { margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px #2a323c; }
+.ui-inspector-group-title { padding: 4px 0px 6px; color: #6f8298; font-size: 8px; }
+.ui-style-row { display: flex; align-items: center; margin-bottom: 3px; }
+.ui-style-label { width: 78px; flex-shrink: 0; color: #8494a7; font-size: 9px; }
+.ui-style-input { position: relative; z-index: 2; flex-grow: 1; flex-shrink: 0; flex-basis: 110px; min-width: 0px; height: 23px; padding: 2px 6px; margin: 0px; color: #cfdcea; background-color: #1b2129; border: 1px #333e4b; border-radius: 3px; font-size: 10px; }
+.ui-style-input:hover { border-color: #4a5a6c; }
+.ui-style-input:focus { border-color: #6b9bd0; }
+.ui-style-clear { width: 18px; height: 23px; flex-shrink: 0; margin-left: 3px; padding: 0px; color: #6d7d90; background-color: transparent; border-width: 0px; font-size: 10px; }
+.ui-style-clear:hover { color: #e7a7ad; }
+.ui-style-pane { display: flex; flex-direction: column; flex-grow: 1; min-height: 0px; padding: 8px; overflow: auto; }
+.ui-style-summary { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; color: #b8c5d5; font-size: 10px; }
+.ui-style-groups { display: flex; flex-direction: column; gap: 6px; }
+.ui-style-rule { padding: 6px 8px; background-color: #1b2129; border: 1px #2c3540; border-radius: 3px; }
+.ui-style-selector { color: #8fe0cb; font-size: 10px; }
+.ui-style-specificity { margin-left: 6px; color: #5e7186; font-size: 8px; }
+.ui-style-declarations { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; }
+.ui-style-declaration { color: #9fb0c3; font-size: 9px; }
+.ui-style-name { margin-right: 4px; color: #7b8fa5; }
+.ui-muted { color: #7d8ea3; font-size: 10px; }
+.ui-source-pane { display: flex; flex-direction: column; flex-grow: 1; min-height: 0px; }
+.ui-source-label { flex-shrink: 0; padding: 5px 12px; color: #7f93a9; background-color: #171c22; border-bottom: 1px #262e38; font-size: 9px; }
+.ui-diagnostics-list { display: flex; flex-direction: column; flex-grow: 1; min-height: 0px; overflow: auto; }
 .ui-editor-canvas-shell { display: flex; flex-direction: column; flex-grow: 1; min-width: 0px; min-height: 0px; background-color: #101419; }
 .ui-canvas-rulers { display: flex; height: 25px; flex-shrink: 0; align-items: center; padding: 0px 10px; color: #66768a; background-color: #171c22; font-size: 9px; }
 .ui-editor-canvas-scroll { display: flex; flex-grow: 1; min-width: 0px; min-height: 0px; overflow: auto; padding: 28px; background-color: #0d1116; }
@@ -300,7 +358,9 @@ viewport { display: block; }
 .ui-inspector-heading .ui-tag { margin-right: 8px; color: #5dc0a8; }
 .ui-inspector-section { margin-bottom: 10px; }
 .ui-inspector-label { display: block; margin-bottom: 4px; color: #8292a8; font-size: 10px; }
-.ui-inspector-section input { height: 27px; margin-bottom: 0px; }
+.ui-inspector-section input, .ui-inspector-input { position: relative; z-index: 2; height: 27px; margin-bottom: 0px; padding: 3px 7px; color: #cfdcea; background-color: #1b2129; border: 1px #333e4b; border-radius: 3px; }
+.ui-inspector-section input:hover, .ui-inspector-input:hover { border-color: #4a5a6c; }
+.ui-inspector-section input:focus, .ui-inspector-input:focus { border-color: #6b9bd0; }
 .ui-segmented { display: flex; }
 .ui-segmented button { flex-grow: 1; height: 27px; border-radius: 0px; }
 .ui-segmented button.active { color: #ffffff; background-color: #28715f; border-color: #52b79f; }

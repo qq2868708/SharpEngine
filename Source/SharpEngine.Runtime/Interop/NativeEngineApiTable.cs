@@ -48,4 +48,8 @@ namespace SharpEngine.Interop;
         public delegate* unmanaged[Cdecl]<NativeRenderStats*, byte> GetRenderStats;
         public delegate* unmanaged[Cdecl]<byte, byte> SetGameplayInputCapture;
         public delegate* unmanaged[Cdecl]<byte> GetGameplayInputCapture;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, byte*, byte*, byte>
+            SetHostUiProperty;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, byte> SetUiDocument;
+        public delegate* unmanaged[Cdecl]<byte> ClearUiDocument;
     }

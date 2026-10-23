@@ -27,6 +27,9 @@ public sealed partial class EditorRuntime
 
     private void RegisterBuiltInEditorUi()
     {
+        AssetOpeners.Register(new EditorAssetOpener("engine.ui-document-editor", "UiDocument",
+            Context => new UiAssetEditorInstance(Context), Priority: -100,
+            EditorId: "ui-editor"));
         AssetOpeners.Register(new EditorAssetOpener("engine.ui-editor", "RmlDocument",
             Context => new UiAssetEditorInstance(Context), Priority: -100,
             EditorId: "ui-editor"));

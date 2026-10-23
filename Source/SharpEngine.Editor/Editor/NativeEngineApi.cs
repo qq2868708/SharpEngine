@@ -54,6 +54,8 @@ internal unsafe readonly struct NativeEngineApi
         uint, void> SubmitHostViewportFrameFunction;
     private readonly delegate* unmanaged[Cdecl]<byte, byte> SetGameplayInputCaptureFunction;
     private readonly delegate* unmanaged[Cdecl]<byte> GetGameplayInputCaptureFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, byte*, byte*, byte>
+        SetHostUiPropertyFunction;
 
     public bool HasDocumentUi => _setUiText != null && _getViewportRect != null;
     public bool HasDockHosts => _createDockWindow != null && _destroyDockWindow != null &&
@@ -145,6 +147,10 @@ internal unsafe readonly struct NativeEngineApi
         {
             SetGameplayInputCaptureFunction = api->SetGameplayInputCapture;
             GetGameplayInputCaptureFunction = api->GetGameplayInputCapture;
+        }
+        if (api->Version >= 18)
+        {
+            SetHostUiPropertyFunction = api->SetHostUiProperty;
         }
     }
 
@@ -348,6 +354,28 @@ internal unsafe readonly struct NativeEngineApi
         fixed (byte* idPointer = idUtf8)
         fixed (byte* markupPointer = markupUtf8)
             return _setHostMarkup(hostPointer, idPointer, markupPointer) != 0;
+    }
+
+    public bool SetHostUiProperty(string HostId, string ElementId, string Name,
+        string Value)
+    {
+        if (SetHostUiPropertyFunction == null)
+        {
+            return false;
+        }
+
+        var HostUtf8 = Encoding.UTF8.GetBytes(HostId + "\0");
+        var IdUtf8 = Encoding.UTF8.GetBytes(ElementId + "\0");
+        var NameUtf8 = Encoding.UTF8.GetBytes(Name + "\0");
+        var ValueUtf8 = Encoding.UTF8.GetBytes(Value + "\0");
+        fixed (byte* HostPointer = HostUtf8)
+        fixed (byte* IdPointer = IdUtf8)
+        fixed (byte* NamePointer = NameUtf8)
+        fixed (byte* ValuePointer = ValueUtf8)
+        {
+            return SetHostUiPropertyFunction(HostPointer, IdPointer, NamePointer,
+                ValuePointer) != 0;
+        }
     }
 
     public bool TryChooseWorldSavePath(nint ownerWindow, string contentRoot,
