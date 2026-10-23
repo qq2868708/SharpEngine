@@ -197,6 +197,21 @@ public static class McpEndpoint
         return new(JsonSerializer.Serialize(result, JsonOptions), !result.Success);
     }
 
+    private static ToolCall CreateContent(EditorRuntime Runtime, JsonElement Request)
+    {
+        var Arguments = Request.GetProperty("params").GetProperty("arguments");
+        string[] Expected = ["schemaVersion", "type", "folder", "name", "expectedRevision"];
+        if (Arguments.EnumerateObject().Any(Field => !Expected.Contains(Field.Name, StringComparer.Ordinal)))
+        {
+            return new(JsonSerializer.Serialize(new Assets.CreateContentAssetResult(1, false,
+                "CONTENT_CREATE_SCHEMA", "Unknown creation request field"), JsonOptions), true);
+        }
+        var Result = Runtime.CreateContentAsset(new(Arguments.GetProperty("schemaVersion").GetInt32(),
+            Arguments.GetProperty("type").GetString()!, Arguments.GetProperty("folder").GetString()!,
+            Arguments.GetProperty("name").GetString()!, Arguments.GetProperty("expectedRevision").GetString()!));
+        return new(JsonSerializer.Serialize(Result, JsonOptions), !Result.Success);
+    }
+
     private static ToolCall ComponentEdit(EditorRuntime runtime, JsonElement request)
     {
         var result = runtime.EditComponent(JsonNode.Parse(request.GetProperty("params").GetProperty("arguments").GetRawText())!.AsObject());
@@ -247,6 +262,7 @@ public static class McpEndpoint
             "components.edit" => ComponentEdit(runtime, request),
             "assets.describe" => new ToolCall(runtime.DescribeAssetsJson(), false),
             "content.describe" => new ToolCall(runtime.DescribeContentJson(), false),
+            "content.create" => CreateContent(runtime, request),
             "editor.describe" => new ToolCall(runtime.DescribeEditorJson(), false),
             "editor.mcp.describe" => new ToolCall(runtime.DescribeMcpJson(), false),
             "editor.mcp.configure" => ConfigureMcp(runtime, request),

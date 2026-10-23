@@ -51,5 +51,20 @@ public sealed partial class EditorRuntime
         }
 
         public void OpenContentAsset(string AssetId) { Runtime.OpenAsset(AssetId); }
+
+        public IReadOnlyList<Assets.ContentAssetType> CreationTypes
+        {
+            get
+            {
+                return Runtime.ContentCreationTypes;
+            }
+        }
+
+        public bool CanCreateContent(string Folder) { return Runtime.CanCreateContent(Folder); }
+
+        public void OpenContentCreation(string PaneId, string Type, string Folder)
+        {
+            Runtime.OpenContentCreation(PaneId, Type, Folder);
+        }
     }
 }

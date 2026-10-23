@@ -293,6 +293,47 @@ internal static class ContentManagerUiValidation
             CheckContextMenu(HostId, true);
             return HostId;
         }
+        void CheckDisabledMenuItem(string HostId, string Id)
+        {
+            var Session = Content()["contextMenus"]!["sessions"]!.ToJsonString();
+            var Ui = Snapshot();
+            var Item = Elements(Ui).Single(Pair => Pair.Host["hostId"]!.GetValue<string>() == HostId &&
+                Match(Pair.Element, Id)).Element;
+            Require(Item["visible"]!.GetValue<bool>() && !Item["enabled"]!.GetValue<bool>() &&
+                !Item["hitTarget"]!.GetValue<bool>(), "Disabled entries remain visible without an interactive hit target");
+            var Bounds = Item["bounds"]!;
+            var Pointer = new JsonObject
+            {
+                ["hostId"] = HostId,
+                ["event"] = "move",
+                ["button"] = "none",
+                ["x"] = (int)(Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>() / 2),
+                ["y"] = (int)(Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() / 2),
+                ["buttons"] = new JsonArray(),
+                ["modifiers"] = new JsonArray(),
+                ["pointerId"] = 0,
+                ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+            };
+            var Moved = Invoke("ui.pointer", Pointer);
+            Require(Moved["accepted"]!.GetValue<bool>(), "Pointer movement over a disabled row is accepted: " + Moved);
+            var HoverUi = Snapshot();
+            var Hovered = Elements(HoverUi).Single(Pair => Pair.Host["hostId"]!.GetValue<string>() == HostId &&
+                Match(Pair.Element, Id)).Element;
+            Require(!Hovered["hovered"]!.GetValue<bool>(), "A disabled menu entry cannot acquire hover");
+            Pointer["event"] = "down";
+            Pointer["button"] = "left";
+            Pointer["expectedElementId"] = Moved["targetElementId"]!.DeepClone();
+            Pointer["expectedFrameId"] = HoverUi["frameId"]!.DeepClone();
+            var Down = Invoke("ui.pointer", Pointer);
+            Require(Down["accepted"]!.GetValue<bool>(), "A disabled row's container receives pointer down: " + Down);
+            Pointer["event"] = "up";
+            Pointer["expectedFrameId"] = Down["frameId"]!.DeepClone();
+            var Up = Invoke("ui.pointer", Pointer);
+            Require(Up["accepted"]!.GetValue<bool>(), "A disabled row's container receives pointer up");
+            Require(Content()["contextMenus"]!["sessions"]!.ToJsonString() == Session,
+                "Clicking a disabled menu row keeps its original popup session open");
+            SaveFrames("disabled-menu-item");
+        }
         JsonObject MovePointer(string id)
         {
             var snap = Snapshot();
@@ -338,6 +379,112 @@ internal static class ContentManagerUiValidation
                     a!.GetValue<string>().StartsWith($"editor.content.select:{pane}:", StringComparison.Ordinal)))
             .Select(p => p.Element).ToList();
 
+        void EnterCreationName(string Name)
+        {
+            var Host = Click("content-create-name");
+            JsonObject Result = new();
+            for (var Attempt = 0; Attempt < 6; Attempt++)
+            {
+                var Ui = Snapshot();
+                Require(Ui["hosts"]!.AsArray().Single(Node =>
+                    Node!["hostId"]!.GetValue<string>() == "content.create")!["focusedElementId"]!
+                    .GetValue<string>().EndsWith("/id/content-create-name", StringComparison.Ordinal),
+                    "The creation name field owns keyboard focus");
+                Result = Invoke("ui.key", new JsonObject
+                {
+                    ["hostId"] = Host["hostId"]!.DeepClone(),
+                    ["event"] = "text",
+                    ["text"] = Name,
+                    ["modifiers"] = new JsonArray(),
+                    ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+                });
+                if (Result["accepted"]!.GetValue<bool>())
+                {
+                    break;
+                }
+                Require(Result["diagnostics"]?[0]?["code"]?.GetValue<string>() == "UI_FRAME_STALE",
+                    "Only rejected stale frames may retry name input: " + Result);
+            }
+            Require(Result["accepted"]!.GetValue<bool>(), "The creation dialog accepts real keyboard text: " + Result);
+        }
+
+        void CheckContentCreation()
+        {
+            Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
+            Invoke("editor.action", new() { ["action"] = "editor.content.source:content:project" });
+            Click("content-add");
+            WaitMenuSession("main");
+            var Menu = Snapshot();
+            Require(Elements(Menu).Any(Pair => Match(Pair.Element, "menu-category-content.create.Basic%20Assets") &&
+                Pair.Element["visible"]!.GetValue<bool>()), "Add displays named creation categories");
+            SaveFrames("add-content-menu");
+            Require(!Elements(Snapshot()).Any(Pair => Match(Pair.Element, "context-command-content-create-RmlDocument") &&
+                Pair.Element["visible"]!.GetValue<bool>()), "UI assets are hidden until their second-level menu opens");
+            var UiHover = MovePointer("context-submenu-content.create.User%20Interface");
+            Require(UiHover["accepted"]!.GetValue<bool>(), "Hover opens the User Interface submenu through native input");
+            var NestedUi = Snapshot();
+            var NestedMenu = Elements(NestedUi).Single(Pair =>
+                Match(Pair.Element, "context-submenu-content.create.User%20Interface-submenu"));
+            var Bounds = NestedMenu.Element["bounds"]!;
+            Require(NestedMenu.Element["visible"]!.GetValue<bool>() &&
+                Bounds["x"]!.GetValue<double>() >= 0 && Bounds["y"]!.GetValue<double>() >= 0 &&
+                Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>() <= NestedMenu.Host["bounds"]!["width"]!.GetValue<double>() &&
+                Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() <= NestedMenu.Host["bounds"]!["height"]!.GetValue<double>(),
+                "The second-level menu is contained by its actual host");
+            SaveFrames("add-content-submenu");
+            var InputHover = MovePointer("context-submenu-content.create.Input");
+            Require(InputHover["accepted"]!.GetValue<bool>(), "Hover switches to the Input submenu");
+            Require(!Elements(Snapshot()).Any(Pair => Match(Pair.Element, "context-command-content-create-RmlDocument") &&
+                Pair.Element["visible"]!.GetValue<bool>()), "Switching submenu closes its sibling");
+            Click("context-command-content-create-InputAction");
+            Require(Content()["creation"]!["pending"]!["type"]!.GetValue<string>() == "InputAction",
+                "A second-level leaf executes its captured creation command");
+            Click("content-create-cancel");
+            Click("content-add");
+            Click("context-command-content-create-Folder");
+            Click("content-create-confirm");
+            Require(Content()["creation"]!["pending"] is not null,
+                "An invalid empty name keeps the dialog open without committing");
+            var Folder = "UiCreated" + Guid.NewGuid().ToString("N")[..8];
+            EnterCreationName(Folder);
+            SaveFrames("create-content-dialog");
+            Click("content-create-confirm");
+            Require(Content()["creation"]!["pending"] is null &&
+                State("content")["selectedPath"]!.GetValue<string>() == Folder,
+                "Toolbar Add creates and selects a new folder through real input");
+            Invoke("editor.action", new() { ["action"] = "editor.content.open:content:project|" + Folder });
+            RightClickBackground("content");
+            Click("context-command-content-create-Material");
+            EnterCreationName("CreatedMaterial");
+            Click("content-create-confirm");
+            var Selected = State("content")["selected"]!.GetValue<string>();
+            var Assets = Invoke("assets.describe")["assets"]!.AsArray();
+            Require(Assets.Any(Node => Node!["id"]!.GetValue<string>() == Selected &&
+                Node["path"]!.GetValue<string>() == "Content/" + Folder + "/CreatedMaterial.smaterial"),
+                "Blank-area creation saves and registers the material in the captured current folder");
+            SaveFrames("created-content");
+            RightClickBackground("content");
+            Require(MovePointer("context-submenu-content.create.User%20Interface")["accepted"]!.GetValue<bool>(),
+                "A right-edge popup can open its second-level menu");
+            var Edge = Snapshot();
+            var Parent = Elements(Edge).Single(Pair => Match(Pair.Element, "contextMenu")).Element;
+            var Child = Elements(Edge).Single(Pair =>
+                Match(Pair.Element, "context-submenu-content.create.User%20Interface-submenu")).Element;
+            Require(Child["visible"]!.GetValue<bool>() &&
+                Child["bounds"]!["x"]!.GetValue<double>() < Parent["bounds"]!["x"]!.GetValue<double>() &&
+                Elements(Edge).Single(Pair => Match(Pair.Element, "context-submenu-content.create.User%20Interface"))
+                    .Element["expanded"]!.GetValue<bool>(),
+                "Second-level menus flip left near the host edge and expose expanded state");
+            SaveFrames("add-content-submenu-left");
+            Click("context-command-content-create-RmlDocument");
+            Click("content-create-cancel");
+            Click("content-add");
+            Click("context-command-content-create-Prefab");
+            Click("content-create-cancel");
+            Require(Content()["creation"]!["pending"] is null,
+                "Cancel releases the pending creation without writing an asset");
+        }
+
         // Existing user layout is loaded read-only; Reset affects this isolated session only.
         Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
         Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
@@ -360,6 +507,10 @@ internal static class ContentManagerUiValidation
         Require(State("content")["viewMode"]!.GetValue<string>() == "Tile",
             "A background right-click changes its own browser to Tile view");
         RightClickBackground("content");
+        CheckDisabledMenuItem("main", "context-command-core.content-up");
+        CheckDisabledMenuItem("main", "context-submenu-content.create.User%20Interface");
+        Require(!Elements(Snapshot()).Any(Pair => Match(Pair.Element, "context-command-content-create-RmlDocument") &&
+            Pair.Element["visible"]!.GetValue<bool>()), "Disabled submenu categories cannot open their children");
         SaveFrames("background-context-menu");
         Click("context-command-core.content-clear-filters");
         Require(State("content")["search"]!.GetValue<string>() == "" &&
@@ -565,6 +716,7 @@ internal static class ContentManagerUiValidation
         SaveFrames("four-docked");
         if (ContextMenusOnly)
         {
+            CheckContentCreation();
             Invoke("editor.action", new() { ["action"] = "editor.dock-reset-layout" });
             Invoke("editor.action", new() { ["action"] = "editor.content.source:content:engine" });
             Search("content", "cube");

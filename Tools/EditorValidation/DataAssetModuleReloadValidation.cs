@@ -38,7 +38,7 @@ internal static class DataAssetModuleReloadValidation
             Require(ResourceReply["error"] is null && ResourceText == Runtime.DescribeAssetsJson(),
                 "The asset MCP resource exposes the same committed snapshot as assets.describe");
 
-            Require(JsonNode.Parse(Runtime.DescribeAssetsJson())!["dataAssetTypes"]!.AsArray().Count == 1,
+            Require(JsonNode.Parse(Runtime.DescribeAssetsJson())!["dataAssetTypes"]!.AsArray().Count == 2,
                 "The committed reload keeps its data-asset registry while its preparation is alive");
         }
         Require(Runtime.DescribeAssetsJson() == Before,
@@ -48,7 +48,7 @@ internal static class DataAssetModuleReloadValidation
             Accepted.Commit();
             Accepted.Accept();
         }
-        Require(JsonNode.Parse(Runtime.DescribeAssetsJson())!["dataAssetTypes"]!.AsArray().Count == 1,
+        Require(JsonNode.Parse(Runtime.DescribeAssetsJson())!["dataAssetTypes"]!.AsArray().Count == 2,
             "An accepted module reload retains its registered data-asset types");
     }
 }

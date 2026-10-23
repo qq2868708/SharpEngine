@@ -158,13 +158,13 @@ public sealed partial class EditorRuntime
             new EditorMenu("help", "Help", 600),
         }) _menus.RegisterBuiltInMenu(menu);
 
-        _menus.RegisterCategory(new EditorMenuCategory("file", "project", 100));
-        _menus.RegisterCategory(new EditorMenuCategory("file", "level", 200));
-        _menus.RegisterCategory(new EditorMenuCategory("file", "settings", 300));
-        _menus.RegisterCategory(new EditorMenuCategory("edit", "history", 50));
-        _menus.RegisterCategory(new EditorMenuCategory("assets", "content", 100));
-        _menus.RegisterCategory(new EditorMenuCategory("view", "panes", 100));
-        _menus.RegisterCategory(new EditorMenuCategory("view", "layout", 200));
+        _menus.RegisterCategory(new EditorMenuCategory("file", "project", 100, "Project"));
+        _menus.RegisterCategory(new EditorMenuCategory("file", "level", 200, "Level"));
+        _menus.RegisterCategory(new EditorMenuCategory("file", "settings", 300, "Settings"));
+        _menus.RegisterCategory(new EditorMenuCategory("edit", "history", 50, "History"));
+        _menus.RegisterCategory(new EditorMenuCategory("assets", "content", 100, "Content"));
+        _menus.RegisterCategory(new EditorMenuCategory("view", "panes", 100, "Panes"));
+        _menus.RegisterCategory(new EditorMenuCategory("view", "layout", 200, "Layout"));
         _menus.RegisterItem(new EditorMenuItem("file", "project", "core.new-project", 100));
         _menus.RegisterItem(new EditorMenuItem("file", "project", "core.open-project", 200));
         _menus.RegisterItem(new EditorMenuItem("file", "project", "core.new-csharp", 300));
@@ -381,25 +381,34 @@ public sealed partial class EditorRuntime
         }
     }
 
-    private void AppendMenuCategories<TCategory>(StringBuilder markup,
-        IReadOnlyList<TCategory> categories,
-        Func<TCategory, IReadOnlyList<EditorMenuItem>> items,
-        Func<TCategory, string> identity)
+    private void AppendMenuCategories(StringBuilder Markup,
+        IReadOnlyList<EditorMenuCategory> Categories,
+        Func<EditorMenuCategory, IReadOnlyList<EditorMenuItem>> Items,
+        Func<EditorMenuCategory, string> Identity)
     {
-        var wroteCategory = false;
-        foreach (var category in categories)
+        var WroteCategory = false;
+        foreach (var Category in Categories)
         {
-            var categoryItems = items(category);
-            var commands = categoryItems.Select(item =>
-                    _commands.TryGet(item.CommandId, out var command) ? command : null)
-                .Where(command => command is not null).Cast<EditorCommand>().ToArray();
-            if (commands.Length == 0) continue;
-            if (wroteCategory) markup.Append("<div class=\"menu-divider\" />");
-            foreach (var command in commands)
-                AppendCommandMenuItem(markup, command, identity(category));
-            wroteCategory = true;
+            var CategoryItems = Items(Category);
+            var Commands = CategoryItems.Select(Item =>
+                    _commands.TryGet(Item.CommandId, out var Command) ? Command : null)
+                .OfType<EditorCommand>().ToArray();
+            if (Commands.Length == 0)
+            {
+                continue;
+            }
+            Markup.Append("<div class=\"menu-heading\"><span>").Append(Escape(Category.Label))
+                .Append("</span><span class=\"menu-heading-line\" /></div>");
+            foreach (var Command in Commands)
+            {
+                AppendCommandMenuItem(Markup, Command, Identity(Category));
+            }
+            WroteCategory = true;
         }
-        if (!wroteCategory) markup.Append("<div class=\"empty-menu\">No commands</div>");
+        if (!WroteCategory)
+        {
+            Markup.Append("<div class=\"empty-menu\">No commands</div>");
+        }
     }
 
     private void AppendCommandMenuItem(StringBuilder markup, EditorCommand command,
@@ -462,7 +471,7 @@ public sealed partial class EditorRuntime
         var Selection = _selection;
         var Context = new EditorCommandContext(this, Selection, null, HostId);
         var Sections = _contextMenus.OrderedCategories(Kind).Select(Category =>
-            (Category.Id, (IReadOnlyList<EditorCommand>)_contextMenus.OrderedItems(Kind, Category.Id)
+            new EditorPopupSection(Category.Id, Category.Label, _contextMenus.OrderedItems(Kind, Category.Id)
                 .Select(Item => _commands.TryGet(Item.CommandId, out var Command) ? Command : null)
                 .OfType<EditorCommand>().ToArray()));
         PopupMenus.Show(HostId, X, Y, Context, Sections,

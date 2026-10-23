@@ -401,11 +401,22 @@ viewport { display: block; }
 .menu-path { padding: 6px 12px 4px; color: #65758a; font-size: 9px; overflow: hidden; }
 /* GL2 has no offscreen layer/filter support; box-shadow produces an untextured white quad. */
 .menu-popup { display: none; position: absolute; top: 32px; left: 0px; z-index: 300; width: 236px; padding: 5px; background-color: #22262e; color: #d4dae4; border: 1px #4a5566; border-radius: 4px; }
-.menu-popup button { display: block; width: 100%; text-align: left; background-color: transparent; color: #d4dae4; border-width: 0px; padding: 8px 12px; }
-.menu-popup button:hover { background-color: #3d526c; }
-.menu-command { display: flex; align-items: center; }
+.menu-popup button { display: block; width: 100%; text-align: left; background-color: transparent; color: #d4dae4; border-width: 0px; padding: 5px 12px; }
+.menu-popup button:hover, .menu-popup button.submenu-open { background-color: #3d526c; }
+.menu-popup button:disabled, .menu-popup button.disabled, .menu-popup button:disabled:hover, .menu-popup button.disabled:hover { color: #68778b; background-color: transparent; border-color: transparent; focus: none; }
+.menu-popup .menu-command { display: flex; align-items: center; }
 .menu-check { display: inline-block; width: 24px; color: #7fc0ff; font-weight: bold; }
 .empty-menu { padding: 8px 12px; color: #758195; }
 .context-menu { position: absolute; top: 0px; left: 0px; z-index: 500; }
-.menu-heading { padding: 6px 12px 4px; color: #718198; font-size: 10px; letter-spacing: 1px; }
+.menu-heading { display: flex; align-items: center; padding: 6px 8px 4px; color: #718198; font-size: 10px; }
+.menu-heading-line { flex: 1; height: 1px; margin-left: 8px; background-color: #424d5c; }
+.menu-submenu-arrow { margin-left: auto; padding-left: 18px; }
+.context-submenu { z-index: 510; overflow-y: auto; }
 .menu-divider { height: 1px; margin: 5px; background-color: #424d5c; }
+.content-create-form { padding: 24px; }
+.content-create-form h2 { display: block; margin-bottom: 16px; font-size: 20px; font-weight: bold; }
+.content-create-form label { display: block; margin-top: 20px; }
+.content-create-form p { display: block; margin: 12px 0px; color: #9eafc4; }
+.content-create-form input { display: block; width: 400px; max-width: 90%; margin-top: 8px; }
+.content-create-buttons { display: flex; margin-top: 18px; }
+.content-create-buttons button { margin-right: 12px; min-width: 84px; }

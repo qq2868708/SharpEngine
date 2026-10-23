@@ -147,6 +147,9 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>资产创建菜单保留层级：文件夹和基础资产放在一级；Advanced Assets 下的 User Interface、Input、Data Assets 悬停展开二级资产项，分类行带箭头。切换分类收起相邻子菜单；靠近窗口右边缘时子菜单向左展开。禁用分类不接收 hover，也不会展开。</p>
+      <p>Content Manager 工具栏新增 <strong>+ Add</strong>，与浏览区空白处右键共用资产创建分类。可以创建文件夹、World、Prefab、Material、RML UI 文档、StyleSheet、InputAction、InputMappingContext 和当前已注册的 DataAsset 类型。选择类型后输入名称，Create 将源文件保存到该浏览器当时的项目 Content 目录，并注册、刷新和选中新资产；Cancel 不写文件。引擎、插件目录及 Play 期间禁用创建。重复名称或清单版本冲突会保留对话框并显示错误；DataAsset 的构造默认值必须通过该类型校验。创建是立即保存到磁盘的操作，独立于 World Undo；创建 World 不切换当前 World，也不更改启动 World。模型、纹理与音频导入不在此入口范围内。</p>
+      <p>菜单分类显示名称与分隔线。禁用菜单项保持灰色，不接收 hover、焦点或命令点击；点击其所在行不会关闭菜单。菜单打开后命令变为不可用时，执行复查同样保留菜单。</p>
       <p>合并浏览器私有删除命令与视图拥有的右键菜单。Delete Asset 保留面板隔离，并绑定右击时的目标；资产列表重载后释放旧菜单并重新绑定各浏览器视图。</p>
       <p>Content Manager 的 Go Up、Refresh、Clear Filters、Tile View、List View 只在浏览区空白处右键出现；资产和文件夹菜单只包含对应目标操作。空白处右键保留已有选择。每个浏览器视图拥有自己的菜单和事件绑定，右键沿实际 UI 布局冒泡到所属视图处理。</p>
       <p>修复 Rider 启动与构建配置脱节：每个 Debug、Development、Shipping 启动项现在拥有固定配置的 Target 与独立启动文件。选择 Debug Editor 会构建并启动 Debug Editor，即使全局解决方案选择 Development；普通 Build Solution 仍遵循全局配置。旧项目重新生成并加载解决方案后，选择新的配置专属启动 Target。重新构建前先停止占用该输出的编辑器。</p>

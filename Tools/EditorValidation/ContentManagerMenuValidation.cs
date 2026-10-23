@@ -180,14 +180,21 @@ internal static unsafe class ContentManagerMenuValidation
                     Captured = Context;
                     Called++;
                 }, Context => Enabled));
-            using var Category = Runtime.ContextMenus.RegisterCategory(new EditorContextMenuCategory(EditorContextMenuKind.Asset, "validation"));
+            using var Category = Runtime.ContextMenus.RegisterCategory(new EditorContextMenuCategory(
+                EditorContextMenuKind.Asset, "validation", Label: "Validation <&>"));
             using var Placement = Runtime.ContextMenus.RegisterItem(new EditorContextMenuItem(
                 EditorContextMenuKind.Asset, "validation", "validation.context-extra"));
             Request("asset", "engine", "engine://meshes/cube");
             var Extra = Command("validation.context-extra");
+            Check(Menu().Descendants("div").Single(Element =>
+                (string?)Element.Attribute("id") == "menu-category-validation").Value == "Validation <&>",
+                "Context categories render their escaped display label instead of only a divider");
+            var DisabledToken = Menu().Attribute("data-menu-session")!.Value;
             Enabled = false;
             Execute(Extra);
             Check(Called == 0, "Extension CanExecute is rechecked immediately before execution");
+            Check(Menu().Attribute("data-menu-session")?.Value == DisabledToken,
+                "A command that becomes unavailable preserves the current popup session");
             Enabled = true;
             Request("asset", "engine", "engine://meshes/cube");
             Extra = Command("validation.context-extra");
@@ -304,7 +311,7 @@ internal static unsafe class ContentManagerMenuValidation
             {
                 new("item", "<Label & text>", "action<&", false, true),
             };
-            var Ui = new UiMenu([new UiMenuSection("section", Items)]);
+            var Ui = new UiMenu([new UiMenuSection("section", Items, "Category <&>")]);
             Items.Clear();
             var Layout = XElement.Parse(Ui.BuildLayout(new UiLayoutContext(100, 100)));
             Check(Layout.Descendants("button").Single().Value.Contains("<Label & text>") &&
@@ -312,6 +319,27 @@ internal static unsafe class ContentManagerMenuValidation
                 Layout.Descendants("button").Single().Attribute("data-action") is null,
                 "Generic menu rendering escapes labels, snapshots definitions without World " +
                 "dependencies, and gives a disabled entry no action to dispatch");
+            Check(Layout.Descendants("div").Single(Element =>
+                (string?)Element.Attribute("id") == "menu-category-section").Value == "Category <&>" &&
+                Layout.Descendants("button").Single().Attribute("class")!.Value.Contains("disabled"),
+                "Generic menu sections retain labels and disabled items carry their visual state");
+            var Children = new List<UiMenuItem>
+            {
+                new("nested-leaf", "Nested", "nested-action"),
+            };
+            var NestedMenu = new UiMenu([new UiMenuSection("nested", [
+                new UiMenuItem("nested-parent", "Parent", "", Children: Children),
+                new UiMenuItem("disabled-parent", "Disabled", "", false, Children: [new("disabled-leaf", "Leaf", "", false)]),
+            ])]);
+            Children.Clear();
+            var NestedLayout = XElement.Parse(NestedMenu.BuildLayout(new UiLayoutContext(100, 100)));
+            Check(NestedLayout.Descendants("button").Single(Element =>
+                (string?)Element.Attribute("id") == "nested-parent").Attribute("data-menu-submenu") is not null &&
+                NestedLayout.Descendants("div").Count(Element =>
+                    (string?)Element.Attribute("class") == "menu-popup context-submenu") == 2 &&
+                NestedLayout.Descendants("button").Single(Element =>
+                    (string?)Element.Attribute("id") == "disabled-parent").Attribute("data-menu-submenu") is null,
+                "Nested menu definitions are deep snapshots and disabled parents expose no submenu trigger");
             Runtime.InvokeUiAction("editor.play");
             Runtime.Shutdown();
             Check(Runtime.ContextMenuRouter.Describe()["scopes"]!.AsArray().Count == 0,

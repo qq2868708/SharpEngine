@@ -57,6 +57,10 @@ internal sealed record McpCapabilityDescriptor(
         {
             return (false, McpCapabilityCatalog.Unavailable("PROJECT_UNAVAILABLE", "Open a project before managing Plugins"));
         }
+        if (Id == "content.create" && (runtime.ProjectManifest is null || runtime.PlayState != EditorPlayState.Stopped))
+        {
+            return (false, McpCapabilityCatalog.Unavailable("CONTENT_CREATE_UNAVAILABLE", "Open a project and stop Play before creating content"));
+        }
         if (Id is "source.create" or "source.modules" && runtime.ProjectManifest is null)
             return (false, McpCapabilityCatalog.Unavailable("PROJECT_UNAVAILABLE", "Open a project before creating C# source"));
         if (RequiresLiveUi && !runtime.HasLiveUi)
@@ -110,6 +114,13 @@ internal static class McpCapabilityCatalog
                 ObjectOutput(), RevisionPrecondition: "context revision"),
             Read("assets.describe", "Return the engine and project asset registry with source and importer metadata."),
             Read("content.describe", "Return all four independent content managers, their queries, filters, selections, Tile/List modes, and active routing target (schema v2)."),
+            new("content.create", 1, "Create a folder or a registered source asset inside project Content. Commits the source and asset manifest to disk; separate from World Undo and startup configuration.", "external",
+                JsonNode.Parse("""
+                    {"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+                     "required":["schemaVersion","type","folder","name","expectedRevision"],"properties":{
+                     "schemaVersion":{"const":1},"type":{"type":"string","minLength":1},"folder":{"type":"string"},
+                     "name":{"type":"string","minLength":1},"expectedRevision":{"type":"string","minLength":1}}}
+                    """)!.AsObject(), ObjectOutput(), RevisionPrecondition: "content.describe.creation.revision"),
             Read("editor.describe", "Return the committed editor snapshot and links to capability and live UI resources."),
             Read("editor.mcp.describe", "Read the MCP configuration, active HTTP endpoint, revision and diagnostics."),
             new("editor.mcp.configure", 1,

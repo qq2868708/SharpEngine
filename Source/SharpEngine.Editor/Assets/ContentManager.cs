@@ -106,10 +106,10 @@ public sealed class ContentManager
         }
     }
 
-    internal IEnumerable<(string Id, IReadOnlyList<EditorCommand> Commands)> MenuSections(EditorContextMenuKind Kind)
+    internal IEnumerable<EditorPopupSection> MenuSections(EditorContextMenuKind Kind)
     {
         return _contextMenus.OrderedCategories(Kind).Select(Category =>
-            (Category.Id, (IReadOnlyList<EditorCommand>)_contextMenus.OrderedItems(Kind, Category.Id)
+            new EditorPopupSection(Category.Id, Category.Label, _contextMenus.OrderedItems(Kind, Category.Id)
                 .Select(Item => _commands.TryGet(Item.CommandId, out var Command) ? Command : null)
                 .OfType<EditorCommand>().ToArray()));
     }
@@ -168,7 +168,7 @@ public sealed class ContentManager
                 Context.PlayState == EditorPlayState.Stopped,
             "Remove the asset's manifest entry and its source file"));
         _contextMenus.RegisterOwnedCategory(new EditorContextMenuCategory(
-            EditorContextMenuKind.Asset, "asset", 100));
+            EditorContextMenuKind.Asset, "asset", 100, "Asset"));
         _contextMenus.RegisterOwnedItem(new EditorContextMenuItem(
             EditorContextMenuKind.Asset, "asset", DeleteAssetCommandId, 100));
     }
@@ -188,7 +188,6 @@ public sealed class ContentManager
     internal void AppendContextMenu(EditorContextMenuKind Kind, StringBuilder Markup,
         EditorCommandContext Context)
     {
-        var Wrote = false;
         foreach (var Category in _contextMenus.OrderedCategories(Kind))
         {
             var Active = _contextMenus.OrderedItems(Kind, Category.Id)
@@ -200,15 +199,13 @@ public sealed class ContentManager
             {
                 continue;
             }
-            if (Wrote)
-            {
-                Markup.Append("<div class=\"menu-divider\" />");
-            }
+            Markup.Append("<div class=\"menu-heading\"><span>")
+                .Append(System.Net.WebUtility.HtmlEncode(Category.Label))
+                .Append("</span><span class=\"menu-heading-line\" /></div>");
             foreach (var Command in Active)
             {
                 AppendCommandItem(Markup, Command, Kind, Category.Id, Context);
             }
-            Wrote = true;
         }
     }
 
@@ -220,9 +217,8 @@ public sealed class ContentManager
         Markup.Append("<button id=\"").Append(System.Net.WebUtility.HtmlEncode(SurfaceId))
             .Append("-command-").Append(System.Net.WebUtility.HtmlEncode(Command.Id))
             .Append("\" class=\"menu-command")
-            .Append(Enabled ? "\"" : " disabled\" disabled=\"true\"")
-            .Append(" data-action=\"")
-            .Append(System.Net.WebUtility.HtmlEncode(CommandAction(Command.Id))).Append('"');
+            .AppendAvailability(Enabled)
+            .AppendAction(CommandAction(Command.Id), Enabled);
         if (Command.Tooltip is not null)
         {
             Markup.Append(" title=\"")

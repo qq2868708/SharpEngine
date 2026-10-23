@@ -257,6 +257,7 @@ public sealed partial class EditorRuntime
         var Snapshot = JsonNode.Parse(_contentManagers?.ToJson() ?? "{}")!.AsObject();
         Snapshot["contextMenus"] = PopupMenus.Describe();
         Snapshot["contextRouting"] = ContextMenuRouting.Describe();
+        Snapshot["creation"] = DescribeContentCreation();
         return Snapshot.ToJsonString();
     }
     public string DescribeInputJson() => _inputRuntime?.DescribeJson() ??
@@ -429,6 +430,7 @@ public sealed partial class EditorRuntime
             {
                 context = category.Context.ToString(),
                 id = category.Id,
+                label = category.Label,
                 order = category.Order,
             }),
             contextItems = _contextMenus.Items.Select(item => new
@@ -923,6 +925,10 @@ public sealed partial class EditorRuntime
             return;
         }
         if (HandleSourceAction(actionHostId, action)) return;
+        if (HandleContentCreationAction(actionHostId, action))
+        {
+            return;
+        }
         if (AssetOpeners.TryHandleHostAction(actionHostId, action)) return;
         // Pane-owned commands dispatch by their published action before the global registry
         // is consulted, so a content browser never needs a global command entry.
@@ -1270,6 +1276,10 @@ public sealed partial class EditorRuntime
 
     public void Shutdown()
     {
+        if (PendingCreation is not null)
+        {
+            CloseContentCreation();
+        }
         PopupMenus.Clear();
         StopRuntimeInstance();
         ShutdownMcp();

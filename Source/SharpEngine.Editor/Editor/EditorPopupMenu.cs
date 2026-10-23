@@ -6,6 +6,9 @@ using SharpEngine.Logging;
 
 namespace SharpEngine.Editor;
 
+internal sealed record EditorPopupSection(string Id, string Label,
+    IReadOnlyList<EditorCommand> Commands, IReadOnlyList<EditorPopupSection>? Submenus = null);
+
 /// <summary>One command popup per native host. No asset or browser-specific behavior.</summary>
 internal sealed class EditorPopupMenu
 {
@@ -27,7 +30,7 @@ internal sealed class EditorPopupMenu
     }
 
     internal void Show(string HostId, int X, int Y, EditorCommandContext Context,
-        IEnumerable<(string Id, IReadOnlyList<EditorCommand> Commands)> Sections, Func<bool> IsValid,
+        IEnumerable<EditorPopupSection> Sections, Func<bool> IsValid,
         EditorCommandRegistry? LocalCommands = null)
     {
         Close(HostId);
@@ -35,6 +38,10 @@ internal sealed class EditorPopupMenu
         var BoundCommands = new Dictionary<string, CommandBinding>(StringComparer.Ordinal);
         var Items = new List<UiMenuSection>();
         foreach (var Section in Sections)
+        {
+            Items.Add(new UiMenuSection(Section.Id, BuildItems(Section), Section.Label));
+        }
+        IReadOnlyList<UiMenuItem> BuildItems(EditorPopupSection Section)
         {
             var Entries = new List<UiMenuItem>();
             foreach (var Command in Section.Commands)
@@ -68,7 +75,16 @@ internal sealed class EditorPopupMenu
                     Command.GetChecked is null ? null : Registry.IsChecked(Command, Context),
                     Command.Tooltip));
             }
-            Items.Add(new UiMenuSection(Section.Id, Entries));
+            foreach (var Submenu in Section.Submenus ?? [])
+            {
+                var Children = BuildItems(Submenu);
+                if (Children.Count > 0)
+                {
+                    Entries.Add(new UiMenuItem("context-submenu-" + Submenu.Id, Submenu.Label,
+                        string.Empty, Children.Any(Child => Child.Enabled), Children: Children));
+                }
+            }
+            return Entries;
         }
         if (BoundCommands.Count == 0)
         {
@@ -114,19 +130,25 @@ internal sealed class EditorPopupMenu
         {
             return true;
         }
-        Close(HostId);
         var HasCommand = Session.Commands.TryGetValue(Parts[1], out var Binding);
         if (!Session.IsValid() || !HasCommand)
         {
+            Close(HostId);
             Session.Context.SetStatus("Context menu target is no longer available");
             return true;
         }
         var Registered = Binding!.Registry.TryGet(Parts[1], out var Current);
         if (!Registered || !ReferenceEquals(Binding.Command, Current))
         {
+            Close(HostId);
             Session.Context.SetStatus("Context menu target is no longer available");
             return true;
         }
+        if (!Binding.Registry.CanExecute(Binding.Command, Session.Context))
+        {
+            return true;
+        }
+        Close(HostId);
         Binding.Registry.TryExecute("editor.command:" + Binding.Command.Id, Session.Context);
         return true;
     }

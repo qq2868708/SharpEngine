@@ -163,16 +163,30 @@ public sealed record EditorMenu
 
 public sealed record EditorMenuCategory
 {
-    public EditorMenuCategory(string menuId, string id, int order = 0)
+    public EditorMenuCategory(string menuId, string id, int order = 0, string? Label = null)
     {
         MenuId = EditorExtensionIds.Validate(menuId, nameof(menuId));
         Id = EditorExtensionIds.Validate(id, nameof(id));
         Order = order;
+        this.Label = EditorExtensionIds.RequireLabel(Label ?? id, nameof(Label));
     }
 
-    public string MenuId { get; }
-    public string Id { get; }
-    public int Order { get; }
+    public string MenuId
+    {
+        get;
+    }
+    public string Id
+    {
+        get;
+    }
+    public int Order
+    {
+        get;
+    }
+    public string Label
+    {
+        get;
+    }
 }
 
 public sealed record EditorMenuItem
@@ -202,16 +216,30 @@ public enum EditorContextMenuKind : byte
 
 public sealed record EditorContextMenuCategory
 {
-    public EditorContextMenuCategory(EditorContextMenuKind context, string id, int order = 0)
+    public EditorContextMenuCategory(EditorContextMenuKind context, string id, int order = 0, string? Label = null)
     {
         Context = context;
         Id = EditorExtensionIds.Validate(id, nameof(id));
         Order = order;
+        this.Label = EditorExtensionIds.RequireLabel(Label ?? id, nameof(Label));
     }
 
-    public EditorContextMenuKind Context { get; }
-    public string Id { get; }
-    public int Order { get; }
+    public EditorContextMenuKind Context
+    {
+        get;
+    }
+    public string Id
+    {
+        get;
+    }
+    public int Order
+    {
+        get;
+    }
+    public string Label
+    {
+        get;
+    }
 }
 
 public sealed record EditorContextMenuItem

@@ -15,10 +15,16 @@ internal interface IContentManagerMenuHost
     void ContentSelectionChanged(string Status, bool Rebuild = false);
     bool CanOpenContentAsset(string AssetId);
     void OpenContentAsset(string AssetId);
+    IReadOnlyList<ContentAssetType> CreationTypes
+    {
+        get;
+    }
+    bool CanCreateContent(string Folder);
+    void OpenContentCreation(string PaneId, string Type, string Folder);
 }
 
 /// <summary>Owns browser context targets and menu contributions, independent of EditorRuntime.</summary>
-internal sealed class ContentManagerContextMenus
+internal sealed class ContentManagerContextMenus : IDisposable
 {
     private readonly IContentManagerMenuHost Host;
     private readonly EditorCommandRegistry Commands;
@@ -27,6 +33,7 @@ internal sealed class ContentManagerContextMenus
     private readonly string PaneId;
     private readonly ContentManager Model;
     private readonly Func<bool> IsAvailable;
+    private readonly List<IDisposable> CreationRegistrations = [];
 
     internal ContentManagerContextMenus(string PaneId, ContentManager Model, Func<bool> IsAvailable,
         IContentManagerMenuHost Host, EditorCommandRegistry Commands,
@@ -106,7 +113,7 @@ internal sealed class ContentManagerContextMenus
             var Target = Kind == "content" && Data["target"] is null
                 ? Model.CurrentFolder : Data["target"]!.GetValue<string>();
             return ShowRequest(Event.HostId, Event.X, Event.Y, Kind,
-                Data["source"]!.GetValue<string>(), Target);
+                Data["source"]!.GetValue<string>(), Target, Data["addOnly"]?.GetValue<bool>() == true);
         }
         catch (Exception Error) when (Error is JsonException or InvalidOperationException or NullReferenceException)
         {
@@ -143,7 +150,8 @@ internal sealed class ContentManagerContextMenus
         return ShowRequest(HostId, X, Y, Parts[2], Parts[3], Target);
     }
 
-    private bool ShowRequest(string HostId, int X, int Y, string TargetKind, string SourceName, string Target)
+    private bool ShowRequest(string HostId, int X, int Y, string TargetKind, string SourceName, string Target,
+        bool AddOnly = false)
     {
         if (TargetKind is not ("asset" or "folder" or "content"))
         {
@@ -158,7 +166,12 @@ internal sealed class ContentManagerContextMenus
             return true;
         }
         Popup.Close(HostId);
+        ClearCreationCommands();
         var ParsedSource = Enum.TryParse<AssetSource>(SourceName, true, out var Source);
+        if (!ParsedSource)
+        {
+            Source = Model.SourceFilter == ContentSourceFilter.Engine ? AssetSource.Engine : AssetSource.Project;
+        }
         if (TargetKind != "content" && (!ParsedSource || Source is not (AssetSource.Engine or AssetSource.Project)))
         {
             return true;
@@ -188,7 +201,7 @@ internal sealed class ContentManagerContextMenus
                 {
                     return true;
                 }
-                Selection = new EditorSelection(EditorSelectionKind.None, Path: Target);
+                Selection = new EditorSelection(EditorSelectionKind.None, Path: Target, Source: Source);
             }
             else
             {
@@ -209,23 +222,49 @@ internal sealed class ContentManagerContextMenus
         var Context = Host.BindContentContext(Selection, PaneId, HostId);
         var Kind = TargetKind == "asset" ? EditorContextMenuKind.Asset :
             TargetKind == "folder" ? EditorContextMenuKind.Folder : EditorContextMenuKind.Content;
-        var Sections = new List<(string Id, IReadOnlyList<EditorCommand> Commands)>();
+        var Sections = new List<EditorPopupSection>();
+        if (Kind == EditorContextMenuKind.Content)
+        {
+            var Advanced = new List<EditorPopupSection>();
+            foreach (var Group in Host.CreationTypes.GroupBy(Type => Type.Category))
+            {
+                var CreationCommands = new List<EditorCommand>();
+                foreach (var Definition in Group)
+                {
+                    var Command = new EditorCommand(Definition.CommandId, Definition.Label,
+                        Context => Host.OpenContentCreation(PaneId, Definition.Type, Target),
+                        Context => IsAvailable() && Source == AssetSource.Project && Host.CanCreateContent(Target));
+                    CreationRegistrations.Add(Model.MenuCommands.RegisterOwned(Command));
+                    CreationCommands.Add(Command);
+                }
+                var Section = new EditorPopupSection("content.create." + Uri.EscapeDataString(Group.Key), Group.Key, CreationCommands);
+                if (Group.Key is "Folder" or "Basic Assets")
+                {
+                    Sections.Add(Section);
+                }
+                else
+                {
+                    Advanced.Add(Section);
+                }
+            }
+            Sections.Add(new("content.create.advanced", "Advanced Assets", [], Advanced));
+        }
         var Primary = Kind switch
         {
             EditorContextMenuKind.Asset => new[] { "core.content-open", "core.content-browse-parent" },
             EditorContextMenuKind.Folder => new[] { "core.content-open" },
             _ => Array.Empty<string>(),
         };
-        Sections.Add(("content.target", Resolve(Primary)));
+        Sections.Add(new("content.target", "Target", Resolve(Primary)));
         Sections.AddRange(Model.MenuSections(Kind));
         foreach (var Category in Extensions.OrderedCategories(Kind))
         {
-            Sections.Add((Category.Id, Resolve(Extensions.OrderedItems(Kind, Category.Id).Select(Item => Item.CommandId))));
+            Sections.Add(new(Category.Id, Category.Label, Resolve(Extensions.OrderedItems(Kind, Category.Id).Select(Item => Item.CommandId))));
         }
-        if (Kind == EditorContextMenuKind.Content)
+        if (Kind == EditorContextMenuKind.Content && !AddOnly)
         {
-            Sections.Add(("content.navigation", Resolve(["core.content-up", "core.content-refresh", "core.content-clear-filters"])));
-            Sections.Add(("content.view", Resolve(["core.content-view-tile", "core.content-view-list"])));
+            Sections.Add(new("content.navigation", "Navigation", Resolve(["core.content-up", "core.content-refresh", "core.content-clear-filters"])));
+            Sections.Add(new("content.view", "View", Resolve(["core.content-view-tile", "core.content-view-list"])));
         }
         Popup.Show(HostId, X, Y, Context, Sections,
             () => IsAvailable() && Host.FindContentHost(PaneId) == HostId &&
@@ -234,6 +273,17 @@ internal sealed class ContentManagerContextMenus
                     : TargetExists(Manager, Selection)), Model.MenuCommands);
         return true;
     }
+
+    private void ClearCreationCommands()
+    {
+        foreach (var Registration in CreationRegistrations)
+        {
+            Registration.Dispose();
+        }
+        CreationRegistrations.Clear();
+    }
+
+    public void Dispose() { ClearCreationCommands(); }
 
     internal bool SelectFolder(AssetSource Source, string Path)
     {

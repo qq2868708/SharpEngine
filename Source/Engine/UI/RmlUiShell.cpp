@@ -432,6 +432,8 @@ struct RmlUiShell::Impl
         TextInputMethodEditor_Win32 Ime;
         Rml::Element* OpenPopup{};
         bool ContextMenuNeedsLayout = false;
+        std::vector<Rml::Element*> ContextSubmenus;
+        bool SubmenusNeedLayout = false;
         bool OwnsWindow{};
         bool TopLevelEditor{};
         bool Reported{};
@@ -820,7 +822,7 @@ struct RmlUiShell::Impl
     {
         if (!element) return false;
         const auto role = ElementRole(element);
-        return role == "splitter" || role == "tab" || role == "button" ||
+        return role == "splitter" || role == "tab" || role == "button" || role == "menu" ||
             role == "input" || role == "viewport" || role == "menu-item" ||
             element->HasAttribute("data-input-surface") ||
             element->HasAttribute("data-timeline-ruler") ||
@@ -1193,8 +1195,32 @@ struct RmlUiShell::Impl
         return host.Surface && host.Surface->MakeCurrent();
     }
 
+    void SetContextSubmenuOpen(Host& Host, Rml::Element* Submenu, bool Open)
+    {
+        Submenu->SetProperty("display", Open ? "block" : "none");
+        if (Open)
+        {
+            Submenu->SetAttribute("open", true);
+        }
+        else
+        {
+            Submenu->RemoveAttribute("open");
+        }
+        auto* Opener = Host.Document->GetElementById(Attribute(Submenu, "data-menu-opener"));
+        if (Opener)
+        {
+            Opener->SetClass("submenu-open", Open);
+            Opener->SetAttribute("aria-expanded", Open ? "true" : "false");
+        }
+    }
+
     void HidePopups(Host& host)
     {
+        for (auto* Submenu : host.ContextSubmenus)
+        {
+            SetContextSubmenuOpen(host, Submenu, false);
+        }
+        host.SubmenusNeedLayout = false;
         if (host.OpenPopup)
         {
             host.OpenPopup->SetAttribute("open", false);
@@ -1238,6 +1264,87 @@ struct RmlUiShell::Impl
         Menu->SetProperty("left", std::to_string(std::clamp(X, 0, (std::max)(0, Width - static_cast<int>(std::ceil(Size.x)) - 4))) + "px");
         Menu->SetProperty("top", std::to_string(std::clamp(Y, 0, (std::max)(0, Height - static_cast<int>(std::ceil(Size.y)) - 4))) + "px");
         Host.Context->Update();
+    }
+
+    void ClearContextSubmenus(Host& Host)
+    {
+        Host.SubmenusNeedLayout = false;
+        for (auto* Submenu : Host.ContextSubmenus)
+        {
+            auto* Parent = Submenu->GetParentNode();
+            if (Parent)
+            {
+                Parent->RemoveChild(Submenu);
+            }
+        }
+        Host.ContextSubmenus.clear();
+    }
+
+    void UpdateContextSubmenus(Host& Host, Rml::Element* Target)
+    {
+        auto* Owner = Target;
+        while (Owner && Owner->GetId() != "contextMenu" && !Owner->IsClassSet("context-submenu"))
+        {
+            Owner = Owner->GetParentNode();
+        }
+        if (!Owner)
+        {
+            return;
+        }
+        const int Depth = Owner->GetAttribute<int>("data-menu-depth", 0);
+        auto* Trigger = FindAttributeElement(Target, "data-menu-submenu");
+        auto* Next = Trigger && !Trigger->HasAttribute("disabled")
+            ? Host.Document->GetElementById(Attribute(Trigger, "data-menu-submenu")) : nullptr;
+        for (auto* Submenu : Host.ContextSubmenus)
+        {
+            if (Submenu != Next && Submenu->GetAttribute<int>("data-menu-depth", 1) > Depth)
+            {
+                SetContextSubmenuOpen(Host, Submenu, false);
+            }
+        }
+        if (Next && !Next->HasAttribute("open"))
+        {
+            SetContextSubmenuOpen(Host, Next, true);
+            Host.SubmenusNeedLayout = true;
+        }
+    }
+
+    void PositionContextSubmenus(Host& Host, int Width, int Height)
+    {
+        if (!Host.SubmenusNeedLayout)
+        {
+            return;
+        }
+        Host.SubmenusNeedLayout = false;
+        for (auto* Submenu : Host.ContextSubmenus)
+        {
+            if (!Submenu->HasAttribute("open"))
+            {
+                continue;
+            }
+            auto* Opener = Host.Document->GetElementById(Attribute(Submenu, "data-menu-opener"));
+            auto* ParentMenu = Opener ? Opener->GetParentNode() : nullptr;
+            while (ParentMenu && ParentMenu->GetId() != "contextMenu" && !ParentMenu->IsClassSet("context-submenu"))
+            {
+                ParentMenu = ParentMenu->GetParentNode();
+            }
+            if (!ParentMenu)
+            {
+                continue;
+            }
+            Submenu->SetProperty("max-width", std::to_string((std::max)(0, Width - 16)) + "px");
+            Submenu->SetProperty("max-height", std::to_string((std::max)(0, Height - 16)) + "px");
+            Host.Context->Update();
+            const auto Size = Submenu->GetBox().GetSize(Rml::BoxArea::Border);
+            const auto ParentPosition = ParentMenu->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const auto ParentSize = ParentMenu->GetBox().GetSize(Rml::BoxArea::Border);
+            const int Right = static_cast<int>(ParentPosition.x + ParentSize.x) - 1;
+            const int X = Right + Size.x <= Width - 4 ? Right : static_cast<int>(ParentPosition.x - Size.x) + 1;
+            const int Y = static_cast<int>(Opener->GetAbsoluteOffset(Rml::BoxArea::Border).y) - 5;
+            Submenu->SetProperty("left", std::to_string(std::clamp(X, 0, (std::max)(0, Width - static_cast<int>(std::ceil(Size.x)) - 4))) + "px");
+            Submenu->SetProperty("top", std::to_string(std::clamp(Y, 0, (std::max)(0, Height - static_cast<int>(std::ceil(Size.y)) - 4))) + "px");
+            Host.Context->Update();
+        }
     }
 
     void ClearHierarchyDrop(Host& host)
@@ -2028,6 +2135,10 @@ struct RmlUiShell::Impl
         }
         Rml::Element* target = event.GetTargetElement();
         const auto EventId = event.GetId();
+        if (EventId == Rml::EventId::Mousemove)
+        {
+            UpdateContextSubmenus(host, target);
+        }
         const int MouseX = event.GetParameter<int>("mouse_x", 0);
         const int MouseY = event.GetParameter<int>("mouse_y", 0);
         auto* Timeline = FindAttributeElement(target, "data-timeline-id");
@@ -2176,8 +2287,10 @@ struct RmlUiShell::Impl
                 return;
             }
         }
-        if (event.GetId() == Rml::EventId::Mouseup &&
-            event.GetParameter<int>("button", -1) == 1)
+        if ((event.GetId() == Rml::EventId::Mouseup &&
+             event.GetParameter<int>("button", -1) == 1) ||
+            (event.GetId() == Rml::EventId::Click &&
+             FindAttributeElement(target, "data-ui-context-trigger")))
         {
             std::string Payload;
             std::vector<std::string> Route;
@@ -2235,6 +2348,19 @@ struct RmlUiShell::Impl
             return;
         }
         if (event.GetId() != Rml::EventId::Click) return;
+        for (auto* Element = target; Element; Element = Element->GetParentNode())
+        {
+            if (Element->HasAttribute("disabled"))
+            {
+                return;
+            }
+        }
+        auto* SubmenuTrigger = FindAttributeElement(target, "data-menu-submenu");
+        if (SubmenuTrigger)
+        {
+            UpdateContextSubmenus(host, target);
+            return;
+        }
         // Selection replaces content nodes. Use the stable action rather than
         // RmlUi's element identity, including clicks on an item's icon or label.
         const auto DoubleAction = Attribute(
@@ -2302,6 +2428,10 @@ struct RmlUiShell::Impl
                 }
                 EmitAction(host, action);
                 EngineLog::Info("RmlUi", "Host action host=" + host.Id + " action=" + action);
+                return;
+            }
+            if (target->GetId() == "contextMenu" || target->IsClassSet("menu-popup"))
+            {
                 return;
             }
             target = target->GetParentNode();
@@ -3149,6 +3279,7 @@ bool RmlUiShell::Render(bool ObserveUi)
         host.Context->SetDimensions({client.right, client.bottom});
         host.Context->Update();
         state.PositionContextMenu(host, client.right, client.bottom);
+        state.PositionContextSubmenus(host, client.right, client.bottom);
         host.ColorPicker.AfterLayout(host.Document);
         RmlControlTooltip::Update(*host.Context, *host.Document);
         host.Surface->Resize(static_cast<uint32_t>(client.right), static_cast<uint32_t>(client.bottom));
@@ -3337,6 +3468,10 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
         host->OpenPopup = nullptr;
     }
     ++host->MarkupDepth;
+    if (strcmp(elementId, "contextMenu") == 0)
+    {
+        State->ClearContextSubmenus(*host);
+    }
     // Dock resize rebuilds the workspace. Retain the Inspector subtree so its
     // uncommitted inputs, picker draft and scroll position survive the rebuild.
     Rml::ElementPtr Inspector;
@@ -3353,6 +3488,15 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
     RmlRuntimeUi::Restore(*element, RuntimeNodes);
     if (strcmp(elementId, "contextMenu") == 0)
     {
+        Rml::ElementList Submenus;
+        element->GetElementsByClassName(Submenus, "context-submenu");
+        for (auto* Submenu : Submenus)
+        {
+            auto* Parent = Submenu->GetParentNode();
+            auto Detached = Parent->RemoveChild(Submenu);
+            host->Document->AppendChild(std::move(Detached));
+            host->ContextSubmenus.push_back(Submenu);
+        }
         element->SetProperty("display", *markup ? "block" : "none");
         host->ContextMenuNeedsLayout = *markup != '\0';
     }

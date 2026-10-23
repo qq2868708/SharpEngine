@@ -44,18 +44,19 @@ internal sealed class ContentManagerView : IDisposable
 
     internal static string ScopeId(string PaneId) { return "content-manager/" + PaneId; }
 
-    internal static string ContextAttribute(string Kind, string Source, string? Target)
+    internal static string ContextAttribute(string Kind, string Source, string? Target, bool AddOnly = false)
     {
-        return WebUtility.HtmlEncode(ContextPayload(Kind, Source, Target));
+        return WebUtility.HtmlEncode(ContextPayload(Kind, Source, Target, AddOnly));
     }
 
-    private static string ContextPayload(string Kind, string Source, string? Target)
+    private static string ContextPayload(string Kind, string Source, string? Target, bool AddOnly = false)
     {
         var Payload = new JsonObject
         {
             ["kind"] = Kind,
             ["source"] = Source,
             ["target"] = Target,
+            ["addOnly"] = AddOnly,
         };
         return Payload.ToJsonString();
     }
@@ -121,5 +122,6 @@ internal sealed class ContentManagerView : IDisposable
         ContextRegistration.Dispose();
         CompatibilityRegistration.Dispose();
         Popup.ClosePane(PaneId);
+        Menu.Dispose();
     }
 }

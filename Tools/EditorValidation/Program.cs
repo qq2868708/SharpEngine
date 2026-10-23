@@ -246,6 +246,7 @@ try
     runtime.InvokeUiAction("editor.content.clear");
     if (args.Contains("--content-only", StringComparer.Ordinal))
     {
+        ContentCreationValidation.Run(runtime, temporary.FullName, Require);
         ContentManagerValidation.Run(runtime, temporary.FullName, Require);
         ContentManagerMenuValidation.Run(Require);
         runtime.Shutdown();
@@ -680,6 +681,7 @@ try
     Require(runtime.World.Entities.Count == MainEntityCountBeforePrefab && !runtime.World.Data.IsPrefab,
         "Play while a Prefab editor is open still runs the main World");
     runtime.InvokeUiAction("editor.stop");
+    ContentCreationValidation.Run(runtime, temporary.FullName, Require);
     ContentManagerMenuValidation.Run(Require);
     EditorExtensionValidation.Run(Require);
     runtime.Shutdown();

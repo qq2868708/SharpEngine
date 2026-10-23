@@ -6,9 +6,22 @@ Content Manager 在资产、文件夹和浏览区空白处提供自己的右键�
 | --- | --- |
 | 已注册资产 | Open、Browse Containing Folder、Delete Asset |
 | 文件夹 | Open |
-| 仅浏览区空白处 | Go Up、Refresh、Clear Filters、Tile View、List View |
+| 仅浏览区空白处 | 资产创建分类、Go Up、Refresh、Clear Filters、Tile View、List View |
+| 工具栏 + Add | 同一套资产创建分类 |
 
 没有可用资产打开器的文件禁用 Open。Go Up 在根目录禁用。Delete Asset 复用浏览器私有命令与既有资产删除流程：引擎、插件、只读资产及 Play 期间禁用，执行时还检查当前 World 和未保存的资产编辑器，确认后删除清单条目与源文件。浏览和视图操作是瞬态编辑器状态；只有既有 Save Layout 才保存浏览器配置，菜单本身不进入布局或资产。
+
+分类通过 `EditorContextMenuCategory.Label` 指定显示名称，省略时显示 category ID；弹窗渲染名称与横线，空分类不显示。禁用菜单项不接收 hover、焦点或命令点击；点击禁用行或分类标题会保留当前菜单。命令打开后变为不可用时，执行前的可用状态复查也不会关闭菜单；目标或命令注册本身失效时仍关闭旧菜单。
+
+## 创建资产
+
+支持 Folder、World、Prefab、Material、RmlDocument、StyleSheet、InputAction、InputMappingContext 和当前已注册的 DataAsset。Folder 与 Basic Assets 直接提供一级操作；Advanced Assets 中的 User Interface、Input、Data Assets 是带箭头的二级菜单入口，悬停后展开对应类型，切换入口收起相邻子菜单。子菜单在所属窗口内定位，右侧空间不足时向左展开；禁用入口不会 hover 或展开。每次打开菜单重新读取类型注册表，项目代码重载后不会保留旧类型的创建入口。项目目录可创建，引擎与虚拟 Plugin 目录保持禁用；All 视图的项目/引擎区域分别使用对应来源，工具栏 Add 沿用当前来源，All 时默认面向项目。
+
+选择类型会打开独立命名窗口，并捕获所属浏览器、当前目录和清单哈希。Create 校验名称与路径并立即保存源文件/注册清单，成功后只清除发起浏览器的筛选、显示目标目录并选中新资产；其他浏览器保留状态。取消不写入，失败保留对话框及错误。清单冲突需要重新打开窗口获取新版本。DataAsset 构造默认值必须通过其已有序列化校验。创建 World 不会打开或替换当前 World，也不更新项目启动设置。
+
+`content.describe.creation` 使用 schema v1，公开 `available`、`revision`、`types` 和 `pending`。`content.create` 与 UI 共用 `EditorRuntime.CreateContentAsset`，输入 `{schemaVersion:1,type,folder,name,expectedRevision}`；folder 相对项目 Content，name 不含后缀。该操作 effect=external，独立于 World Undo。成功返回资产 ID、绝对路径、事务 ID 和清单前后哈希。新资产身份独立于显示名和路径；Input 资源保持 `project://input/actions/…` / `project://input/contexts/…` 身份约束。源码写入失败不修改清单，清单替换失败删除本次新文件；既有文件从不覆盖。模型、纹理、音频导入另行实现。
+
+新 JSON 资源使用现有或规范化后缀 `.sworld`、`.sprefab`、`.smaterial`、`.sinputaction`、`.sinputmappingcontext`、`.sdataasset`，UI 使用已有 `.rml` / `.rcss` 格式；不迁移既有资源。
 
 ## 所有权
 
@@ -18,7 +31,7 @@ Content Manager 在资产、文件夹和浏览区空白处提供自己的右键�
 - `ContentManagerView`：每个浏览器的 UI 使用实例，拥有模型引用、条目布局、自己的 `ContentManagerContextMenus` 及 scope 注册。
 - `ContentManagerContextMenus`：由所属 ContentManagerView 创建，解释本实例收到的右键数据、选择目标并组装菜单。它通过 `IContentManagerMenuHost` 使用编辑器集成能力，不持有 EditorRuntime。
 - `SharpEngine.UI.UiContextMenuRouter`：按 UI 布局的 scope 路径从内向外冒泡，某个处理器消费后停止。它不理解资产、文件夹或浏览器类型。
-- `ContentManagerMenuHost`：EditorRuntime 的窄适配器，仅连接窗口位置、统一选择、刷新和资产打开服务。
+- `ContentManagerMenuHost`：EditorRuntime 的窄适配器，连接窗口位置、统一选择、刷新、资产打开与类型化创建服务。
 - 原生 RmlUi：真实命中/输入路径、弹窗测量和窗口内定位、关闭通知；不判断资产或文件夹业务。
 
 EditorRuntime 创建通用服务和 Content Manager 功能，只将右键传输消息交给通用路由器，不直接创建或调用 ContentManagerContextMenus。`SharpEngine.Assets.ContentManager` 保留浏览状态和私有删除命令定义；视图负责实际右键路由及弹窗组合。层级和场景右键暂时保留既有语义入口，复用弹窗宿主；这次没有宣称整个编辑器的全部输入都已迁移。
@@ -76,3 +89,10 @@ EditorValidation 验证目标捕获、多实例隔离、失效动作和扩展兼
 SubsystemValidation 44 项、真实坐标右键专项 208 项通过。专项包含空白处视图/导航/筛选、
 目标菜单范围、浮动窗口、Escape 和通过菜单打开资产编辑器；匹配帧保存在
 `Saved/Validation/ContentManager`。该结果不包含上述旧双击时序用例。
+
+本次资产创建与二级菜单扩展通过标准 Debug/OpenGL Editor 构建、309 项 EditorValidation、
+285 项真实坐标右键/创建 UI 检查和引擎手册校验。新增 UI 检查覆盖工具栏 Add、
+二级悬停/切换/点击、右边缘向左展开、禁用分类不展开、命名校验、取消与当前目录创建；
+托管检查另覆盖各资产类型回读、DataAsset 默认值校验、清单冲突、失败回滚和 MCP 创建。
+匹配帧包括 `add-content-submenu-main.png`、`add-content-submenu-left-main.png`、
+`create-content-dialog-content.create.png` 与 `disabled-menu-item-main.png`。
