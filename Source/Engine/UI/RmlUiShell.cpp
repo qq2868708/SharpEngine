@@ -1097,8 +1097,8 @@ struct RmlUiShell::Impl
             {
                 continue;
             }
-            const auto ViewPosition = Owner->GetAbsoluteOffset(Rml::BoxArea::Content);
-            const auto ViewSize = Owner->GetBox().GetSize(Rml::BoxArea::Content);
+            const auto ViewPosition = Owner->GetAbsoluteOffset(Rml::BoxArea::Padding);
+            const auto ViewSize = Rml::Vector2f(Owner->GetClientWidth(), Owner->GetClientHeight());
             const auto Position = Target->GetAbsoluteOffset(Rml::BoxArea::Border);
             const auto Size = Target->GetBox().GetSize(Rml::BoxArea::Border);
             float ScrollTop = Owner->GetScrollTop();

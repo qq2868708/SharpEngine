@@ -15,7 +15,7 @@ internal enum UiControlPropertyKind
 internal sealed record UiControlProperty(string Name, string Label,
     UiControlPropertyKind Kind, string DefaultValue = "");
 
-internal sealed record UiControlDefinition(string Id, string Label, string Group,
+internal sealed record UiControlDefinition(string Id, string Label, string Group, string Icon,
     string DefaultRml, IReadOnlyList<UiControlProperty> Properties)
 {
     internal XElement Create(string ElementId)
@@ -43,29 +43,29 @@ internal static class UiControlCatalog
         get;
     } = Array.AsReadOnly(new[]
     {
-        new UiControlDefinition("container", "Container", "Layout",
+        new UiControlDefinition("container", "Container", "Layout", "control-container",
             "<div style='display: block; min-width: 120px; min-height: 48px;' />", []),
-        new UiControlDefinition("horizontal", "Horizontal Layout", "Layout",
+        new UiControlDefinition("horizontal", "Horizontal Layout", "Layout", "control-horizontal",
             "<div style='display: flex; flex-direction: row; gap: 8px; min-height: 48px;' />", [Gap]),
-        new UiControlDefinition("vertical", "Vertical Layout", "Layout",
+        new UiControlDefinition("vertical", "Vertical Layout", "Layout", "control-vertical",
             "<div style='display: flex; flex-direction: column; gap: 8px; min-height: 48px;' />", [Gap]),
-        new UiControlDefinition("text", "Text", "Content", "<span>Text</span>", [Text]),
-        new UiControlDefinition("image", "Image", "Content",
+        new UiControlDefinition("text", "Text", "Content", "control-text", "<span>Text</span>", [Text]),
+        new UiControlDefinition("image", "Image", "Content", "texture",
             "<img src='sharpengine-resource://engine/Resources/Editor/Icons/texture.tga' style='width: 64px; height: 64px;' />",
             [new UiControlProperty("src", "Image source", UiControlPropertyKind.Text)]),
-        new UiControlDefinition("button", "Button", "Interaction", "<button>Button</button>", [Text]),
-        new UiControlDefinition("text-input", "Text Input", "Interaction",
+        new UiControlDefinition("button", "Button", "Interaction", "control-button", "<button>Button</button>", [Text]),
+        new UiControlDefinition("text-input", "Text Input", "Interaction", "control-input",
             "<input type='text' value='' style='width: 180px; height: 30px;' />",
             [new UiControlProperty("value", "Initial text", UiControlPropertyKind.Text)]),
-        new UiControlDefinition("checkbox", "Checkbox", "Interaction",
+        new UiControlDefinition("checkbox", "Checkbox", "Interaction", "control-checkbox",
             "<input type='checkbox' value='on' style='width: 22px; height: 22px;' />",
             [new UiControlProperty("checked", "Initially checked", UiControlPropertyKind.Boolean, "false"),
                 new UiControlProperty("value", "Submitted value", UiControlPropertyKind.Text, "on")]),
-        new UiControlDefinition("slider", "Slider", "Interaction",
+        new UiControlDefinition("slider", "Slider", "Interaction", "control-slider",
             "<input type='range' min='0' max='100' step='1' value='50' style='width: 180px; height: 24px;' />",
             [Value, new UiControlProperty("min", "Minimum", UiControlPropertyKind.Number, "0"), Max,
                 new UiControlProperty("step", "Step", UiControlPropertyKind.Number, "1")]),
-        new UiControlDefinition("progress", "Progress Bar", "Content",
+        new UiControlDefinition("progress", "Progress Bar", "Content", "control-progress",
             "<progress value='50' max='100' style='width: 180px; height: 18px;' />",
             [Value, new UiControlProperty("max", "Maximum", UiControlPropertyKind.Number, "1")]),
     });

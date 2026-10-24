@@ -416,8 +416,8 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                 : "<div id=\"uiRuntimePreview\" class=\"ui-runtime-preview\"></div>",
             "design" => UiEditorMarkup.BuildCanvas(Document),
             "controls" => UiEditorMarkup.BuildControls(Document),
-            "elements" => "<div class=\"ui-panel-title\">WIDGET TREE</div>" +
-                UiEditorMarkup.BuildHierarchy(Document),
+            "elements" => "<div class=\"ui-tree-panel\"><div class=\"ui-panel-title\">WIDGET TREE</div>" +
+                UiEditorMarkup.BuildHierarchy(Document) + "</div>",
             "inspector" => "<div class=\"ui-panel-title\">UI INSPECTOR</div>" +
                 "<div id=\"uiInspectorBody\" class=\"ui-element-inspector\">" +
                 UiEditorMarkup.BuildInspector(Document) + "</div>",

@@ -104,6 +104,53 @@ namespace SharpEngine.Tools
                     Box(g, Green,3,4,18,16); Circle(g, Green,6,7,4,true);
                     Line(g, Green,4,18,10,12,14,16,17,12,21,17);
                     break;
+                case "control-container":
+                    Box(g, Blue, 3, 4, 18, 16);
+                    Box(g, Blue, 7, 8, 10, 8);
+                    break;
+                case "control-horizontal":
+                    Box(g, Blue, 3, 5, 7, 14);
+                    Box(g, Blue, 14, 5, 7, 14);
+                    break;
+                case "control-vertical":
+                    Box(g, Blue, 3, 4, 18, 6);
+                    Box(g, Blue, 3, 14, 18, 6);
+                    break;
+                case "control-text":
+                    Line(g, Green, 4, 5, 20, 5);
+                    Line(g, Green, 12, 5, 12, 20);
+                    Line(g, Green, 8, 20, 16, 20);
+                    break;
+                case "control-button":
+                    Box(g, Gold, 3, 6, 18, 12);
+                    Line(g, Gold, 8, 12, 16, 12);
+                    break;
+                case "control-input":
+                    Box(g, Gold, 2, 6, 20, 12);
+                    Line(g, Gold, 7, 9, 7, 15);
+                    Line(g, Gold, 12, 15, 18, 15);
+                    break;
+                case "control-checkbox":
+                    Box(g, Gold, 4, 4, 16, 16);
+                    Line(g, Gold, 7, 12, 11, 16, 18, 8);
+                    break;
+                case "control-slider":
+                    Line(g, Gold, 3, 12, 21, 12);
+                    Box(g, Gold, 12, 7, 4, 10, true);
+                    break;
+                case "control-progress":
+                    Box(g, Green, 2, 7, 20, 10);
+                    Box(g, Green, 5, 10, 9, 4, true);
+                    break;
+                case "control-reference":
+                    Box(g, Purple, 3, 3, 12, 12);
+                    Box(g, Purple, 9, 9, 12, 12);
+                    break;
+                case "control-slot":
+                    Line(g, Purple, 8, 4, 4, 4, 4, 20, 8, 20);
+                    Line(g, Purple, 16, 4, 20, 4, 20, 20, 16, 20);
+                    Line(g, Purple, 9, 12, 15, 12);
+                    break;
                 case "audio":
                     Polygon(g, Gold,3,9,7,9,12,5,12,19,7,15,3,15);
                     Arc(g, Gold,11,7,8,10,-65,130);
@@ -197,7 +244,10 @@ namespace SharpEngine.Tools
             string[] names = { "folder","mesh","material","world","ui","style","texture","audio","data","file",
                 "search","filter","reset","up","lock","save","export","play","pause","stop","move","rotate","scale",
                 "add","more","minimize","maximize","close","all","list","engine","camera","light",
-                "down","check","chevron-down","chevron-right","trash" };
+                "down","check","chevron-down","chevron-right","trash",
+                "control-container", "control-horizontal", "control-vertical", "control-text",
+                "control-button", "control-input", "control-checkbox", "control-slider",
+                "control-progress", "control-reference", "control-slot" };
             foreach (string name in names)
             {
                 using (var bitmap = new Bitmap(48,48,PixelFormat.Format32bppArgb))
@@ -226,4 +276,4 @@ namespace SharpEngine.Tools
 '@
 }
 [SharpEngine.Tools.EditorIconBuilder]::Build([System.IO.Path]::GetFullPath($OutputDirectory))
-Write-Output "Generated 38 editor icons in $([System.IO.Path]::GetFullPath($OutputDirectory))"
+Write-Output "Generated 49 editor icons in $([System.IO.Path]::GetFullPath($OutputDirectory))"
