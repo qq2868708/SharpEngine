@@ -398,6 +398,16 @@ internal sealed class AssetEditorHost : IDisposable
         {
             LiveFloatingHosts.Add(HostId);
         }
+        var DocumentPreview = Instance as IAssetEditorDocumentPreview;
+        var PreviewDocument = DocumentPreview?.BuildPreviewDocument();
+        if (DocumentPreview is not null && PreviewDocument is not null)
+        {
+            Runtime.SetAssetEditorUiDocument(RootId, DocumentPreview.PreviewElementId, PreviewDocument);
+            foreach (var HostId in Desired)
+            {
+                Runtime.SetAssetEditorUiDocument(HostId, DocumentPreview.PreviewElementId, PreviewDocument);
+            }
+        }
     }
 
     private void ApplyLiveProperty(AssetEditorLiveProperty Property)
@@ -686,6 +696,9 @@ public sealed partial class EditorRuntime
     internal bool SetAssetEditorElementProperty(string HostId, string ElementId,
         string Name, string Value) =>
         _nativeApi.SetHostUiProperty(HostId, ElementId, Name, Value);
+
+    internal bool SetAssetEditorUiDocument(string HostId, string AnchorId,
+        EditorUiPreviewDocument Document) => _nativeApi.SetHostUiDocument(HostId, AnchorId, Document);
 
     internal void SubmitAssetEditorViewportFrame(string HostId, string Kind,
         ViewportFrame Frame) =>

@@ -110,7 +110,7 @@ internal static class GameUiValidation
 
         File.WriteAllText(Path.Combine(Folder, "Content/Assets/assets.json"), new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 2,
             ["assets"] = new JsonArray
             {
                 new JsonObject
@@ -118,7 +118,7 @@ internal static class GameUiValidation
                     ["id"] = "ui/screen",
                     ["type"] = "UiDocument",
                     ["name"] = "Runtime Screen",
-                    ["path"] = "Content/UI/Screen.sui",
+                    ["path"] = "UI/Screen.sui",
                     ["importer"] = "SharpEngine.UiDocumentJson",
                 },
                 new JsonObject
@@ -126,7 +126,7 @@ internal static class GameUiValidation
                     ["id"] = "ui/filler",
                     ["type"] = "UiDocument",
                     ["name"] = "Filler Screen",
-                    ["path"] = "Content/UI/Filler.sui",
+                    ["path"] = "UI/Filler.sui",
                     ["importer"] = "SharpEngine.UiDocumentJson",
                 },
                 new JsonObject
@@ -134,7 +134,7 @@ internal static class GameUiValidation
                     ["id"] = "ui/composed",
                     ["type"] = "UiDocument",
                     ["name"] = "Composed Screen",
-                    ["path"] = "Content/UI/Composed.sui",
+                    ["path"] = "UI/Composed.sui",
                     ["importer"] = "SharpEngine.UiDocumentJson",
                 },
                 new JsonObject
@@ -142,7 +142,7 @@ internal static class GameUiValidation
                     ["id"] = "ui/button",
                     ["type"] = "UiDocument",
                     ["name"] = "Reusable Button",
-                    ["path"] = "Content/UI/Button.sui",
+                    ["path"] = "UI/Button.sui",
                     ["importer"] = "SharpEngine.UiDocumentJson",
                 },
             },

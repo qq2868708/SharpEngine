@@ -70,7 +70,9 @@ internal sealed class UiStyleSheet
 
     public static UiStyleSheet Load(XDocument Document, string DocumentPath,
         string OwnerRoot, List<UiEditorDiagnostic> Diagnostics,
-        IReadOnlyList<string>? PackageStyleSheets = null)
+        IReadOnlyList<string>? PackageStyleSheets = null,
+        IReadOnlyList<string>? ReferencedStyleSheets = null,
+        IReadOnlyList<SharpEngine.UI.UiPrivateStyle>? PrivateStyles = null)
     {
         var Rules = new List<UiStyleRule>();
         var Classes = new SortedSet<string>(StringComparer.Ordinal);
@@ -93,6 +95,20 @@ internal sealed class UiStyleSheet
                     ref Order, ref Skipped))
             {
                 continue;
+            }
+        }
+        foreach (var Sheet in (ReferencedStyleSheets ?? []).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            _ = TryLoadFile(Sheet, DocumentDirectory,
+                System.IO.Path.GetDirectoryName(Sheet)! + System.IO.Path.DirectorySeparatorChar,
+                Files, Diagnostics, ref Order, ref Skipped);
+        }
+        foreach (var Private in PrivateStyles ?? [])
+        {
+            if (Private.Rcss.Length > 0)
+            {
+                InlineBlocks++;
+                AddRules(SharpEngine.UI.UiStyleSources.RebaseUrls(Private.Rcss, Private.SourcePath), ref Order, ref Skipped);
             }
         }
         // RmlUi pushes <link type="text/rcss|text/css"> and inline <style> text into
@@ -334,6 +350,10 @@ internal sealed class UiSelector
             var Character = Trimmed[Index];
             if (char.IsWhiteSpace(Character))
             {
+                if (!Child)
+                {
+                    SeekCompound = true;
+                }
                 Index++;
                 continue;
             }
@@ -367,7 +387,7 @@ internal sealed class UiSelector
             Child = false;
             SeekCompound = false;
         }
-        if (Parts.Count == 0 || Child || SeekCompound)
+        if (Parts.Count == 0 || Child)
         {
             return false;
         }

@@ -44,7 +44,7 @@ ManifestPath = Root / 'Content/Assets/assets.json'
 OriginalText = ManifestPath.read_text(encoding='utf-8')
 StageManifest = json.loads((Stage / 'Content/Assets/assets.json').read_text())
 Changes = {Record['id']: Record for Record in StageManifest['assets']
-    if Record['path'] in Import['files']}
+    if 'Content/' + Record['path'] in Import['files']}
 Decoder = json.JSONDecoder()
 Position = re.search(r'"assets"\s*:\s*\[', OriginalText).end()
 Replacements = []

@@ -1,4 +1,5 @@
 #include "GameUiShell.h"
+#include "RmlUiSourceUrl.h"
 #include "UiObservation.h"
 #include "../RenderCore/Private/RenderBackend.h"
 #include <algorithm>
@@ -257,6 +258,8 @@ bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml
     }
     state.Ready = true;
     Rml::LoadFontFace("C:/Windows/Fonts/segoeui.ttf");
+    Rml::LoadFontFace("C:/Windows/Fonts/segoeuib.ttf");
+    Rml::LoadFontFace("C:/Windows/Fonts/msyh.ttc", true);
     RECT client{};
     GetClientRect(window, &client);
     state.Context = Rml::CreateContext("game", Rml::Vector2i(client.right, client.bottom), renderer, &state.Ime);
@@ -302,10 +305,10 @@ bool GameUiShell::SetDocument(std::string_view rml, std::string_view sourcePath)
     }
     // The source URL keeps relative stylesheet links next to the authoritative
     // asset, which for a .sui package is the package file itself.
-    const Rml::String source(sourcePath.data(), sourcePath.size());
+    const auto SourceUrl = RmlUiSourceUrl::FromFilePath(sourcePath);
     const auto Rml = InjectUserAgentStyle(rml);
     state.Document = state.Context->LoadDocumentFromMemory(
-        Rml::String(Rml.data(), Rml.size()), source.empty() ? "[runtime screen]" : source);
+        Rml::String(Rml.data(), Rml.size()), SourceUrl.empty() ? "[runtime screen]" : SourceUrl);
     if (!state.Document)
     {
         return false;

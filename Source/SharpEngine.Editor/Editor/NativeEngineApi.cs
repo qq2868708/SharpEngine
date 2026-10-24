@@ -56,6 +56,8 @@ internal unsafe readonly struct NativeEngineApi
     private readonly delegate* unmanaged[Cdecl]<byte> GetGameplayInputCaptureFunction;
     private readonly delegate* unmanaged[Cdecl]<byte*, byte*, byte*, byte*, byte>
         SetHostUiPropertyFunction;
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, byte*, byte*, float, float, byte>
+        SetHostUiDocumentFunction;
 
     public bool HasDocumentUi => _setUiText != null && _getViewportRect != null;
     public bool HasDockHosts => _createDockWindow != null && _destroyDockWindow != null &&
@@ -152,12 +154,34 @@ internal unsafe readonly struct NativeEngineApi
         {
             SetHostUiPropertyFunction = api->SetHostUiProperty;
         }
+        if (api->Version >= 20)
+        {
+            SetHostUiDocumentFunction = api->SetHostUiDocument;
+        }
     }
 
     internal bool SetGameplayInputCapture(bool Enabled)
     {
         return SetGameplayInputCaptureFunction != null &&
             SetGameplayInputCaptureFunction(Enabled ? (byte)1 : (byte)0) != 0;
+    }
+
+    internal bool SetHostUiDocument(string HostId, string AnchorId,
+        EditorUiPreviewDocument Document)
+    {
+        if (SetHostUiDocumentFunction == null)
+        {
+            return false;
+        }
+        var Host = Encoding.UTF8.GetBytes(HostId + '\0');
+        var Anchor = Encoding.UTF8.GetBytes(AnchorId + '\0');
+        var Rml = Encoding.UTF8.GetBytes(Document.Rml + '\0');
+        var Source = Encoding.UTF8.GetBytes(Document.SourcePath + '\0');
+        fixed (byte* HostPointer = Host, AnchorPointer = Anchor, RmlPointer = Rml, SourcePointer = Source)
+        {
+            return SetHostUiDocumentFunction(HostPointer, AnchorPointer, RmlPointer,
+                SourcePointer, Document.Width, Document.Height) != 0;
+        }
     }
 
     internal bool IsGameplayInputCaptured()

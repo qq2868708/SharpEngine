@@ -460,7 +460,7 @@ internal static class ContentManagerUiValidation
             var Selected = State("content")["selected"]!.GetValue<string>();
             var Assets = Invoke("assets.describe")["assets"]!.AsArray();
             Require(Assets.Any(Node => Node!["id"]!.GetValue<string>() == Selected &&
-                Node["path"]!.GetValue<string>() == "Content/" + Folder + "/CreatedMaterial.smaterial"),
+                Node["path"]!.GetValue<string>() == Folder + "/CreatedMaterial.smaterial"),
                 "Blank-area creation saves and registers the material in the captured current folder");
             SaveFrames("created-content");
             RightClickBackground("content");

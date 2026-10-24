@@ -1,12 +1,12 @@
 {
-  "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
-  "schemaVersion": 1,
+  "$schema": "https://sharpengine.dev/schemas/assets-v2.json",
+  "schemaVersion": 2,
   "assets": [
     {
       "id": "ui/main",
       "type": "UiDocument",
       "name": "Main UI",
-      "path": "Content/UI/Main.sui",
+      "path": "UI/Main.sui",
       "importer": "SharpEngine.UiDocumentJson",
       "tags": ["ui"]
     },
@@ -14,7 +14,7 @@
       "id": "ui/main-style",
       "type": "StyleSheet",
       "name": "Main UI Style",
-      "path": "Content/UI/Main.rcss",
+      "path": "UI/Main.rcss",
       "importer": "RmlUi.StyleSheet",
       "tags": ["ui", "style"]
     },
@@ -22,7 +22,7 @@
       "id": "input/actions/gameplay.move",
       "type": "InputAction",
       "name": "Move",
-      "path": "Content/Input/Actions/Move.inputaction.json",
+      "path": "Input/Actions/Move.inputaction.json",
       "importer": "SharpEngine.InputActionJson",
       "tags": ["input", "gameplay"]
     },
@@ -30,7 +30,7 @@
       "id": "input/actions/gameplay.primary",
       "type": "InputAction",
       "name": "Primary",
-      "path": "Content/Input/Actions/Primary.inputaction.json",
+      "path": "Input/Actions/Primary.inputaction.json",
       "importer": "SharpEngine.InputActionJson",
       "tags": ["input", "gameplay"]
     },
@@ -38,7 +38,7 @@
       "id": "input/contexts/gameplay",
       "type": "InputMappingContext",
       "name": "Gameplay",
-      "path": "Content/Input/Contexts/Gameplay.inputmapping.json",
+      "path": "Input/Contexts/Gameplay.inputmapping.json",
       "importer": "SharpEngine.InputMappingContextJson",
       "tags": ["input", "gameplay"]
     }

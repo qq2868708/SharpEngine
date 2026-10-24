@@ -70,7 +70,7 @@ try
     var pluginAssetDirectory = Directory.CreateDirectory(Path.Combine(pluginDirectory,
         "Content", "Assets")).FullName;
     File.WriteAllText(Path.Combine(pluginAssetDirectory, "assets.json"),
-        "{\"schemaVersion\":1,\"assets\":[]}\n");
+        "{\"schemaVersion\":2,\"assets\":[]}\n");
     var pluginModulePath = Path.Combine(pluginModuleDirectory, "ForeignPlugin.Runtime.csproj");
     File.WriteAllText(pluginModulePath, "<Project Sdk=\"Microsoft.NET.Sdk\" />");
     File.WriteAllText(Path.Combine(pluginDirectory, "ForeignPlugin.sharpplugin"),

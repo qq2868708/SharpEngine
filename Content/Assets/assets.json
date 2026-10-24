@@ -1,22 +1,22 @@
 {
-  "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
-  "schemaVersion": 1,
+  "$schema": "https://sharpengine.dev/schemas/assets-v2.json",
+  "schemaVersion": 2,
   "assets": [
-    {"id": "input/actions/player.move", "type": "InputAction", "name": "PlayerMove", "path": "Content/Input/Actions/PlayerMove.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
-    {"id": "input/actions/player.look", "type": "InputAction", "name": "PlayerLook", "path": "Content/Input/Actions/PlayerLook.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
-    {"id": "input/actions/player.release-pointer", "type": "InputAction", "name": "PlayerReleasePointer", "path": "Content/Input/Actions/PlayerReleasePointer.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
-    {"id": "input/contexts/player", "type": "InputMappingContext", "name": "Player", "path": "Content/Input/Contexts/Player.sinputmappingcontext", "importer": "SharpEngine.InputMappingContextJson", "tags": ["input", "player"]},
+    {"id": "input/actions/player.move", "type": "InputAction", "name": "PlayerMove", "path": "Input/Actions/PlayerMove.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
+    {"id": "input/actions/player.look", "type": "InputAction", "name": "PlayerLook", "path": "Input/Actions/PlayerLook.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
+    {"id": "input/actions/player.release-pointer", "type": "InputAction", "name": "PlayerReleasePointer", "path": "Input/Actions/PlayerReleasePointer.sinputaction", "importer": "SharpEngine.InputActionJson", "tags": ["input", "player"]},
+    {"id": "input/contexts/player", "type": "InputMappingContext", "name": "Player", "path": "Input/Contexts/Player.sinputmappingcontext", "importer": "SharpEngine.InputMappingContextJson", "tags": ["input", "player"]},
 
-{"id":"input/actions/demo.confirm","type":"InputAction","name":"DemoConfirm","path":"Content/Input/Actions/DemoConfirm.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
-{"id":"input/actions/demo.move","type":"InputAction","name":"DemoMove","path":"Content/Input/Actions/DemoMove.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
-{"id":"input/contexts/demo-ui","type":"InputMappingContext","name":"DemoUi","path":"Content/Input/Contexts/DemoUi.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
-{"id":"input/contexts/demo-gameplay","type":"InputMappingContext","name":"DemoGameplay","path":"Content/Input/Contexts/DemoGameplay.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
-{"id":"prefabs/capsule-character","type":"Prefab","name":"Capsule Character","path":"Content/Prefabs/CapsuleCharacter.sprefab","importer":"SharpEngine.PrefabJson","tags":["prefab","character","sample"]},
+{"id":"input/actions/demo.confirm","type":"InputAction","name":"DemoConfirm","path":"Input/Actions/DemoConfirm.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
+{"id":"input/actions/demo.move","type":"InputAction","name":"DemoMove","path":"Input/Actions/DemoMove.inputaction.json","importer":"SharpEngine.InputActionJson","tags":["input","sample"]},
+{"id":"input/contexts/demo-ui","type":"InputMappingContext","name":"DemoUi","path":"Input/Contexts/DemoUi.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
+{"id":"input/contexts/demo-gameplay","type":"InputMappingContext","name":"DemoGameplay","path":"Input/Contexts/DemoGameplay.inputmapping.json","importer":"SharpEngine.InputMappingContextJson","tags":["input","sample"]},
+{"id":"prefabs/capsule-character","type":"Prefab","name":"Capsule Character","path":"Prefabs/CapsuleCharacter.sprefab","importer":"SharpEngine.PrefabJson","tags":["prefab","character","sample"]},
     {
       "id": "worlds/main",
       "type": "World",
       "name": "Editor Sample World",
-      "path": "Content/Worlds/Main.sworld",
+      "path": "Worlds/Main.sworld",
       "importer": "SharpEngine.WorldJson",
       "tags": ["builtin", "scene", "sample"]
     },
@@ -24,7 +24,7 @@
       "id": "ui/editor",
       "type": "RmlDocument",
       "name": "Editor UI",
-      "path": "Content/UI/Rml/Editor.rml",
+      "path": "UI/Rml/Editor.rml",
       "importer": "RmlUi.Document",
       "tags": ["editor", "ui"]
     },
@@ -32,7 +32,7 @@
       "id": "ui/editor-style",
       "type": "StyleSheet",
       "name": "Editor Style",
-      "path": "Content/UI/Rml/Editor.rcss",
+      "path": "UI/Rml/Editor.rcss",
       "importer": "RmlUi.StyleSheet",
       "tags": ["editor", "ui"]
     },
@@ -40,7 +40,7 @@
       "id": "ui/timeline-style",
       "type": "StyleSheet",
       "name": "Timeline View Style",
-      "path": "Content/UI/Rml/Timeline.rcss",
+      "path": "UI/Rml/Timeline.rcss",
       "importer": "RmlUi.StyleSheet",
       "tags": ["editor", "ui", "timeline"]
     },
@@ -48,7 +48,7 @@
       "id": "meshes/cube",
       "type": "Mesh",
       "name": "Cube",
-      "path": "Content/Assets/Meshes/Cube.mesh.json",
+      "path": "Assets/Meshes/Cube.mesh.json",
       "readOnly": true,
       "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "primitive"],
@@ -58,7 +58,7 @@
       "id": "meshes/plane",
       "type": "Mesh",
       "name": "Plane",
-      "path": "Content/Assets/Meshes/Plane.mesh.json",
+      "path": "Assets/Meshes/Plane.mesh.json",
       "importer": "SharpEngine.MeshJson",
       "tags": ["builtin", "primitive"],
       "metadata": {"primitive": "Plane", "vertices": "4", "triangles": "2"}
@@ -67,7 +67,7 @@
       "id": "meshes/capsule",
       "type": "Mesh",
       "name": "Capsule",
-      "path": "Content/Assets/Meshes/Capsule.mesh.json",
+      "path": "Assets/Meshes/Capsule.mesh.json",
       "readOnly": true,
       "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "primitive"],
@@ -77,7 +77,7 @@
       "id": "meshes/sphere",
       "type": "Mesh",
       "name": "Sphere",
-      "path": "Content/Assets/Meshes/Sphere.mesh.json",
+      "path": "Assets/Meshes/Sphere.mesh.json",
       "readOnly": true,
       "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "primitive"],
@@ -87,7 +87,7 @@
       "id": "skeletons/robot",
       "type": "Skeleton",
       "name": "Robot Skeleton",
-      "path": "Content/Assets/Skeletons/Robot.skeleton.json",
+      "path": "Assets/Skeletons/Robot.skeleton.json",
       "importer": "SharpEngine.SkeletonJson",
       "tags": ["builtin", "skeleton", "robot"],
       "metadata": {"bones": "3"}
@@ -96,7 +96,7 @@
       "id": "skeletons/uefn-mannequin",
       "type": "Skeleton",
       "name": "UEFN Mannequin Skeleton",
-      "path": "Content/Assets/Skeletons/UEFNMannequin.sharpskeleton",
+      "path": "Assets/Skeletons/UEFNMannequin.sharpskeleton",
       "importer": "SharpEngine.SkeletonJson",
       "tags": ["imported", "skeleton", "uefn", "mannequin"],
       "metadata": {"bones": "88", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "coordinateSystem": "Y-up, right-handed, -Z forward"}
@@ -105,7 +105,7 @@
       "id": "meshes/robot-static",
       "type": "StaticMesh",
       "name": "Robot Static Mesh",
-      "path": "Content/Assets/StaticMeshes/Robot.staticmesh.json",
+      "path": "Assets/StaticMeshes/Robot.staticmesh.json",
       "importer": "SharpEngine.StaticMeshJson",
       "tags": ["builtin", "mesh", "static", "robot"],
       "metadata": {"vertices": "8", "triangles": "12"}
@@ -114,7 +114,7 @@
       "id": "meshes/robot-skeletal",
       "type": "SkeletalMesh",
       "name": "Robot Skeletal Mesh",
-      "path": "Content/Assets/Meshes/Robot.skeletalmesh.json",
+      "path": "Assets/Meshes/Robot.skeletalmesh.json",
       "importer": "SharpEngine.SkeletalMeshJson",
       "tags": ["builtin", "mesh", "skeletal", "robot"],
       "metadata": {"skeleton": "skeletons/robot", "vertices": "8", "triangles": "12"}
@@ -123,7 +123,7 @@
       "id": "meshes/uefn-mannequin",
       "type": "SkeletalMesh",
       "name": "UEFN Mannequin Skeletal Mesh",
-      "path": "Content/Assets/Meshes/UEFNMannequin.sharpskeletalmesh",
+      "path": "Assets/Meshes/UEFNMannequin.sharpskeletalmesh",
       "importer": "SharpEngine.SkeletalMeshJson",
       "tags": ["imported", "mesh", "skeletal", "uefn", "mannequin"],
       "metadata": {"skeleton": "skeletons/uefn-mannequin", "vertices": "6009", "triangles": "9324", "influences": "9", "coordinateSystem": "Y-up, right-handed, -Z forward", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "schemaVersion": "2"}
@@ -132,7 +132,7 @@
       "id": "animations/uefn-mannequin-idle",
       "type": "SkeletalAnimation",
       "name": "UEFN Mannequin Idle",
-      "path": "Content/Assets/Animations/UEFNMannequinIdle.sharpskeletalanimation",
+      "path": "Assets/Animations/UEFNMannequinIdle.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "idle"],
       "metadata": {"duration": "2.0", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
@@ -141,7 +141,7 @@
       "id": "animations/uefn-mannequin-walk",
       "type": "SkeletalAnimation",
       "name": "UEFN Mannequin Walk",
-      "path": "Content/Assets/Animations/UEFNMannequinWalk.sharpskeletalanimation",
+      "path": "Assets/Animations/UEFNMannequinWalk.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "walk"],
       "metadata": {"duration": "1.0666666666666667", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
@@ -150,7 +150,7 @@
       "id": "animations/uefn-mannequin-run",
       "type": "SkeletalAnimation",
       "name": "UEFN Mannequin Run",
-      "path": "Content/Assets/Animations/UEFNMannequinRun.sharpskeletalanimation",
+      "path": "Assets/Animations/UEFNMannequinRun.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "run"],
       "metadata": {"duration": "0.6666666666666666", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
@@ -159,7 +159,7 @@
       "id": "animations/uefn-mannequin-jump",
       "type": "SkeletalAnimation",
       "name": "UEFN Mannequin Jump",
-      "path": "Content/Assets/Animations/UEFNMannequinJump.sharpskeletalanimation",
+      "path": "Assets/Animations/UEFNMannequinJump.sharpskeletalanimation",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["imported", "animation", "skeletal", "uefn", "mannequin", "jump"],
       "metadata": {"duration": "1.4", "sampleRate": "240", "skeleton": "skeletons/uefn-mannequin", "authoring": "blender-action", "sourceFormat": "Blender", "sourceFile": "UEFNMannequin.blend", "sourcePath": "Resources/SourceAssets/UEFNMannequin/UEFNMannequin.blend", "sourceSha256": "2379E972EDA16721C0BB031C9C51068D5E00714D4F91CCB96F2F2FE75DEE9A8A", "coordinateSystem": "Y-up, right-handed, -Z forward"}
@@ -168,7 +168,7 @@
       "id": "animation-state-machines/uefn-mannequin-locomotion",
       "type": "AnimationStateMachine",
       "name": "UEFN Mannequin Locomotion",
-      "path": "Content/Assets/AnimationControllers/UEFNMannequin.sanimationstatemachine",
+      "path": "Assets/AnimationControllers/UEFNMannequin.sanimationstatemachine",
       "readOnly": true,
       "importer": "SharpEngine.AnimationStateMachineJson",
       "tags": ["builtin", "preset", "animation", "state-machine", "locomotion", "uefn", "mannequin"],
@@ -178,7 +178,7 @@
       "id": "materials/default",
       "type": "Material",
       "name": "Default Material",
-      "path": "Content/Assets/Materials/Default.material.json",
+      "path": "Assets/Materials/Default.material.json",
       "importer": "SharpEngine.MaterialJson",
       "tags": ["builtin", "material"]
     },
@@ -186,7 +186,7 @@
       "id": "animations/robot-walk",
       "type": "SkeletalAnimation",
       "name": "Robot Walk",
-      "path": "Content/Assets/Animations/RobotWalk.skeletalanimation.json",
+      "path": "Assets/Animations/RobotWalk.skeletalanimation.json",
       "importer": "SharpEngine.SkeletalAnimationJson",
       "tags": ["builtin", "animation", "skeletal"],
       "metadata": {"duration": "1.0", "sampleRate": "30"}
@@ -195,7 +195,7 @@
       "id": "timelines/robot-walk",
       "type": "Timeline",
       "name": "Robot Walk Timeline",
-      "path": "Content/Assets/Timelines/RobotWalk.timeline.json",
+      "path": "Assets/Timelines/RobotWalk.timeline.json",
       "importer": "SharpEngine.TimelineJson",
       "tags": ["builtin", "timeline", "sequencing"],
       "metadata": {"duration": "3.0", "frameRate": "30"}
@@ -204,7 +204,7 @@
       "id": "ui/main",
       "type": "RmlDocument",
       "name": "Default Game UI",
-      "path": "Content/UI/Main.rml",
+      "path": "UI/Main.rml",
       "readOnly": true,
       "importer": "RmlUi.Document",
       "tags": ["runtime", "ui"]
@@ -213,7 +213,7 @@
       "id": "ui/main-style",
       "type": "StyleSheet",
       "name": "Default Game UI Style",
-      "path": "Content/UI/Main.rcss",
+      "path": "UI/Main.rcss",
       "readOnly": true,
       "importer": "RmlUi.StyleSheet",
       "tags": ["runtime", "ui", "style"]
@@ -222,7 +222,7 @@
       "id": "input/actions/editor.play-pause",
       "type": "InputAction",
       "name": "Editor Play Pause",
-      "path": "Content/Input/Actions/EditorPlayPause.inputaction.json",
+      "path": "Input/Actions/EditorPlayPause.inputaction.json",
       "readOnly": true,
       "importer": "SharpEngine.InputActionJson",
       "tags": ["editor", "input"]
@@ -231,7 +231,7 @@
       "id": "input/actions/editor.stop",
       "type": "InputAction",
       "name": "Editor Stop",
-      "path": "Content/Input/Actions/EditorStop.inputaction.json",
+      "path": "Input/Actions/EditorStop.inputaction.json",
       "readOnly": true,
       "importer": "SharpEngine.InputActionJson",
       "tags": ["editor", "input"]
@@ -240,7 +240,7 @@
       "id": "input/actions/editor.save",
       "type": "InputAction",
       "name": "Editor Save",
-      "path": "Content/Input/Actions/EditorSave.inputaction.json",
+      "path": "Input/Actions/EditorSave.inputaction.json",
       "readOnly": true,
       "importer": "SharpEngine.InputActionJson",
       "tags": ["editor", "input"]
@@ -249,7 +249,7 @@
       "id": "input/actions/editor.undo",
       "type": "InputAction",
       "name": "Editor Undo",
-      "path": "Content/Input/Actions/EditorUndo.inputaction.json",
+      "path": "Input/Actions/EditorUndo.inputaction.json",
       "readOnly": true,
       "importer": "SharpEngine.InputActionJson",
       "tags": ["editor", "input"]
@@ -258,7 +258,7 @@
       "id": "input/actions/editor.redo",
       "type": "InputAction",
       "name": "Editor Redo",
-      "path": "Content/Input/Actions/EditorRedo.inputaction.json",
+      "path": "Input/Actions/EditorRedo.inputaction.json",
       "readOnly": true,
       "importer": "SharpEngine.InputActionJson",
       "tags": ["editor", "input"]
@@ -267,7 +267,7 @@
       "id": "input/contexts/editor",
       "type": "InputMappingContext",
       "name": "Editor Input",
-      "path": "Content/Input/Contexts/Editor.inputmapping.json",
+      "path": "Input/Contexts/Editor.inputmapping.json",
       "readOnly": true,
       "importer": "SharpEngine.InputMappingContextJson",
       "tags": ["editor", "input"]

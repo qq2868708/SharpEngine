@@ -19,6 +19,20 @@ feature. Compose existing capabilities and keep manual maintenance straightforwa
 
 ## UI Layout Composition
 
+Fixed UI structure, child references and editable per-use parameters belong in authored
+RML, with shared appearance in RCSS. Use the UI-domain `ui-use` asset reference and
+template `values` contracts for fixed composition; C# supplies behavior and transient
+state. Preserve use boundaries when expanding an authoring canvas: edits target the
+reference/parameters or explicitly open the shared definition, never save derived
+expanded nodes into the parent. UI edits must round-trip through Save/reopen and retain
+stylesheet dependencies. Runtime previews are supplementary and never replace authoring.
+
+Private RCSS is part of the owning `.sui` authority and shares its save/Undo boundary.
+Cross-UI styles use explicit `GlobalStyleSheet` asset URIs (`.sglobalcss`) in
+`globalStyleSheets`; never scan and inject registered styles globally. Collect child
+dependencies even when runtime parts provide the rendered markup. Shared source edits
+remain separate transactions and refresh dependent presentation without dirtying it.
+
 For a dedicated asset editor, keep feature logic and its layout definition separate.
 Use the UI-domain `IUiLayoutPart` contract for referenced child layouts; do not copy
 child markup into the parent or create an arbitrary business-object layout container.

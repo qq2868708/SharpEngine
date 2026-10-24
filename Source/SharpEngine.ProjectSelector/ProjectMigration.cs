@@ -4,26 +4,48 @@ namespace SharpEngine.ProjectSelector;
 
 internal static class ProjectMigration
 {
-    internal static void CreateStartupWorld(ResolvedSharpProject resolved)
+    internal static void CreateStartupWorld(ResolvedSharpProject Resolved)
     {
-        var project = JsonNode.Parse(File.ReadAllText(resolved.Project.ManifestPath))!.AsObject();
-        if (project["world"]?["startup"] is not null) return;
-        var engine = JsonNode.Parse(File.ReadAllText(resolved.Engine.ManifestPath))!;
-        var preset = engine["worldPresets"]!["default"]!.GetValue<string>().Replace("engine://", "", StringComparison.Ordinal);
-        var assets = JsonNode.Parse(File.ReadAllText(Path.Combine(resolved.Engine.Root,
-            engine["assets"]!["manifest"]!.GetValue<string>())))!;
-        var source = assets["assets"]!.AsArray().Single(a => a!["id"]!.GetValue<string>() == preset)!["path"]!.GetValue<string>();
-        var destination = Path.Combine(resolved.Project.Root, "Content", "Worlds", "Main.sworld");
-        if (File.Exists(destination)) throw new IOException("Cannot initialize startup World: Main.sworld already exists");
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        File.Copy(Path.Combine(resolved.Engine.Root, source), destination);
-        var manifestPath = Path.Combine(resolved.Project.Root, project["assets"]!["manifest"]!.GetValue<string>());
-        var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!.AsObject();
-        manifest["assets"]!.AsArray().Add(new JsonObject { ["id"] = "worlds/main", ["type"] = "World",
-            ["name"] = "Main", ["path"] = "Content/Worlds/Main.sworld" });
-        File.WriteAllText(manifestPath, manifest.ToJsonString(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Default) { WriteIndented = true }));
-        project["world"] = new JsonObject { ["startup"] = "Content/Worlds/Main.sworld" };
-        File.WriteAllText(resolved.Project.ManifestPath, project.ToJsonString(new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Default) { WriteIndented = true }));
+        var Project = JsonNode.Parse(File.ReadAllText(Resolved.Project.ManifestPath))!.AsObject();
+        if (Project["world"]?["startup"] is not null)
+        {
+            return;
+        }
+        var Engine = JsonNode.Parse(File.ReadAllText(Resolved.Engine.ManifestPath))!;
+        var Preset = Engine["worldPresets"]!["default"]!.GetValue<string>().Replace("engine://", "", StringComparison.Ordinal);
+        var Assets = JsonNode.Parse(File.ReadAllText(Path.Combine(Resolved.Engine.Root,
+            Engine["assets"]!["manifest"]!.GetValue<string>())))!;
+        var ManifestPath = Path.Combine(Resolved.Project.Root, Project["assets"]!["manifest"]!.GetValue<string>());
+        var Manifest = JsonNode.Parse(File.ReadAllText(ManifestPath))!.AsObject();
+        if (Assets["schemaVersion"]?.GetValue<int>() != 2 || Manifest["schemaVersion"]?.GetValue<int>() != 2)
+        {
+            throw new InvalidDataException("Asset manifests require schemaVersion=2 and Content-relative paths");
+        }
+        var Source = Assets["assets"]!.AsArray().Single(Asset => Asset!["id"]!.GetValue<string>() == Preset)!["path"]!.GetValue<string>();
+        var Destination = Path.Combine(Resolved.Project.Root, "Content", "Worlds", "Main.sworld");
+        if (File.Exists(Destination))
+        {
+            throw new IOException("Cannot initialize startup World: Main.sworld already exists");
+        }
+        Directory.CreateDirectory(Path.GetDirectoryName(Destination)!);
+        File.Copy(Path.Combine(Resolved.Engine.Root, "Content", Source), Destination);
+        Manifest["assets"]!.AsArray().Add(new JsonObject
+        {
+            ["id"] = "worlds/main",
+            ["type"] = "World",
+            ["name"] = "Main",
+            ["path"] = "Worlds/Main.sworld",
+        });
+        var Options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Default)
+        {
+            WriteIndented = true,
+        };
+        File.WriteAllText(ManifestPath, Manifest.ToJsonString(Options));
+        Project["world"] = new JsonObject
+        {
+            ["startup"] = "Content/Worlds/Main.sworld",
+        };
+        File.WriteAllText(Resolved.Project.ManifestPath, Project.ToJsonString(Options));
     }
 
     // Explicit migration only; normal Generate never edits authored project code.

@@ -63,6 +63,9 @@ using ManagedSetHostUiPropertyFn = uint8_t(__cdecl*)(const char* hostIdUtf8,
 using ManagedSetUiDocumentFn = uint8_t(__cdecl*)(const char* rmlUtf8,
                                                  const char* sourcePathUtf8);
 using ManagedClearUiDocumentFn = uint8_t(__cdecl*)();
+using ManagedSetHostUiDocumentFn = uint8_t(__cdecl*)(const char* hostIdUtf8,
+    const char* anchorIdUtf8, const char* rmlUtf8, const char* sourcePathUtf8,
+    float width, float height);
 using ManagedChooseWorldSavePathFn = uint8_t(__cdecl*)(void* ownerWindow,
                                                         const char* contentRootUtf8,
                                                         char* resultUtf8,
@@ -120,7 +123,7 @@ using ManagedGetGameplayInputCaptureFn = uint8_t(__cdecl*)();
 
 struct ManagedHostApi
 {
-    uint32_t Version = 19;
+    uint32_t Version = 20;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -175,6 +178,8 @@ struct ManagedHostApi
     // Version 19 appends code-driven runtime UI screens for the Game target.
     ManagedSetUiDocumentFn SetUiDocument = nullptr;
     ManagedClearUiDocumentFn ClearUiDocument = nullptr;
+    // Version 20 appends independent native documents inside Editor preview panes.
+    ManagedSetHostUiDocumentFn SetHostUiDocument = nullptr;
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

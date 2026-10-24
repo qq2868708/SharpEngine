@@ -598,6 +598,7 @@ public sealed class ContentManager
             ".sui" => "UiDocument",
             ".rml" => "RmlDocument",
             ".rcss" => "StyleSheet",
+            ".sglobalcss" => "GlobalStyleSheet",
             ".xml" => "Xml",
             ".json" => "Json",
             ".png" or ".jpg" or ".jpeg" or ".tga" => "Texture",

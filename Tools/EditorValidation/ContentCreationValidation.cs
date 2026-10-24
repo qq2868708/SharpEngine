@@ -41,13 +41,19 @@ internal static class ContentCreationValidation
         Check(FolderResult.Success && Directory.Exists(Path.Combine(DirectoryPath, "Nested")),
             "Folder creation uses the requested project Content directory");
         var StaleRevision = Revision();
-        foreach (var Type in new[] { "World", "Prefab", "Material", "UiDocument", "RmlDocument", "StyleSheet", "InputAction", "InputMappingContext", "validation.creation-data" })
+        foreach (var Type in new[] { "World", "Prefab", "Material", "UiDocument", "RmlDocument", "StyleSheet", "GlobalStyleSheet", "InputAction", "InputMappingContext", "validation.creation-data" })
         {
             var Name = Type.Replace('.', '_');
             var Result = Create(Type, Name);
             Check(Result.Success && Result.AssetId is not null && File.Exists(Result.Path),
                 $"Creation saves and registers {Type}: {Result}");
             var Asset = Runtime.Assets!.Find(Result.AssetId)!;
+            var Entry = JsonNode.Parse(File.ReadAllText(ManifestPath))!["assets"]!.AsArray()
+                .Single(Entry => Entry!["id"]!.GetValue<string>() == Result.AssetId!["project://".Length..])!;
+            Check(Asset.RelativePath == "CreationValidation/" + Path.GetFileName(Result.Path) &&
+                Entry["path"]!.GetValue<string>() == Asset.RelativePath &&
+                Runtime.Assets.ResolvePath(Asset) == Result.Path,
+                "Asset creation persists a Content-relative path and resolves the original source");
             Check(Asset.Source == AssetSource.Project && Asset.Type == Type &&
                 Path.GetDirectoryName(Result.Path) == DirectoryPath && Result.BeforeRevision != Result.AfterRevision &&
                 Result.AfterRevision == Revision() && Result.TransactionId is not null,
@@ -81,11 +87,12 @@ internal static class ContentCreationValidation
                 var Package = Type == "UiDocument"
                     ? UiDocumentAsset.Parse(Source, Result.Path!) : null;
                 var Rml = Package?.Rml ?? Source;
-                Check(XDocument.Parse(Rml).Root!.Name == "rml",
+                Check(XDocument.Parse(Rml).Root!.Name == (Type == "UiDocument" ? "template" : "rml"),
                     $"New {Type} source is valid RML text");
                 var Opened = UiEditorDocument.Load(Asset, Result.Path!, Runtime.EngineRoot);
-                Check(Opened.Sheet.InlineBlocks == 1 && Opened.Sheet.Rules.Count > 0 &&
-                    Opened.Sheet.Compute(Opened.BodyElement!).ContainsKey("background-color"),
+                var Target = Type == "UiDocument" ? Opened.BodyElement!.Elements().First() : Opened.BodyElement!;
+                Check(Opened.Sheet.Compute(Target).ContainsKey("background-color") &&
+                    (Type == "UiDocument" || Opened.Sheet.InlineBlocks == 1),
                     $"New {Type} inline <style> feeds the design surface cascade");
             }
             else if (Type == "validation.creation-data")

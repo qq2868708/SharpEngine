@@ -1,12 +1,12 @@
 {
-  "$schema": "https://sharpengine.dev/schemas/assets-v1.json",
-  "schemaVersion": 1,
+  "$schema": "https://sharpengine.dev/schemas/assets-v2.json",
+  "schemaVersion": 2,
   "assets": [
     {
       "id": "worlds/main",
       "type": "World",
       "name": "Network Dedicated Server",
-      "path": "Content/Worlds/Main.sworld",
+      "path": "Worlds/Main.sworld",
       "importer": "SharpEngine.WorldJson",
       "tags": ["network", "server"]
     }

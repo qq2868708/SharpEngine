@@ -2,21 +2,25 @@ using System.Net;
 using System.Text.Json.Nodes;
 using SharpEngine.Assets;
 using SharpEngine.Editor.Layout;
+using SharpEngine.UI;
 
 namespace SharpEngine.Editor;
 
 /// <summary>Formal RML UI asset editor. The authored RML source stays authoritative;
 /// selection, resolved styles, diagnostics and drag transactions are editor state.</summary>
-internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview
+internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview,
+    IAssetEditorDocumentPreview
 {
     private readonly EditorAssetOpenContext Context;
     private readonly UiEditorDocument Document;
+    private readonly IEditorUiPreview? Preview;
     private readonly List<AssetEditorLiveProperty> PendingLiveProperties = [];
     private bool MarkupRefreshRequested;
 
-    public UiAssetEditorInstance(EditorAssetOpenContext Context)
+    public UiAssetEditorInstance(EditorAssetOpenContext Context, IEditorUiPreview? Preview = null)
     {
         this.Context = Context;
+        this.Preview = Preview;
         var OwnerRoot = Context.Asset.Source == AssetSource.Project ?
             Path.GetDirectoryName(Context.Runtime.ProjectManifest ?? string.Empty) :
             Context.Runtime.EngineRoot;
@@ -25,12 +29,26 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
             OwnerRoot = Context.Runtime.EngineRoot;
         }
         Document = UiEditorDocument.Load(Context.Asset, Context.Path, OwnerRoot);
+        if (Context.Runtime.Assets is not null)
+        {
+            Document.SetGlobalStyleResolver(GlobalStyleSheetAsset.CreateResolver(Context.Runtime.Assets));
+            Document.SetAssetResolver(UiLayoutAssets.CreateResolver(Context.Runtime.Assets));
+        }
+        if (Preview is not null)
+        {
+            Panes = new[]
+            {
+                new AssetEditorPaneDefinition("preview", "Runtime Preview"),
+            }
+                .Concat(Panes).ToArray();
+        }
     }
 
     public AssetDescriptor Asset => Document.Asset;
     public string EditorId => "ui-editor";
     public string Title => Document.Title;
     public string PrimaryPaneId => "design";
+    public string PreviewElementId => "uiRuntimePreview";
     public bool IsDirty => Document.IsDirty;
     public bool IsReadOnly => Document.IsReadOnly;
     public bool SuppressMarkupRefresh => Document.IsGesturing && !Document.IsReadOnly;
@@ -86,7 +104,8 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                             Kind = DockNodeKind.Split,
                             Orientation = DockSplitOrientation.Vertical,
                             Ratio = 0.74f,
-                            First = Tabs("ui.design", "ui.design.tabs", "design"),
+                            First = Tabs("ui.design", "ui.design.tabs",
+                                Preview is null ? ["design"] : ["design", "preview"]),
                             Second = Tabs("ui.bottom", "ui.bottom.tabs", "style",
                                 "diagnostics", "source"),
                         },
@@ -164,6 +183,77 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
 
     public bool TryHandleAction(string Action)
     {
+        const string PrivatePrefix = "editor.ui-private-style:";
+        if (Action.StartsWith("editor.ui-private-rule-add:", StringComparison.Ordinal))
+        {
+            Report(Document.AddPrivateRule(Action["editor.ui-private-rule-add:".Length..], out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith(PrivatePrefix, StringComparison.Ordinal))
+        {
+            var Payload = Action[PrivatePrefix.Length..];
+            var First = Payload.IndexOf(':');
+            var Second = First < 0 ? -1 : Payload.IndexOf(':', First + 1);
+            var Index = -1;
+            var Valid = First > 0 && int.TryParse(Payload[..First], out Index);
+            if (Valid && Second > First)
+            {
+                var Name = Uri.UnescapeDataString(Payload[(First + 1)..Second]);
+                Report(Document.SetPrivateStyleValue(Index, Name, Payload[(Second + 1)..], out var Message), Message);
+            }
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-global-style-add:", StringComparison.Ordinal) ||
+            Action.StartsWith("editor.ui-global-style-remove:", StringComparison.Ordinal))
+        {
+            var Add = Action.StartsWith("editor.ui-global-style-add:", StringComparison.Ordinal);
+            var Prefix = Add ? "editor.ui-global-style-add:" : "editor.ui-global-style-remove:";
+            Report(Document.SetGlobalStyleReference(Action[Prefix.Length..].Trim(), Add, out var Message), Message);
+            return true;
+        }
+        if (Preview is not null && Preview.TryHandleAction(Action))
+        {
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-use-asset:", StringComparison.Ordinal))
+        {
+            Report(Document.SetUseAsset(Action["editor.ui-use-asset:".Length..], out var Message), Message);
+            return true;
+        }
+        if (Action is "editor.ui-enabled:1" or "editor.ui-enabled:0")
+        {
+            Report(Document.SetEnabled(Action.EndsWith(":1", StringComparison.Ordinal), out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-open-style:", StringComparison.Ordinal))
+        {
+            Context.Runtime.InvokeUiAction("editor.open-asset:" + Action["editor.ui-open-style:".Length..]);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-add-use:", StringComparison.Ordinal))
+        {
+            Report(Document.AddUse(Action["editor.ui-add-use:".Length..], out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-open-use:", StringComparison.Ordinal))
+        {
+            Context.Runtime.InvokeUiAction("editor.open-asset:" + Action["editor.ui-open-use:".Length..]);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-parameter:", StringComparison.Ordinal) ||
+            Action.StartsWith("editor.ui-template-parameter:", StringComparison.Ordinal))
+        {
+            var Template = Action.StartsWith("editor.ui-template-parameter:", StringComparison.Ordinal);
+            var Prefix = Template ? "editor.ui-template-parameter:" : "editor.ui-parameter:";
+            var Payload = Action[Prefix.Length..];
+            var Separator = Payload.IndexOf(':');
+            if (Separator >= 0)
+            {
+                var Name = Uri.UnescapeDataString(Payload[..Separator]);
+                Report(Document.SetParameter(Name, Payload[(Separator + 1)..], Template, out var Message), Message);
+            }
+            return true;
+        }
         if (Action == "editor.ui-select-parent")
         {
             Document.SelectParent();
@@ -289,6 +379,9 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     {
         return PaneId switch
         {
+            "preview" => Preview is null
+                ? "<div class=\"ui-editor-empty\">No project preview factory is registered for this asset.</div>"
+                : "<div id=\"uiRuntimePreview\" class=\"ui-runtime-preview\"></div>",
             "design" => UiEditorMarkup.BuildCanvas(Document),
             "elements" => "<div class=\"ui-panel-title\">ELEMENTS</div>" +
                 UiEditorMarkup.BuildHierarchy(Document),
@@ -296,7 +389,7 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                 "<div id=\"uiInspectorBody\" class=\"ui-element-inspector\">" +
                 UiEditorMarkup.BuildInspector(Document) + "</div>",
             "style" => "<div class=\"ui-panel-title\">STYLES</div>" +
-                UiEditorMarkup.BuildStylePane(Document),
+                BuildStyleLinks() + UiEditorMarkup.BuildStylePane(Document),
             "diagnostics" => "<div class=\"ui-panel-title\">DIAGNOSTICS</div>" +
                 UiEditorMarkup.BuildDiagnostics(Document),
             "source" => UiEditorMarkup.BuildSource(Document),
@@ -313,6 +406,31 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     public void Update(float DeltaSeconds)
     {
         _ = DeltaSeconds;
+        MarkupRefreshRequested |= Document.RefreshChangedDependencies();
+    }
+
+    private string BuildStyleLinks()
+    {
+        var Assets = Context.Runtime.Assets;
+        if (Assets is null)
+        {
+            return string.Empty;
+        }
+        var Paths = Document.Sheet.Files.Select(FileValue => System.IO.Path.GetFullPath(
+            System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Context.Path)!, FileValue)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var Builder = new System.Text.StringBuilder("<div class=\"ui-element-tools\">");
+        foreach (var Asset in Assets.Assets.Where(Asset => Asset.Type is "StyleSheet" or "GlobalStyleSheet"))
+        {
+            var PathValue = Assets.ResolvePath(Asset);
+            if (PathValue is not null && Paths.Contains(System.IO.Path.GetFullPath(PathValue)))
+            {
+                Builder.Append("<button class=\"ui-tool-button\" action=\"editor.ui-open-style:")
+                    .Append(WebUtility.HtmlEncode(Asset.Id)).Append("\">Edit ")
+                    .Append(WebUtility.HtmlEncode(Asset.Name)).Append("</button>");
+            }
+        }
+        return Builder.Append("</div>").ToString();
     }
 
     public bool ConsumeMarkupRefreshRequest()
@@ -341,12 +459,20 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
             Context.Runtime.UiRuntime.ViewModelContracts.Any(Contract =>
                 Contract.Key.Equals(Document.ViewModelContract, StringComparison.Ordinal));
         State["panes"] = new JsonArray(Panes.Select(Pane => (JsonNode)Pane.PaneId).ToArray());
+        State["runtimePreview"] = Preview?.Describe();
         return State;
+    }
+
+    public EditorUiPreviewDocument? BuildPreviewDocument()
+    {
+        return Preview?.BuildDocument(new EditorUiPreviewSource(Asset.Id, Context.Path,
+            Document.SerializeForSave(), Document.Revision, Document.DependencyRevision));
     }
 
     public void Dispose()
     {
         PendingLiveProperties.Clear();
+        Preview?.Dispose();
     }
 
     private void BeginGesture(string Payload)

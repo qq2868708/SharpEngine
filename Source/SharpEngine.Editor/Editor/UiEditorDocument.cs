@@ -18,7 +18,8 @@ internal enum UiDocumentFormat
     Package,
 }
 
-internal sealed record UiEditorSnapshot(string Xml, string? Selection);
+internal sealed record UiEditorSnapshot(string Xml, string? Selection, string Rcss,
+    IReadOnlyList<string> GlobalStyleSheets);
 
 internal sealed record UiEditorGestureBase(bool Absolute, float Left, float Top,
     float Width, float Height, float MarginLeft, float MarginTop);
@@ -77,7 +78,7 @@ internal sealed partial class UiEditorDocument
     private static readonly HashSet<string> DirectiveTags = new(
         StringComparer.OrdinalIgnoreCase)
     {
-        "ui-slot", "ui-if", "ui-repeat",
+        "ui-slot", "ui-if", "ui-repeat", "ui-use",
     };
 
     private readonly string OwnerRoot;
@@ -93,7 +94,8 @@ internal sealed partial class UiEditorDocument
 
     private UiEditorDocument(AssetDescriptor Asset, string Path, string OwnerRoot,
         XDocument Document, UiDocumentFormat Format, string PackageName,
-        IReadOnlyList<string> StyleSheets)
+        IReadOnlyList<string> StyleSheets, string Rcss = "",
+        IReadOnlyList<string>? GlobalStyleSheets = null)
     {
         this.Asset = Asset;
         this.Path = Path;
@@ -102,8 +104,10 @@ internal sealed partial class UiEditorDocument
         this.Format = Format;
         this.PackageName = PackageName;
         this.PackageStyleSheets = StyleSheets;
+        PrivateRcss = Rcss;
+        this.GlobalStyleSheets = GlobalStyleSheets?.ToArray() ?? [];
         this.IsTemplate = Document.Root?.Name.LocalName == "template";
-        this.SavedState = Canonical(Document);
+        this.SavedState = AuthoringState();
         this.SourceHash = HashSource();
         var First = EnumerateBody().FirstOrDefault();
         this.SelectionKey = First is null ? null : KeyOf(First);
@@ -117,13 +121,23 @@ internal sealed partial class UiEditorDocument
     public string PackageName { get; }
     /// <summary>Stylesheets declared by a <c>.sui</c> package rather than by a link.</summary>
     public IReadOnlyList<string> PackageStyleSheets { get; }
+    internal string PrivateRcss
+    {
+        get;
+        private set;
+    }
+    internal IReadOnlyList<string> GlobalStyleSheets
+    {
+        get;
+        private set;
+    }
     /// <summary>True when this asset is a reusable <c>&lt;template&gt;</c> definition. The
     /// editor presents its content with placeholder values; it has no screen size or body.</summary>
     public bool IsTemplate { get; }
     public string? SelectedKey => SelectionKey;
     public long Revision { get; private set; }
     public bool IsReadOnly => Asset.ReadOnly || Asset.Source == AssetSource.Engine;
-    public bool IsDirty => Canonical(Document) != SavedState;
+    public bool IsDirty => AuthoringState() != SavedState;
     public bool CanUndo => UndoStack.Count != 0;
     public bool CanRedo => RedoStack.Count != 0;
     public bool IsGesturing => Gesture is not null;
@@ -159,7 +173,7 @@ internal sealed partial class UiEditorDocument
         var Document = XDocument.Parse(Package.Rml,
             LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
         return new UiEditorDocument(Asset, Full, OwnerRoot, Document,
-            UiDocumentFormat.Package, Package.Name, Package.StyleSheets);
+            UiDocumentFormat.Package, Package.Name, Package.StyleSheets, Package.Rcss, Package.GlobalStyleSheets);
     }
 
     /// <summary>A package is recognized by its asset type or, for unregistered sources,
@@ -328,6 +342,11 @@ internal sealed partial class UiEditorDocument
         if (Element.HasElements)
         {
             Message = "Container text cannot replace child elements";
+            return false;
+        }
+        if (Element.Name.LocalName == "ui-use")
+        {
+            Message = "Edit the reusable control's parameters or open its shared definition";
             return false;
         }
         return Edit("text", () => Element.Value = Value, out Message);
@@ -640,7 +659,7 @@ internal sealed partial class UiEditorDocument
         {
             return;
         }
-        RedoStack.Push(new(Canonical(Document), SelectedKey));
+        RedoStack.Push(CaptureSnapshot());
         Restore(UndoStack.Pop());
     }
 
@@ -654,7 +673,7 @@ internal sealed partial class UiEditorDocument
         {
             return;
         }
-        UndoStack.Push(new(Canonical(Document), SelectedKey));
+        UndoStack.Push(CaptureSnapshot());
         Restore(RedoStack.Pop());
     }
 
@@ -827,7 +846,7 @@ internal sealed partial class UiEditorDocument
         Gesture = null;
         if (Active.Changed && Canonical(Document) != Active.Xml)
         {
-            UndoStack.Push(new(Active.Xml, Active.Selection));
+            UndoStack.Push(new(Active.Xml, Active.Selection, PrivateRcss, GlobalStyleSheets.ToArray()));
             RedoStack.Clear();
         }
         RefreshDerivedState();
@@ -882,7 +901,7 @@ internal sealed partial class UiEditorDocument
             // document can never reach the authored file.
             VerifySerializedFile(Temporary);
             File.Move(Temporary, Path, true);
-            SavedState = Canonical(Document);
+            SavedState = AuthoringState();
             SourceHash = HashSource();
         }
         finally
@@ -900,7 +919,8 @@ internal sealed partial class UiEditorDocument
     {
         if (Format == UiDocumentFormat.Package)
         {
-            return UiDocumentAsset.Create(PackageName, Document.ToString())
+            return UiDocumentAsset.Create(PackageName, Canonical(Document), PackageStyleSheets,
+                    PrivateRcss, GlobalStyleSheets)
                 .Serialize() + Environment.NewLine;
         }
         return Document.ToString() + Environment.NewLine;
@@ -913,7 +933,8 @@ internal sealed partial class UiEditorDocument
             var Reparsed = UiDocumentAsset.Load(Temporary);
             var Rml = XDocument.Parse(Reparsed.Rml,
                 LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
-            if (Canonical(Rml) != Canonical(Document))
+            if (Canonical(Rml) != Canonical(Document) || Reparsed.Rcss != PrivateRcss ||
+                !Reparsed.GlobalStyleSheets.SequenceEqual(GlobalStyleSheets))
             {
                 throw new InvalidDataException(
                     "The serialized UI package does not round-trip its RML document");
@@ -989,6 +1010,8 @@ internal sealed partial class UiEditorDocument
                 ["files"] = new JsonArray(StyleSheet.Files.Select(File =>
                     (JsonNode)File).ToArray()),
                 ["inlineBlocks"] = StyleSheet.InlineBlocks,
+                ["privateRcss"] = PrivateRcss,
+                ["globalStyleSheets"] = new JsonArray(GlobalStyleSheets.Select(Value => (JsonNode)Value).ToArray()),
                 ["ruleCount"] = StyleSheet.Rules.Count,
                 ["classes"] = new JsonArray(StyleSheet.Classes.Select(Class =>
                     (JsonNode)Class).ToArray()),
@@ -1040,14 +1063,14 @@ internal sealed partial class UiEditorDocument
         {
             CommitGesture();
         }
-        var Before = Canonical(Document);
-        var BeforeSelection = SelectedKey;
+        var Before = CaptureSnapshot();
+        var BeforeState = AuthoringState();
         Mutation();
-        if (Canonical(Document) == Before)
+        if (AuthoringState() == BeforeState)
         {
             return false;
         }
-        UndoStack.Push(new(Before, BeforeSelection));
+        UndoStack.Push(Before);
         RedoStack.Clear();
         Revision++;
         RefreshDerivedState();
@@ -1056,6 +1079,8 @@ internal sealed partial class UiEditorDocument
 
     private void Restore(UiEditorSnapshot Snapshot)
     {
+        PrivateRcss = Snapshot.Rcss;
+        GlobalStyleSheets = Snapshot.GlobalStyleSheets.ToArray();
         Document = XDocument.Parse(Snapshot.Xml,
             LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
         SelectionKey = Snapshot.Selection;
@@ -1102,6 +1127,10 @@ internal sealed partial class UiEditorDocument
             Diagnostics.Add(new("error", "UI_RML_BODY", "The document requires one <body>"));
         }
         var Elements = EnumerateBody().ToArray();
+        if (!IsTemplate && Elements.Any(Element => Element.Name.LocalName == "ui-use"))
+        {
+            Diagnostics.Add(new("error", "UI_USE_TEMPLATE_REQUIRED", "Fixed UI composition requires a <template> document"));
+        }
         foreach (var Element in Elements.Where(Value => ElementId(Value).Length == 0 &&
                      !IsTemplate))
         {
@@ -1130,8 +1159,12 @@ internal sealed partial class UiEditorDocument
             Diagnostics.Add(new("warning", "UI_ELEMENT_TAG_UNKNOWN",
                 $"<{Unknown.Name.LocalName}> is not a known RML layout element"));
         }
+        BuildDesignComposition(Diagnostics);
+        var GlobalFiles = ResolvedGlobalStyles(Diagnostics);
+        var PrivateStyles = new[] { new SharpEngine.UI.UiPrivateStyle(Path, PrivateRcss) }.Concat(ChildPrivateStyles).ToArray();
         StyleSheet = UiStyleSheet.Load(Document, Path, OwnerRoot, Diagnostics,
-            PackageStyleSheets);
+            PackageStyleSheets, GlobalFiles.Concat(ReferencedStyleSheets).ToArray(), PrivateStyles);
+        TrackDependencies();
         DiagnosticList = Diagnostics;
         if (SelectedKey is not null && Find(SelectedKey) is null)
         {
@@ -1259,7 +1292,7 @@ internal sealed partial class UiEditorDocument
     };
 
     private static bool CanContain(XElement Element) =>
-        !LeafTags.Contains(Element.Name.LocalName);
+        !LeafTags.Contains(Element.Name.LocalName) && Element.Name.LocalName is not ("ui-use" or "ui-slot");
 
 
 

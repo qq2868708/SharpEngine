@@ -67,7 +67,7 @@ try
     var importedAssets = Directory.CreateDirectory(Path.Combine(importRoot.FullName, "Content", "Assets"));
     File.Copy(objPath, Path.Combine(importedAssets.FullName, "quad.obj"));
     File.WriteAllText(Path.Combine(importedAssets.FullName, "assets.json"), """
-      {"schemaVersion":1,"assets":[{"id":"meshes/quad","type":"Mesh","name":"Imported Quad","path":"Content/Assets/quad.obj","importer":"SharpEngine.Obj"}]}
+      {"schemaVersion":2,"assets":[{"id":"meshes/quad","type":"Mesh","name":"Imported Quad","path":"Assets/quad.obj","importer":"SharpEngine.Obj"}]}
       """);
     var importedManifest = Path.Combine(importRoot.FullName, "Imported.sharpproject");
     File.WriteAllText(importedManifest, """

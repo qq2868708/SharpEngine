@@ -1,8 +1,22 @@
 # RML UI 资产编辑器
 
+固定布局、控件引用和可编辑参数由 RML 保存；私有 RCSS 保存在同一 `.sui` 的 `rcss` 成员中，共享规则使用独立 `.sglobalcss` 资产；C# 负责行为与运行时状态。
+
+`globalStyleSheets` 是稳定资产 URI 数组，例如 `["project://ui/reuse-lab/controls-style"]`。目标必须为 `GlobalStyleSheet`，文件后缀 `.sglobalcss`，importer `RmlUi.GlobalStyleSheet`。不会因为文件存在或资产已注册而自动加载；只收集当前 UI 和其子定义显式声明的引用。
+
+Styles 的 PRIVATE STYLES 编辑当前包私有声明，Add private rule 创建规则；修改与结构编辑共用 Undo/Redo、dirty 和 Save。EXPLICIT SHARED STYLES 可添加/移除 URI，Edit 打开独立共享样式资产。私有编辑不改写共享源，共享规则编辑使用独立文档历史。保存/回读同时保留 RML、私有 RCSS 原文和引用顺序。共享规则先于私有规则进入级联；选择器优先级仍按 RCSS 计算。旧 `styleSheets` 路径声明保持可读，新的独立共享资产使用显式 URI。
+
+可组合的 `.sui` 使用 `<template values='{"Title":"Default"}'>`。父布局通过 `<ui-use id="First" asset="project://ui/reuse-lab/counter-card" values='{"Id":"first","Title":"Instance A"}' />` 声明一次固定使用，`class` 和 `style` 保存父级布局覆盖。引用通过资产清单解析，禁止引用环；暂不支持 repeat 中的 ui-use。动态内容仍可通过既有 ui-slot 与实例 API 提供，不会自动保存执行状态。
+
+Design 展开子结构用于显示，点击子结构选择父文档中的 ui-use。Inspector 的 REUSABLE CONTROL 分组编辑资产 URI 和本次参数；Edit shared definition 打开原定义。TEMPLATE DEFAULTS 编辑模板默认参数，Add UI asset 输入已注册的 UiDocument URI 后插入新使用。父文档保存时只写引用与覆盖，不把展开结构烘焙进父 RML；子定义保持独立。新增、移动、尺寸、文本、class、enabled、参数等修改参与文档 Undo/Redo，Save 后重新打开恢复。
+
+Styles 的 Edit 按钮打开已注册的共享 RCSS。StyleSheet 的 Rules & Preview 面板以规则和属性字段编辑现有声明；修改进入该 RCSS 文档自己的 Undo/Redo，Save 原子写回源文件。源区间编辑保留无关注释、选择器、声明和嵌套规则；当前结构化面板不编辑 @ 规则内部，Source 仍保留完整原文。保存后引用画布检测依赖变化并刷新，不把共享变化写成父元素的行内覆盖。
+
+项目可注册 `EditorUiAssetEditor.Create(Context, IEditorUiPreview)`，运行预览与 Game 共用 `UiScreenComposer` 和项目行为代码，但创建独立实例。Design 为默认制作入口，Runtime Preview 为辅助 Tab；预览参数使用当前未保存源文本，不回写源。画布样式解析支持后代和子选择器，运行预览由原生 RmlUi 解析完整 RCSS。
+
 项目 UI 画面的权威源格式是 `.sui`：一个版本化 JSON 资产包，`rml` 成员保存权威 RML 文本。一个画面就是一个资产、一个身份、一次原子保存。早期直接注册的 `.rml`（`RmlDocument`）仍可打开编辑，行为不变。
 
-`UiAssetEditorInstance` 把 `UiDocument` 与 `RmlDocument` 都打开为独立的顶层资产编辑器根。RML 源文件是唯一权威数据；选择、级联样式、诊断和拖动事务属于该编辑器实例的 transient/derived 状态，不写入资产。
+`UiAssetEditorInstance` 把 `UiDocument` 与 `RmlDocument` 都打开为独立的顶层资产编辑器根。`.sui` 的 RML、私有 RCSS 和共享引用构成权威数据；选择、级联结果、诊断和拖动过程是 transient/derived 状态，不保存到资产。
 
 ## 包格式
 

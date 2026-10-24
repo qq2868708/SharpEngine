@@ -122,7 +122,7 @@ internal static class RootMotionValidation
             var Content = Directory.CreateDirectory(Path.Combine(Fixture.FullName, "Content/Assets"));
             var Manifest = new JsonObject
             {
-                ["schemaVersion"] = 1,
+                ["schemaVersion"] = 2,
                 ["assets"] = new JsonArray
                 {
                     Entry(Motion.AssetId[9..], "SkeletalAnimation", "clip.json"),
@@ -243,7 +243,7 @@ internal static class RootMotionValidation
             ["id"] = Id,
             ["type"] = Type,
             ["name"] = Id,
-            ["path"] = "Content/Assets/" + FileName,
+            ["path"] = "Assets/" + FileName,
         };
     }
 }

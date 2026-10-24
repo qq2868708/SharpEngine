@@ -313,9 +313,10 @@ try
     File.WriteAllText(Path.Combine(temporary.FullName, "test.sharpproject"),
         "{\"assets\":{\"manifest\":\"assets.json\"}}");
     File.WriteAllText(Path.Combine(temporary.FullName, "assets.json"),
-        "{\"schemaVersion\":1,\"assets\":[{\"id\":\"input/actions/test\",\"type\":\"InputAction\",\"path\":\"test.json\"}]}");
+        "{\"schemaVersion\":2,\"assets\":[{\"id\":\"input/actions/test\",\"type\":\"InputAction\",\"path\":\"test.json\"}]}");
     var valid = "{\"schemaVersion\":1,\"actionId\":\"project://input/actions/test\",\"valueType\":\"Axis2D\",\"continuous\":true}";
-    var path = Path.Combine(temporary.FullName, "test.json");
+    Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content"));
+    var path = Path.Combine(temporary.FullName, "Content", "test.json");
     File.WriteAllText(path, valid);
     var loaded = InputRuntimeService.Load(AssetRegistry.Load(root, temporary.FullName));
     Check(loaded.Actions.Single(action => action.Id == "project://input/actions/test").Continuous,

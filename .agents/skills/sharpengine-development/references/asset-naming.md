@@ -19,6 +19,7 @@ standalone extension or the type portion of a compound text extension.
 | Skeletal mesh | `.sskeletalmesh` | `.skeletalmesh.json`, `.sharpskeletalmesh` |
 | Skeletal animation | `.sskeletalanimation` | `.skeletalanimation.json`, `.sharpskeletalanimation` |
 | UI screen | `.sui` | `.rml` (bare RML, still readable) |
+| Shared UI stylesheet | `.sglobalcss` | `.rcss` (legacy StyleSheet, still readable) |
 
 `.sui` is a versioned JSON package whose `rml` member holds the authoritative RML
 document. One screen is one asset with one identity and one atomic save, so a
@@ -26,6 +27,12 @@ package must not also register its inline RML as a second asset. A bare `.rml`
 file remains a valid `RmlDocument` source and keeps working as a legacy
 single-document asset; `.rcss` stays a `StyleSheet` text format. Neither text
 format is being renamed.
+
+New project UI private RCSS belongs in the `.sui` package's `rcss` text member.
+Only confirmed cross-UI rules become a `GlobalStyleSheet` asset with suffix
+`.sglobalcss` and importer `RmlUi.GlobalStyleSheet`. UI packages list stable IDs
+in `globalStyleSheets`; registration never implies automatic global injection.
+Preserve the existing asset ID when migrating an external shared rule file.
 
 For a JSON-backed source file, keep the `s`-prefixed resource suffix in the
 compound name, for example `Character.sskeletalmesh.json`. Do not use

@@ -96,7 +96,8 @@ public sealed class UiLayoutInstance : IUiLayoutPart, IUiActionHandler, IDisposa
     public string BuildLayout(UiLayoutContext Context) { return Render(Context, Values, Parts); }
 
     public string Render(UiLayoutContext Context, JsonObject Values,
-        IReadOnlyDictionary<string, IUiLayoutPart>? Parts = null)
+        IReadOnlyDictionary<string, IUiLayoutPart>? Parts = null,
+        Func<string, UiLayoutTemplate>? ResolveAsset = null)
     {
         EnsureAlive();
         if (Parts is not null)
@@ -112,7 +113,7 @@ public sealed class UiLayoutInstance : IUiLayoutPart, IUiActionHandler, IDisposa
             Element.WasRendered = false;
         }
         RenderContext = Context;
-        var Markup = UiLayoutTemplate.FromElement(Definition).Render(Context, Values, Parts);
+        var Markup = UiLayoutTemplate.FromElement(Definition).Render(Context, Values, Parts, ResolveAsset);
         var Output = XElement.Parse("<fragment>" + Markup + "</fragment>");
         var Targets = Output.Descendants().Where(Element => Element.Attribute("data-ui-instance-node") is not null).ToArray();
         foreach (var Target in Targets)
@@ -368,6 +369,6 @@ public sealed class UiLayoutInstance : IUiLayoutPart, IUiActionHandler, IDisposa
     private IEnumerable<XElement> OwnElements()
     {
         return Definition.Descendants().Where(Element => !Element.Name.LocalName.StartsWith("ui-", StringComparison.Ordinal) &&
-            !Element.Ancestors().Any(Ancestor => Ancestor.Name == "ui-slot" || Ancestor.Name == "ui-repeat"));
+            !Element.Ancestors().Any(Ancestor => Ancestor.Name == "ui-slot" || Ancestor.Name == "ui-repeat" || Ancestor.Name == "ui-use"));
     }
 }

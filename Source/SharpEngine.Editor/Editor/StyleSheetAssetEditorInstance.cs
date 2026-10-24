@@ -24,13 +24,13 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
     public AssetDescriptor Asset => Context.Asset;
     public string EditorId => "stylesheet-editor";
     public string Title => Asset.Name;
-    public string PrimaryPaneId => "source";
+    public string PrimaryPaneId => "preview";
     public bool IsDirty => Document.IsDirty;
     public bool IsReadOnly => Document.IsReadOnly;
     public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; } =
     [
-        new("source", "Source", false),
-        new("preview", "Preview"),
+        new("source", "Source"),
+        new("preview", "Rules & Preview", false),
         new("details", "Details"),
         new("diagnostics", "Diagnostics"),
     ];
@@ -44,8 +44,8 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
     ];
 
     public EditorLayoutDocument CreateDefaultLayout() =>
-        AssetEditorInstanceUtilities.CreateDocumentLayout("source", "details",
-            "preview", "diagnostics");
+        AssetEditorInstanceUtilities.CreateDocumentLayout("preview", "details",
+            "source", "diagnostics");
 
     public bool CanExecuteCommand(string CommandId)
     {
@@ -88,6 +88,36 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        const string PropertyPrefix = "editor.stylesheet-property:";
+        if (Action.StartsWith(PropertyPrefix, StringComparison.Ordinal))
+        {
+            var Payload = Action[PropertyPrefix.Length..];
+            var First = Payload.IndexOf(':');
+            var Second = First < 0 ? -1 : Payload.IndexOf(':', First + 1);
+            var Index = -1;
+            var Valid = First > 0 && int.TryParse(Payload[..First], out Index);
+            if (Valid && Second > First && !IsReadOnly)
+            {
+                try
+                {
+                    var Name = Uri.UnescapeDataString(Payload[(First + 1)..Second]);
+                    var Value = Payload[(Second + 1)..];
+                    var Field = UiStyleProperties.Find(Name);
+                    var Message = string.Empty;
+                    if (Field is not null && !UiStyleProperties.Validate(Name, Value, out Message))
+                    {
+                        Context.SetStatus(Message);
+                        return true;
+                    }
+                    Document.Replace(RcssSourceEditing.SetValue(Document.Source, Index, Name, Value));
+                }
+                catch (InvalidDataException Error)
+                {
+                    Context.SetStatus(Error.Message);
+                }
+            }
+            return true;
+        }
         const string LinePrefix = "editor.stylesheet-line:";
         if (Action.StartsWith(LinePrefix, StringComparison.Ordinal))
         {
@@ -250,6 +280,7 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
     private string BuildPreviewMarkup()
     {
         var Markup = new StringBuilder("<div class=\"stylesheet-preview\">");
+        Markup.Append(BuildRuleFields());
         var Rules = ParseRules(Document.Source);
         foreach (var Rule in Rules.Take(12))
         {
@@ -281,6 +312,31 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
         return Markup.ToString();
     }
 
+    private string BuildRuleFields()
+    {
+        var Markup = new StringBuilder("<div class=\"stylesheet-rules\">");
+        try
+        {
+            var Rules = RcssSourceEditing.Read(Document.Source);
+            for (var Index = 0; Index < Rules.Count; Index++)
+            {
+                var Rule = Rules[Index];
+                Markup.Append("<div class=\"asset-reference-row\"><strong>")
+                    .Append(AssetEditorInstanceUtilities.Escape(Rule.Selector)).Append("</strong></div>");
+                foreach (var Field in Rule.Declarations.DistinctBy(Field => Field.Name))
+                {
+                    Markup.Append(AssetEditorInstanceUtilities.Field(Field.Name, Field.Value,
+                        "editor.stylesheet-property:" + Index + ":" + Uri.EscapeDataString(Field.Name) + ":", IsReadOnly));
+                }
+            }
+        }
+        catch (InvalidDataException Error)
+        {
+            Markup.Append(AssetEditorInstanceUtilities.Escape(Error.Message));
+        }
+        return Markup.Append("</div>").ToString();
+    }
+
     private IReadOnlyList<AssetDescriptor> ReferencingDocuments()
     {
         var Assets = Context.Runtime.Assets;
@@ -304,8 +360,11 @@ internal sealed class StyleSheetAssetEditorInstance : IAssetEditorInstance
             {
                 return false;
             }
-            return File.ReadAllText(PathValue).Contains(FileName,
-                StringComparison.OrdinalIgnoreCase);
+            if (IsUiDocument && Asset.Type == "GlobalStyleSheet")
+            {
+                return UiDocumentAsset.Load(PathValue).GlobalStyleSheets.Contains(Asset.Id, StringComparer.Ordinal);
+            }
+            return File.ReadAllText(PathValue).Contains(FileName, StringComparison.OrdinalIgnoreCase);
         }).ToArray();
     }
 

@@ -74,9 +74,11 @@ internal static class WorldAssetWorkflow
         var assetManifestPath = ResolveUnder(fullProjectRoot, assetManifestRelative,
             "Project asset manifest");
         var assetManifest = ReadObject(assetManifestPath);
-        if (assetManifest["schemaVersion"]?.GetValue<int>() != 1 ||
-            assetManifest["assets"] is not JsonArray assetArray)
-            throw new InvalidDataException("Project asset manifest requires schemaVersion=1 and an assets array");
+        var assetArray = assetManifest["assets"] as JsonArray;
+        if (assetManifest["schemaVersion"]?.GetValue<int>() != AssetRegistry.ManifestSchemaVersion || assetArray is null)
+        {
+            throw new InvalidDataException("Project asset manifest requires schemaVersion=2 and an assets array");
+        }
 
         JsonObject? matchingId = null;
         foreach (var node in assetArray)
@@ -88,12 +90,12 @@ internal static class WorldAssetWorkflow
             var path = item["path"]?.GetValue<string>()?.Replace('\\', '/') ?? string.Empty;
             if (string.Equals(normalizedId, assetId, StringComparison.OrdinalIgnoreCase))
             {
-                if (!string.Equals(path, $"Content/{contentRelative}", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(path, contentRelative, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException(
                         $"Asset id '{assetId}' already belongs to '{path}'");
                 matchingId = item;
             }
-            else if (string.Equals(path, $"Content/{contentRelative}",
+            else if (string.Equals(path, contentRelative,
                          StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException(
                     $"World path 'Content/{contentRelative}' is already registered as '{normalizedId}'");
@@ -106,7 +108,7 @@ internal static class WorldAssetWorkflow
         matchingId["id"] = idPath;
         matchingId["type"] = "World";
         matchingId["name"] = Path.GetFileNameWithoutExtension(target);
-        matchingId["path"] = $"Content/{contentRelative}";
+        matchingId["path"] = contentRelative;
         matchingId["importer"] = "SharpEngine.WorldJson";
         matchingId["tags"] ??= new JsonArray("scene");
 

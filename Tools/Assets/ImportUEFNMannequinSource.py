@@ -159,9 +159,9 @@ for Record in Manifest['assets']:
         Selected.append(Record)
     elif Record['id'] in ['materials/default', 'worlds/main']:
         Selected.append(Record)
-        Destination = Stage / Record['path']
+        Destination = Stage / 'Content' / Record['path']
         Destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(Root / Record['path'], Destination)
+        shutil.copy2(Root / 'Content' / Record['path'], Destination)
 (Stage / 'engine.json').write_bytes((Root / 'engine.json').read_bytes())
 StageManifest = dict(Manifest)
 StageManifest['assets'] = Selected

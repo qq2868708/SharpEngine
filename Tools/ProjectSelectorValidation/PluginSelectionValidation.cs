@@ -41,7 +41,7 @@ internal static class PluginSelectionValidation
                 },
             }));
             Directory.CreateDirectory(Path.Combine(DirectoryPath, "Content"));
-            File.WriteAllText(Path.Combine(DirectoryPath, "Content", "assets.json"), "{\"schemaVersion\":1,\"assets\":[]}");
+            File.WriteAllText(Path.Combine(DirectoryPath, "Content", "assets.json"), "{\"schemaVersion\":2,\"assets\":[]}");
         }
         void References(string Module, params string[] Dependencies)
         {
@@ -62,7 +62,7 @@ internal static class PluginSelectionValidation
         foreach (var OwnerRoot in OwnerRoots)
         {
             Directory.CreateDirectory(Path.Combine(OwnerRoot, "Content", "Assets"));
-            File.WriteAllText(Path.Combine(OwnerRoot, "Content", "Assets", "assets.json"), "{\"schemaVersion\":1,\"assets\":[]}");
+            File.WriteAllText(Path.Combine(OwnerRoot, "Content", "Assets", "assets.json"), "{\"schemaVersion\":2,\"assets\":[]}");
         }
         File.WriteAllText(EngineManifest, JsonSerializer.Serialize(new
         {

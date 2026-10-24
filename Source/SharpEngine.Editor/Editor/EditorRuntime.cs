@@ -366,26 +366,8 @@ public sealed partial class EditorRuntime
                 root = EditorLayoutJson.ToJsonNode(host.Root),
             }),
         },
-        assets = _assets?.Assets.Select(asset => new
-        {
-            id = asset.Id,
-            type = asset.Type,
-            name = asset.Name,
-            source = asset.Source.ToString(),
-            plugin = asset.OwnerId,
-            path = asset.RelativePath,
-            importer = asset.Importer,
-            exists = asset.Exists,
-            tags = asset.Tags,
-            metadata = asset.Metadata,
-        }),
-        plugins = _assets?.Plugins.Select(plugin => new
-        {
-            id = plugin.Id,
-            version = plugin.Version,
-            source = plugin.Source.ToString(),
-            manifest = plugin.ManifestPath,
-        }),
+        assets = _assets is null ? null : JsonNode.Parse(_assets.ToJson())?["assets"],
+        plugins = _assets is null ? null : JsonNode.Parse(_assets.ToJson())?["plugins"],
         content = _contentManagers is null ? null :
             JsonNode.Parse(DescribeContentJson()),
         extensions = new

@@ -35,6 +35,8 @@ public:
     // markup, so a live design gesture keeps the native element identity it captured.
     bool SetHostUiProperty(std::string_view hostId, const char* elementId,
                            const char* name, const char* value);
+    bool SetHostUiDocument(std::string_view HostId, const char* AnchorId,
+        const char* Rml, const char* SourcePath, float Width, float Height);
     HWND GetHostWindow(std::string_view hostId) const;
     bool CaptureScreenshot(const std::filesystem::path& path);
     std::string DescribeUi(uint64_t layoutRevision, uint64_t documentRevision,

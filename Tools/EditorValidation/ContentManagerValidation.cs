@@ -96,7 +96,7 @@ internal static class ContentManagerValidation
         {
             ["id"] = "materials/delete-me",
             ["type"] = "Material",
-            ["path"] = "Content/Assets/Materials/DeleteMe.material.json",
+            ["path"] = "Assets/Materials/DeleteMe.material.json",
         });
         File.WriteAllText(manifestPath, manifest.ToJsonString(
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));

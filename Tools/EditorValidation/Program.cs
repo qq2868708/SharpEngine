@@ -29,6 +29,7 @@ try
 {
     DevelopmentSettingsValidation.Run(temporary.FullName, Require);
     McpConfigurationValidation.Run(temporary.FullName, Require);
+    AssetIndexValidation.Run(temporary.FullName, Require);
     SharpEngine.EditorValidation.UiEditorValidation.Run(temporary.FullName, Require);
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));
@@ -55,8 +56,8 @@ try
     File.WriteAllText(Path.Combine(pluginData.FullName, "Sample.pluginasset.json"),
         "{\"schemaVersion\":1,\"value\":\"validation\"}\n");
     File.WriteAllText(Path.Combine(pluginAssets.FullName, "assets.json"), """
-        {"schemaVersion":1,"assets":[
-          {"id":"sample","type":"PluginData","path":"Content/PluginData/Sample.pluginasset.json"}
+        {"schemaVersion":2,"assets":[
+          {"id":"sample","type":"PluginData","path":"PluginData/Sample.pluginasset.json"}
         ]}
         """);
     File.WriteAllText(Path.Combine(pluginRoot.FullName, "ValidationPlugin.sharpplugin"), """
@@ -105,17 +106,17 @@ try
         {"schemaVersion":1,"kind":"Validation.Reload.Rifle","assetId":"project://data/reload-rifle","name":"Reload Rifle","damage":35,"magazineSize":30}
         """);
     File.WriteAllText(Path.Combine(assets.FullName, "assets.json"), """
-        {"schemaVersion":1,"assets":[
-          {"id":"worlds/main","type":"World","path":"Content/Worlds/Main.sworld"},
-          {"id":"ui/main","type":"RmlDocument","path":"Content/UI/Main.rml"},
-          {"id":"ui/main-style","type":"StyleSheet","path":"Content/UI/Main.rcss"},
-          {"id":"ui/screen","type":"UiDocument","path":"Content/UI/Screen.sui","importer":"SharpEngine.UiDocumentJson"},
-          {"id":"ui/plain","type":"RmlDocument","path":"Content/UI/Plain.rml"},
-          {"id":"materials/validation","type":"Material","path":"Content/Assets/Materials/Validation.material.json"},
-          {"id":"meshes/validation","type":"Mesh","path":"Content/Assets/Meshes/Validation.mesh.json"},
-          {"id":"input/actions/validation-move","type":"InputAction","path":"Content/Input/Actions/ValidationMove.inputaction.json"},
-          {"id":"input/contexts/validation","type":"InputMappingContext","path":"Content/Input/Contexts/Validation.inputmapping.json"},
-          {"id":"data/reload-rifle","type":"Validation.Reload.Rifle","path":"Content/Assets/Data/ReloadRifle.sdataasset"}
+        {"schemaVersion":2,"assets":[
+          {"id":"worlds/main","type":"World","path":"Worlds/Main.sworld"},
+          {"id":"ui/main","type":"RmlDocument","path":"UI/Main.rml"},
+          {"id":"ui/main-style","type":"StyleSheet","path":"UI/Main.rcss"},
+          {"id":"ui/screen","type":"UiDocument","path":"UI/Screen.sui","importer":"SharpEngine.UiDocumentJson"},
+          {"id":"ui/plain","type":"RmlDocument","path":"UI/Plain.rml"},
+          {"id":"materials/validation","type":"Material","path":"Assets/Materials/Validation.material.json"},
+          {"id":"meshes/validation","type":"Mesh","path":"Assets/Meshes/Validation.mesh.json"},
+          {"id":"input/actions/validation-move","type":"InputAction","path":"Input/Actions/ValidationMove.inputaction.json"},
+          {"id":"input/contexts/validation","type":"InputMappingContext","path":"Input/Contexts/Validation.inputmapping.json"},
+          {"id":"data/reload-rifle","type":"Validation.Reload.Rifle","path":"Assets/Data/ReloadRifle.sdataasset"}
         ]}
         """);
     var manifest = Path.Combine(temporary.FullName, "Validation.sharpproject");
@@ -190,10 +191,17 @@ try
         "Public, project, and Plugin Content assets must both be available to a project editor");
     var pluginAsset = runtime.Assets.Find("project://plugins/validation.plugin/sample");
     Require(pluginAsset?.OwnerId == "validation.plugin" &&
-        pluginAsset.RelativePath == "Plugins/ValidationPlugin/Content/PluginData/Sample.pluginasset.json" &&
+        pluginAsset.RelativePath == "PluginData/Sample.pluginasset.json" &&
         runtime.Assets.ResolvePath(pluginAsset) == Path.Combine(pluginRoot.FullName,
             "Content", "PluginData", "Sample.pluginasset.json"),
         "Plugin Content must be namespaced, rooted at its Plugin, and resolvable");
+    var AssetSnapshot = JsonNode.Parse(runtime.DescribeAssetsJson())!;
+    var EditorSnapshot = JsonNode.Parse(runtime.DescribeEditorJson())!;
+    Require(AssetSnapshot["schemaVersion"]!.GetValue<int>() == 2 &&
+        AssetSnapshot["engineRoot"] is null && AssetSnapshot["projectRoot"] is null &&
+        EditorSnapshot["plugins"]![0]!["manifest"]!.GetValue<string>() ==
+            "project://Plugins/ValidationPlugin/ValidationPlugin.sharpplugin",
+        "Editor and dedicated asset discovery expose the same logical index contract");
     Require(runtime.Assets.Find("engine://worlds/main")?.ReadOnly == false &&
         runtime.Assets.Find("engine://meshes/cube")?.ReadOnly == true,
         "Engine Worlds must remain ordinary editable assets without changing other asset policies");
@@ -722,7 +730,7 @@ try
     var untitledRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "UntitledProject"));
     Directory.CreateDirectory(Path.Combine(untitledRoot.FullName, "Content", "Assets"));
     File.WriteAllText(Path.Combine(untitledRoot.FullName, "Content", "Assets", "assets.json"),
-        "{\"schemaVersion\":1,\"assets\":[]}");
+        "{\"schemaVersion\":2,\"assets\":[]}");
     var untitledManifest = Path.Combine(untitledRoot.FullName, "Untitled.sharpproject");
     File.WriteAllText(untitledManifest,
         "{\"schemaVersion\":3,\"projectId\":\"untitled\"," +
@@ -747,7 +755,7 @@ try
     var brokenRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "BrokenProject"));
     Directory.CreateDirectory(Path.Combine(brokenRoot.FullName, "Content", "Assets"));
     File.WriteAllText(Path.Combine(brokenRoot.FullName, "Content", "Assets", "assets.json"),
-        "{\"schemaVersion\":1,\"assets\":[]}");
+        "{\"schemaVersion\":2,\"assets\":[]}");
     var brokenManifest = Path.Combine(brokenRoot.FullName, "Broken.sharpproject");
     File.WriteAllText(brokenManifest,
         "{\"schemaVersion\":3,\"projectId\":\"broken\"," +

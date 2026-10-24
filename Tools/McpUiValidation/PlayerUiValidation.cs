@@ -17,7 +17,7 @@ internal static class PlayerUiValidation
         Directory.CreateDirectory(Path.Combine(Folder, "Content/Worlds"));
         var Manifest = new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 2,
             ["assets"] = new JsonArray(),
         };
         File.WriteAllText(Path.Combine(Folder, "Content/Assets/assets.json"),

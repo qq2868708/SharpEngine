@@ -18,7 +18,7 @@ internal static class RootMotionUiValidation
         File.WriteAllText(Path.Combine(Folder, "Content/Assets/Walk.sskeletalanimation"), Clip.ToJsonString());
         var Manifest = new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 2,
             ["assets"] = new JsonArray
             {
                 new JsonObject
@@ -26,7 +26,7 @@ internal static class RootMotionUiValidation
                     ["id"] = "animations/root-motion-walk",
                     ["name"] = "Root Motion Walk",
                     ["type"] = "SkeletalAnimation",
-                    ["path"] = "Content/Assets/Walk.sskeletalanimation",
+                    ["path"] = "Assets/Walk.sskeletalanimation",
                 },
             },
         };

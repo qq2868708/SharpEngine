@@ -25,7 +25,7 @@ public sealed class AssetDescriptor
     public string Id { get; init; } = string.Empty;
     public string Type { get; init; } = "Unknown";
     public string Name { get; init; } = string.Empty;
-    /// <summary>Path relative to the owning source root, using '/' separators.</summary>
+    /// <summary>Path relative to the owning Engine, Project or Plugin Content directory.</summary>
     public string RelativePath { get; init; } = string.Empty;
     public AssetSource Source { get; init; }
     public bool ReadOnly { get; init; }
@@ -39,7 +39,7 @@ public sealed class AssetDescriptor
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
     /// <summary>Absolute file path when this descriptor points at a file.</summary>
-    public string? ResolvePath(string sourceRoot)
+    public string? ResolvePath(string ContentRoot)
     {
         if (string.IsNullOrWhiteSpace(RelativePath))
         {
@@ -56,7 +56,12 @@ public sealed class AssetDescriptor
                     $"Asset path must be a relative file path: '{RelativePath}'");
             }
 
-            var fullRoot = Path.GetFullPath(sourceRoot);
+            var Segments = RelativePath.Replace('\\', '/').Split('/');
+            if (Segments.Any(Segment => Segment.Length == 0 || Segment is "." or ".."))
+            {
+                throw new InvalidDataException("Asset path must be canonical and remain under Content");
+            }
+            var fullRoot = Path.GetFullPath(ContentRoot);
             var fullPath = Path.GetFullPath(Path.Combine(fullRoot,
                 RelativePath.Replace('/', Path.DirectorySeparatorChar)));
             var relative = Path.GetRelativePath(fullRoot, fullPath);
@@ -65,7 +70,7 @@ public sealed class AssetDescriptor
                     StringComparison.Ordinal) || Path.IsPathRooted(relative))
             {
                 throw new InvalidDataException(
-                    $"Asset path escapes source root or names a directory: '{RelativePath}'");
+                    $"Asset path escapes Content or names a directory: '{RelativePath}'");
             }
             if (RelativePath.EndsWith('/') || RelativePath.EndsWith('\\') ||
                 Directory.Exists(fullPath))
@@ -101,6 +106,8 @@ public sealed record AssetRegistryDiagnostic(
 /// </summary>
 public sealed class AssetRegistry
 {
+    public const int ManifestSchemaVersion = 2;
+
     private readonly List<AssetDescriptor> _assets = new();
     private readonly Dictionary<string, AssetDescriptor> _byId =
         new(StringComparer.OrdinalIgnoreCase);
@@ -139,8 +146,13 @@ public sealed class AssetRegistry
     public string? ResolvePath(AssetDescriptor asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        var root = asset.Source == AssetSource.Engine ? EngineRoot : ProjectRoot;
-        return root is null ? null : asset.ResolvePath(root);
+        var Root = asset.Source == AssetSource.Engine ? EngineRoot : ProjectRoot;
+        if (asset.OwnerId is not null)
+        {
+            Root = Plugins.FirstOrDefault(Plugin => Plugin.Source == asset.Source &&
+                string.Equals(Plugin.Id, asset.OwnerId, StringComparison.OrdinalIgnoreCase))?.Root;
+        }
+        return Root is null ? null : asset.ResolvePath(Path.Combine(Root, "Content"));
     }
 
     public IEnumerable<AssetDescriptor> Search(string? query,
@@ -161,35 +173,68 @@ public sealed class AssetRegistry
     public string ToJson(JsonSerializerOptions? options = null) =>
         JsonSerializer.Serialize(new
         {
-            engineRoot = EngineRoot,
-            projectRoot = ProjectRoot,
+            schemaVersion = ManifestSchemaVersion,
             assets = Assets.Select(asset => new
             {
                 id = asset.Id,
-                type = asset.Type,
-                name = asset.Name,
+                type = RedactPaths(asset.Type),
+                name = RedactPaths(asset.Name),
                 source = asset.Source.ToString(),
                 readOnly = asset.ReadOnly,
                 plugin = asset.OwnerId,
                 exists = asset.Exists,
                 path = asset.RelativePath,
-                importer = asset.Importer,
-                tags = asset.Tags,
-                metadata = asset.Metadata,
+                importer = asset.Importer is null ? null : RedactPaths(asset.Importer),
+                tags = asset.Tags.Select(RedactPaths),
+                metadata = asset.Metadata.ToDictionary(Entry => Entry.Key, Entry => RedactPaths(Entry.Value)),
             }),
             plugins = Plugins.Select(plugin => new
             {
                 id = plugin.Id,
                 version = plugin.Version,
                 source = plugin.Source.ToString(),
-                manifest = plugin.ManifestPath,
+                manifest = LogicalPath(plugin.ManifestPath),
             }),
-            diagnostics = Diagnostics,
+            diagnostics = Diagnostics.Select(Diagnostic => new
+            {
+                message = RedactPaths(Diagnostic.Message),
+                manifestPath = Diagnostic.ManifestPath is null ? null : LogicalPath(Diagnostic.ManifestPath),
+                isError = Diagnostic.IsError,
+            }),
         }, options ?? new JsonSerializerOptions
         {
             WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         });
+
+    private string LogicalPath(string FilePath)
+    {
+        try
+        {
+            if (ProjectRoot is not null)
+            {
+                var Relative = Path.GetRelativePath(ProjectRoot, FilePath).Replace('\\', '/');
+                if (Relative != ".." && !Relative.StartsWith("../", StringComparison.Ordinal) && !Path.IsPathRooted(Relative))
+                {
+                    return "project://" + Relative;
+                }
+            }
+            var EngineRelative = Path.GetRelativePath(EngineRoot, FilePath).Replace('\\', '/');
+            return EngineRelative != ".." && !EngineRelative.StartsWith("../", StringComparison.Ordinal) && !Path.IsPathRooted(EngineRelative)
+                ? "engine://" + EngineRelative : "[external path]";
+        }
+        catch (Exception Error) when (Error is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return "[external path]";
+        }
+    }
+
+    private string RedactPaths(string Message)
+    {
+        return System.Text.RegularExpressions.Regex.Replace(Message,
+            "(?<![a-zA-Z0-9:/])(?:[a-zA-Z]:[\\\\/]|[\\\\/]{2}|/)[^'\"\r\n<>]*",
+            Match => LogicalPath(Match.Value));
+    }
 
     /// <summary>
     /// Load the public engine manifest and the optional project manifest. Missing
@@ -298,8 +343,7 @@ public sealed class AssetRegistry
                 relativePath = manifest.GetString()!;
             }
 
-            var descriptor = new AssetDescriptor { RelativePath = relativePath };
-            LoadManifest(descriptor.ResolvePath(sourceRoot)!, source, sourceRoot);
+            LoadManifest(ResolveUnder(sourceRoot, relativePath, "Asset manifest"), source, sourceRoot);
         }
         catch (Exception exception) when (exception is JsonException or
             InvalidDataException or IOException or UnauthorizedAccessException)
@@ -357,7 +401,7 @@ public sealed class AssetRegistry
     }
 
     private void LoadManifest(string manifestPath, AssetSource source,
-        string sourceRoot, string pathPrefix = "", string idPrefix = "",
+        string sourceRoot, string idPrefix = "",
         string? ownerId = null)
     {
         if (!File.Exists(manifestPath))
@@ -376,10 +420,10 @@ public sealed class AssetRegistry
             };
             var manifest = JsonSerializer.Deserialize<AssetManifestFile>(
                 File.ReadAllText(manifestPath), options);
-            if (manifest is null || manifest.SchemaVersion != 1 || manifest.Assets is null)
+            if (manifest is null || manifest.SchemaVersion != ManifestSchemaVersion || manifest.Assets is null)
             {
                 _diagnostics.Add(new AssetRegistryDiagnostic(
-                    $"Asset manifest requires schemaVersion=1 and an assets array: {manifestPath}",
+                    $"Asset manifest requires schemaVersion=2 and Content-relative paths; migrate older manifests explicitly: {manifestPath}",
                     manifestPath, true));
                 return;
             }
@@ -387,7 +431,7 @@ public sealed class AssetRegistry
             foreach (var item in manifest.Assets ?? new List<AssetManifestItem?>())
             {
                 AddAsset(item, source, sourceRoot, manifestPath,
-                    pathPrefix, idPrefix, ownerId);
+                    idPrefix, ownerId);
             }
         }
         catch (Exception exception) when (exception is JsonException or
@@ -399,7 +443,7 @@ public sealed class AssetRegistry
     }
 
     private void AddAsset(AssetManifestItem? item, AssetSource source,
-        string sourceRoot, string manifestPath, string pathPrefix,
+        string sourceRoot, string manifestPath,
         string idPrefix, string? ownerId)
     {
         if (item is null || string.IsNullOrWhiteSpace(item.Id) ||
@@ -424,18 +468,7 @@ public sealed class AssetRegistry
             return;
         }
 
-        var itemRelativePath = item.Path.Replace('\\', '/');
-        if (ownerId is not null &&
-            (!itemRelativePath.StartsWith("Content/", StringComparison.OrdinalIgnoreCase) ||
-             itemRelativePath.Split('/').Any(segment =>
-                 segment.Length == 0 || segment is "." or "..")))
-        {
-            _diagnostics.Add(new AssetRegistryDiagnostic(
-                $"Plugin asset path must remain under Content: '{item.Path}'",
-                manifestPath, true));
-            return;
-        }
-        var relativePath = pathPrefix + itemRelativePath;
+        var relativePath = item.Path.Replace('\\', '/');
         var descriptor = new AssetDescriptor
         {
             Id = id,
@@ -458,8 +491,8 @@ public sealed class AssetRegistry
 
         try
         {
-            descriptor.Exists = descriptor.ResolvePath(sourceRoot) is { } path &&
-                File.Exists(path);
+            var PathValue = descriptor.ResolvePath(Path.Combine(sourceRoot, "Content"));
+            descriptor.Exists = PathValue is not null && File.Exists(PathValue);
             if (!descriptor.Exists)
             {
                 _diagnostics.Add(new AssetRegistryDiagnostic(
@@ -534,11 +567,8 @@ public sealed class AssetRegistry
 
                 var assetManifestPath = ResolveUnder(pluginRoot,
                     assetManifestRelative, "Plugin asset manifest");
-                var pluginName = Path.GetFileName(pluginRoot);
-                var pathPrefix = $"Plugins/{pluginName}/";
                 var idPrefix = $"plugins/{id}/";
-                LoadManifest(assetManifestPath, source, root, pathPrefix,
-                    idPrefix, id);
+                LoadManifest(assetManifestPath, source, pluginRoot, idPrefix, id);
             }
             catch (Exception exception) when (exception is JsonException or
                 InvalidDataException or IOException or UnauthorizedAccessException)

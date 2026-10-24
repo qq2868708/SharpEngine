@@ -10,6 +10,12 @@ internal static class UiEditorValidation
 {
     internal static void Run(string Root, Action<bool, string> Check)
     {
+        var SelectorValid = UiSelector.TryParse(".scope .card > .value", out var Selector);
+        var SelectorTree = XElement.Parse("<div class='scope'><section><div class='card'><span class='value' /></div></section></div>");
+        Check(SelectorValid && Selector!.Matches(SelectorTree.Descendants("span").Single()),
+            "Descendant and child selectors compose across whitespace without dropping shared RCSS rules");
+        var InvalidChild = UiSelector.TryParse(".scope > > .value", out _);
+        Check(!InvalidChild, "A malformed child combinator is still rejected");
         var Project = Path.Combine(Root, "UiEditorValidation");
         var UiDirectory = Directory.CreateDirectory(Path.Combine(Project, "Content", "UI"));
         var RmlPath = Path.Combine(UiDirectory.FullName, "Screen.rml");
@@ -234,6 +240,37 @@ internal static class UiEditorValidation
         RunPackageChecks(Root, Check);
         RunInlineStyleChecks(Root, Check);
         RunTemplateChecks(Root, Check);
+        RunStyleSheetRoundTripChecks(Root, Check);
+        UiCompositionAuthoringValidation.Run(Root, Check);
+        UiPackagedStylesValidation.Run(Root, Check);
+    }
+
+    private static void RunStyleSheetRoundTripChecks(string Root, Action<bool, string> Check)
+    {
+        var Folder = Directory.CreateDirectory(Path.Combine(Root, "UiStyleSheetRoundTrip"));
+        var PathValue = Path.Combine(Folder.FullName, "Screen.sui");
+        File.WriteAllText(Path.Combine(Folder.FullName, "Shared.rcss"), ".root .value { color: #123456; }");
+        File.WriteAllText(PathValue, UiDocumentAsset.Create("Shared styles",
+            "<template><div id='root' class='root'><span id='value' class='value'>Before</span></div></template>",
+            ["Shared.rcss"]).Serialize());
+        var Asset = new AssetDescriptor
+        {
+            Id = "project://ui/shared-styles",
+            Type = "UiDocument",
+            Name = "Shared styles",
+            RelativePath = "Screen.sui",
+            Source = AssetSource.Project,
+        };
+        var Document = UiEditorDocument.Load(Asset, PathValue, Folder.FullName);
+        Check(UiDocumentAsset.Parse(Document.SerializeForSave()).StyleSheets.SequenceEqual(["Shared.rcss"]),
+            "Unsaved preview input preserves the package's stylesheet dependencies");
+        Document.Select("#value");
+        Document.SetText("After", out _);
+        Document.Save();
+        var Reopened = UiEditorDocument.Load(Asset, PathValue, Folder.FullName);
+        Check(UiDocumentAsset.Load(PathValue).StyleSheets.SequenceEqual(["Shared.rcss"]) &&
+            Reopened.Sheet.Compute(Reopened.Source.Descendants("span").Single())["color"].Value == "#123456",
+            "Editing and saving a styled template preserves both its RCSS list and evaluated shared styles");
     }
 
     /// <summary>A reusable <c>&lt;template&gt;</c> package is valid UI source: the editor

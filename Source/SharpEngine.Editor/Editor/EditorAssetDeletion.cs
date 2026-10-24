@@ -77,7 +77,7 @@ public sealed partial class EditorRuntime
             return RejectDelete(AssetDeleteResult.Cancelled, AssetId, "Deletion was cancelled");
         }
 
-        var SourcePath = Asset.ResolvePath(_projectRoot!);
+        var SourcePath = _assets!.ResolvePath(Asset);
         try
         {
             CommitAssetDeletion(ManifestPath, Asset, SourcePath);

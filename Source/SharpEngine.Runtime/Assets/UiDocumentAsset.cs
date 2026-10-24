@@ -24,11 +24,14 @@ public sealed class UiDocumentAsset
     public const string FileSuffix = ".sui";
 
     private UiDocumentAsset(string name, string rml,
-        IReadOnlyList<string> styleSheets)
+        IReadOnlyList<string> styleSheets, string Rcss,
+        IReadOnlyList<string> GlobalStyleSheets)
     {
         Name = RequireText(name, nameof(name));
         Rml = RequireText(rml, nameof(rml));
         StyleSheets = styleSheets;
+        this.Rcss = Rcss;
+        this.GlobalStyleSheets = GlobalStyleSheets;
         IsTemplate = ValidateRml(Rml);
     }
 
@@ -39,14 +42,31 @@ public sealed class UiDocumentAsset
 
     /// <summary>RCSS files this definition links, relative to the package.</summary>
     public IReadOnlyList<string> StyleSheets { get; }
+    public string Rcss
+    {
+        get;
+    }
+    public IReadOnlyList<string> GlobalStyleSheets
+    {
+        get;
+    }
 
     /// <summary>True when the RML is a reusable <c>&lt;template&gt;</c> definition that
     /// must be rendered with values and parts before it can be presented.</summary>
     public bool IsTemplate { get; }
 
     public static UiDocumentAsset Create(string name, string rml,
-        IReadOnlyList<string>? styleSheets = null) =>
-        new(name, rml, styleSheets?.ToArray() ?? []);
+        IReadOnlyList<string>? styleSheets = null, string Rcss = "",
+        IReadOnlyList<string>? GlobalStyleSheets = null) =>
+        Parse(new JsonObject
+        {
+            ["schemaVersion"] = CurrentSchemaVersion,
+            ["name"] = name,
+            ["rml"] = rml,
+            ["rcss"] = Rcss,
+            ["styleSheets"] = new JsonArray((styleSheets ?? []).Select(Value => (JsonNode)Value).ToArray()),
+            ["globalStyleSheets"] = new JsonArray((GlobalStyleSheets ?? []).Select(Value => (JsonNode)Value).ToArray()),
+        }.ToJsonString());
 
     public string Serialize(bool indented = true) => ToJson().ToJsonString(
         new JsonSerializerOptions
@@ -68,6 +88,14 @@ public sealed class UiDocumentAsset
             Result["styleSheets"] = new JsonArray(
                 StyleSheets.Select(Value => (JsonNode)Value).ToArray());
         }
+        if (Rcss.Length != 0)
+        {
+            Result["rcss"] = Rcss;
+        }
+        if (GlobalStyleSheets.Count != 0)
+        {
+            Result["globalStyleSheets"] = new JsonArray(GlobalStyleSheets.Select(Value => (JsonNode)Value).ToArray());
+        }
         return Result;
     }
 
@@ -87,7 +115,7 @@ public sealed class UiDocumentAsset
             throw Error("SEUI_ROOT_INVALID", source, "The package root must be a JSON object");
         }
         RequireProperties(Root, source, "$schema", "schemaVersion", "name", "rml",
-            "styleSheets");
+            "styleSheets", "rcss", "globalStyleSheets");
         if (Root["schemaVersion"] is not JsonValue Version ||
             !Version.TryGetValue(out int ParsedVersion))
         {
@@ -123,8 +151,41 @@ public sealed class UiDocumentAsset
                 StyleSheets.Add(Href);
             }
         }
+        var Rcss = string.Empty;
+        if (Root.ContainsKey("rcss"))
+        {
+            var Text = Root["rcss"] as JsonValue;
+            var Valid = Text is not null && Text.TryGetValue<string>(out Rcss!);
+            if (!Valid)
+            {
+                throw Error("SEUI_FIELD_INVALID", source, "'rcss' requires text");
+            }
+        }
+        var Globals = new List<string>();
+        if (Rcss.Contains("</style", StringComparison.OrdinalIgnoreCase))
+        {
+            throw Error("SEUI_FIELD_INVALID", source, "Private RCSS cannot close its containing style element");
+        }
+        if (Root.ContainsKey("globalStyleSheets"))
+        {
+            var Array = Root["globalStyleSheets"] as JsonArray ??
+                throw Error("SEUI_FIELD_INVALID", source, "'globalStyleSheets' requires an array of asset URIs");
+            foreach (var Entry in Array)
+            {
+                var Value = Entry as JsonValue;
+                string? Id = null;
+                var Valid = Value is not null && Value.TryGetValue(out Id);
+                if (!Valid || string.IsNullOrWhiteSpace(Id) ||
+                    !(Id.StartsWith("project://", StringComparison.Ordinal) || Id.StartsWith("engine://", StringComparison.Ordinal)) ||
+                    Id.Split('/').Any(Part => Part is "." or "..") || Globals.Contains(Id, StringComparer.Ordinal))
+                {
+                    throw Error("SEUI_FIELD_INVALID", source, "Every shared style requires a unique stable asset URI");
+                }
+                Globals.Add(Id);
+            }
+        }
         return new UiDocumentAsset(RequiredString(Root, "name", source),
-            RequiredString(Root, "rml", source), StyleSheets);
+            RequiredString(Root, "rml", source), StyleSheets, Rcss, Globals);
 
     }
 

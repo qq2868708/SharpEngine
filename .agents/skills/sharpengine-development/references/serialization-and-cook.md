@@ -37,6 +37,14 @@ Unknown component records remain verbatim in the document layer during unrelated
 
 ## Asset Identity And Dependencies
 
+Asset manifests accept v2 only. Asset `path` is relative to the owning engine,
+project or plugin Content directory; preserve stable URI namespaces and plugin
+ownership to identify mounts. All asset producers must write this same contract.
+Resolve physical paths only for host file access. Public asset index v2 must omit
+machine roots and redact physical paths in diagnostic/metadata fields. Follow
+[ProjectOrganization](../../../../Documentation/ProjectOrganization.md) for the
+explicit v1 migration and the separate owner-configuration path semantics.
+
 Separate stable `assetId` from file path and display name. Moves and renames preserve identity. Asset URIs resolve through the stable ID. Changing an ID requires redirect/migration support and upgrades old references on an explicit successful save.
 
 All Runtime asset dependencies must be discoverable for Cook. Prefer serialized stable asset URIs. Dynamic selection must declare an enumerable asset set, tag query, or deterministic dependency generator. Reject arbitrary untracked path construction when it prevents dependency discovery.

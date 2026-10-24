@@ -52,4 +52,6 @@ namespace SharpEngine.Interop;
             SetHostUiProperty;
         public delegate* unmanaged[Cdecl]<byte*, byte*, byte> SetUiDocument;
         public delegate* unmanaged[Cdecl]<byte> ClearUiDocument;
+        public delegate* unmanaged[Cdecl]<byte*, byte*, byte*, byte*, float, float, byte>
+            SetHostUiDocument;
     }

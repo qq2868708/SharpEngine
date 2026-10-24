@@ -3,6 +3,7 @@
 #include "RmlControlTooltip.h"
 #include "RmlViewport3DInput.h"
 #include "RmlRuntimeUi.h"
+#include "RmlUiSourceUrl.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Box.h>
 #include <RmlUi/Core/ElementInstancer.h>
@@ -418,6 +419,17 @@ static Rml::ElementInstancerGeneric<ViewportElement> GViewportInstancer;
 
 struct RmlUiShell::Impl
 {
+    struct UiDocumentPreview
+    {
+        Rml::ElementDocument* Document{};
+        std::string Markup;
+        std::string SourcePath;
+        float Width{};
+        float Height{};
+        UiViewportRect Bounds{};
+        float Scale{1};
+    };
+
     struct Host : Rml::EventListener
     {
         Impl* Owner{};
@@ -429,6 +441,7 @@ struct RmlUiShell::Impl
         WNDPROC OriginalProcedure{};
         Rml::Context* Context{};
         Rml::ElementDocument* Document{};
+        std::unordered_map<std::string, UiDocumentPreview> UiPreviews;
         TextInputMethodEditor_Win32 Ime;
         Rml::Element* OpenPopup{};
         bool ContextMenuNeedsLayout = false;
@@ -787,7 +800,17 @@ struct RmlUiShell::Impl
     static std::string ElementIdentity(const Host& host, Rml::Element* element)
     {
         if (!element) return {};
-        const std::string prefix = "host/" + host.Id;
+        std::string prefix = "host/" + host.Id;
+        auto* Document = element->GetOwnerDocument();
+        const auto Anchor = Document ? Attribute(Document, "data-engine-preview-anchor") : std::string{};
+        if (!Anchor.empty())
+        {
+            prefix += "/preview/" + Anchor;
+            if (element == Document)
+            {
+                return prefix;
+            }
+        }
         if (element == host.Document) return prefix;
         if (const auto node = Attribute(element, "data-dock-splitter-node");
             !node.empty()) return prefix + "/split/" + node + "/handle";
@@ -897,17 +920,29 @@ struct RmlUiShell::Impl
                             std::string_view parentId) const
     {
         const auto id = ElementIdentity(host, element);
-        const auto position = element->GetAbsoluteOffset(Rml::BoxArea::Border);
-        const auto size = element->GetBox().GetSize(Rml::BoxArea::Border);
+        auto position = element->GetAbsoluteOffset(Rml::BoxArea::Border);
+        auto size = element->GetBox().GetSize(Rml::BoxArea::Border);
+        const UiDocumentPreview* Preview = nullptr;
+        for (const auto& Entry : host.UiPreviews)
+        {
+            if (Entry.second.Document == element->GetOwnerDocument())
+            {
+                Preview = &Entry.second;
+                position.x = Preview->Bounds.X + (position.x - Preview->Bounds.X) * Preview->Scale;
+                position.y = Preview->Bounds.Y + (position.y - Preview->Bounds.Y) * Preview->Scale;
+                size *= Preview->Scale;
+                break;
+            }
+        }
         Rml::Rectanglei clip{};
         const bool hasClip = Rml::ElementUtilities::GetClippingRegion(element, clip);
         RECT client{};
         GetClientRect(host.Window, &client);
-        const float clipX = hasClip ? static_cast<float>(clip.Left()) : 0.0f;
-        const float clipY = hasClip ? static_cast<float>(clip.Top()) : 0.0f;
-        const float clipWidth = hasClip ? static_cast<float>(clip.Size().x) :
+        const float clipX = Preview ? Preview->Bounds.X : hasClip ? static_cast<float>(clip.Left()) : 0.0f;
+        const float clipY = Preview ? Preview->Bounds.Y : hasClip ? static_cast<float>(clip.Top()) : 0.0f;
+        const float clipWidth = Preview ? Preview->Width * Preview->Scale : hasClip ? static_cast<float>(clip.Size().x) :
             static_cast<float>(client.right);
-        const float clipHeight = hasClip ? static_cast<float>(clip.Size().y) :
+        const float clipHeight = Preview ? Preview->Height * Preview->Scale : hasClip ? static_cast<float>(clip.Size().y) :
             static_cast<float>(client.bottom);
         const bool visible = element->IsVisible(true) && size.x > 0 && size.y > 0 &&
             position.x + size.x > clipX && position.y + size.y > clipY &&
@@ -1062,6 +1097,11 @@ struct RmlUiShell::Impl
         GetClientRect(host.Window, &client);
         std::vector<std::string> elements;
         CollectElementJson(host, host.Document, {}, elements);
+        for (const auto& Entry : host.UiPreviews)
+        {
+            CollectElementJson(host, Entry.second.Document,
+                "host/" + host.Id + "/id/" + Entry.first, elements);
+        }
         const auto focused = StableAncestorId(host,
             host.Context ? host.Context->GetFocusElement() : nullptr);
         const auto hovered = StableAncestorId(host,
@@ -1119,6 +1159,39 @@ struct RmlUiShell::Impl
         }
         result << "],\"diagnostics\":[]}";
         return result.str();
+    }
+
+    void UpdateUiPreviews(Host& Host)
+    {
+        for (auto& Entry : Host.UiPreviews)
+        {
+            auto& Preview = Entry.second;
+            auto* Anchor = Host.Document->GetElementById(Entry.first);
+            if (!Anchor || !Anchor->IsVisible(true))
+            {
+                Preview.Document->Hide();
+                continue;
+            }
+            const auto Position = Anchor->GetAbsoluteOffset(Rml::BoxArea::Content);
+            const auto Size = Anchor->GetBox().GetSize(Rml::BoxArea::Content);
+            if (Size.x <= 0 || Size.y <= 0)
+            {
+                Preview.Document->Hide();
+                continue;
+            }
+            Preview.Bounds = {Position.x, Position.y, Size.x, Size.y};
+            Preview.Scale = (std::min)(1.0f, (std::min)(Size.x / Preview.Width, Size.y / Preview.Height));
+            Preview.Document->SetProperty("position", "absolute");
+            Preview.Document->SetProperty("left", std::to_string(Position.x) + "px");
+            Preview.Document->SetProperty("top", std::to_string(Position.y) + "px");
+            Preview.Document->SetProperty("width", std::to_string(Preview.Width) + "px");
+            Preview.Document->SetProperty("height", std::to_string(Preview.Height) + "px");
+            Preview.Document->SetProperty("margin", "0px");
+            Preview.Document->SetProperty("overflow", "hidden");
+            Preview.Document->SetProperty("transform-origin", "0px 0px");
+            Preview.Document->SetProperty("transform", "scale(" + std::to_string(Preview.Scale) + ")");
+            Preview.Document->Show(Rml::ModalFlag::None, Rml::FocusFlag::None);
+        }
     }
 
     void RefreshSemanticUi()
@@ -3391,6 +3464,11 @@ bool RmlUiShell::Render(bool ObserveUi)
         }
         host.Context->SetDimensions({client.right, client.bottom});
         host.Context->Update();
+        if (!host.UiPreviews.empty())
+        {
+            state.UpdateUiPreviews(host);
+            host.Context->Update();
+        }
         state.PositionContextMenu(host, client.right, client.bottom);
         state.PositionContextSubmenus(host, client.right, client.bottom);
         host.ColorPicker.AfterLayout(host.Document);
@@ -3638,6 +3716,56 @@ bool RmlUiShell::SetHostUiProperty(std::string_view hostId, const char* elementI
     auto* element = host->Document->GetElementById(elementId);
     if (!element) return false;
     element->SetProperty(name, value);
+    return true;
+}
+
+bool RmlUiShell::SetHostUiDocument(std::string_view HostId, const char* AnchorId,
+    const char* Rml, const char* SourcePath, float Width, float Height)
+{
+    auto* Host = State->FindHost(HostId);
+    if (!Host || !Host->Context || !AnchorId || !Rml || !SourcePath ||
+        !std::isfinite(Width) || !std::isfinite(Height) || Width <= 0 || Height <= 0)
+    {
+        return false;
+    }
+    auto Found = Host->UiPreviews.find(AnchorId);
+    if (Found != Host->UiPreviews.end() && Found->second.Markup == Rml &&
+        Found->second.SourcePath == SourcePath && Found->second.Width == Width &&
+        Found->second.Height == Height)
+    {
+        return true;
+    }
+    auto* Anchor = Host->Document->GetElementById(AnchorId);
+    if (!Anchor)
+    {
+        return false;
+    }
+    if (!State->SetCurrentHost(*Host))
+    {
+        return false;
+    }
+    const auto SourceUrl = RmlUiSourceUrl::FromFilePath(SourcePath);
+    auto* Document = Host->Context->LoadDocumentFromMemory(Rml, SourceUrl);
+    if (!Document)
+    {
+        return false;
+    }
+    Document->SetAttribute("data-engine-preview-anchor", Rml::String(AnchorId));
+    for (auto Event : {Rml::EventId::Click, Rml::EventId::Change})
+    {
+        Document->AddEventListener(Event, Host);
+    }
+    if (Found != Host->UiPreviews.end())
+    {
+        Host->Context->UnloadDocument(Found->second.Document);
+    }
+    auto& Preview = Host->UiPreviews[AnchorId];
+    Preview.Document = Document;
+    Preview.Markup = Rml;
+    Preview.SourcePath = SourcePath;
+    Preview.Width = Width;
+    Preview.Height = Height;
+    State->LastSnapshot.clear();
     return true;
 }
 

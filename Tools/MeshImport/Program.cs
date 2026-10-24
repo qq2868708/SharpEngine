@@ -27,14 +27,18 @@ if (id.StartsWith("project://", StringComparison.OrdinalIgnoreCase)) id = id[10.
 
 var manifestPath = Path.Combine(projectRoot, "Content", "Assets", "assets.json");
 if (!File.Exists(manifestPath)) throw new FileNotFoundException("Project asset manifest was not found", manifestPath);
-var mesh = WavefrontObjImporter.Load(input, name);
-var fileName = Slug(name) + ".mesh.json";
-var relativePath = $"Content/Assets/Meshes/{fileName}";
-var destination = Path.Combine(projectRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
-WavefrontObjImporter.WriteMeshJson(mesh, destination, Path.GetRelativePath(projectRoot, input).Replace('\\', '/'));
-
 var root = JsonNode.Parse(File.ReadAllText(manifestPath))?.AsObject()
     ?? throw new InvalidDataException("Project asset manifest is not a JSON object");
+if (root["schemaVersion"]?.GetValue<int>() != AssetRegistry.ManifestSchemaVersion)
+{
+    throw new InvalidDataException("Asset manifest requires schemaVersion=2 and Content-relative paths");
+}
+var mesh = WavefrontObjImporter.Load(input, name);
+var fileName = Slug(name) + ".mesh.json";
+var RelativePath = $"Assets/Meshes/{fileName}";
+var destination = Path.Combine(projectRoot, "Content", RelativePath.Replace('/', Path.DirectorySeparatorChar));
+WavefrontObjImporter.WriteMeshJson(mesh, destination, Path.GetRelativePath(projectRoot, input).Replace('\\', '/'));
+
 var assets = root["assets"]?.AsArray() ?? throw new InvalidDataException("Project asset manifest has no assets array");
 foreach (var item in assets)
 {
@@ -47,7 +51,7 @@ assets.Add(new JsonObject
     ["id"] = id,
     ["type"] = "Mesh",
     ["name"] = name,
-    ["path"] = relativePath,
+    ["path"] = RelativePath,
     ["importer"] = "SharpEngine.MeshJson",
     ["tags"] = new JsonArray("imported", "mesh"),
     ["metadata"] = new JsonObject

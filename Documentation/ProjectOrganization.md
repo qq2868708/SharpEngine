@@ -25,6 +25,28 @@ implementation files loaded by a known subsystem, such as editor icons, fonts, a
 plugin editor support files. Resource files do not become asset records merely because
 they are present on disk.
 
+Asset manifests use strict `schemaVersion: 2`. Each asset `path` is relative to its
+owning engine, project or plugin **Content** directory, for example
+`UI/UiReuseLab/Screen.sui` or `Assets/Meshes/Cube.mesh.json`. It never includes a
+machine root or the owning `Content/` prefix. Stable IDs and plugin ownership
+identify the mount; equal paths in separate mounts remain distinct assets.
+`AssetRegistry.ResolvePath` resolves a physical path only for host file access;
+`AssetDescriptor.ResolvePath(ContentRoot)` takes that owning Content directory.
+Exported indexes (`ToJson`, `assets.describe`, `sharpengine://assets`) carry
+`schemaVersion: 2`, omit `engineRoot`/`projectRoot`, expose logical plugin manifest
+URIs, and redact physical paths in diagnostics and metadata. Source metadata is
+preserved for authoring; it is not used as a runtime asset location.
+
+Version 1 asset manifests are rejected. Explicit migration preserves every ID,
+removes the leading `Content/` from each v1 asset path and sets schemaVersion to 2
+(and `$schema` to `assets-v2.json` when present). Plugin paths are relative to the
+plugin Content, never to `Plugins/<Name>/Content`. The engine, BasicProject,
+NetworkDedicatedServer example and Sandbox manifests have been migrated.
+Owner configuration fields such as `assets.manifest` and `world.startup` still
+locate files relative to their owner root; they are not asset index entries.
+Content Manager's `Plugins/<Name>/Content` is a virtual browsing location, not an
+asset path or a runtime lookup key.
+
 The engine resource URI is `sharpengine-resource://engine/<relative-path>` or
 `sharpengine-resource://project/<relative-path>`. The relative path must be under the
 corresponding `Resources/` directory or under a plugin's `Plugins/<Name>/Resources/`

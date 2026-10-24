@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using SharpEngine.Assets;
 
 namespace SharpEngine.UI;
 
@@ -26,6 +27,47 @@ public sealed class UiLayoutTemplate
 {
     private static readonly Regex Binding = new(@"\$\{([A-Za-z][A-Za-z0-9_.]*)\}", RegexOptions.CultureInvariant);
     private readonly XElement Definition;
+    public UiDocumentAsset? Package
+    {
+        get;
+        private set;
+    }
+    public IReadOnlyList<string> StyleSheets
+    {
+        get;
+        private set;
+    } = [];
+    public string? SourcePath
+    {
+        get;
+        private set;
+    }
+
+    public JsonObject DefaultValues
+    {
+        get
+        {
+            return UiLayoutUse.ReadValues((string?)Definition.Attribute("values"));
+        }
+    }
+
+    public IReadOnlyList<UiLayoutUse> Uses
+    {
+        get
+        {
+            return Definition.Descendants("ui-use").Select(UiLayoutUse.Read).ToArray();
+        }
+    }
+
+    public static UiLayoutTemplate FromAsset(UiDocumentAsset Package, string SourcePath)
+    {
+        var Template = Parse(Package.Rml);
+        Template.Package = Package;
+        Template.SourcePath = Path.GetFullPath(SourcePath);
+        var Folder = Path.GetDirectoryName(SourcePath)!;
+        Template.StyleSheets = Package.StyleSheets.Select(Href => Path.GetFullPath(Path.Combine(Folder, Href))).ToArray();
+        return Template;
+    }
 
     private UiLayoutTemplate(XElement Definition)
     {
@@ -60,12 +102,26 @@ public sealed class UiLayoutTemplate
     internal static UiLayoutTemplate FromElement(XElement Definition) { return new UiLayoutTemplate(Definition); }
 
     public string Render(UiLayoutContext Context, JsonObject Values,
-        IReadOnlyDictionary<string, IUiLayoutPart>? Parts = null)
+        IReadOnlyDictionary<string, IUiLayoutPart>? Parts = null,
+        Func<string, UiLayoutTemplate>? ResolveAsset = null)
     {
-        var Output = new XElement("fragment");
-        foreach (var Node in Definition.Nodes())
+        return RenderCore(Context, Values, Parts, ResolveAsset, new HashSet<string>(StringComparer.Ordinal));
+    }
+
+    internal string RenderCore(UiLayoutContext Context, JsonObject Values,
+        IReadOnlyDictionary<string, IUiLayoutPart>? Parts,
+        Func<string, UiLayoutTemplate>? ResolveAsset, HashSet<string> Stack)
+    {
+        var EffectiveValues = DefaultValues;
+        foreach (var Pair in Values)
         {
-            foreach (var Rendered in RenderNode(Node, Context, [Values], Parts))
+            EffectiveValues[Pair.Key] = Pair.Value?.DeepClone();
+        }
+        var Resolved = UiLayoutComposition.Expand(Definition, Context, Parts, ResolveAsset, Stack);
+        var Output = new XElement("fragment");
+        foreach (var Node in Resolved.Nodes())
+        {
+            foreach (var Rendered in RenderNode(Node, Context, [EffectiveValues], Parts))
             {
                 Output.Add(Rendered);
             }
@@ -85,6 +141,11 @@ public sealed class UiLayoutTemplate
         var Element = Node as XElement;
         if (Element is null)
         {
+            yield break;
+        }
+        if (Element.Annotation<UiLayoutComposition.ComposedNode>() is not null)
+        {
+            yield return new XElement(Element);
             yield break;
         }
         if (Element.Name == "ui-if")

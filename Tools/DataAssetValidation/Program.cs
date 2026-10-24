@@ -31,7 +31,7 @@ try
 """);
     File.WriteAllText(Path.Combine(EngineRoot, "Content", "Assets", "assets.json"), """
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "assets": []
 }
 """);
@@ -43,13 +43,13 @@ try
 """);
     File.WriteAllText(Path.Combine(ProjectRoot, "Content", "Assets", "assets.json"), """
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "assets": [
     {
       "id": "weapons/rifle",
       "type": "Game.Weapon",
       "name": "Rifle",
-      "path": "Content/Assets/Weapons/Rifle.sdataasset"
+      "path": "Assets/Weapons/Rifle.sdataasset"
     }
   ]
 }

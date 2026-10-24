@@ -56,6 +56,9 @@ public sealed partial class EditorRuntime
         AssetOpeners.Register(new EditorAssetOpener("engine.stylesheet-editor", "StyleSheet",
             Context => new StyleSheetAssetEditorInstance(Context), Priority: -100,
             EditorId: "stylesheet-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.global-stylesheet-editor", "GlobalStyleSheet",
+            Context => new StyleSheetAssetEditorInstance(Context), Priority: -100,
+            EditorId: "stylesheet-editor"));
         AssetOpeners.Register(new EditorAssetOpener("engine.input-action-editor", "InputAction",
             Context => new InputAssetEditorInstance(Context), Priority: -100,
             EditorId: "input-action-editor"));
@@ -248,9 +251,6 @@ public sealed partial class EditorRuntime
         manager.SetSource(asset.Source == AssetSource.Project
             ? ContentSourceFilter.Project : ContentSourceFilter.Engine);
         var relative = asset.RelativePath.Replace('\\', '/');
-        const string contentPrefix = "Content/";
-        if (relative.StartsWith(contentPrefix, StringComparison.OrdinalIgnoreCase))
-            relative = relative[contentPrefix.Length..];
         var slash = relative.LastIndexOf('/');
         manager.OpenFolder(slash < 0 ? string.Empty : relative[..slash]);
         manager.Select(asset.Id);

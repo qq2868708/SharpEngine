@@ -40,7 +40,7 @@ internal static class UiEditorUiValidation
             """);
         File.WriteAllText(Path.Combine(Folder, "Content/Assets/assets.json"), new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 2,
             ["assets"] = new JsonArray
             {
                 new JsonObject
@@ -48,7 +48,7 @@ internal static class UiEditorUiValidation
                     ["id"] = "ui/editor-screen",
                     ["name"] = "Editor Screen",
                     ["type"] = "UiDocument",
-                    ["path"] = "Content/UI/Screen.sui",
+                    ["path"] = "UI/Screen.sui",
                     ["importer"] = "SharpEngine.UiDocumentJson",
                 },
                 new JsonObject
@@ -56,7 +56,7 @@ internal static class UiEditorUiValidation
                     ["id"] = "ui/editor-screen-style",
                     ["name"] = "Editor Screen Style",
                     ["type"] = "StyleSheet",
-                    ["path"] = "Content/UI/Screen.rcss",
+                    ["path"] = "UI/Screen.rcss",
                 },
             },
         }.ToJsonString());

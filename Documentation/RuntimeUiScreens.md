@@ -72,7 +72,7 @@ Ui.ShowScreen(new UiScreenRequest(
 
 - **定义不可变**：`UiLayoutTemplate` 每次渲染都产出新节点，`${...}` 用本次的值展开，两个实例互不影响。
 - **每实例状态**：上例的 `Clicks` 属于 `ReusableButton`（使用方），不属于定义。点击只改自己那一个。
-- **包内声明样式**：`.sui` 的 `styleSheets` 列出 RCSS，组合时按顺序链接，图标等相对资源仍按包目录解析。
+- **包内私有样式**：`.sui` 的 `rcss` 保存私有 RCSS；`globalStyleSheets` 显式引用独立 `.sglobalcss` 资产 URI。组合收集子控件依赖，共享规则先于私有规则；相对图标等资源按各自源资产目录解析。旧 `styleSheets` 相对 RCSS 路径继续可读。
 
 部件要实现 `IUiActionHandler`，并在 `action` 属性里带上自己的身份（`ui.button:${Id}:click`）。动作由原生 shell 收集，**在事件派发之外**（下一帧 `Update` 开头）交给托管侧；因此重新组合并替换文档不会在 RmlUi 派发中途卸载文档。
 

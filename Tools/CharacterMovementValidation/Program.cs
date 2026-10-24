@@ -254,7 +254,7 @@ static (AssetRegistry Assets, string MotionId) BuildAssetFixture(string Root, st
         Source.SkeletonId, null, null, Source.Notifies, new AnimationRootMotionSettings(true, "root"));
     var Manifest = new JsonObject
     {
-        ["schemaVersion"] = 1,
+        ["schemaVersion"] = 2,
         ["assets"] = new JsonArray
         {
             Entry(Motion.AssetId[9..], "SkeletalAnimation", "clip.json"),
@@ -281,7 +281,7 @@ static JsonObject Entry(string Id, string Type, string FileName)
         ["id"] = Id,
         ["type"] = Type,
         ["name"] = Id,
-        ["path"] = "Content/Assets/" + FileName,
+        ["path"] = "Assets/" + FileName,
     };
 }
 

@@ -113,7 +113,7 @@ internal static class ShortcutScopeUiValidation
         var RelativeAsset = Invoke("editor.describe")["assets"]!.AsArray()
             .Select(Node => Node!.AsObject())
             .First(Node => Node["id"]!.GetValue<string>() == AssetId)["path"]!.GetValue<string>();
-        var AssetPath = Path.Combine(ProjectRoot, RelativeAsset);
+        var AssetPath = Path.Combine(ProjectRoot, "Content", RelativeAsset);
         string AssetHash() => File.Exists(AssetPath)
             ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(AssetPath))) : "missing";
         var AssetBefore = AssetHash();

@@ -41,6 +41,7 @@ internal sealed class ContentAssetCreation(AssetRegistry Assets, string Manifest
             new("UiDocument", "UI Screen", "User Interface", ".sui", "SharpEngine.UiDocumentJson"),
             new("RmlDocument", "RML Document", "User Interface", ".rml", "RmlUi.Document"),
             new("StyleSheet", "Style Sheet", "User Interface", ".rcss", "RmlUi.StyleSheet"),
+            new("GlobalStyleSheet", "Shared UI Style", "User Interface", ".sglobalcss", "RmlUi.GlobalStyleSheet"),
             new("InputAction", "Input Action", "Input", ".sinputaction", "SharpEngine.InputActionJson"),
             new("InputMappingContext", "Input Mapping Context", "Input", ".sinputmappingcontext", "SharpEngine.InputMappingContextJson"),
         };
@@ -129,12 +130,12 @@ internal sealed class ContentAssetCreation(AssetRegistry Assets, string Manifest
             {
                 CommentHandling = JsonCommentHandling.Skip,
             }) as JsonObject ?? throw new InvalidDataException("The project asset manifest must be an object");
-            if (Manifest["schemaVersion"]?.GetValue<int>() != 1 || Manifest["assets"] is not JsonArray)
+            if (Manifest["schemaVersion"]?.GetValue<int>() != AssetRegistry.ManifestSchemaVersion || Manifest["assets"] is not JsonArray)
             {
-                throw new InvalidDataException("The project asset manifest must use schemaVersion 1 and contain assets");
+                throw new InvalidDataException("The project asset manifest must use schemaVersion 2 and contain assets");
             }
             var Entries = Manifest["assets"]!.AsArray();
-            var RelativePath = Path.GetRelativePath(Assets.ProjectRoot!, Target).Replace('\\', '/');
+            var RelativePath = Path.GetRelativePath(Path.Combine(Assets.ProjectRoot!, "Content"), Target).Replace('\\', '/');
             if (Entries.Any(Entry => string.Equals(Entry?["path"]?.GetValue<string>(), RelativePath, StringComparison.OrdinalIgnoreCase)))
             {
                 throw new InvalidDataException("This source path is already registered in the manifest");
@@ -230,13 +231,17 @@ internal sealed class ContentAssetCreation(AssetRegistry Assets, string Manifest
         if (Type == "UiDocument")
         {
             var Title = System.Net.WebUtility.HtmlEncode(Name);
-            var Rml = $"<rml><head><title>{Title}</title><style>body {{ background-color: #20252c; color: #e0e6ef; font-family: Segoe UI; }}</style></head><body><div id=\"root\"></div></body></rml>";
+            var Rml = $"<template values=\"{{}}\"><div id=\"root\" style=\"display:block;width:100%;height:100%;background-color:#20252c;color:#e0e6ef;font-family:Segoe UI;\"><span id=\"title\">{Title}</span></div></template>";
             return UiDocumentAsset.Create(Name, Rml).Serialize() + Environment.NewLine;
         }
         if (Type == "RmlDocument")
         {
             var Title = System.Net.WebUtility.HtmlEncode(Name);
             return $"<rml><head><title>{Title}</title><style>body {{ background-color: #20252c; color: #e0e6ef; font-family: Segoe UI; }}</style></head><body><div id=\"root\"></div></body></rml>\n";
+        }
+        if (Type == "GlobalStyleSheet")
+        {
+            return ".shared-control\n{\n    color: #e0e6ef;\n}\n";
         }
         if (Type == "StyleSheet")
         {

@@ -109,11 +109,12 @@ internal sealed class UiRuntimeService : IUiRuntime
         }
 
         string Document;
-        if (Package is { IsTemplate: true })
+        if (Package is not null)
         {
             try
             {
-                Document = ComposeTemplate(Package, Request);
+                Document = UiScreenComposer.Compose(Package, Request, UiLayoutAssets.CreateResolver(_assets),
+                    GlobalStyleSheetAsset.CreateResolver(_assets), PathValue);
             }
             catch (Exception Error) when (Error is InvalidDataException or
                 InvalidOperationException or FormatException)
@@ -167,26 +168,6 @@ internal sealed class UiRuntimeService : IUiRuntime
         // shows it. Recomposing never mutates the shared definition.
         var Refresh = ShowScreen(_activeRequest);
         return Refresh.Success;
-    }
-
-    /// <summary>Renders a reusable template definition into a presentable document. The
-    /// definition stays immutable; <paramref name="Request"/> supplies this use's values
-    /// and parts, so two instances of one template remain independent.</summary>
-    private static string ComposeTemplate(UiDocumentAsset Package, UiScreenRequest Request)
-    {
-        var Template = UiLayoutTemplate.Parse(Package.Rml);
-        var Body = Template.Render(
-            new UiLayoutContext(Request.Width, Request.Height, Package.Name),
-            Request.Values ?? new JsonObject(), Request.Parts);
-        var Builder = new System.Text.StringBuilder("<rml><head>");
-        foreach (var Href in Package.StyleSheets)
-        {
-            Builder.Append("<link type=\"text/rcss\" href=\"")
-                .Append(System.Net.WebUtility.HtmlEncode(Href))
-                .Append("\" />");
-        }
-        Builder.Append("</head><body>").Append(Body).Append("</body></rml>");
-        return Builder.ToString();
     }
 
     public void ClearScreen()

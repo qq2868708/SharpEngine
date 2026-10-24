@@ -23,7 +23,7 @@ Directory.CreateDirectory(Path.Combine(engine, "Build"));
 File.Copy(Path.Combine(repository, "Build", "SharpEngine.Components.targets"), Path.Combine(engine, "Build", "SharpEngine.Components.targets"), true);
 CopyTree(Path.Combine(repository, "Tools", "ProjectBuild"), Path.Combine(engine, "Tools", "ProjectBuild"));
 Directory.CreateDirectory(Path.Combine(root, "Content", "Assets"));
-File.WriteAllText(Path.Combine(root, "Content", "Assets", "assets.json"), "{\"schemaVersion\":1,\"assets\":[]}");
+File.WriteAllText(Path.Combine(root, "Content", "Assets", "assets.json"), "{\"schemaVersion\":2,\"assets\":[]}");
 var manifest = Path.Combine(root, "Sample.sharpproject");
 File.WriteAllText(manifest, """
 {"schemaVersion":3,"projectId":"reload-validation","displayName":"ReloadValidation","engine":{"id":"SharpEngine","version":"0.2.0-dev","association":"validation","manifest":"engine.json"},"modules":["Source/Game/Game.csproj","Source/Game.Editor/Game.Editor.csproj"],"assets":{"manifest":"Content/Assets/assets.json"}}

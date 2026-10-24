@@ -137,27 +137,60 @@ public sealed partial class EditorRuntime
         catch (Exception error) { SetStatus("Prefab: " + error.Message); SetText("componentError", error.Message); }
         return true;
     }
-    private string RegisterPrefabAsset(string path, string name)
+    private string RegisterPrefabAsset(string PathValue, string Name)
     {
-        var root = _projectRoot ?? _engineRoot;
-        var ownerManifest = JsonNode.Parse(File.ReadAllText(_projectManifest ?? Path.Combine(_engineRoot, "engine.json")))!;
-        var manifestPath = Path.Combine(root, ownerManifest["assets"]?["manifest"]?.GetValue<string>() ?? "Content/Assets/assets.json");
-        var json = JsonNode.Parse(File.ReadAllText(manifestPath))!.AsObject();
-        var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-        var id = "prefabs/" + Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
-        var assets = json["assets"]!.AsArray();
-        if (assets.Any(a => a!["id"]!.GetValue<string>() == id)) throw new InvalidOperationException("Prefab asset ID already exists");
-        assets.Add(new JsonObject { ["id"] = id, ["type"] = "Prefab", ["name"] = name,
-            ["path"] = relative, ["importer"] = "SharpEngine.PrefabJson", ["tags"] = new JsonArray("prefab") });
-        var staged = manifestPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try { File.WriteAllText(staged, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true })); File.Move(staged, manifestPath, true); }
-        finally { if (File.Exists(staged)) File.Delete(staged); }
+        var Root = _projectRoot ?? _engineRoot;
+        var OwnerManifest = JsonNode.Parse(File.ReadAllText(_projectManifest ?? Path.Combine(_engineRoot, "engine.json")))!;
+        var ManifestPath = Path.Combine(Root, OwnerManifest["assets"]?["manifest"]?.GetValue<string>() ?? "Content/Assets/assets.json");
+        var Json = JsonNode.Parse(File.ReadAllText(ManifestPath))!.AsObject();
+        if (Json["schemaVersion"]?.GetValue<int>() != AssetRegistry.ManifestSchemaVersion)
+        {
+            throw new InvalidDataException("Asset manifest requires schemaVersion=2 and Content-relative paths");
+        }
+        var ContentRoot = Path.Combine(Root, "Content");
+        var Relative = Path.GetRelativePath(ContentRoot, PathValue).Replace('\\', '/');
+        var Descriptor = new AssetDescriptor
+        {
+            RelativePath = Relative,
+        };
+        Descriptor.ResolvePath(ContentRoot);
+        var Id = "prefabs/" + Path.GetFileNameWithoutExtension(PathValue).ToLowerInvariant();
+        var Assets = Json["assets"]!.AsArray();
+        if (Assets.Any(Asset => Asset!["id"]!.GetValue<string>() == Id))
+        {
+            throw new InvalidOperationException("Prefab asset ID already exists");
+        }
+        Assets.Add(new JsonObject
+        {
+            ["id"] = Id,
+            ["type"] = "Prefab",
+            ["name"] = Name,
+            ["path"] = Relative,
+            ["importer"] = "SharpEngine.PrefabJson",
+            ["tags"] = new JsonArray("prefab"),
+        });
+        var Staged = ManifestPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(Staged, Json.ToJsonString(new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }));
+            File.Move(Staged, ManifestPath, true);
+        }
+        finally
+        {
+            if (File.Exists(Staged))
+            {
+                File.Delete(Staged);
+            }
+        }
         _assets = AssetRegistry.Load(_engineRoot, _projectRoot, _projectManifest);
-        var contentStates = _contentManagers?.Capture() ?? EditorLayoutDocument.CreateDefaultContentManagers();
-        var activeContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
-        SetContentManagers(new ContentManagerCoordinator(_assets, contentStates, activeContent));
+        var ContentStates = _contentManagers?.Capture() ?? EditorLayoutDocument.CreateDefaultContentManagers();
+        var ActiveContent = _contentManagers?.ActivePaneId ?? EditorPaneIds.Content;
+        SetContentManagers(new ContentManagerCoordinator(_assets, ContentStates, ActiveContent));
         RefreshAssets();
-        return (_projectRoot is null ? "engine://" : "project://") + id;
+        return (_projectRoot is null ? "engine://" : "project://") + Id;
     }
     private void RefreshPrefabEditor()
     {

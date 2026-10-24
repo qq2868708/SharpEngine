@@ -12,7 +12,7 @@ internal static class UiEditorMarkup
 {
     public static string BuildCanvas(UiEditorDocument Document)
     {
-        var Body = Document.BodyElement;
+        var Body = Document.DesignBodyElement;
         var Builder = new StringBuilder();
         Builder.Append("<div class=\"ui-design-pane\">")
             .Append("<div class=\"ui-design-ruler\"><span class=\"ui-design-ruler-label\">")
@@ -97,6 +97,22 @@ internal static class UiEditorMarkup
         var Builder = new StringBuilder();
         var ReadOnly = Document.IsReadOnly;
         var Id = UiEditorDocument.ElementIdOf(Element);
+        if (Element.Name.LocalName == "ui-use")
+        {
+            var AssetId = UiEditorDocument.AttributeOf(Element, "asset");
+            Builder.Append("<div class=\"ui-inspector-group\"><div class=\"ui-inspector-group-title\">REUSABLE CONTROL</div>")
+                .Append(TextField("UI asset", AssetId, "editor.ui-use-asset", ReadOnly, "project://ui/...")).Append("<button")
+                .AppendAction("editor.ui-open-use:" + AssetId, AssetId.Length != 0)
+                .Append(">Edit shared definition</button>")
+                .Append(BuildParameters(Document.ParametersOf(Element), "editor.ui-parameter", ReadOnly))
+                .Append("</div>");
+        }
+        else if (ReferenceEquals(Element, Document.BodyElement?.Elements().FirstOrDefault()))
+        {
+            Builder.Append("<div class=\"ui-inspector-group\"><div class=\"ui-inspector-group-title\">TEMPLATE DEFAULTS</div>")
+                .Append(BuildParameters(Document.ParametersOf(Document.Source.Root), "editor.ui-template-parameter", ReadOnly))
+                .Append("</div>");
+        }
         Builder.Append("<div class=\"ui-inspector-heading\"><span class=\"ui-tag\">&lt;")
             .Append(Escape(Element.Name.LocalName)).Append("&gt;</span><strong>")
             .Append(Escape(Id.Length == 0 ? "(no id)" : Id))
@@ -138,8 +154,10 @@ internal static class UiEditorMarkup
                     !ReadOnly)
                 .Append(">+ ").Append(Escape(ClassName)).Append("</button>");
         }
-        Builder.Append("</div></div>");
-        if (!Element.HasElements)
+        Builder.Append("</div></div><div class=\"ui-inspector-section\"><span class=\"ui-inspector-label\">Enabled</span><button")
+            .AppendAction(Element.Attribute("disabled") is null ? "editor.ui-enabled:0" : "editor.ui-enabled:1", !ReadOnly)
+            .Append('>').Append(Element.Attribute("disabled") is null ? "Enabled" : "Disabled").Append("</button></div>");
+        if (Element.Name.LocalName != "ui-use" && !Element.HasElements)
         {
             Builder.Append(TextField("Text", Element.Value, "editor.ui-field:text", ReadOnly,
                 "Element text"));
@@ -176,8 +194,44 @@ internal static class UiEditorMarkup
 
     public static string BuildStylePane(UiEditorDocument Document)
     {
-        var Builder = new StringBuilder();
-        Builder.Append("<div class=\"ui-style-pane\"><div class=\"ui-style-summary\">")
+        var Builder = new StringBuilder("<div class=\"ui-style-editor-scroll\">");
+        if (Document.Format == UiDocumentFormat.Package)
+        {
+            Builder.Append("<div class=\"ui-private-rules\"><div class=\"ui-panel-title\">PRIVATE STYLES / SAVED WITH THIS UI</div>");
+            try
+            {
+                var Rules = RcssSourceEditing.Read(Document.PrivateRcss);
+                for (var Index = 0; Index < Rules.Count; Index++)
+                {
+                    var Rule = Rules[Index];
+                    Builder.Append("<div class=\"ui-style-rule\"><div class=\"ui-style-selector\">")
+                        .Append(Escape(Rule.Selector)).Append("</div>");
+                    foreach (var Field in Rule.Declarations.DistinctBy(Field => Field.Name))
+                    {
+                        Builder.Append(TextField(Field.Name, Field.Value,
+                            "editor.ui-private-style:" + Index + ":" + Uri.EscapeDataString(Field.Name),
+                            Document.IsReadOnly, "Private RCSS declaration"));
+                    }
+                    Builder.Append("</div>");
+                }
+            }
+            catch (InvalidDataException Error)
+            {
+                Builder.Append(Escape(Error.Message));
+            }
+            Builder.Append(TextField("Add private rule", string.Empty, "editor.ui-private-rule-add",
+                Document.IsReadOnly, ".my-control"));
+            Builder.Append("<div class=\"ui-panel-title\">EXPLICIT SHARED STYLES</div>");
+            foreach (var AssetId in Document.GlobalStyleSheets)
+            {
+                Builder.Append("<div class=\"ui-style-rule\"><span>").Append(Escape(AssetId))
+                    .Append("</span><button").AppendAction("editor.ui-global-style-remove:" + AssetId, !Document.IsReadOnly)
+                    .Append(">Remove reference</button></div>");
+            }
+            Builder.Append(TextField("Add shared style", string.Empty, "editor.ui-global-style-add",
+                Document.IsReadOnly, "project://ui/styles/theme")).Append("</div>");
+        }
+        Builder.Append("<div class=\"ui-computed-style-rules\"><div class=\"ui-style-summary\">")
             .Append("<div><span class=\"ui-inspector-label\">View model contract</span><span>")
             .Append(Escape(Document.ViewModelContract.Length == 0
                 ? "None (data-view-model is empty)" : Document.ViewModelContract))
@@ -186,7 +240,7 @@ internal static class UiEditorMarkup
             .Append("</span></div></div>");
         if (Document.Sheet.Rules.Count == 0)
         {
-            Builder.Append("<div class=\"ui-editor-empty\">No style rules</div></div>");
+            Builder.Append("<div class=\"ui-editor-empty\">No style rules</div></div></div>");
             return Builder.ToString();
         }
         Builder.Append("<div class=\"ui-style-groups\">");
@@ -207,7 +261,7 @@ internal static class UiEditorMarkup
             }
             Builder.Append("</div></div>");
         }
-        Builder.Append("</div></div>");
+        Builder.Append("</div></div></div>");
         return Builder.ToString();
     }
 
@@ -285,6 +339,26 @@ internal static class UiEditorMarkup
             .Append(" elements / revision ")
             .Append(Document.Revision.ToString(CultureInfo.InvariantCulture))
             .Append("</span></div></div>");
+        if (Document.IsTemplate)
+        {
+            Builder.Append("<div class=\"ui-inspector-group\"><div class=\"ui-inspector-group-title\">TEMPLATE DEFAULTS</div>")
+                .Append(BuildParameters(Document.ParametersOf(Document.Source.Root), "editor.ui-template-parameter", Document.IsReadOnly))
+                .Append(TextField("Add UI asset", string.Empty, "editor.ui-add-use", Document.IsReadOnly, "project://ui/..."))
+                .Append("</div>");
+        }
+        return Builder.ToString();
+    }
+
+    private static string BuildParameters(System.Text.Json.Nodes.JsonObject Values, string Prefix, bool ReadOnly)
+    {
+        var Builder = new StringBuilder();
+        foreach (var Pair in Values)
+        {
+            var Value = Pair.Value?.GetValueKind() == System.Text.Json.JsonValueKind.String
+                ? Pair.Value.GetValue<string>() : Pair.Value?.ToJsonString() ?? "null";
+            Builder.Append(TextField(Pair.Key, Value, Prefix + ":" + Uri.EscapeDataString(Pair.Key),
+                ReadOnly, "Serialized parameter"));
+        }
         return Builder.ToString();
     }
 
@@ -304,7 +378,7 @@ internal static class UiEditorMarkup
         var OptionsHint = Field.Options.Count == 0
             ? string.Empty
             : " (" + string.Join(" | ", Field.Options) + ")";
-        Builder.Append("<input class=\"ui-style-input\" type=\"text\" style=\"display: block; width: 150px;\" id=\"uiStyleField-")
+        Builder.Append("<input class=\"ui-style-input\" type=\"text\" id=\"uiStyleField-")
             .Append(Escape(Field.Name)).Append("\" value=\"")
             .Append(Escape(Inline ?? string.Empty))
             .Append("\" placeholder=\"").Append(Escape(Hint + OptionsHint))
@@ -329,8 +403,12 @@ internal static class UiEditorMarkup
         var Separator = Action.LastIndexOf(':');
         var FieldName = Separator < 0 ? Action : Action[(Separator + 1)..];
         var FieldId = "uiInspectorField-" + FieldName;
+        if (Action.StartsWith("editor.ui-private-style:", StringComparison.Ordinal))
+        {
+            FieldId = "uiPrivateStyle-" + Action["editor.ui-private-style:".Length..].Replace(':', '-');
+        }
         return "<div class=\"ui-inspector-section\" style=\"display: block; width: 220px;\"><label class=\"ui-inspector-label\">" +
-            Escape(Label) + "</label><input class=\"ui-inspector-input\" type=\"text\" style=\"width: 206px; max-width: none;\" id=\"" +
+            Escape(Label) + "</label><input class=\"ui-inspector-input\" type=\"text\" style=\"width: 206px; box-sizing: border-box; max-width: none;\" id=\"" +
             Escape(FieldId) + "\" value=\"" +
             Escape(Value) + "\" placeholder=\"" + Escape(Placeholder) +
             "\" data-change-action=\"" + Escape(Action) + ":\"" +
@@ -359,8 +437,10 @@ internal static class UiEditorMarkup
             }
             return;
         }
-        var Key = UiEditorDocument.KeyOf(Element);
-        var Selected = string.Equals(Key, Document.SelectedKey, StringComparison.Ordinal);
+        var SourceNode = Element.Annotation<UiDesignSourceNode>();
+        var Key = SourceNode?.Key ?? UiEditorDocument.KeyOf(Element);
+        var Derived = SourceNode?.Derived == true;
+        var Selected = !Derived && string.Equals(Key, Document.SelectedKey, StringComparison.Ordinal);
         var Tag = MapTag(AuthoredTag);
         var Classes = new List<string>
         {
@@ -384,13 +464,13 @@ internal static class UiEditorMarkup
         }
         var Style = BuildNodeStyle(Document, Element, Selected);
         Builder.Append('<').Append(Tag)
-            .Append(" id=\"").Append(Escape(UiEditorDocument.PreviewNodeIdOf(Element)))
+            .Append(" id=\"").Append(Escape(SourceNode?.PreviewId ?? UiEditorDocument.PreviewNodeIdOf(Element)))
             .Append("\" class=\"").Append(Escape(string.Join(' ', Classes)))
             .Append("\" style=\"").Append(Escape(Style)).Append('"');
         Builder.Append(" data-ui-node=\"").Append(Escape(Key)).Append('"');
         Builder.Append(" data-action=\"editor.ui-select:").Append(Escape(Key)).Append('"');
         // A slot has no authored geometry to drag; the using screen decides its size.
-        if (!Document.IsReadOnly && AuthoredTag != "ui-slot")
+        if (!Document.IsReadOnly && !Derived && AuthoredTag != "ui-slot")
         {
             Builder.Append(" data-ui-gesture=\"move\"");
         }
@@ -409,9 +489,18 @@ internal static class UiEditorMarkup
         }
         else if (Element.HasElements)
         {
-            foreach (var Child in Element.Elements())
+            foreach (var Child in Element.Nodes())
             {
-                AppendNode(Builder, Document, Child);
+                var ChildElement = Child as XElement;
+                var Text = Child as XText;
+                if (ChildElement is not null)
+                {
+                    AppendNode(Builder, Document, ChildElement);
+                }
+                else if (Text is not null)
+                {
+                    Builder.Append(Escape(Text.Value));
+                }
             }
         }
         else if (AuthoredTag == "input")
@@ -436,7 +525,7 @@ internal static class UiEditorMarkup
         }
         else
         {
-            Builder.Append(Escape(UiEditorDocument.SampleText(Element.Value)));
+            Builder.Append(Escape(SourceNode is null ? UiEditorDocument.SampleText(Element.Value) : Element.Value));
         }
         if (Selected && !Document.IsReadOnly && AuthoredTag != "ui-slot")
         {
@@ -489,7 +578,7 @@ internal static class UiEditorMarkup
     private static string MapTag(string Tag) => Tag.ToLowerInvariant() switch
     {
         "span" or "label" or "p" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6" or
-            "button" => Tag.ToLowerInvariant(),
+            "button" or "br" => Tag.ToLowerInvariant(),
         _ => "div",
     };
 

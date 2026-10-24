@@ -13,7 +13,7 @@ internal static class DynamicUiValidation
         Directory.CreateDirectory(Path.Combine(Folder, "Content/Worlds"));
         File.Copy(Path.Combine(Root, "Templates/BasicProject/Directory.Build.props"), Path.Combine(Folder, "Directory.Build.props"));
         File.Copy(Path.Combine(Root, "Content/Worlds/Main.sworld"), Path.Combine(Folder, "Content/Worlds/Main.sworld"));
-        File.WriteAllText(Path.Combine(Folder, "Content/Assets/assets.json"), """{"schemaVersion":1,"assets":[]}""");
+        File.WriteAllText(Path.Combine(Folder, "Content/Assets/assets.json"), """{"schemaVersion":2,"assets":[]}""");
         File.WriteAllText(Path.Combine(Folder, "Content/UI/Dynamic.rml"), """
             <template><div id="panel" style="padding:20px;"><span>${Caption}</span><div style="margin-top:12px;">
             <button id="fixture-add" data-action="fixture.add">Add runtime UI</button>
