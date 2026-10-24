@@ -271,6 +271,15 @@
       "readOnly": true,
       "importer": "SharpEngine.InputMappingContextJson",
       "tags": ["editor", "input"]
+    },
+    {
+      "id": "ui/basic-controls-style",
+      "type": "GlobalStyleSheet",
+      "name": "Basic UI Controls",
+      "path": "UI/Controls/BasicControls.sglobalcss",
+      "readOnly": true,
+      "importer": "RmlUi.GlobalStyleSheet",
+      "tags": ["ui", "controls", "shared"]
     }
   ]
 }

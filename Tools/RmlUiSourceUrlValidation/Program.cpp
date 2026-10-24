@@ -1,4 +1,5 @@
 #include "UI/RmlUiSourceUrl.h"
+#include "UI/RmlUiResourcePath.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/URL.h>
 #include <iostream>
@@ -43,7 +44,27 @@ int main()
     Rml::URL Relative(RmlUiSourceUrl::FromFilePath("Content/UI/Screen.sui"));
     Check(Relative.GetFileName() == "Screen", "Relative file sources remain supported");
     Check(RmlUiSourceUrl::FromFilePath("").empty(), "Empty source handling remains with the host");
-    std::cout << "PASS: " << Assertions << " native RmlUi source URL assertions\n";
+    const std::filesystem::path EngineRoot = LR"(D:\Engine)";
+    const std::filesystem::path ProjectRoot = LR"(E:\Game)";
+    Check(RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot,
+        "sharpengine-resource://engine/Resources/Editor/Icons/texture.tga") == EngineRoot / L"Resources/Editor/Icons/texture.tga",
+        "Editor and Game resolve the same engine resource URI");
+    Check(RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot,
+        "sharpengine-resource://project/Resources/icon.tga") == ProjectRoot / L"Resources/icon.tga",
+        "Project resources use the project root rather than the engine installation");
+    Check(RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot,
+        "sharpengine-resource://project/Plugins/Test/Resources/icon.tga") == ProjectRoot / L"Plugins/Test/Resources/icon.tga",
+        "Plugin resource mounts retain their existing ownership contract");
+    Check(RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot,
+        "sharpengine-resource://project/Resources/../private.tga").empty() &&
+        RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot, "sharpengine-resource://project/Content/icon.tga").empty(),
+        "Resource URI resolution rejects traversal and non-resource paths");
+    Check(RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot,
+        "sharpengine-resource://unknown/Resources/icon.tga").empty(), "Unknown resource owners are rejected");
+    SetEnvironmentVariableW(L"SHARPENGINE_PROJECT_MANIFEST", LR"(E:\Game\Sample.sharpproject)");
+    Check(RmlUiResourcePath::ProjectRootFromEnvironment() == ProjectRoot,
+        "The resolver sees the project selected by the native host's Win32 environment API");
+    std::cout << "PASS: " << Assertions << " native RmlUi URL/resource assertions\n";
     Rml::SetSystemInterface(nullptr);
     return 0;
 }

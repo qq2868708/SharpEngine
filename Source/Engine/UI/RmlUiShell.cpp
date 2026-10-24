@@ -4,6 +4,7 @@
 #include "RmlViewport3DInput.h"
 #include "RmlRuntimeUi.h"
 #include "RmlUiSourceUrl.h"
+#include "RmlUiResourcePath.h"
 #include <RmlUi/Core.h>
 #include <RmlUi/Core/Box.h>
 #include <RmlUi/Core/ElementInstancer.h>
@@ -281,97 +282,18 @@ namespace
     }
 }
 
-constexpr std::string_view ResourceScheme = "sharpengine-resource://";
-
-std::filesystem::path ProjectRootFromEnvironment()
-{
-    const wchar_t* manifest = _wgetenv(L"SHARPENGINE_PROJECT_MANIFEST");
-    return manifest && *manifest
-        ? std::filesystem::path(manifest).parent_path()
-        : std::filesystem::path{};
-}
-
-bool IsResourcePathAllowed(std::string_view relative)
-{
-    if (relative.empty() || relative.front() == '/' || relative.find('\\') != std::string_view::npos ||
-        relative.find(':') != std::string_view::npos || relative.find('?') != std::string_view::npos ||
-        relative.find('#') != std::string_view::npos)
-        return false;
-
-    bool hasInvalidSegment = false;
-    size_t start = 0;
-    while (start <= relative.size())
-    {
-        const size_t end = relative.find('/', start);
-        const auto segment = relative.substr(start, end == std::string_view::npos
-            ? relative.size() - start : end - start);
-        if (segment.empty() || segment == "." || segment == "..")
-        {
-            hasInvalidSegment = true;
-            break;
-        }
-        if (end == std::string_view::npos) break;
-        start = end + 1;
-    }
-    if (hasInvalidSegment) return false;
-
-    const bool engineResources = relative == "Resources" ||
-        relative.starts_with("Resources/");
-    std::vector<std::string_view> segments;
-    size_t segmentStart = 0;
-    while (segmentStart <= relative.size())
-    {
-        const size_t segmentEnd = relative.find('/', segmentStart);
-        segments.push_back(relative.substr(segmentStart, segmentEnd == std::string_view::npos
-            ? relative.size() - segmentStart : segmentEnd - segmentStart));
-        if (segmentEnd == std::string_view::npos) break;
-        segmentStart = segmentEnd + 1;
-    }
-    const bool pluginResources = segments.size() >= 4 && segments[0] == "Plugins" &&
-        segments[2] == "Resources";
-    return engineResources || pluginResources;
-}
-
-std::filesystem::path ResolveResourcePath(const std::filesystem::path& engineRoot,
-                                          const std::filesystem::path& projectRoot,
-                                          std::string_view value)
-{
-    if (!value.starts_with(ResourceScheme))
-        return std::filesystem::path(RmlWin32::ConvertToUTF16(std::string(value)));
-
-    const auto payload = value.substr(ResourceScheme.size());
-    const size_t separator = payload.find('/');
-    if (separator == std::string_view::npos || separator == 0 || separator + 1 >= payload.size())
-        return {};
-
-    const auto owner = payload.substr(0, separator);
-    const auto relative = payload.substr(separator + 1);
-    const auto& root = owner == "engine" ? engineRoot : owner == "project" ? projectRoot : std::filesystem::path{};
-    if (root.empty() || !IsResourcePathAllowed(relative)) return {};
-
-    const auto relativePath = std::filesystem::path(
-        RmlWin32::ConvertToUTF16(std::string(relative)));
-    const auto normalizedRoot = root.lexically_normal();
-    const auto normalizedPath = (normalizedRoot / relativePath).lexically_normal();
-    const auto withinRoot = normalizedPath.lexically_relative(normalizedRoot);
-    const auto withinRootText = withinRoot.generic_string();
-    if (withinRoot.empty() || withinRootText == ".." || withinRootText.starts_with("../"))
-        return {};
-    return normalizedPath;
-}
-
 class Win32FileInterface : public Rml::FileInterface
 {
 public:
     void ConfigureResourceRoots(const std::filesystem::path& engineRoot)
     {
         EngineRoot = engineRoot;
-        ProjectRoot = ProjectRootFromEnvironment();
+        ProjectRoot = RmlUiResourcePath::ProjectRootFromEnvironment();
     }
 
     Rml::FileHandle Open(const Rml::String& path) override
     {
-        const auto resolved = ResolveResourcePath(EngineRoot, ProjectRoot, path);
+        const auto resolved = RmlUiResourcePath::Resolve(EngineRoot, ProjectRoot, path);
         if (resolved.empty()) return 0;
         return reinterpret_cast<Rml::FileHandle>(
             _wfopen(resolved.c_str(), L"rb"));
@@ -442,6 +364,7 @@ struct RmlUiShell::Impl
         Rml::Context* Context{};
         Rml::ElementDocument* Document{};
         std::unordered_map<std::string, UiDocumentPreview> UiPreviews;
+        std::unordered_map<std::string, std::string> RevealedUiTargets;
         TextInputMethodEditor_Win32 Ime;
         Rml::Element* OpenPopup{};
         bool ContextMenuNeedsLayout = false;
@@ -1159,6 +1082,49 @@ struct RmlUiShell::Impl
         }
         result << "],\"diagnostics\":[]}";
         return result.str();
+    }
+
+    bool RevealUiTargets(Host& Host)
+    {
+        Rml::ElementList Owners;
+        Host.Document->QuerySelectorAll(Owners, "[data-ui-reveal-target]");
+        bool Updated = false;
+        for (auto* Owner : Owners)
+        {
+            const auto TargetId = Attribute(Owner, "data-ui-reveal-target");
+            auto* Target = Owner->GetElementById(TargetId);
+            if (!Target || !Target->IsVisible(true) || Host.RevealedUiTargets[Owner->GetId()] == TargetId)
+            {
+                continue;
+            }
+            const auto ViewPosition = Owner->GetAbsoluteOffset(Rml::BoxArea::Content);
+            const auto ViewSize = Owner->GetBox().GetSize(Rml::BoxArea::Content);
+            const auto Position = Target->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const auto Size = Target->GetBox().GetSize(Rml::BoxArea::Border);
+            float ScrollTop = Owner->GetScrollTop();
+            float ScrollLeft = Owner->GetScrollLeft();
+            if (Position.y < ViewPosition.y)
+            {
+                ScrollTop += Position.y - ViewPosition.y;
+            }
+            else if (Position.y + Size.y > ViewPosition.y + ViewSize.y)
+            {
+                ScrollTop += Position.y + Size.y - ViewPosition.y - ViewSize.y;
+            }
+            if (Position.x < ViewPosition.x)
+            {
+                ScrollLeft += Position.x - ViewPosition.x;
+            }
+            else if (Position.x + Size.x > ViewPosition.x + ViewSize.x)
+            {
+                ScrollLeft += Position.x + Size.x - ViewPosition.x - ViewSize.x;
+            }
+            Owner->SetScrollTop(ScrollTop);
+            Owner->SetScrollLeft(ScrollLeft);
+            Host.RevealedUiTargets[Owner->GetId()] = TargetId;
+            Updated = true;
+        }
+        return Updated;
     }
 
     void UpdateUiPreviews(Host& Host)
@@ -3464,6 +3430,10 @@ bool RmlUiShell::Render(bool ObserveUi)
         }
         host.Context->SetDimensions({client.right, client.bottom});
         host.Context->Update();
+        if (state.RevealUiTargets(host))
+        {
+            host.Context->Update();
+        }
         if (!host.UiPreviews.empty())
         {
             state.UpdateUiPreviews(host);
@@ -3676,6 +3646,10 @@ bool RmlUiShell::SetHostMarkup(std::string_view hostId, const char* elementId,
     }
     auto RuntimeNodes = RmlRuntimeUi::Capture(*element, *host->Context);
     element->SetInnerRML(markup);
+    if (std::string_view(markup).find("data-ui-reveal-target") != std::string_view::npos)
+    {
+        host->RevealedUiTargets.clear();
+    }
     RmlRuntimeUi::Restore(*element, RuntimeNodes);
     if (strcmp(elementId, "contextMenu") == 0)
     {

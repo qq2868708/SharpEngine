@@ -492,3 +492,32 @@ viewport { display: block; }
 .content-create-buttons { display: flex; margin-top: 18px; }
 .content-create-buttons button { margin-right: 12px; min-width: 84px; }
 .ui-runtime-preview { position: relative; display: block; width: 100%; height: 100%; flex: 1 1 auto; min-width: 0px; min-height: 0px; background-color: #0c1423; }
+
+/* UI authoring palette and readable source tree. */
+.ui-control-palette { display: block; box-sizing: border-box; width: 100%; height: 100%; overflow: auto; padding: 8px; }
+.ui-control-group-title { margin-top: 4px; margin-bottom: 5px; color: #93a5bc; font-size: 10px; }
+.ui-control-group { display: block; width: 246px; margin-bottom: 6px; }
+.ui-control-add { position: relative; z-index: 1; pointer-events: auto; display: inline-block; width: 112px; min-width: 112px; max-width: 112px; height: 27px; margin: 0px 4px 4px 0px; white-space: nowrap; box-sizing: border-box; padding: 5px 6px; text-align: left; font-size: 10px; color: #d4e1ed; background-color: #273342; border: 1px #405269; border-radius: 3px; }
+.ui-control-add:hover { background-color: #354f64; border-color: #73b7cf; }
+.ui-control-help { font-size: 10px; color: #8296ad; line-height: 16px; }
+.ui-tree-search-bar { display: flex; flex-shrink: 0; padding: 6px; gap: 4px; }
+.ui-tree-search { display: block; box-sizing: border-box; width: 180px; min-width: 80px; height: 26px; flex-grow: 1; padding: 4px 6px; background-color: #151c25; border: 1px #405168; color: #dbe5f0; font-size: 11px; }
+.ui-widget-row { min-width: 260px; display: flex; align-items: center; width: 100%; height: 42px; box-sizing: border-box; margin-bottom: 2px; background-color: #202831; border-radius: 3px; }
+.ui-widget-row:hover { background-color: #2c3a49; }
+.ui-widget-row.selected { background-color: #285348; }
+.ui-widget-row.reference { border-left: 2px #8e8ed3; }
+.ui-tree-toggle, .ui-tree-toggle-spacer { display: block; box-sizing: border-box; width: 20px; min-width: 20px; flex-shrink: 0; height: 24px; margin: 0px; padding: 3px; }
+.ui-tree-toggle { color: #97b9d3; background-color: transparent; border-width: 0px; text-align: center; }
+.ui-tree-toggle:hover { background-color: #43576d; }
+.ui-tree-select { position: relative; z-index: 1; display: block; box-sizing: border-box; width: 190px; min-width: 190px; flex-shrink: 0; flex-grow: 1; height: 40px; padding: 4px; margin: 0px; background-color: transparent; border-width: 0px; text-align: left; }
+.ui-tree-name { display: block; width: 100%; color: #e3edf7; font-size: 12px; line-height: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ui-tree-detail { display: block; width: 100%; color: #8da5bd; font-size: 9px; line-height: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ui-design-control { position: relative; min-width: 18px; min-height: 18px; }
+.ui-control-native-preview { pointer-events: none; }
+
+.ui-control-property-toggle { display: block; position: relative; z-index: 1; width: 206px; height: 28px; padding: 4px 8px; color: #c7e8df; background-color: #28443e; border: 1px #537a70; text-align: left; }
+
+.ui-class-chips, .ui-class-suggestions { display: block; width: 220px; }
+.ui-class-chip, .ui-class-suggestion { display: inline-block; position: relative; flex-shrink: 0; max-width: 206px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ui-class-suggestion { display: block; width: 206px; min-width: 206px; height: 24px; text-align: left; }

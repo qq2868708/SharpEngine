@@ -1,5 +1,6 @@
 #include "GameUiShell.h"
 #include "RmlUiSourceUrl.h"
+#include "RmlUiResourcePath.h"
 #include "UiObservation.h"
 #include "../RenderCore/Private/RenderBackend.h"
 #include <algorithm>
@@ -23,7 +24,12 @@ namespace
 
         Rml::FileHandle Open(const Rml::String& path) override
         {
-            std::filesystem::path requested = std::filesystem::u8path(path);
+            auto requested = RmlUiResourcePath::Resolve(Root,
+                RmlUiResourcePath::ProjectRootFromEnvironment(), path);
+            if (requested.empty())
+            {
+                return 0;
+            }
             if (requested.is_relative())
             {
                 requested = Root / requested;

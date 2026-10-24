@@ -145,26 +145,35 @@ internal static class UiEditorUiValidation
         }
         void Pointer(string Id, string Event, int OffsetX = 0, int OffsetY = 0)
         {
+            JsonObject? LastUi = null;
+            JsonObject? LastResult = null;
             for (var Attempt = 0; Attempt < 10; Attempt++)
             {
                 var Ui = Observe();
+                LastUi = Ui;
                 var Target = Element(Ui, Id);
                 var Bounds = Target["bounds"]!;
+                var Clip = Target["clip"]!.AsObject();
+                var Left = Math.Max(Bounds["x"]!.GetValue<double>(), Clip["x"]!.GetValue<double>());
+                var Top = Math.Max(Bounds["y"]!.GetValue<double>(), Clip["y"]!.GetValue<double>());
+                var Right = Math.Min(Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>(),
+                    Clip["x"]!.GetValue<double>() + Clip["width"]!.GetValue<double>());
+                var Bottom = Math.Min(Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>(),
+                    Clip["y"]!.GetValue<double>() + Clip["height"]!.GetValue<double>());
                 var Result = Invoke("ui.pointer", new JsonObject
                 {
                     ["hostId"] = RootId,
                     ["event"] = Event,
                     ["button"] = "left",
-                    ["x"] = (int)(Bounds["x"]!.GetValue<double>() +
-                        Bounds["width"]!.GetValue<double>() / 2) + OffsetX,
-                    ["y"] = (int)(Bounds["y"]!.GetValue<double>() +
-                        Bounds["height"]!.GetValue<double>() / 2) + OffsetY,
+                    ["x"] = (int)((Left + Right) / 2) + OffsetX,
+                    ["y"] = (int)((Top + Bottom) / 2) + OffsetY,
                     ["buttons"] = Event == "down" ? new JsonArray("left") : new JsonArray(),
                     ["modifiers"] = new JsonArray(),
                     ["pointerId"] = 0,
                     ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
                     ["expectedElementId"] = Target["elementId"]!.DeepClone(),
                 });
+                LastResult = Result;
                 if (Result["accepted"]?.GetValue<bool>() == true)
                 {
                     return;
@@ -176,7 +185,18 @@ internal static class UiEditorUiValidation
                     throw new InvalidOperationException(Result.ToJsonString());
                 }
             }
-            throw new InvalidOperationException("Retained UI editor input frame unavailable");
+            File.WriteAllText(Path.Combine(Output, "pointer-failed-ui.json"), LastUi!.ToJsonString());
+            File.WriteAllText(Path.Combine(Output, "pointer-failed-result.json"), LastResult!.ToJsonString());
+            var Frame = Call(Sequence++, "resources/read", new JsonObject
+            {
+                ["uri"] = $"sharpengine://ui/frames/{LastUi["frameId"]}/{RootId}.png",
+            });
+            var Blob = Frame["result"]?["contents"]?[0]?["blob"]?.GetValue<string>();
+            if (Blob is not null)
+            {
+                File.WriteAllBytes(Path.Combine(Output, "pointer-failed.png"), Convert.FromBase64String(Blob));
+            }
+            throw new InvalidOperationException("Retained input unavailable for " + Id + ": " + LastResult);
         }
         void Click(string Id)
         {
@@ -222,7 +242,7 @@ internal static class UiEditorUiValidation
             IdField["hitTarget"]!.GetValue<bool>() &&
             IdField["value"]?.GetValue<string>() == "screen",
             "Inspector text fields are visible, enabled, clickable native inputs");
-        var StyleField = Element(Initial, "uiStyleField-position");
+        var StyleField = Element(Initial, "uiControlField-gap");
         Check(StyleField["role"]!.GetValue<string>() == "input" &&
             StyleField["visible"]!.GetValue<bool>() &&
             StyleField["hitTarget"]!.GetValue<bool>() &&
@@ -272,7 +292,7 @@ internal static class UiEditorUiValidation
         Check(ClickedState["selectedKey"]!.GetValue<string>() == "#continue",
             "Clicking a design node selects exactly the authored element");
         Click("uiInspectorField-binding");
-        void Key(string Event, int Code, string Text)
+        void Key(string Event, int Code, string Text, JsonArray? Modifiers = null)
         {
             for (var Attempt = 0; Attempt < 10; Attempt++)
             {
@@ -283,7 +303,7 @@ internal static class UiEditorUiValidation
                     ["event"] = Event,
                     ["key"] = Code,
                     ["text"] = Text,
-                    ["modifiers"] = new JsonArray(),
+                    ["modifiers"] = Modifiers?.DeepClone() ?? new JsonArray(),
                     ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
                 });
                 if (Result["accepted"]?.GetValue<bool>() == true)
@@ -414,6 +434,88 @@ internal static class UiEditorUiValidation
             SavedPackage["rml"]!.GetValue<string>()
                 .Contains("margin-left: 40px", StringComparison.Ordinal),
             "Save keeps the .sui envelope and writes the RML back inside it");
+        var SavedRevision = State()["revision"]!.GetValue<long>();
+        Click("uiTreeToggle-ui-design-node-0");
+        Check(State()["tree"]!["visibleKeys"]!.AsArray().Count == 1 &&
+            !State()["dirty"]!.GetValue<bool>() && State()["revision"]!.GetValue<long>() == SavedRevision,
+            "A real tree-toggle click collapses a branch without dirtying the document");
+        Click("ui-design-node-0-1");
+        Check(State()["tree"]!["visibleKeys"]!.AsArray().Count == 3,
+            "Canvas selection reveals the selected control in a collapsed tree");
+        Click("uiTreeSearch");
+        Key("text", 0, "Continue");
+        Click("uiTreeSelect-ui-design-node-0");
+        Check(State()["tree"]!["search"]!.GetValue<string>() == "Continue" &&
+            State()["tree"]!["visibleKeys"]!.AsArray().Count == 2 && !State()["dirty"]!.GetValue<bool>(),
+            "Native search input filters the tree while retaining the parent path");
+        Click("uiTreeClear");
+        Check(State()["tree"]!["visibleKeys"]!.AsArray().Count == 3,
+            "The native Clear control restores the full source tree");
+        for (var Scroll = 0; Scroll < 8; Scroll++)
+        {
+            var Ui = Observe();
+            var Target = Element(Ui, "uiControlAdd-checkbox");
+            var Bounds = Target["bounds"]!.AsObject();
+            var Clip = Target["clip"]!.AsObject();
+            if (Bounds["y"]!.GetValue<double>() >= Clip["y"]!.GetValue<double>() &&
+                Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() <=
+                Clip["y"]!.GetValue<double>() + Clip["height"]!.GetValue<double>())
+            {
+                break;
+            }
+            var Anchor = Element(Ui, "uiControlPalette");
+            var AnchorBounds = Anchor["bounds"]!.AsObject();
+            var WheelResult = Invoke("ui.pointer", new JsonObject
+            {
+                ["hostId"] = RootId,
+                ["event"] = "wheel",
+                ["button"] = "none",
+                ["buttons"] = new JsonArray(),
+                ["modifiers"] = new JsonArray(),
+                ["pointerId"] = 0,
+                ["x"] = (int)(AnchorBounds["x"]!.GetValue<double>() + AnchorBounds["width"]!.GetValue<double>() / 2),
+                ["y"] = (int)(AnchorBounds["y"]!.GetValue<double>() + AnchorBounds["height"]!.GetValue<double>() / 2),
+                ["wheelY"] = Bounds["y"]!.GetValue<double>() < Clip["y"]!.GetValue<double>() ? -1 : 1,
+                ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+                ["expectedElementId"] = Anchor["elementId"]!.DeepClone(),
+            });
+            File.WriteAllText(Path.Combine(Output, "palette-wheel-" + Scroll + ".json"), WheelResult.ToJsonString());
+        }
+        Click("uiControlAdd-checkbox");
+        Check(State()["selectedKey"]!.GetValue<string>() == "#checkbox" &&
+            State()["selected"]!["controlProperties"]!.AsArray().Any(Property => Property!["name"]!.GetValue<string>() == "checked"),
+            "Clicking the palette adds and selects a checkbox with typed properties");
+        Click("uiControlField-checked");
+        Check(State()["selected"]!["controlProperties"]!.AsArray()
+            .Single(Property => Property!["name"]!.GetValue<string>() == "checked")!["value"]!.GetValue<string>() == "true",
+            "A real property toggle edits the native checkbox initial state");
+        Click("uiInspectorField-name");
+        Key("down", 0x41, "", new JsonArray("control"));
+        Key("up", 0x41, "", new JsonArray("control"));
+        Key("text", 0, "Accept terms");
+        Click("uiTreeSelect-ui-design-node-0");
+        var Checkbox = State()["elements"]!.AsArray().Single(Node => Node!["elementId"]!.GetValue<string>() == "checkbox")!;
+        Check(Checkbox["displayName"]!.GetValue<string>() == "Accept terms" &&
+            Checkbox["attributes"]!["checked"] is not null &&
+            !File.ReadAllText(PackagePath).Contains("Accept terms", StringComparison.Ordinal),
+            "Typing a readable control name preserves its ID and remains unsaved until Save");
+        _ = Invoke("editor.action", new JsonObject
+        {
+            ["action"] = $"editor.host-action:{RootId}:editor.asset-save",
+        });
+        _ = Invoke("editor.action", new JsonObject
+        {
+            ["action"] = $"editor.host-action:{RootId}:window.close-requested",
+        });
+        _ = Invoke("editor.action", new JsonObject
+        {
+            ["action"] = "editor.open-asset:" + ScreenId,
+        });
+        var Reopened = State();
+        var ReopenedCheckbox = Reopened["elements"]!.AsArray().Single(Node => Node!["elementId"]!.GetValue<string>() == "checkbox")!;
+        Check(!Reopened["dirty"]!.GetValue<bool>() && ReopenedCheckbox["displayName"]!.GetValue<string>() == "Accept terms" &&
+            ReopenedCheckbox["attributes"]!["checked"] is not null && Reopened["tree"]!["search"]!.GetValue<string>() == string.Empty,
+            "Closing and reopening the real asset editor restores the authored control and resets transient search");
         File.WriteAllText(Path.Combine(Output, "ui-editor-state.json"),
             State().ToJsonString(new System.Text.Json.JsonSerializerOptions(
                 System.Text.Json.JsonSerializerOptions.Default)

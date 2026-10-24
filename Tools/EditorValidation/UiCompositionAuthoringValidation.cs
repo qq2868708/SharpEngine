@@ -21,7 +21,7 @@ internal static class UiCompositionAuthoringValidation
         var SourcePath = Path.Combine(Folder.FullName, "Screen.sui");
         const string Source = """
             <template values='{"Caption":"Initial"}'><div id="screen"><span id="caption">${Caption}</span>
-            <ui-use id="First" asset="project://ui/card" values='{"Id":"a","Title":"A"}' />
+            <ui-use id="First" data-ui-name="First card" asset="project://ui/card" values='{"Id":"a","Title":"A"}' />
             <ui-use id="Second" asset="project://ui/card" values='{"Id":"b","Title":"B"}' /></div></template>
             """;
         File.WriteAllText(SourcePath, UiDocumentAsset.Create("Screen", Source).Serialize());
@@ -43,6 +43,11 @@ internal static class UiCompositionAuthoringValidation
         };
         var Document = UiEditorDocument.Load(Asset, SourcePath, Folder.FullName);
         Document.SetAssetResolver(Resolve);
+        Document.SetTreeSearch("project://ui/card");
+        Check(Document.VisibleTreeElements().Count == 3 &&
+            Document.VisibleTreeElements().Count(Element => Element.Name.LocalName == "ui-use") == 2,
+            "The readable source tree searches reusable references without baking in their derived children");
+        Document.SetTreeSearch(string.Empty);
         Check(!Document.Diagnostics.Any(Diagnostic => Diagnostic.Severity == "error"),
             "Serialized control references resolve without executing project behavior");
         Check(Document.DesignBodyElement!.Descendants("span").Any(Element => Element.Value == "A") &&

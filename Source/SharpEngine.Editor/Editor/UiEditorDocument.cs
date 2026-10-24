@@ -66,7 +66,7 @@ internal sealed partial class UiEditorDocument
         StringComparer.OrdinalIgnoreCase)
     {
         "span", "label", "p", "h1", "h2", "h3", "h4", "h5", "h6", "button", "input",
-        "img", "text",
+        "img", "text", "progress",
     };
     private static readonly HashSet<string> ContainerTags = new(
         StringComparer.OrdinalIgnoreCase)
@@ -190,6 +190,7 @@ internal sealed partial class UiEditorDocument
             return false;
         }
         SelectionKey = KeyOf(Resolved);
+        RevealInTree(Resolved);
         return true;
     }
 
@@ -274,6 +275,7 @@ internal sealed partial class UiEditorDocument
             case "class":
             case "data-bind":
             case "data-command":
+            case "data-ui-name":
                 return Edit("attribute", () => SetOrRemove(Element, Name, Value),
                     out Message);
             default:
@@ -415,53 +417,15 @@ internal sealed partial class UiEditorDocument
 
     public bool AddElement(string Tag, out string Message)
     {
-        Message = string.Empty;
-        var Normalized = Tag.Trim().ToLowerInvariant();
-        if (Normalized is not ("div" or "span" or "button" or "input" or "img"))
+        var ControlId = Tag.Trim().ToLowerInvariant() switch
         {
-            Message = $"Unsupported UI element '{Tag}'";
-            return false;
-        }
-        var BodyElement = Body();
-        if (BodyElement is null)
-        {
-            Message = "RML document has no body";
-            return false;
-        }
-        var Selected = SelectedElement();
-        var Parent = BodyElement;
-        if (Selected is not null)
-        {
-            Parent = CanContain(Selected) ? Selected : Selected.Parent ?? BodyElement;
-        }
-        var Id = UniqueId(DefaultPrefix(Normalized));
-        var Created = new XElement(Normalized, new XAttribute("id", Id));
-        switch (Normalized)
-        {
-            case "div":
-                Created.SetAttributeValue("style",
-                    "display: flex; flex-direction: column; gap: 8px;");
-                break;
-            case "span":
-                Created.Value = "Text";
-                break;
-            case "button":
-                Created.Value = "Button";
-                Created.SetAttributeValue("data-command", Id);
-                break;
-            case "input":
-                Created.SetAttributeValue("type", "text");
-                Created.SetAttributeValue("placeholder", "Input");
-                break;
-            case "img":
-                Created.SetAttributeValue("src", "sharpengine-resource://engine/Resources/Editor/Icons/image.tga");
-                break;
-        }
-        return Edit("add " + Normalized, () =>
-        {
-            Parent.Add(Created);
-            SelectionKey = KeyOf(Created);
-        }, out Message);
+            "div" => "container",
+            "span" => "text",
+            "input" => "text-input",
+            "img" => "image",
+            var Id => Id,
+        };
+        return AddControl(ControlId, out Message);
     }
 
     public bool DuplicateSelected(out string Message)
@@ -967,6 +931,10 @@ internal sealed partial class UiEditorDocument
                 ["key"] = KeyOf(Candidate),
                 ["elementId"] = ElementId(Candidate),
                 ["tag"] = Candidate.Name.LocalName,
+                ["displayName"] = DisplayName(Candidate),
+                ["controlType"] = ControlOf(Candidate)?.Id ?? Candidate.Name.LocalName,
+                ["controlLabel"] = ControlLabel(Candidate),
+                ["expanded"] = TreeExpanded(Candidate),
                 ["previewElementId"] = PreviewNodeId(Candidate),
                 ["depth"] = DepthOf(Candidate),
                 ["children"] = Candidate.Elements().Count(),
@@ -1005,6 +973,20 @@ internal sealed partial class UiEditorDocument
                 ["height"] = DesignHeight,
             },
             ["elements"] = Elements,
+            ["tree"] = DescribeTree(),
+            ["controls"] = new JsonArray(UiControlCatalog.All.Select(Control => (JsonNode)new JsonObject
+            {
+                ["id"] = Control.Id,
+                ["label"] = Control.Label,
+                ["group"] = Control.Group,
+                ["properties"] = new JsonArray(Control.Properties.Select(Property => (JsonNode)new JsonObject
+                {
+                    ["name"] = Property.Name,
+                    ["label"] = Property.Label,
+                    ["kind"] = Property.Kind.ToString(),
+                    ["defaultValue"] = Property.DefaultValue,
+                }).ToArray()),
+            }).ToArray()),
             ["styleSheet"] = new JsonObject
             {
                 ["files"] = new JsonArray(StyleSheet.Files.Select(File =>
@@ -1032,6 +1014,8 @@ internal sealed partial class UiEditorDocument
             DocumentState["selected"] = new JsonObject
             {
                 ["key"] = KeyOf(Element),
+                ["displayName"] = DisplayName(Element),
+                ["controlProperties"] = DescribeControlProperties(Element),
                 ["tag"] = Element.Name.LocalName,
                 ["elementId"] = ElementId(Element),
                 ["classes"] = new JsonArray(UiStyleText.ClassList(Element)
@@ -1090,6 +1074,8 @@ internal sealed partial class UiEditorDocument
 
     private void RefreshDerivedState()
     {
+        ControlTypes.Clear();
+        CollapsedTreeKeys.IntersectWith(EnumerateBody().Select(KeyOf));
         var Diagnostics = new List<UiEditorDiagnostic>();
         var Root = Document.Root;
         if (IsTemplate)
@@ -1164,6 +1150,20 @@ internal sealed partial class UiEditorDocument
         var PrivateStyles = new[] { new SharpEngine.UI.UiPrivateStyle(Path, PrivateRcss) }.Concat(ChildPrivateStyles).ToArray();
         StyleSheet = UiStyleSheet.Load(Document, Path, OwnerRoot, Diagnostics,
             PackageStyleSheets, GlobalFiles.Concat(ReferencedStyleSheets).ToArray(), PrivateStyles);
+        RefreshBasicControlStyles();
+        foreach (var Candidate in Elements)
+        {
+            var Control = ControlOf(Candidate);
+            if (Control is null)
+            {
+                continue;
+            }
+            var ValidControl = UiControlCatalog.ValidateNumbers(Candidate, Control.Id, out var ControlMessage);
+            if (!ValidControl)
+            {
+                Diagnostics.Add(new("error", "UI_CONTROL_VALUE_INVALID", KeyOf(Candidate) + ": " + ControlMessage));
+            }
+        }
         TrackDependencies();
         DiagnosticList = Diagnostics;
         if (SelectedKey is not null && Find(SelectedKey) is null)
@@ -1174,6 +1174,11 @@ internal sealed partial class UiEditorDocument
         if (SelectedKey is null && Elements.Length != 0)
         {
             SelectionKey = KeyOf(Elements[0]);
+        }
+        var Selected = SelectedElement();
+        if (Selected is not null)
+        {
+            RevealInTree(Selected);
         }
     }
 
@@ -1282,15 +1287,6 @@ internal sealed partial class UiEditorDocument
         }
     }
 
-    private static string DefaultPrefix(string Tag) => Tag switch
-    {
-        "span" => "text",
-        "button" => "button",
-        "input" => "input",
-        "img" => "image",
-        _ => "container",
-    };
-
     private static bool CanContain(XElement Element) =>
         !LeafTags.Contains(Element.Name.LocalName) && Element.Name.LocalName is not ("ui-use" or "ui-slot");
 
@@ -1334,9 +1330,9 @@ internal sealed partial class UiEditorDocument
         Element.SetAttributeValue("style", Text.Length == 0 ? null : Text);
     }
 
-    private static void SetOrRemove(XElement Element, string Name, string Value)
+    private static void SetOrRemove(XElement Element, string Name, string? Value)
     {
-        var Normalized = Value.Trim();
+        var Normalized = Value?.Trim() ?? string.Empty;
         Element.SetAttributeValue(Name, Normalized.Length == 0 ? null : Normalized);
     }
 

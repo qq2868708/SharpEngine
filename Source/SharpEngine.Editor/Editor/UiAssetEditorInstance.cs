@@ -56,27 +56,25 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; } =
     [
         new("design", "Design", false),
-        new("elements", "Elements"),
+        new("elements", "Widget Tree"),
+        new("controls", "Controls"),
         new("inspector", "Inspector"),
         new("style", "Styles"),
         new("diagnostics", "Diagnostics"),
         new("source", "Source"),
     ];
 
-    public IReadOnlyList<AssetEditorCommandDefinition> Commands { get; } =
-    [
+    public IReadOnlyList<AssetEditorCommandDefinition> Commands { get; } = new AssetEditorCommandDefinition[]
+    {
         new("undo", "Undo", "Edit", 100, "reset", true),
         new("redo", "Redo", "Edit", 110, "reset", true),
-        new("add-div", "Add Container", "Elements", 100, "add", true),
-        new("add-span", "Add Text", "Elements", 110, "add"),
-        new("add-button", "Add Button", "Elements", 120, "add"),
-        new("add-input", "Add Input", "Elements", 130, "add"),
-        new("add-img", "Add Image", "Elements", 140, "add"),
         new("duplicate", "Duplicate Element", "Elements", 200, null, true),
         new("delete", "Delete Element", "Elements", 210, null, true),
         new("move-up", "Move Earlier", "Elements", 300),
         new("move-down", "Move Later", "Elements", 310),
-    ];
+    }.Concat(UiControlCatalog.All.Select((Control, Index) =>
+        new AssetEditorCommandDefinition(UiControlCatalog.CommandId(Control), "Add " + Control.Label,
+            "Elements", 100 + Index * 5, "add", Control.Id == "container"))).ToArray();
 
     public EditorLayoutDocument CreateDefaultLayout()
     {
@@ -90,8 +88,16 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                     NodeId = "ui.root",
                     Kind = DockNodeKind.Split,
                     Orientation = DockSplitOrientation.Horizontal,
-                    Ratio = 0.18f,
-                    First = Tabs("ui.elements", "ui.elements.tabs", "elements"),
+                    Ratio = 0.23f,
+                    First = new DockNodeState
+                    {
+                        NodeId = "ui.left",
+                        Kind = DockNodeKind.Split,
+                        Orientation = DockSplitOrientation.Vertical,
+                        Ratio = 0.42f,
+                        First = Tabs("ui.controls", "ui.controls.tabs", "controls"),
+                        Second = Tabs("ui.elements", "ui.elements.tabs", "elements"),
+                    },
                     Second = new DockNodeState
                     {
                         NodeId = "ui.main",
@@ -121,12 +127,14 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
 
     public bool CanExecuteCommand(string CommandId)
     {
+        if (UiControlCatalog.ForCommand(CommandId) is not null)
+        {
+            return !IsReadOnly;
+        }
         return CommandId switch
         {
             "undo" => !IsReadOnly && Document.CanUndo,
             "redo" => !IsReadOnly && Document.CanRedo,
-            "add-div" or "add-span" or "add-button" or "add-input" or "add-img" =>
-                !IsReadOnly,
             "duplicate" or "delete" or "move-up" or "move-down" =>
                 !IsReadOnly && Document.SelectedKey is not null,
             _ => false,
@@ -135,6 +143,12 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
 
     public void ExecuteCommand(string CommandId)
     {
+        var Control = UiControlCatalog.ForCommand(CommandId);
+        if (Control is not null)
+        {
+            Report(Document.AddControl(Control.Id, out var Message), Message);
+            return;
+        }
         switch (CommandId)
         {
             case "undo":
@@ -142,21 +156,6 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                 break;
             case "redo":
                 Document.Redo();
-                break;
-            case "add-div":
-                Report(Document.AddElement("div", out var DivMessage), DivMessage);
-                break;
-            case "add-span":
-                Report(Document.AddElement("span", out var SpanMessage), SpanMessage);
-                break;
-            case "add-button":
-                Report(Document.AddElement("button", out var ButtonMessage), ButtonMessage);
-                break;
-            case "add-input":
-                Report(Document.AddElement("input", out var InputMessage), InputMessage);
-                break;
-            case "add-img":
-                Report(Document.AddElement("img", out var ImageMessage), ImageMessage);
                 break;
             case "duplicate":
                 Report(Document.DuplicateSelected(out var DuplicateMessage),
@@ -183,6 +182,39 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
 
     public bool TryHandleAction(string Action)
     {
+        if (Action.StartsWith("editor.ui-control-add:", StringComparison.Ordinal))
+        {
+            Report(Document.AddControl(Action["editor.ui-control-add:".Length..], out var Message), Message);
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-control-property:", StringComparison.Ordinal))
+        {
+            var Payload = Action["editor.ui-control-property:".Length..];
+            var Separator = Payload.IndexOf(':');
+            if (Separator > 0)
+            {
+                Report(Document.SetControlProperty(Payload[..Separator], Payload[(Separator + 1)..], out var Message), Message);
+            }
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-tree-search:", StringComparison.Ordinal))
+        {
+            Document.SetTreeSearch(Action["editor.ui-tree-search:".Length..]);
+            MarkupRefreshRequested = true;
+            return true;
+        }
+        if (Action.StartsWith("editor.ui-tree-toggle:", StringComparison.Ordinal))
+        {
+            Document.ToggleTree(Action["editor.ui-tree-toggle:".Length..]);
+            MarkupRefreshRequested = true;
+            return true;
+        }
+        if (Action is "editor.ui-tree-expand" or "editor.ui-tree-collapse")
+        {
+            Document.ExpandTree(Action == "editor.ui-tree-expand");
+            MarkupRefreshRequested = true;
+            return true;
+        }
         const string PrivatePrefix = "editor.ui-private-style:";
         if (Action.StartsWith("editor.ui-private-rule-add:", StringComparison.Ordinal))
         {
@@ -383,7 +415,8 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                 ? "<div class=\"ui-editor-empty\">No project preview factory is registered for this asset.</div>"
                 : "<div id=\"uiRuntimePreview\" class=\"ui-runtime-preview\"></div>",
             "design" => UiEditorMarkup.BuildCanvas(Document),
-            "elements" => "<div class=\"ui-panel-title\">ELEMENTS</div>" +
+            "controls" => UiEditorMarkup.BuildControls(Document),
+            "elements" => "<div class=\"ui-panel-title\">WIDGET TREE</div>" +
                 UiEditorMarkup.BuildHierarchy(Document),
             "inspector" => "<div class=\"ui-panel-title\">UI INSPECTOR</div>" +
                 "<div id=\"uiInspectorBody\" class=\"ui-element-inspector\">" +
@@ -590,6 +623,8 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
         var Value = Payload[(Separator + 1)..];
         var Changed = Field switch
         {
+            "name" => Document.SetAttribute("data-ui-name", Value.Trim(), out var NameMessage)
+                ? ReportMessage(true, NameMessage) : ReportMessage(false, NameMessage),
             "id" => Document.RenameId(Value, out var IdMessage)
                 ? ReportMessage(true, IdMessage) : ReportMessage(false, IdMessage),
             "text" => Document.SetText(Value, out var TextMessage)

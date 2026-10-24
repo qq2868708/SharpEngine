@@ -300,6 +300,10 @@ internal static class UiEditorValidation
             Source = AssetSource.Project,
         };
         var Template = UiEditorDocument.Load(Asset, PackagePath, Project);
+        var DefaultStylePath = Path.Combine(UiDirectory.FullName, "Default.sglobalcss");
+        File.WriteAllText(DefaultStylePath, ".se-control { color: #ffffff; }");
+        Template.SetGlobalStyleResolver(Id => Id == UiControlCatalog.DefaultStyleId
+            ? DefaultStylePath : throw new InvalidDataException("Unexpected style: " + Id));
         Check(Template.IsTemplate,
             "A <template> package is recognized as a reusable definition");
         Check(Template.Diagnostics.Count == 0,

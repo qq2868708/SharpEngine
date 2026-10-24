@@ -234,7 +234,7 @@ internal sealed partial class UiEditorDocument
                 var Markup = Child.Render(new UiLayoutContext(DesignWidth, DesignHeight), Use.Values, ResolveAsset: Resolve);
                 var SourceNode = Element.Annotation<UiDesignSourceNode>()!;
                 var Wrapper = new XElement("div", Element.Attributes().Where(Attribute =>
-                    Attribute.Name.LocalName is "id" or "class" or "style"));
+                    Attribute.Name.LocalName is "id" or "class" or "style" or "data-ui-name"));
                 Wrapper.AddAnnotation(SourceNode);
                 var Fragment = XElement.Parse("<fragment>" + Markup + "</fragment>");
                 Wrapper.Add(Fragment.Nodes());
@@ -265,7 +265,10 @@ internal sealed partial class UiEditorDocument
         {
             foreach (var Attribute in Element.Attributes().ToArray())
             {
-                Attribute.Value = Expand(Attribute.Value);
+                if (Attribute.Name.LocalName != "data-ui-name")
+                {
+                    Attribute.Value = Expand(Attribute.Value);
+                }
             }
             foreach (var Text in Element.Nodes().OfType<XText>())
             {

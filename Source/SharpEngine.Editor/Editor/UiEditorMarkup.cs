@@ -49,41 +49,49 @@ internal static class UiEditorMarkup
         return Builder.ToString();
     }
 
+    public static string BuildControls(UiEditorDocument Document)
+    {
+        var Builder = new StringBuilder("<div class=\"ui-panel-title\">BASIC CONTROLS</div><div id=\"uiControlPalette\" class=\"ui-control-palette\">");
+        Builder.Append("<div class=\"ui-control-group\">");
+        foreach (var Control in UiControlCatalog.All)
+        {
+            Builder.Append("<button id=\"uiControlAdd-").Append(Control.Id).Append("\" class=\"ui-control-add\"")
+                .AppendAction("editor.ui-control-add:" + Control.Id, !Document.IsReadOnly)
+                .Append(AppendAvailability(!Document.IsReadOnly)).Append(" title=\"")
+                .Append(Escape(Control.Group + " / Add " + Control.Label)).Append(" to the selected container\">")
+                .Append(Escape(Control.Label)).Append("</button>");
+        }
+        Builder.Append("</div>");
+        return Builder.Append("<div class=\"ui-control-help\">Select a parent in the tree, then add a control. Use the Inspector to edit its initial properties.</div></div>").ToString();
+    }
+
     public static string BuildHierarchy(UiEditorDocument Document)
     {
-        var Body = Document.BodyElement;
-        if (Body is null)
+        var Builder = new StringBuilder("<div class=\"ui-control-help\" style=\"padding: 4px 6px 0px;\">Search name, type or id</div><div class=\"ui-tree-search-bar\"><input id=\"uiTreeSearch\" type=\"text\" class=\"ui-tree-search\" value=\"");
+        Builder.Append(Escape(Document.TreeSearch)).Append("\" placeholder=\"Search name, type or id\" data-change-action=\"editor.ui-tree-search:\" />")
+            .Append("<button id=\"uiTreeClear\" class=\"ui-tool-button\" data-action=\"editor.ui-tree-search:\">Clear</button></div>")
+            .Append("<div class=\"ui-element-tools\">")
+            .Append(ToolButton("editor.ui-tree-expand", "Expand", "Expand every branch", true))
+            .Append(ToolButton("editor.ui-tree-collapse", "Collapse", "Collapse every branch", true))
+            .Append(ToolButton("editor.ui-select-parent", "Parent", "Select parent", Document.SelectedKey is not null))
+            .Append(ToolButton("editor.ui-move-up", "Up", "Move earlier", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("editor.ui-move-down", "Down", "Move later", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("editor.ui-indent", "Nest", "Nest into previous sibling", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("editor.ui-outdent", "Unnest", "Move out one level", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append("</div><div class=\"ui-element-hierarchy\" id=\"uiWidgetTree\" data-ui-reveal-target=\"")
+            .Append(Escape(Document.SelectedElement() is { } Selected ? "uiTreeSelect-" + UiEditorDocument.PreviewNodeIdOf(Selected) : string.Empty))
+            .Append("\">");
+        var Visible = Document.VisibleTreeElements();
+        if (Visible.Count == 0)
         {
-            return "<div class=\"ui-editor-empty\">Invalid RML body</div>";
+            Builder.Append("<div class=\"ui-editor-empty\">").Append(Document.TreeSearch.Length > 0
+                ? "No matching controls" : "Add a control from the Controls panel").Append("</div>");
         }
-        var Elements = Body.Elements().ToArray();
-        var Builder = new StringBuilder();
-        Builder.Append("<div class=\"ui-element-tools\">")
-            .Append(ToolButton("editor.ui-select-parent", "Parent", "Select the parent element",
-                Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-move-up", "Up", "Move the element earlier",
-                Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-move-down", "Down", "Move the element later",
-                Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-indent", "In", "Nest into the previous sibling",
-                Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-outdent", "Out", "Move one level out",
-                Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-duplicate", "Dup", "Duplicate the element",
-                Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-delete", "Del", "Delete the element",
-                Document.SelectedKey is not null))
-            .Append("</div><div class=\"ui-element-hierarchy\">");
-        if (Elements.Length == 0)
-        {
-            Builder.Append("<div class=\"ui-editor-empty\">The screen is empty</div>");
-        }
-        foreach (var Element in Elements)
+        foreach (var Element in Visible)
         {
             AppendHierarchyRow(Builder, Document, Element);
         }
-        Builder.Append("</div>");
-        return Builder.ToString();
+        return Builder.Append("</div>").ToString();
     }
 
     public static string BuildInspector(UiEditorDocument Document)
@@ -97,6 +105,9 @@ internal static class UiEditorMarkup
         var Builder = new StringBuilder();
         var ReadOnly = Document.IsReadOnly;
         var Id = UiEditorDocument.ElementIdOf(Element);
+        Builder.Append(TextField("Display name", UiEditorDocument.AttributeOf(Element, "data-ui-name"),
+            "editor.ui-field:name", ReadOnly, Document.DisplayName(Element)));
+        Builder.Append(BuildControlInspector(Document, Element));
         if (Element.Name.LocalName == "ui-use")
         {
             var AssetId = UiEditorDocument.AttributeOf(Element, "asset");
@@ -146,7 +157,8 @@ internal static class UiEditorMarkup
         }
         Builder.Append("</div><div class=\"ui-class-suggestions\">");
         foreach (var ClassName in Document.Sheet.Classes
-                     .Where(ClassName => !Classes.Contains(ClassName, StringComparer.Ordinal))
+                     .Where(ClassName => !Classes.Contains(ClassName, StringComparer.Ordinal) &&
+                         ClassName != "se-control" && !ClassName.StartsWith("se-control-", StringComparison.Ordinal))
                      .Take(24))
         {
             Builder.Append("<button class=\"ui-class-suggestion\"")
@@ -157,11 +169,6 @@ internal static class UiEditorMarkup
         Builder.Append("</div></div><div class=\"ui-inspector-section\"><span class=\"ui-inspector-label\">Enabled</span><button")
             .AppendAction(Element.Attribute("disabled") is null ? "editor.ui-enabled:0" : "editor.ui-enabled:1", !ReadOnly)
             .Append('>').Append(Element.Attribute("disabled") is null ? "Enabled" : "Disabled").Append("</button></div>");
-        if (Element.Name.LocalName != "ui-use" && !Element.HasElements)
-        {
-            Builder.Append(TextField("Text", Element.Value, "editor.ui-field:text", ReadOnly,
-                "Element text"));
-        }
         var Declarations = UiEditorDocument.DeclarationsOf(Element);
         var Computed = Document.Sheet.Compute(Element);
         var Absolute = Declarations.TryGetValue("position", out var Position) &&
@@ -403,6 +410,10 @@ internal static class UiEditorMarkup
         var Separator = Action.LastIndexOf(':');
         var FieldName = Separator < 0 ? Action : Action[(Separator + 1)..];
         var FieldId = "uiInspectorField-" + FieldName;
+        if (Action.StartsWith("editor.ui-control-property:", StringComparison.Ordinal))
+        {
+            FieldId = "uiControlField-" + FieldName;
+        }
         if (Action.StartsWith("editor.ui-private-style:", StringComparison.Ordinal))
         {
             FieldId = "uiPrivateStyle-" + Action["editor.ui-private-style:".Length..].Replace(':', '-');
@@ -450,17 +461,17 @@ internal static class UiEditorMarkup
         {
             Classes.Add("ui-design-selected");
         }
-        if (AuthoredTag is "input" or "img")
+        if (AuthoredTag is "input" or "img" or "progress")
         {
-            Classes.Add("ui-design-replaced");
+            Classes.Add("ui-design-control");
         }
         if (AuthoredTag == "ui-slot")
         {
             Classes.Add("ui-design-slot-node");
         }
-        foreach (var ClassName in UiEditorDocument.ClassList(Element))
+        if (AuthoredTag is not ("input" or "img" or "progress"))
         {
-            Classes.Add(ClassName);
+            Classes.AddRange(Document.DesignClasses(Element));
         }
         var Style = BuildNodeStyle(Document, Element, Selected);
         Builder.Append('<').Append(Tag)
@@ -503,24 +514,29 @@ internal static class UiEditorMarkup
                 }
             }
         }
-        else if (AuthoredTag == "input")
+        else if (AuthoredTag is "input" or "progress")
         {
-            var Placeholder = UiEditorDocument.SampleText(
-                UiEditorDocument.AttributeOf(Element, "placeholder"));
-            var Value = UiEditorDocument.SampleText(
-                UiEditorDocument.AttributeOf(Element, "value"));
-            Builder.Append("<span class=\"ui-design-replaced-text\">")
-                .Append(Escape(Value.Length != 0 || Placeholder.Length != 0
-                    ? Value + Placeholder : "input")).Append("</span>");
+            Builder.Append('<').Append(AuthoredTag).Append(" class=\"ui-control-native-preview ")
+                .Append(Escape(string.Join(' ', Document.DesignClasses(Element))))
+                .Append("\" style=\"").Append(Escape(BuildNativeControlStyle(Document, Element))).Append('"');
+            foreach (var Attribute in Element.Attributes().Where(Attribute => Attribute.Name.LocalName is
+                         "type" or "value" or "placeholder" or "min" or "max" or "step" or "checked" or "disabled"))
+            {
+                Builder.Append(' ').Append(Attribute.Name.LocalName).Append("=\"")
+                    .Append(Escape(UiEditorDocument.SampleText(Attribute.Value))).Append('"');
+            }
+            Builder.Append(" />");
         }
         else if (AuthoredTag == "img")
         {
             var Source = UiEditorDocument.SampleText(
                 UiEditorDocument.AttributeOf(Element, "src"));
-            Builder.Append("<img class=\"ui-design-image\" src=\"")
+            Builder.Append("<img class=\"ui-control-native-preview ")
+                .Append(Escape(string.Join(' ', Document.DesignClasses(Element))))
+                .Append("\" style=\"").Append(Escape(BuildNativeControlStyle(Document, Element))).Append("\" src=\"")
                 .Append(Escape(Source.Length == 0 || UiEditorDocument.HasPlaceholder(Source)
-                    ? "sharpengine-resource://engine/Resources/Editor/Icons/image.tga"
-                    : Source))
+                    ? "sharpengine-resource://engine/Resources/Editor/Icons/texture.tga"
+                    : DesignImageSource(Document, Source)))
                 .Append("\" />");
         }
         else
@@ -550,6 +566,26 @@ internal static class UiEditorMarkup
         }
     }
 
+    private static string DesignImageSource(UiEditorDocument Document, string Source)
+    {
+        if (Source.Contains("://", StringComparison.Ordinal) || Source.StartsWith("data:", StringComparison.Ordinal))
+        {
+            return Source;
+        }
+        try
+        {
+            var Full = System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(Document.Path)!, Source)).Replace('\\', '/');
+            // Texture sources are passed to SystemInterface.JoinPath, which accepts
+            // Windows absolute paths directly. The pipe encoding is for document URLs.
+            return Full;
+        }
+        catch (Exception Error) when (Error is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return "sharpengine-resource://engine/Resources/Editor/Icons/texture.tga";
+        }
+    }
+
     private static string BuildNodeStyle(UiEditorDocument Document, XElement Element,
         bool Selected)
     {
@@ -559,6 +595,10 @@ internal static class UiEditorMarkup
                      .OrderBy(Pair => Pair.Key, StringComparer.Ordinal))
         {
             if (Pair.Key.Equals("transform", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (Element.Name.LocalName is "input" or "img" or "progress" && !ControlLayoutProperty(Pair.Key))
             {
                 continue;
             }
@@ -575,6 +615,20 @@ internal static class UiEditorMarkup
         return string.Join(' ', Declarations);
     }
 
+    private static bool ControlLayoutProperty(string Name) =>
+        Name is "display" or "position" or "left" or "top" or "right" or "bottom" or "width" or "height" or
+            "min-width" or "max-width" or "min-height" or "max-height" or "box-sizing" or "vertical-align" or
+            "align-self" or "flex-grow" or "flex-shrink" or "flex-basis" or "order" ||
+        Name.StartsWith("margin", StringComparison.Ordinal);
+
+    private static string BuildNativeControlStyle(UiEditorDocument Document, XElement Element)
+    {
+        var Style = string.Join(' ', Document.Sheet.Compute(Element)
+            .Where(Pair => !ControlLayoutProperty(Pair.Key) && Pair.Key != "transform")
+            .Select(Pair => Pair.Key + ": " + Pair.Value.Value + ";"));
+        return Style + " pointer-events: none; width: 100%; height: 100%; margin: 0px; box-sizing: border-box;";
+    }
+
     private static string MapTag(string Tag) => Tag.ToLowerInvariant() switch
     {
         "span" or "label" or "p" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6" or
@@ -582,26 +636,61 @@ internal static class UiEditorMarkup
         _ => "div",
     };
 
-    private static void AppendHierarchyRow(StringBuilder Builder,
-        UiEditorDocument Document, XElement Element)
+    private static string BuildControlInspector(UiEditorDocument Document, XElement Element)
+    {
+        var Control = Document.ControlOf(Element);
+        var Builder = new StringBuilder("<div class=\"ui-inspector-group\"><div class=\"ui-inspector-group-title\">");
+        Builder.Append(Escape(Document.ControlLabel(Element))).Append(" PROPERTIES</div>");
+        foreach (var Property in Control?.Properties ?? [])
+        {
+            var Value = UiControlCatalog.Read(Element, Property, Document.Sheet);
+            var Action = "editor.ui-control-property:" + Property.Name;
+            if (Property.Kind == UiControlPropertyKind.Boolean)
+            {
+                Builder.Append("<div class=\"ui-inspector-section\"><label class=\"ui-inspector-label\">")
+                    .Append(Escape(Property.Label)).Append("</label><button class=\"ui-control-property-toggle\" id=\"uiControlField-")
+                    .Append(Property.Name).Append('"').AppendAction(Action + ":" + (Value == "true" ? "false" : "true"), !Document.IsReadOnly)
+                    .Append(AppendAvailability(!Document.IsReadOnly)).Append('>').Append(Value == "true" ? "On" : "Off").Append("</button></div>");
+            }
+            else
+            {
+                Builder.Append(TextField(Property.Label, Value, Action, Document.IsReadOnly, Property.DefaultValue));
+            }
+        }
+        return Builder.Append("</div>").ToString();
+    }
+
+    private static void AppendHierarchyRow(StringBuilder Builder, UiEditorDocument Document, XElement Element)
     {
         var Key = UiEditorDocument.KeyOf(Element);
         var Id = UiEditorDocument.ElementIdOf(Element);
-        var Depth = UiEditorDocument.DepthOf(Element);
-        var Selected = string.Equals(Key, Document.SelectedKey, StringComparison.Ordinal);
-        Builder.Append("<button class=\"ui-tree-row")
-            .Append(Selected ? " selected" : string.Empty)
-            .Append(Id.Length == 0 ? " invalid" : string.Empty)
-            .Append("\" style=\"padding-left:")
-            .Append(8 + Depth * 12).Append("px;\"").AppendAction("editor.ui-select:" + Key, true)
-            .Append("><span class=\"ui-tree-tag\">&lt;")
-            .Append(Escape(Element.Name.LocalName)).Append("&gt;</span><span class=\"ui-tree-label\">")
-            .Append(Escape(Id.Length == 0 ? "(no id)" : Id))
-            .Append("</span></button>");
-        foreach (var Child in Element.Elements())
+        var NodeId = UiEditorDocument.PreviewNodeIdOf(Element);
+        var Selected = Key == Document.SelectedKey;
+        var Expanded = Document.TreeExpanded(Element);
+        var Reference = Element.Name.LocalName == "ui-use";
+        var Type = Document.ControlLabel(Element);
+        var Name = Document.DisplayName(Element);
+        var Asset = UiEditorDocument.AttributeOf(Element, "asset");
+        Builder.Append("<div class=\"ui-widget-row").Append(Selected ? " selected" : string.Empty)
+            .Append(Reference ? " reference" : string.Empty).Append("\" style=\"padding-left:")
+            .Append(4 + UiEditorDocument.DepthOf(Element) * 12).Append("px;\">");
+        if (Element.HasElements)
         {
-            AppendHierarchyRow(Builder, Document, Child);
+            Builder.Append("<button class=\"ui-tree-toggle\" id=\"uiTreeToggle-").Append(NodeId).Append('"')
+                .AppendAction("editor.ui-tree-toggle:" + Key, Document.TreeSearch.Length == 0)
+                .Append(" title=\"").Append(Expanded ? "Collapse branch" : "Expand branch").Append("\">")
+                .Append(Expanded ? "-" : "+").Append("</button>");
         }
+        else
+        {
+            Builder.Append("<span class=\"ui-tree-toggle-spacer\"></span>");
+        }
+        Builder.Append("<button class=\"ui-tree-select\" id=\"uiTreeSelect-").Append(NodeId).Append('"')
+            .AppendAction("editor.ui-select:" + Key, true).Append(" title=\"")
+            .Append(Escape(Type + " | " + Name + " | " + (Id.Length == 0 ? Key : "#" + Id) + (Reference ? " | " + Asset : string.Empty)))
+            .Append("\"><span class=\"ui-tree-name\">").Append(Escape(Name)).Append("</span><span class=\"ui-tree-detail\">")
+            .Append(Reference ? "REF / " : string.Empty).Append(Escape(Type))
+            .Append(" / ").Append(Escape(Id.Length == 0 ? "anonymous" : "#" + Id)).Append("</span></button></div>");
     }
 
     private static string AppendAvailability(bool Enabled) =>

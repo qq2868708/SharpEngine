@@ -280,13 +280,25 @@ internal sealed class UiStyleSheet
 internal sealed record UiSelectorPart(UiSelectorCompound Compound, bool Child);
 
 internal sealed record UiSelectorCompound(string? Tag, string? Id,
-    IReadOnlyList<string> Classes)
+    IReadOnlyList<string> Classes, IReadOnlyList<string> States)
 {
-    public int Specificity => (Id is null ? 0 : 10000) + Classes.Count * 100 +
+    public int Specificity => (Id is null ? 0 : 10000) + (Classes.Count + States.Count) * 100 +
         (Tag is null or "*" ? 0 : 1);
 
     public bool Matches(XElement Element)
     {
+        foreach (var State in States)
+        {
+            if (State == "checked" && (Element.Name.LocalName != "input" ||
+                AttributeType(Element) is not ("checkbox" or "radio") || Element.Attribute("checked") is null))
+            {
+                return false;
+            }
+            if (State == "disabled" && Element.Attribute("disabled") is null)
+            {
+                return false;
+            }
+        }
         if (Tag is not null && Tag != "*" &&
             !Element.Name.LocalName.Equals(Tag, StringComparison.OrdinalIgnoreCase))
         {
@@ -310,6 +322,9 @@ internal sealed record UiSelectorCompound(string? Tag, string? Id,
         }
         return true;
     }
+
+    private static string AttributeType(XElement Element) =>
+        UiStyleText.Attribute(Element, "type").ToLowerInvariant();
 }
 
 internal sealed class UiSelector
@@ -337,7 +352,7 @@ internal sealed class UiSelector
         Result = null;
         var Trimmed = Text.Trim();
         if (Trimmed.Length == 0 ||
-            Trimmed.IndexOfAny([':', '[', ']', '+', '~', '@', '(', ')', '"', '\'']) >= 0)
+            Trimmed.IndexOfAny(['[', ']', '+', '~', '@', '(', ')', '"', '\'']) >= 0)
         {
             return false;
         }
@@ -426,6 +441,13 @@ internal sealed class UiSelector
     private static bool TryParseCompound(string Token, out UiSelectorCompound? Result)
     {
         Result = null;
+        var Segments = Token.Split(':');
+        var States = Segments.Skip(1).ToArray();
+        if (States.Any(State => State is not ("checked" or "disabled")))
+        {
+            return false;
+        }
+        Token = Segments[0].Length == 0 && States.Length > 0 ? "*" : Segments[0];
         if (Token.Length == 0)
         {
             return false;
@@ -484,7 +506,7 @@ internal sealed class UiSelector
         {
             return false;
         }
-        Result = new(Tag, Id, Classes);
+        Result = new(Tag, Id, Classes, States);
         return true;
     }
 }

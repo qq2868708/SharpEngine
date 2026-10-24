@@ -219,6 +219,11 @@ public sealed class UiLayoutTemplate
         var Result = new XElement(Element.Name);
         foreach (var Attribute in Element.Attributes())
         {
+            if (Attribute.Name == "data-ui-name")
+            {
+                Result.SetAttributeValue(Attribute.Name, Attribute.Value);
+                continue;
+            }
             if (Attribute.Name == "ui-disabled")
             {
                 var Value = Lookup(Attribute.Value, Scopes);
@@ -311,7 +316,8 @@ public sealed class UiLayoutTemplate
 
     private static void CheckAttributes(XElement Element, params string[] Allowed)
     {
-        if (Element.Attributes().Any(Attribute => !Allowed.Contains(Attribute.Name.LocalName, StringComparer.Ordinal)))
+        if (Element.Attributes().Any(Attribute => Attribute.Name.LocalName != "data-ui-name" &&
+            !Allowed.Contains(Attribute.Name.LocalName, StringComparer.Ordinal)))
         {
             throw new InvalidDataException("UILAYOUT_ATTRIBUTE_UNKNOWN: " + Element.Name);
         }

@@ -1,0 +1,21 @@
+/* Explicitly referenced foundation styles. Every selector belongs to the se-control namespace. */
+.se-control { box-sizing: border-box; font-family: Segoe UI; font-size: 14px; color: #dce7f3; line-height: 22px; }
+.se-control-container, .se-control-horizontal, .se-control-vertical { padding: 10px; background-color: #162335; border: 1px #344962; border-radius: 5px; }
+.se-control-text { display: inline-block; }
+.se-control-image { background-color: #22364d; border: 1px #56708b; border-radius: 4px; }
+.se-control-button { min-width: 96px; height: 34px; padding: 5px 14px; color: #102b25; background-color: #79d8b9; border: 1px #9be8d1; border-radius: 4px; text-align: center; }
+.se-control-button:hover { background-color: #a1ebd4; }
+.se-control-button:active { background-color: #52af91; }
+.se-control-button:disabled { color: #83929e; background-color: #283747; border-color: #3e5269; }
+.se-control-text-input { padding: 4px 7px; background-color: #0e1826; color: #e4eff9; border: 1px #5a7390; border-radius: 4px; }
+.se-control-text-input:focus { border-color: #88dfd1; }
+.se-control-checkbox { background-color: #0e1826; border: 2px #6f8da9; border-radius: 4px; }
+.se-control-checkbox:checked { background-color: #79d8b9; border-color: #c0f4e5; }
+.se-control-checkbox:disabled { opacity: 0.45; }
+.se-control-slider { padding: 0px; background-color: transparent; border-width: 0px; }
+.se-control-slider slidertrack { height: 6px; margin-top: 8px; background-color: #38516e; border-radius: 3px; }
+.se-control-slider sliderprogress { background-color: #6ccebb; }
+.se-control-slider sliderbar { width: 12px; height: 22px; margin-top: -8px; background-color: #b3eee4; border-radius: 4px; }
+.se-control-slider sliderarrowdec, .se-control-slider sliderarrowinc { display: none; }
+.se-control-progress { background-color: #30445d; border-radius: 4px; }
+.se-control-progress fill { background-color: #79d8b9; }

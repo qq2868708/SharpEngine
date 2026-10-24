@@ -50,7 +50,8 @@ asset path or a runtime lookup key.
 The engine resource URI is `sharpengine-resource://engine/<relative-path>` or
 `sharpengine-resource://project/<relative-path>`. The relative path must be under the
 corresponding `Resources/` directory or under a plugin's `Plugins/<Name>/Resources/`
-directory. Built-in toolbar icon names are shorthand for
+directory. Editor and Game use the same URI resolver, including native-host project selection.
+Built-in toolbar icon names are shorthand for
 `sharpengine-resource://engine/Resources/Editor/Icons/<name>.tga`.
 
 The intended layout is:

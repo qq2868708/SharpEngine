@@ -2,6 +2,7 @@
 <head>
 <title>SharpEngine Dock</title>
 <link type="text/rcss" href="Editor.rcss" />
+<link type="text/rcss" href="../Controls/BasicControls.sglobalcss" />
 <link type="text/rcss" href="Viewport3D.rcss" />
 <link type="text/rcss" href="Inspector.rcss" />
 </head>

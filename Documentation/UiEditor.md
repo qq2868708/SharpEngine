@@ -18,6 +18,20 @@ Styles 的 Edit 按钮打开已注册的共享 RCSS。StyleSheet 的 Rules & Pre
 
 `UiAssetEditorInstance` 把 `UiDocument` 与 `RmlDocument` 都打开为独立的顶层资产编辑器根。`.sui` 的 RML、私有 RCSS 和共享引用构成权威数据；选择、级联结果、诊断和拖动过程是 transient/derived 状态，不保存到资产。
 
+## 控件树与基础控件
+
+Controls 面板提供 10 类基础控件：Container、Horizontal Layout、Vertical Layout、Text、Image、Button、Text Input、Checkbox、Slider、Progress Bar。先在 Widget Tree 选中目标容器，再点击 Controls 中的类型；选中的是叶子时插入到它的父级。创建、显示名称、专属属性和布局修改共用文档事务，Save 才写回源文件。重复创建生成独立节点与唯一 id。
+
+显示名称保存在 RML 的 `data-ui-name` 属性中，和行为绑定使用的 `id` 分开；`ui-use`、`ui-if`、`ui-repeat` 和 `ui-slot` 也允许该作者元数据，显示名称是字面文本，不参与 `${...}` 绑定，组合求值不会把它当作行为参数。未命名的旧节点回退到文字摘要、id、class 或类型名，打开旧资产不会自动改写源。树每行以名称为主，第二行显示类型与 id；匿名节点可按结构位置选中，不被误标为无效。`ui-use` 标为 Reusable Control / REF，搜索包含引用 URI，树中不展开或保存引用定义的派生节点。
+
+每个有子节点的分支可折叠，Expand / Collapse 操作整棵树。搜索按名称、控件类型、id、class 和引用 URI 匹配，保留命中节点的祖先路径。点击 Design 节点会选中同一源节点、展开祖先，并把选中行滚入树的可视范围；当前筛选会隐藏它时会清空筛选。折叠、搜索、选择均为当前文档实例的临时视图状态，不改变 dirty、document revision 或 Undo 历史，也不写进 RML。
+
+Inspector 顶部提供 Display name 和类型专属属性：布局间距、文字内容、图片源、按钮文字、文本框初始文字、复选框初始选中与提交值、滑条 value/min/max/step，以及进度条 value/max。布尔属性按 RmlUi 的属性存在语义保存；取消选中会删除 `checked`，不会写入仍被视为选中的 `checked="false"`。数值要求有限、step 为正、最大值大于最小值、value 在范围内；非法修改不产生部分写入或新 revision，已有非法源会产生 `UI_CONTROL_VALUE_INVALID` 并阻止保存。模板占位值在组合时求值。
+
+基础控件的默认外观位于 `engine://ui/basic-controls-style`（`Content/UI/Controls/BasicControls.sglobalcss`）。在 `.sui` 创建首个基础控件时，该引用与新节点在同一事务内加入 `globalStyleSheets`；后续创建去重，撤销首个创建也撤销本次新增的引用。每个控件使用 `se-control` 与 `se-control-<type>` class，项目可用包内 RCSS 覆盖。共享样式不会注入未引用它的 Game 界面。旧式 `.rml` 仍沿用自己显式链接的样式，不引入包字段。
+
+Design 中的输入、复选框、滑条、进度和图片使用原生元素展示，外围选中框拥有设计手势；点击用于选中，不会把运行时输入当作作者编辑。图片的文档相对路径按 `.sui` 所在目录解析，预览不会把解析出的本机路径写回源。设计态可根据已保存的 `checked` 和 `disabled` 计算对应伪类；hover/active/focus 等运行时状态仍交由实际 RmlUi 运行预览处理。
+
 ## 包格式
 
 ```json
@@ -42,7 +56,8 @@ Styles 的 Edit 按钮打开已注册的共享 RCSS。StyleSheet 的 Rules & Pre
 | 面板 | 内容 |
 | --- | --- |
 | Design | 1280×720 的设计画布，按已链接 RCSS 的级联结果渲染每个元素，并提供选中、拖动、缩放手柄 |
-| Elements | 元素树与外观属性（id、`data-bind`、`data-command`、class），以及父级选择、上移/下移、缩进/反缩进、复制、删除 |
+| Controls | 创建布局、内容和交互类的 10 类基础控件 |
+| Widget Tree | 显示名称、类型和 id，支持折叠、搜索、祖先路径及画布选中联动 |
 | Inspector | 选中元素的属性、class 建议和按 Layout / Flex / Spacing / Text / Appearance 分组的样式字段 |
 | Styles | 已链接 RCSS 的规则、选择器、优先级和声明 |
 | Diagnostics | 文档、样式表和选择器求值的诊断 |
@@ -72,7 +87,7 @@ Document.CommitGesture();   // 整次拖动只产生一条 Undo 记录
 - 按 RmlUi 的同一语义读取**两种**样式来源：`<link type="text/rcss">`、`<link type="text/css">` 和内联 `<style>` 块，全部按**文档出现顺序**进入同一个级联列表。RmlUi 内部就是把它们推进同一个 `rcss` 列表后顺序加载的。
 - 解析支持标签、`#id`、`.class` 以及它们的组合、后代和 `>` 子选择器。
 - 按选择器优先级加出现顺序计算级联，行内 `style` 属性最后覆盖；`!important` 声明优先于普通声明。
-- 伪类、属性选择器、`+`/`~` 组合符和 `@media` 等规则不被猜测为等价规则，而是产生 `UI_STYLE_SELECTOR_UNSUPPORTED` 警告。设计画布因此不会静默展示错误的样式。
+- 除基于源属性的 `:checked` / `:disabled` 之外的伪类、属性选择器、`+`/`~` 组合符和 `@media` 等规则不被猜测为等价规则，而是产生 `UI_STYLE_SELECTOR_UNSUPPORTED` 警告。设计画布因此不会静默展示错误的样式。
 - 位于 `<head>` 之外的 `<style>` 会被 RmlUi 忽略，画布同样忽略，但会产生 `UI_STYLE_OUTSIDE_HEAD` 警告而不是静默丢弃。
 - `styleSheet.files` 只列外部文件；`styleSheet.inlineBlocks` 记录参与级联的内联块数量。Styles 面板同时显示两者，因此“只有内联样式”的画面不会被误报成没有样式。
 
@@ -130,7 +145,7 @@ Document.CommitGesture();   // 整次拖动只产生一条 Undo 记录
 
 `format` 为 `package`（`.sui`）或 `rml`（旧式裸 RML 资产），`packageName` 是包内 `name`；裸 RML 资产的 `packageName` 等于资产名。
 
-每个元素条目包含 `key`、`elementId`、`tag`、`previewElementId`、`depth`、`children`、`attributes` 和行内 `style`。选中元素还包含 `classes`、`text` 和 `computed`（每个生效声明的值及其来源：选择器文本或 `inline`）。
+状态新增 `controls`（可创建类型目录）、`tree.search/collapsedKeys/visibleKeys`（临时视图）；选中节点增加 `controlProperties`（name/label/kind/value）。每个元素条目新增 `displayName`、`controlType`、`controlLabel`、`expanded`，并包含 `key`、`elementId`、`tag`、`previewElementId`、`depth`、`children`、`attributes` 和行内 `style`。选中元素还包含 `classes`、`text` 和 `computed`（每个生效声明的值及其来源：选择器文本或 `inline`）。
 
 ## 验证
 

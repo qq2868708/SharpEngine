@@ -154,6 +154,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>UI 资产编辑器新增可读的 Widget Tree 与 Controls 面板：10 类基础控件可创建并编辑初始属性，显示名称独立保存在 RML 的 <code>data-ui-name</code>，不改变 id 和绑定。树支持折叠、搜索及画布选中联动，引用控件保留 REF 边界；视图状态不污染资产。图片控件使用存在的默认图标，Editor 与 Game 共享资源 URI 解析。首个基础控件创建会显式引用引擎 <code>.sglobalcss</code>，与创建一起撤销／保存；项目私有 RCSS 可覆盖。详见 <a href="../../../../UiEditor.md">UI 编辑器</a>。</p>
       <p>资产清单统一升级为 v2：资产路径相对所属 Content，例如 <code>UI/UiReuseLab/Screen.sui</code>；引擎、项目与插件通过稳定资产 ID 区分。新建资产、World 保存、Prefab 注册及导入均写入新路径。运行时与 MCP 资产索引不再暴露本机根目录，诊断和元数据中的物理路径会脱敏。旧版清单明确报错，迁移保留 ID 并移除 path 的 <code>Content/</code> 前缀；源配置的 assets.manifest/world.startup 仍相对所属根目录。详见 <a href="../../../../ProjectOrganization.md">项目与 Content 契约</a>。</p>
       <p>修复 Windows 下打开 UI 资产时 Runtime Preview 触发 RmlUi URL 断言的问题。Editor 预览和 Game 从内存加载文档时，现在按 RmlUi 文件流的规则转换盘符与路径分隔符；源资产路径、相对资源位置和保存内容保持原有含义。</p>
       <p>UI 私有 RCSS 现在保存在 <code>.sui</code> 的 <code>rcss</code> 文本中，与 RML 共用 Undo/Redo、dirty 和原子 Save。Styles 面板提供 PRIVATE STYLES 声明编辑和新增规则入口。确认跨 UI 复用的规则使用独立 <code>.sglobalcss</code> 资产：Content Manager 的 Shared UI Style 可创建，打开后以 Rules &amp; Preview 编辑。UI 在 <code>globalStyleSheets</code> 中显式引用其稳定资产 URI；Styles 可添加或移除引用。子控件依赖由组合系统收集，共享资产不会自动注入无关界面或编辑器外壳。Sandbox 示例已迁移为包内页面/卡片样式和一个共享按钮主题资产。</p>
