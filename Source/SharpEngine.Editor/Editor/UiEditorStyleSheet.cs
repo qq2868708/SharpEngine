@@ -559,6 +559,14 @@ internal static class UiStyleProperties
         Field("flex-basis", "Basis", "Flex", "auto", UiStyleValueKind.Size),
         Field("padding", "Padding", "Spacing", "8px", UiStyleValueKind.Length),
         Field("margin", "Margin", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("margin-left", "Left Margin", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("margin-right", "Right Margin", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("margin-top", "Top Margin", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("margin-bottom", "Bottom Margin", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("padding-left", "Left Padding", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("padding-right", "Right Padding", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("padding-top", "Top Padding", "Spacing", "0px", UiStyleValueKind.Length),
+        Field("padding-bottom", "Bottom Padding", "Spacing", "0px", UiStyleValueKind.Length),
         Field("border-width", "Border Width", "Spacing", "1px", UiStyleValueKind.Length),
         Field("border-color", "Border Color", "Spacing", "#2f3a46", UiStyleValueKind.Color),
         Field("border-radius", "Radius", "Spacing", "4px", UiStyleValueKind.Length),
@@ -665,7 +673,7 @@ internal static class UiStyleProperties
 
     private static readonly Regex LengthPattern = new(
         "^(auto|none|normal|inherit|initial|unset|fit-content|" +
-        "-?\\d+(\\.\\d+)?(px|%|em|rem|pt|vh|vw|deg|x)?)$",
+        "-?\\d+(\\.\\d+)?(px|%|dp|em|rem|pt|vh|vw|deg|x)?)$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex ColorPattern = new(

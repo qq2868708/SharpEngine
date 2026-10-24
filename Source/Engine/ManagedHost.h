@@ -123,7 +123,7 @@ using ManagedGetGameplayInputCaptureFn = uint8_t(__cdecl*)();
 
 struct ManagedHostApi
 {
-    uint32_t Version = 20;
+    uint32_t Version = 21;
     ManagedSetWindowTitleFn SetWindowTitle = nullptr;
     ManagedBeginUiFn BeginUi = nullptr;
     ManagedUiPanelFn UiPanel = nullptr;
@@ -180,6 +180,8 @@ struct ManagedHostApi
     ManagedClearUiDocumentFn ClearUiDocument = nullptr;
     // Version 20 appends independent native documents inside Editor preview panes.
     ManagedSetHostUiDocumentFn SetHostUiDocument = nullptr;
+    // Version 21 exposes native layout measurements for unit-preserving UI authoring.
+    uint32_t(__cdecl* GetHostUiElementLayout)(const char*, const char*, char*, uint32_t) = nullptr;
 };
 
 // Resolved from a root .sharpproject manifest. User Module loading remains in

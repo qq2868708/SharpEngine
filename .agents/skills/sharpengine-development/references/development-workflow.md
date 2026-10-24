@@ -82,6 +82,15 @@ For rendering/interop read `Documentation/RenderBackends.md`. Identify the conte
 
 ## Review And Git Delivery
 
+For UI visual layout authoring, retain the supported container/slot semantics and
+the authored RCSS unit when manipulating geometry. RML/RCSS remain authoritative;
+`data-ui-layout` and `data-ui-align-x/y` carry validated literal editing intent,
+not a second runtime layout graph. Preview dimensions/zoom are per-instance
+transient state. Do not rewrite arbitrary custom styles into presets on open or
+selection. Native layout measurements and real transformed hit tests are required
+for drag acceptance; a canvas resize does not establish viewport-unit/media-query
+parity when the Design canvas still shares its host context.
+
 Before delivery inspect the final diff and run `git diff --check` over the relevant change. Review new/changed source and code examples against `engine-code-style`; preserve required external/serialized identifiers. Do not format unrelated files.
 
 When submission is requested in this workspace, it means commit plus push unless the user narrows it. Stage explicit task-owned content, inspect the staged diff including shared-document hunks and submodule pointers, and verify the pushed remote revision. Analysis or implementation authorization alone is not a request to commit/push. Report the tested snapshot and unverified boundaries; do not transfer test results from unrelated working-tree content to a commit.

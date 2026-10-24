@@ -63,6 +63,7 @@ public:
     bool GetUiElementRect(std::string_view id, UiViewportRect& rect) const;
     bool GetHostUiElementRect(std::string_view hostId, std::string_view id,
                               UiViewportRect& rect) const;
+    std::string GetHostUiElementLayout(std::string_view HostId, std::string_view Id) const;
     void SubmitScene(const UiViewportRect& rect, const UiSceneVertex* triangles,
                      int triangleVertices, const UiSceneVertex* lines, int lineVertices);
     bool EnsureGpuMesh(const GpuMeshUpload* upload);

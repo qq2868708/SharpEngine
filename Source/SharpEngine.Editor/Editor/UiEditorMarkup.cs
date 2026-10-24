@@ -8,24 +8,37 @@ namespace SharpEngine.Editor;
 
 /// <summary>Markup for the UI editor panes. Markup is presentation only: every edit is
 /// applied to the authoritative document and re-rendered from it.</summary>
-internal static class UiEditorMarkup
+internal static partial class UiEditorMarkup
 {
     public static string BuildCanvas(UiEditorDocument Document)
     {
         var Body = Document.DesignBodyElement;
         var Builder = new StringBuilder();
-        Builder.Append("<div class=\"ui-design-pane\">")
+        Builder.Append("<div class=\"ui-design-pane\"><div class=\"ui-preview-controls\">Preview <input id=\"uiPreviewWidth\" type=\"text\" value=\"")
+            .Append(Document.PreviewWidth).Append("\" data-change-action=\"editor.ui-preview:width:\" /> x <input id=\"uiPreviewHeight\" type=\"text\" value=\"")
+            .Append(Document.PreviewHeight).Append("\" data-change-action=\"editor.ui-preview:height:\" />")
+            .Append(ToolButton("editor.ui-preview-fit", "Fit", "Fit the preview into the available space", true))
+            .Append(ToolButton("editor.ui-preview-zoom:1", "100%", "Actual preview pixels", true))
+            .Append(ToolButton("editor.ui-preview-size:1280:720", "720p", "1280 x 720 preview", true))
+            .Append(ToolButton("editor.ui-preview-size:1920:1080", "1080p", "1920 x 1080 preview", true))
+            .Append(ToolButton("editor.ui-preview-size:2560:1080", "Wide", "2560 x 1080 preview", true))
+            .Append(ToolButton("editor.ui-preview-size:720:1280", "Portrait", "720 x 1280 preview", true)).Append("</div>")
             .Append("<div class=\"ui-design-ruler\"><span class=\"ui-design-ruler-label\">")
-            .Append(UiEditorDocument.DesignWidth.ToString(CultureInfo.InvariantCulture))
+            .Append(Document.PreviewWidth.ToString(CultureInfo.InvariantCulture))
             .Append(" x ")
-            .Append(UiEditorDocument.DesignHeight.ToString(CultureInfo.InvariantCulture))
+            .Append(Document.PreviewHeight.ToString(CultureInfo.InvariantCulture))
             .Append("</span><div class=\"grow\" /><span class=\"ui-design-hint\">")
             .Append(Document.IsReadOnly ? "Read only document" : "Drag to move, Shift for 10px steps")
             .Append("</span></div>")
-            .Append("<div class=\"ui-design-scroll\"><div id=\"uiDesignCanvas\" class=\"ui-design-canvas\" style=\"width:")
-            .Append(UiEditorDocument.DesignWidth.ToString(CultureInfo.InvariantCulture))
+            .Append("<div id=\"uiDesignViewport\" class=\"ui-design-scroll\"><div id=\"uiDesignSurface\" class=\"ui-design-surface\" style=\"width:")
+            .Append((Document.PreviewWidth * Document.PreviewZoom).ToString(CultureInfo.InvariantCulture)).Append("px;height:")
+            .Append((Document.PreviewHeight * Document.PreviewZoom).ToString(CultureInfo.InvariantCulture))
+            .Append("px;\"><div id=\"uiDesignCanvas\" class=\"ui-design-canvas\" data-ui-scale=\"")
+            .Append(Document.PreviewZoom.ToString(CultureInfo.InvariantCulture)).Append("\" style=\"transform-origin:0px 0px;transform:scale(")
+            .Append(Document.PreviewZoom.ToString(CultureInfo.InvariantCulture)).Append(");width:")
+            .Append(Document.PreviewWidth.ToString(CultureInfo.InvariantCulture))
             .Append("px;height:")
-            .Append(UiEditorDocument.DesignHeight.ToString(CultureInfo.InvariantCulture))
+            .Append(Document.PreviewHeight.ToString(CultureInfo.InvariantCulture))
             .Append("px;\">");
         if (Body is null || !Body.Elements().Any())
         {
@@ -45,7 +58,9 @@ internal static class UiEditorMarkup
                 AppendNode(Builder, Document, Element);
             }
         }
-        Builder.Append("</div></div></div>");
+        Builder.Append("<div id=\"uiPreviewResize\" class=\"ui-preview-resize\" data-ui-gesture=\"viewport-resize\" title=\"Drag to resize the preview environment\" style=\"width:")
+            .Append((22 / Document.PreviewZoom).ToString(CultureInfo.InvariantCulture)).Append("px;height:")
+            .Append((22 / Document.PreviewZoom).ToString(CultureInfo.InvariantCulture)).Append("px;\">↘</div></div></div></div></div>");
         return Builder.ToString();
     }
 
@@ -562,7 +577,7 @@ internal static class UiEditorMarkup
                      ("resize-se", "se"), ("resize-e", "e"), ("resize-s", "s"),
                  })
         {
-            Builder.Append("<div class=\"ui-design-handle ui-handle-")
+            Builder.Append("<div id=\"uiResize-").Append(Label).Append("\" class=\"ui-design-handle ui-handle-")
                 .Append(Label).Append("\" data-ui-gesture=\"")
                 .Append(Handle).Append("\" title=\"").Append(Handle)
                 .Append("\"></div>");
@@ -597,10 +612,6 @@ internal static class UiEditorMarkup
         foreach (var Pair in Document.Sheet.Compute(Element)
                      .OrderBy(Pair => Pair.Key, StringComparer.Ordinal))
         {
-            if (Pair.Key.Equals("transform", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
             if (Element.Name.LocalName is "input" or "img" or "progress" && !ControlLayoutProperty(Pair.Key))
             {
                 continue;

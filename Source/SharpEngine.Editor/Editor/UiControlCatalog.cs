@@ -24,6 +24,14 @@ internal sealed record UiControlDefinition(string Id, string Label, string Group
         Element.SetAttributeValue("id", ElementId);
         Element.SetAttributeValue("data-ui-name", Label);
         Element.SetAttributeValue("class", "se-control se-control-" + Id);
+        var BoxStyle = (string?)Element.Attribute("style") ?? string.Empty;
+        Element.SetAttributeValue("style", BoxStyle + " box-sizing: border-box;");
+        if (Id is "container" or "horizontal" or "vertical")
+        {
+            Element.SetAttributeValue("data-ui-layout", Id == "container" ? "free" : Id);
+            var Style = (string?)Element.Attribute("style") ?? string.Empty;
+            Element.SetAttributeValue("style", Style + " position: relative;");
+        }
         return Element;
     }
 }

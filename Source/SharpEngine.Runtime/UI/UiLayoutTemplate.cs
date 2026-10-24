@@ -143,6 +143,7 @@ public sealed class UiLayoutTemplate
         {
             yield break;
         }
+        UiAuthoringMetadata.Validate(Element);
         if (Element.Annotation<UiLayoutComposition.ComposedNode>() is not null)
         {
             yield return new XElement(Element);
@@ -219,7 +220,7 @@ public sealed class UiLayoutTemplate
         var Result = new XElement(Element.Name);
         foreach (var Attribute in Element.Attributes())
         {
-            if (Attribute.Name == "data-ui-name")
+            if (UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName))
             {
                 Result.SetAttributeValue(Attribute.Name, Attribute.Value);
                 continue;
@@ -316,7 +317,7 @@ public sealed class UiLayoutTemplate
 
     private static void CheckAttributes(XElement Element, params string[] Allowed)
     {
-        if (Element.Attributes().Any(Attribute => Attribute.Name.LocalName != "data-ui-name" &&
+        if (Element.Attributes().Any(Attribute => !UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName) &&
             !Allowed.Contains(Attribute.Name.LocalName, StringComparer.Ordinal)))
         {
             throw new InvalidDataException("UILAYOUT_ATTRIBUTE_UNKNOWN: " + Element.Name);

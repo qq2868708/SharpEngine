@@ -231,10 +231,10 @@ internal sealed partial class UiEditorDocument
                     return Child;
                 }
                 var Child = Resolve(Use.AssetId);
-                var Markup = Child.Render(new UiLayoutContext(DesignWidth, DesignHeight), Use.Values, ResolveAsset: Resolve);
+                var Markup = Child.Render(new UiLayoutContext(PreviewWidth, PreviewHeight), Use.Values, ResolveAsset: Resolve);
                 var SourceNode = Element.Annotation<UiDesignSourceNode>()!;
                 var Wrapper = new XElement("div", Element.Attributes().Where(Attribute =>
-                    Attribute.Name.LocalName is "id" or "class" or "style" or "data-ui-name"));
+                    Attribute.Name.LocalName is "id" or "class" or "style" || UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName)));
                 Wrapper.AddAnnotation(SourceNode);
                 var Fragment = XElement.Parse("<fragment>" + Markup + "</fragment>");
                 Wrapper.Add(Fragment.Nodes());
@@ -265,7 +265,7 @@ internal sealed partial class UiEditorDocument
         {
             foreach (var Attribute in Element.Attributes().ToArray())
             {
-                if (Attribute.Name.LocalName != "data-ui-name")
+                if (!UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName))
                 {
                     Attribute.Value = Expand(Attribute.Value);
                 }

@@ -107,6 +107,11 @@ internal sealed partial class UiEditorDocument
                 GlobalStyleSheets = GlobalStyleSheets.Append(UiControlCatalog.DefaultStyleId).ToArray();
             }
             Parent.Add(Created);
+            var ParentMode = LayoutOf(Parent);
+            if (ParentMode is "free" or "overlay" && Parent != Body())
+            {
+                ConfigureLayoutChild(Created, ParentMode);
+            }
             SelectionKey = KeyOf(Created);
             RevealInTree(Created);
         }, out Message);

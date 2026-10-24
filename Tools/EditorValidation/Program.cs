@@ -31,6 +31,7 @@ try
     McpConfigurationValidation.Run(temporary.FullName, Require);
     AssetIndexValidation.Run(temporary.FullName, Require);
     UiControlsValidation.Run(temporary.FullName, Require, root);
+    UiResponsiveLayoutValidation.Run(temporary.FullName, Require);
     SharpEngine.EditorValidation.UiEditorValidation.Run(temporary.FullName, Require);
     var worlds = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Worlds"));
     var assets = Directory.CreateDirectory(Path.Combine(temporary.FullName, "Content", "Assets"));

@@ -154,6 +154,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>UI 编辑器新增 Layout 页：Free／Horizontal／Vertical／Overlay 容器、Fixed／Content／Fill／Percent 尺寸、对齐、边距和内部留白。画布拖动保留单位与贴边约束，并实时更新属性；松开一次 Undo，Save 写入当前节点 RML，不改共享样式。预览宽高、尺寸角点和 Fit／100% 为临时环境。Sandbox 的 Responsive Layout Lab 展示各模式。完整媒体查询、平台安全区及 Design 独立上下文仍未接入；详见 <a href="../../../../UiEditor.md">UI 编辑器及边界</a>。</p>
       <p>Widget Tree 用类型图标、18px 缩进和纵向引导线显示层级；选中底色铺满行宽，长名称省略并保留悬停说明。窄面板的工具栏与 Controls 按钮自动换行，列表独立滚动；明确原生滚动条尺寸，避免其占满内容区或让树内容与工具栏重叠。点击图标与名称选择同一源节点，不改写 RML 或 RCSS。</p>
       <p>UI 资产编辑器新增可读的 Widget Tree 与 Controls 面板：10 类基础控件可创建并编辑初始属性，显示名称独立保存在 RML 的 <code>data-ui-name</code>，不改变 id 和绑定。树支持折叠、搜索及画布选中联动，引用控件保留 REF 边界；视图状态不污染资产。图片控件使用存在的默认图标，Editor 与 Game 共享资源 URI 解析。首个基础控件创建会显式引用引擎 <code>.sglobalcss</code>，与创建一起撤销／保存；项目私有 RCSS 可覆盖。详见 <a href="../../../../UiEditor.md">UI 编辑器</a>。</p>
       <p>资产清单统一升级为 v2：资产路径相对所属 Content，例如 <code>UI/UiReuseLab/Screen.sui</code>；引擎、项目与插件通过稳定资产 ID 区分。新建资产、World 保存、Prefab 注册及导入均写入新路径。运行时与 MCP 资产索引不再暴露本机根目录，诊断和元数据中的物理路径会脱敏。旧版清单明确报错，迁移保留 ID 并移除 path 的 <code>Content/</code> 前缀；源配置的 assets.manifest/world.startup 仍相对所属根目录。详见 <a href="../../../../ProjectOrganization.md">项目与 Content 契约</a>。</p>

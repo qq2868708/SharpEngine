@@ -1,6 +1,7 @@
 using SharpEngine.Rendering;
 using SharpEngine.Interop;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Runtime.InteropServices;
 using SharpEngine.UI;
 using SharpEngine.World;
@@ -9,6 +10,7 @@ namespace SharpEngine.Editor;
 
 internal unsafe readonly struct NativeEngineApi
 {
+    private readonly delegate* unmanaged[Cdecl]<byte*, byte*, byte*, uint, uint> GetHostUiElementLayoutFunction;
     private readonly delegate* unmanaged[Cdecl]<nint, byte*, void>
         _setWindowTitle;
     private readonly delegate* unmanaged[Cdecl]<nint, uint, uint, void> _beginUi;
@@ -88,6 +90,10 @@ internal unsafe readonly struct NativeEngineApi
         }
 
         var api = (NativeEngineApiTable*)table;
+        if (api->Version >= 21)
+        {
+            GetHostUiElementLayoutFunction = api->GetHostUiElementLayout;
+        }
         _setWindowTitle = api->SetWindowTitle;
         if (api->Version < 2)
         {
@@ -181,6 +187,30 @@ internal unsafe readonly struct NativeEngineApi
         {
             return SetHostUiDocumentFunction(HostPointer, AnchorPointer, RmlPointer,
                 SourcePointer, Document.Width, Document.Height) != 0;
+        }
+    }
+
+    internal JsonObject? ReadHostUiElementLayout(string HostId, string ElementId)
+    {
+        if (GetHostUiElementLayoutFunction == null)
+        {
+            return null;
+        }
+        var Host = Encoding.UTF8.GetBytes(HostId + '\0');
+        var Id = Encoding.UTF8.GetBytes(ElementId + '\0');
+        fixed (byte* HostPointer = Host, IdPointer = Id)
+        {
+            var Size = GetHostUiElementLayoutFunction(HostPointer, IdPointer, null, 0);
+            if (Size == 0 || Size > 1024 * 1024)
+            {
+                return null;
+            }
+            var Bytes = new byte[Size];
+            fixed (byte* Result = Bytes)
+            {
+                GetHostUiElementLayoutFunction(HostPointer, IdPointer, Result, Size);
+            }
+            return JsonNode.Parse(Encoding.UTF8.GetString(Bytes, 0, (int)Size - 1)) as JsonObject;
         }
     }
 

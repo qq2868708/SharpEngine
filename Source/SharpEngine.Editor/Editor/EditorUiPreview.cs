@@ -4,7 +4,7 @@ namespace SharpEngine.Editor;
 
 /// <summary>Current authoring input. Preview factories must not modify or save it.</summary>
 public sealed record EditorUiPreviewSource(string AssetId, string SourcePath,
-    string SourceText, long Revision, long DependencyRevision = 0);
+    string SourceText, long Revision, long DependencyRevision = 0, float Width = 1280, float Height = 720);
 
 public sealed record EditorUiPreviewDocument(string Rml, string SourcePath,
     float Width = 1280, float Height = 720);

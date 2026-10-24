@@ -10,6 +10,7 @@
 #include <RmlUi/Core/ElementInstancer.h>
 #include <RmlUi/Core/ElementText.h>
 #include <RmlUi/Core/ElementUtilities.h>
+#include <RmlUi/Core/Elements/ElementFormControl.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
 #include "RmlUi_Platform_Win32.h"
@@ -526,6 +527,7 @@ struct RmlUiShell::Impl
         POINT StartScreen{};
         int LastX{};
         int LastY{};
+        float DesignScale{1};
         bool Pending{};
         bool Active{};
     } ElementGesture;
@@ -787,6 +789,7 @@ struct RmlUiShell::Impl
         return role == "splitter" || role == "tab" || role == "button" || role == "menu" ||
             role == "input" || role == "viewport" || role == "menu-item" ||
             element->HasAttribute("data-input-surface") ||
+            element->HasAttribute("data-ui-gesture") ||
             element->HasAttribute("data-timeline-ruler") ||
             element->HasAttribute("action") || element->HasAttribute("data-action");
     }
@@ -855,6 +858,16 @@ struct RmlUiShell::Impl
                 position.y = Preview->Bounds.Y + (position.y - Preview->Bounds.Y) * Preview->Scale;
                 size *= Preview->Scale;
                 break;
+            }
+        }
+        if (!Preview)
+        {
+            Rml::Rectanglef Transformed;
+            const bool Measured = Rml::ElementUtilities::GetBoundingBox(Transformed, element, Rml::BoxArea::Border);
+            if (Measured)
+            {
+                position = Transformed.Position();
+                size = Transformed.Size();
             }
         }
         Rml::Rectanglei clip{};
@@ -1896,11 +1909,9 @@ struct RmlUiShell::Impl
         }
         auto* host = ElementGesture.SourceHost;
         if (!host || !host->Context) return;
-        // Authored offsets are document pixels. Convert the screen-space gesture with
-        // the same density ratio the document layout uses, so the committed value
-        // matches what the user dragged instead of the context's raw dp ratio.
-        const float ratio = (std::max)(0.01f,
-            Rml::ElementUtilities::GetDensityIndependentPixelRatio(host->Document));
+        // Pointer deltas are screen pixels; authoring zoom changes their scale.
+        // Individual RCSS units (including dp) are converted by the layout editor.
+        const float ratio = (std::max)(0.01f, ElementGesture.DesignScale);
         const int dx = static_cast<int>(std::lround(
             (screen.x - ElementGesture.StartScreen.x) / ratio));
         const int dy = static_cast<int>(std::lround(
@@ -1943,6 +1954,8 @@ struct RmlUiShell::Impl
         {
             ElementGesture.SourceHost = &host;
             ElementGesture.Element = gesture;
+            auto* ScaleOwner = FindAttributeElement(gesture, "data-ui-scale");
+            ElementGesture.DesignScale = ScaleOwner ? ScaleOwner->GetAttribute<float>("data-ui-scale", 1.0f) : 1.0f;
             ElementGesture.Handle = Attribute(gesture, "data-ui-gesture");
             ElementGesture.NodeKey = Attribute(
                 FindAttributeElement(gesture, "data-ui-node"), "data-ui-node");
@@ -3689,6 +3702,27 @@ bool RmlUiShell::SetHostUiProperty(std::string_view hostId, const char* elementI
     if (!host || !host->Document) return false;
     auto* element = host->Document->GetElementById(elementId);
     if (!element) return false;
+    if (std::string_view(name) == "value")
+    {
+        auto* Control = rmlui_dynamic_cast<Rml::ElementFormControl*>(element);
+        if (!Control)
+        {
+            return false;
+        }
+        if (Control->GetValue() != value)
+        {
+            Control->SetValue(value);
+        }
+        return true;
+    }
+    if (std::string_view(name) == "text-content")
+    {
+        if (element->GetInnerRML() != value)
+        {
+            element->SetInnerRML(value);
+        }
+        return true;
+    }
     element->SetProperty(name, value);
     return true;
 }
@@ -3782,10 +3816,69 @@ bool RmlUiShell::GetHostUiElementRect(std::string_view hostId,
     {
         return false;
     }
-    const auto position = element->GetAbsoluteOffset();
-    const auto size = element->GetBox().GetSize();
+    Rml::Rectanglef Bounds;
+    const bool Measured = Rml::ElementUtilities::GetBoundingBox(Bounds, element, Rml::BoxArea::Content);
+    if (!Measured)
+    {
+        return false;
+    }
+    const auto position = Bounds.Position();
+    const auto size = Bounds.Size();
     rect = {position.x, position.y, size.x, size.y};
     return size.x > 0 && size.y > 0;
+}
+
+std::string RmlUiShell::GetHostUiElementLayout(std::string_view HostId, std::string_view Id) const
+{
+    const auto* Host = State->FindHost(HostId);
+    auto* Element = Host && Host->Document ? Host->Document->GetElementById(Rml::String(Id)) : nullptr;
+    if (!Element)
+    {
+        return "{}";
+    }
+    auto* Parent = Element->GetParentNode();
+    const auto Position = Element->GetComputedValues().position();
+    const bool Absolute = Position == Rml::Style::Position::Absolute || Position == Rml::Style::Position::Fixed;
+    auto* Containing = Absolute ? Element->GetOffsetParent() : Parent;
+    if (!Containing)
+    {
+        Containing = Host->Document;
+    }
+    const auto Area = Absolute ? Rml::BoxArea::Padding : Rml::BoxArea::Content;
+    const auto Reference = Containing->GetBox().GetSize(Area);
+    const auto Origin = Containing->GetAbsoluteOffset(Area);
+    const auto Bounds = Element->GetAbsoluteOffset(Rml::BoxArea::Border);
+    const auto Size = Element->GetBox().GetSize(Rml::BoxArea::Border);
+    const auto Viewport = Host->Context->GetDimensions();
+    std::ostringstream Json;
+    Json << "{\"schemaVersion\":1,\"frameId\":" << State->FrameId << ",\"x\":" << Bounds.x - Origin.x << ",\"y\":" << Bounds.y - Origin.y
+         << ",\"width\":" << Size.x << ",\"height\":" << Size.y
+         << ",\"parentWidth\":" << Reference.x << ",\"parentHeight\":" << Reference.y
+         << ",\"viewportWidth\":" << Viewport.x << ",\"viewportHeight\":" << Viewport.y
+         << ",\"fontSize\":" << Element->GetComputedValues().font_size()
+         << ",\"rootFontSize\":" << Host->Document->GetComputedValues().font_size()
+         << ",\"density\":" << Host->Context->GetDensityIndependentPixelRatio()
+         << ",\"contentWidth\":" << Element->GetBox().GetSize(Rml::BoxArea::Content).x
+         << ",\"contentHeight\":" << Element->GetBox().GetSize(Rml::BoxArea::Content).y
+         << ",\"properties\":{";
+    bool First = true;
+    for (const auto* Name : {"position", "left", "top", "right", "bottom", "width", "height", "flex-basis",
+        "flex-grow", "flex-shrink", "margin-left", "margin-right", "margin-top", "margin-bottom", "transform", "box-sizing"})
+    {
+        const auto* Property = Element->GetProperty(Name);
+        if (!Property)
+        {
+            continue;
+        }
+        if (!First)
+        {
+            Json << ',';
+        }
+        First = false;
+        Json << JsonString(Name) << ':' << JsonString(Property->ToString());
+    }
+    Json << "}}";
+    return Json.str();
 }
 
 void RmlUiShell::SubmitScene(const UiViewportRect& rect,

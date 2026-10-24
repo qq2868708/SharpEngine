@@ -160,6 +160,20 @@ namespace
             !GUi->GetUiElementRect(id, r)) return 0;
         *x=r.X; *y=r.Y; *w=r.Width; *h=r.Height; return 1;
     }
+    uint32_t __cdecl GetHostUiElementLayout(const char* HostId, const char* Id, char* Result, uint32_t Capacity)
+    {
+        if (!GUi || !HostId || !Id)
+        {
+            return 0;
+        }
+        const auto Text = GUi->GetHostUiElementLayout(HostId, Id);
+        const auto Required = static_cast<uint32_t>(Text.size() + 1);
+        if (Result && Capacity >= Required)
+        {
+            memcpy(Result, Text.c_str(), Required);
+        }
+        return Required;
+    }
     uint8_t __cdecl GetHostUiElementRect(const char* hostId, const char* id,
                                          float* x, float* y, float* w, float* h)
     {
@@ -442,6 +456,7 @@ int wmain(int argc,wchar_t** argv)
     api.GetGameplayInputCapture = GetGameplayInputCapture;
     api.SetHostUiProperty = SetHostUiProperty;
     api.SetHostUiDocument = SetHostUiDocument;
+    api.GetHostUiElementLayout = GetHostUiElementLayout;
     Splash.Report(28, "CoreCLR / SharpEngine.Host", "Loading .NET runtime and managed host");
     const auto ManagedDirectory = BrowserMode ? executableDirectory.parent_path() / L"Tools" : executableDirectory;
     const bool loaded=managed.Initialize(

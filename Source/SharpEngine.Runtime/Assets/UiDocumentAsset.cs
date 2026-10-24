@@ -217,6 +217,10 @@ public sealed class UiDocumentAsset
         {
             throw Error("SEUI_RML_INVALID", "rml", "The RML root element is missing");
         }
+        foreach (var Element in Root.DescendantsAndSelf())
+        {
+            SharpEngine.UI.UiAuthoringMetadata.Validate(Element);
+        }
         if (Root.Name.LocalName == "template")
         {
             return true;

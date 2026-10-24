@@ -689,6 +689,9 @@ public sealed partial class EditorRuntime
         return NativeEngineApi.PromptUnsavedWorld(Window == 0 ? _windowHandle : Window, Title);
     }
 
+    internal JsonObject? ReadAssetEditorElementLayout(string HostId, string ElementId) =>
+        _nativeApi.ReadHostUiElementLayout(HostId, ElementId);
+
     internal bool TryGetAssetEditorElementRect(string HostId, string ElementId,
         out SharpEngine.UI.UiRect Bounds) =>
         _nativeApi.TryGetHostUiElementRect(HostId, ElementId, out Bounds);

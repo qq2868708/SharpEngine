@@ -21,7 +21,8 @@ public sealed record UiLayoutUse(string Id, string AssetId, JsonObject Values)
         [
             "id", "asset", "values", "class", "style", "data-ui-name",
         ];
-        if (Element.Attributes().Any(Attribute => !Allowed.Contains(Attribute.Name.LocalName, StringComparer.Ordinal)))
+        if (Element.Attributes().Any(Attribute => !UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName) &&
+            !Allowed.Contains(Attribute.Name.LocalName, StringComparer.Ordinal)))
         {
             throw new InvalidDataException("UILAYOUT_USE_ATTRIBUTE_UNKNOWN: " + Id);
         }
@@ -104,7 +105,7 @@ internal static class UiLayoutComposition
                     : Part.BuildLayout(Context);
                 var Wrapper = new XElement("div", new XAttribute("id", Use.Id));
                 foreach (var Attribute in Element.Attributes().Where(Attribute =>
-                             Attribute.Name.LocalName is "class" or "style" or "data-ui-name"))
+                             Attribute.Name.LocalName is "class" or "style" || UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName)))
                 {
                     Wrapper.SetAttributeValue(Attribute.Name, Attribute.Value);
                 }

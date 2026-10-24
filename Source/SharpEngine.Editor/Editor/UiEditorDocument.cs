@@ -22,18 +22,21 @@ internal sealed record UiEditorSnapshot(string Xml, string? Selection, string Rc
     IReadOnlyList<string> GlobalStyleSheets);
 
 internal sealed record UiEditorGestureBase(bool Absolute, float Left, float Top,
-    float Width, float Height, float MarginLeft, float MarginTop);
+    float Width, float Height, float MarginLeft, float MarginTop,
+    IReadOnlyDictionary<string, UiLayoutLength>? Lengths = null, string ParentMode = "custom",
+    string WidthMode = "fixed", string HeightMode = "fixed", string AlignmentX = "", string AlignmentY = "");
 
 internal sealed class UiEditorGesture
 {
     public UiEditorGesture(string Name, string Xml, string? Selection,
-        UiEditorGestureBase Base)
+        UiEditorGestureBase Base, string? OriginalStyle)
     {
         this.Name = Name;
         this.Xml = Xml;
         this.Selection = Selection;
         this.Base = Base;
         this.Handle = string.Empty;
+        this.OriginalStyle = OriginalStyle;
     }
 
     public string Name { get; }
@@ -42,6 +45,10 @@ internal sealed class UiEditorGesture
     public UiEditorGestureBase Base { get; }
     public string Handle { get; set; }
     public bool Changed { get; set; }
+    public string? OriginalStyle
+    {
+        get;
+    }
 }
 
 /// <summary>Authoritative authoring model for one RML document. XML source is the
@@ -642,7 +649,7 @@ internal sealed partial class UiEditorDocument
     }
 
     public bool BeginGesture(string Name, int RectX, int RectY, int RectWidth,
-        int RectHeight, out string Message)
+        int RectHeight, out string Message, UiLayoutMetrics? Metrics = null)
     {
         Message = string.Empty;
         if (IsReadOnly)
@@ -661,11 +668,11 @@ internal sealed partial class UiEditorDocument
             return false;
         }
         if (!TryBuildGestureBase(Element, RectX, RectY, RectWidth, RectHeight,
-                out var Base, out Message))
+                out var Base, out Message, Metrics))
         {
             return false;
         }
-        Gesture = new UiEditorGesture(Name, Canonical(Document), SelectedKey, Base);
+        Gesture = new UiEditorGesture(Name, Canonical(Document), SelectedKey, Base, (string?)Element.Attribute("style"));
         return true;
     }
 
@@ -674,33 +681,15 @@ internal sealed partial class UiEditorDocument
     {
         Message = string.Empty;
         var Element = SelectedElement();
-        if (Gesture is null || Element is null)
+        if (Gesture is null || Element is null || Handle != "move")
         {
-            Message = "No active element gesture";
+            Message = "No active move gesture";
             return false;
         }
-        if (!string.Equals(Handle, "move", StringComparison.Ordinal))
-        {
-            Message = "Unknown element gesture";
-            return false;
-        }
-        int X = Snap(DeltaX, SnapGrid);
-        int Y = Snap(DeltaY, SnapGrid);
-        var Base = Gesture.Base;
-        if (Base.Absolute)
-        {
-            WriteDeclaration(Element, "left", FormatLength(Base.Left + X));
-            WriteDeclaration(Element, "top", FormatLength(Base.Top + Y));
-        }
-        else
-        {
-            WriteDeclaration(Element, "margin-left", FormatLength(Base.MarginLeft + X));
-            WriteDeclaration(Element, "margin-top", FormatLength(Base.MarginTop + Y));
-        }
-        Gesture.Handle = "move";
-        Gesture.Changed = true;
-        Revision++;
-        return true;
+        var Changes = new Dictionary<string, string>(StringComparer.Ordinal);
+        BuildMoveAxis(Changes, Gesture.Base, true, Snap(DeltaX, SnapGrid));
+        BuildMoveAxis(Changes, Gesture.Base, false, Snap(DeltaY, SnapGrid));
+        return ApplyGestureChanges(Element, Handle, Changes, out Message);
     }
 
     public bool ApplyGestureResize(string Handle, int DeltaX, int DeltaY,
@@ -708,70 +697,28 @@ internal sealed partial class UiEditorDocument
     {
         Message = string.Empty;
         var Element = SelectedElement();
-        if (Gesture is null || Element is null)
+        if (Gesture is null || Element is null || !Handle.StartsWith("resize-", StringComparison.Ordinal))
         {
-            Message = "No active element gesture";
+            Message = "No active resize gesture";
             return false;
         }
-        var Base = Gesture.Base;
-        int X = Snap(DeltaX, SnapGrid);
-        int Y = Snap(DeltaY, SnapGrid);
-        if (!Base.Absolute)
+        var Changes = new Dictionary<string, string>(StringComparer.Ordinal);
+        var Edges = Handle["resize-".Length..];
+        var Horizontal = Edges.Contains('e') || Edges.Contains('w');
+        var Vertical = Edges.Contains('n') || Edges.Contains('s');
+        var Valid = !Horizontal || BuildResizeAxis(Changes, Gesture.Base, true,
+            Edges.Contains('w'), Snap(DeltaX, SnapGrid), out Message);
+        if (!Valid)
         {
-            var Horizontal = Handle.Contains('e', StringComparison.Ordinal) ||
-                Handle.Contains('w', StringComparison.Ordinal);
-            var Vertical = Handle.Contains('n', StringComparison.Ordinal) ||
-                Handle.Contains('s', StringComparison.Ordinal);
-            if (Horizontal && Handle.Contains('w', StringComparison.Ordinal) ||
-                Vertical && Handle.Contains('n', StringComparison.Ordinal))
-            {
-                Message = "Flow elements resize from the right or bottom edge";
-                return false;
-            }
-            var Width = Math.Max(8, Base.Width + (Horizontal ? X : 0));
-            var Height = Math.Max(8, Base.Height + (Vertical ? Y : 0));
-            WriteDeclaration(Element, "width", FormatLength(Width));
-            WriteDeclaration(Element, "height", FormatLength(Height));
-            Gesture.Handle = Handle;
-            Gesture.Changed = true;
-            Revision++;
-            return true;
-        }
-        var Left = Base.Left;
-        var Top = Base.Top;
-        var TargetWidth = Base.Width;
-        var TargetHeight = Base.Height;
-        if (Handle.Contains('w', StringComparison.Ordinal))
-        {
-            Left += X;
-            TargetWidth -= X;
-        }
-        if (Handle.Contains('e', StringComparison.Ordinal))
-        {
-            TargetWidth += X;
-        }
-        if (Handle.Contains('n', StringComparison.Ordinal))
-        {
-            Top += Y;
-            TargetHeight -= Y;
-        }
-        if (Handle.Contains('s', StringComparison.Ordinal))
-        {
-            TargetHeight += Y;
-        }
-        if (TargetWidth < 8 || TargetHeight < 8)
-        {
-            Message = "Elements cannot be resized below 8px";
             return false;
         }
-        WriteDeclaration(Element, "left", FormatLength(Left));
-        WriteDeclaration(Element, "top", FormatLength(Top));
-        WriteDeclaration(Element, "width", FormatLength(TargetWidth));
-        WriteDeclaration(Element, "height", FormatLength(TargetHeight));
-        Gesture.Handle = Handle;
-        Gesture.Changed = true;
-        Revision++;
-        return true;
+        Valid = !Vertical || BuildResizeAxis(Changes, Gesture.Base, false,
+            Edges.Contains('n'), Snap(DeltaY, SnapGrid), out Message);
+        if (!Valid)
+        {
+            return false;
+        }
+        return ApplyGestureChanges(Element, Handle, Changes, out Message);
     }
 
     /// <summary>Inline declarations a live gesture is currently driving. The host sends
@@ -784,18 +731,17 @@ internal sealed partial class UiEditorDocument
         {
             return Array.Empty<(string, string)>();
         }
-        var Inline = Declarations(Element);
+        var Computed = Sheet.Compute(Element);
         var Result = new List<(string, string)>(6);
         foreach (var Name in new[]
                  {
                      "left", "top", "right", "bottom", "width", "height",
-                     "margin-left", "margin-top",
+                     "margin-left", "margin-top", "margin-right", "margin-bottom",
                  })
         {
-            if (Inline.TryGetValue(Name, out var Value))
-            {
-                Result.Add((Name, Value));
-            }
+            var Value = Name.StartsWith("margin-", StringComparison.Ordinal)
+                ? LayoutStyleValue(Element, Name) : Computed.GetValueOrDefault(Name)?.Value ?? "auto";
+            Result.Add((Name, Value));
         }
         return Result;
     }
@@ -969,8 +915,9 @@ internal sealed partial class UiEditorDocument
             ["elementCount"] = Elements.Count,
             ["design"] = new JsonObject
             {
-                ["width"] = DesignWidth,
-                ["height"] = DesignHeight,
+                ["width"] = PreviewWidth,
+                ["height"] = PreviewHeight,
+                ["zoom"] = PreviewZoom,
             },
             ["elements"] = Elements,
             ["tree"] = DescribeTree(),
@@ -1183,69 +1130,66 @@ internal sealed partial class UiEditorDocument
     }
 
     private bool TryBuildGestureBase(XElement Element, int RectX, int RectY,
-        int RectWidth, int RectHeight, out UiEditorGestureBase Base, out string Message)
+        int RectWidth, int RectHeight, out UiEditorGestureBase Base, out string Message,
+        UiLayoutMetrics? Metrics = null)
     {
         Message = string.Empty;
-        Base = new(false, 0, 0, RectWidth, RectHeight, 0, 0);
-        var Style = Declarations(Element);
-        var Position = Style.TryGetValue("position", out var PositionValue)
-            ? PositionValue.ToLowerInvariant()
-            : "static";
-        var Absolute = Position is "absolute" or "fixed";
-        if (Absolute)
+        Metrics ??= new UiLayoutMetrics(RectX, RectY, RectWidth, RectHeight,
+            PreviewWidth, PreviewHeight, PreviewWidth, PreviewHeight);
+        if (HasCustomTransform(Element))
         {
-            if (!TryPixelOffset(Style, "left", out var Left) ||
-                !TryPixelOffset(Style, "top", out var Top))
+            Base = new(false, 0, 0, 0, 0, 0, 0);
+            Message = "This control has a custom transform; edit its source properties explicitly";
+            return false;
+        }
+        var Style = Sheet.Compute(Element).ToDictionary(Pair => Pair.Key, Pair => Pair.Value.Value,
+            StringComparer.OrdinalIgnoreCase);
+        var Absolute = Style.GetValueOrDefault("position") is "absolute" or "fixed";
+        var Lengths = new Dictionary<string, UiLayoutLength>(StringComparer.Ordinal);
+        foreach (var Name in new[] { "left", "top", "right", "bottom", "width", "height",
+            "margin-left", "margin-right", "margin-top", "margin-bottom" })
+        {
+            var Text = Style.GetValueOrDefault(Name);
+            if (Text is null && Name.StartsWith("margin-", StringComparison.Ordinal))
             {
-                Message = "Moving an absolute element requires pixel left and top values";
+                var Parts = (Style.GetValueOrDefault("margin") ?? "0px").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var Index = Name switch
+                {
+                    "margin-top" => 0,
+                    "margin-right" => Parts.Length > 1 ? 1 : 0,
+                    "margin-bottom" => Parts.Length > 2 ? 2 : 0,
+                    _ => Parts.Length > 3 ? 3 : Parts.Length > 1 ? 1 : 0,
+                };
+                Text = Parts.Length > Index ? Parts[Index] : "0px";
+            }
+            var Length = Text is null ? null : UiLayoutLength.Parse(Text, Name, Metrics);
+            if (Length is not null)
+            {
+                Lengths[Name] = Length.Value;
+            }
+            else if (Text is not null && Text != "auto")
+            {
+                Base = new(false, 0, 0, 0, 0, 0, 0);
+                Message = "Custom layout value requires explicit editing: " + Name + " = " + Text;
                 return false;
             }
-            var Width = TryPixelSize(Style, "width", RectWidth);
-            var Height = TryPixelSize(Style, "height", RectHeight);
-            Base = new(true, Left, Top, Width, Height, 0, 0);
-            return true;
         }
-        Base = new(false, 0, 0, Math.Max(8, RectWidth), Math.Max(8, RectHeight),
-            UiStyleText.MarginSide(Element, "left"), UiStyleText.MarginSide(Element, "top"));
+        // Auto-sized controls become fixed only on the axis explicitly resized.
+        foreach (var Name in new[] { "width", "height" })
+        {
+            if (!Lengths.ContainsKey(Name))
+            {
+                var ContentBox = Style.GetValueOrDefault("box-sizing") != "border-box";
+                var Width = ContentBox && Metrics.ContentWidth > 0 ? Metrics.ContentWidth : Metrics.Width;
+                var Height = ContentBox && Metrics.ContentHeight > 0 ? Metrics.ContentHeight : Metrics.Height;
+                Lengths[Name] = new(Name == "width" ? Width : Height, "px", 1);
+            }
+        }
+        Base = new(Absolute, Metrics.X, Metrics.Y, Metrics.Width, Metrics.Height,
+            Lengths.GetValueOrDefault("margin-left").Pixels, Lengths.GetValueOrDefault("margin-top").Pixels,
+            Lengths, SlotLayoutOf(Element), AxisMode(Element, true), AxisMode(Element, false),
+            AlignmentOf(Element, true), AlignmentOf(Element, false));
         return true;
-    }
-
-    private static bool TryPixelOffset(Dictionary<string, string> Style, string Name,
-        out float Value)
-    {
-        Value = 0;
-        if (!Style.TryGetValue(Name, out var Raw))
-        {
-            return false;
-        }
-        var Trimmed = Raw.Trim();
-        if (Trimmed.EndsWith('%') || Trimmed is "auto" or "none")
-        {
-            return false;
-        }
-        var Parsed = UiStyleText.ParseLength(Trimmed);
-        if (Parsed is null)
-        {
-            return false;
-        }
-        Value = Parsed.Value;
-        return true;
-    }
-
-    private static float TryPixelSize(Dictionary<string, string> Style, string Name,
-        int Fallback)
-    {
-        if (!Style.TryGetValue(Name, out var Raw))
-        {
-            return Math.Max(8, Fallback);
-        }
-        var Trimmed = Raw.Trim();
-        if (Trimmed.EndsWith('%') || Trimmed is "auto" or "none")
-        {
-            return Math.Max(8, Fallback);
-        }
-        var Parsed = UiStyleText.ParseLength(Trimmed);
-        return Parsed is null ? Math.Max(8, Fallback) : Math.Max(8, Parsed.Value);
     }
 
     private static int Snap(int Value, bool SnapGrid)

@@ -18,6 +18,30 @@ Styles 的 Edit 按钮打开已注册的共享 RCSS。StyleSheet 的 Rules & Pre
 
 `UiAssetEditorInstance` 把 `UiDocument` 与 `RmlDocument` 都打开为独立的顶层资产编辑器根。`.sui` 的 RML、私有 RCSS 和共享引用构成权威数据；选择、级联结果、诊断和拖动过程是 transient/derived 状态，不保存到资产。
 
+## 可视化布局与预览环境
+
+右侧 **Layout** 页提供有限、可回读的布局编辑；Inspector 保留控件内容与详细样式字段。容器支持 Free、Horizontal、Vertical、Overlay。显式选择容器模式会在一个事务中更新该容器及直接子项的定位声明；转换到 Free 时采用当前原生测量保留子项位置和大小。未符合这些模式的手写布局显示为 Custom，不会因打开、选择或预览而被转换。选择一个预设才表示明确采用该模式。
+
+子项的 Width / Height 可分别选择 Fixed（像素）、Content（auto）、Fill、Percent。Layout 同时显示作者值与原生计算后的像素尺寸。水平／纵向容器提供子项间距和主轴分布；子项可编辑交叉轴对齐。Free／Overlay 提供起点、居中、终点对齐以及四边距离。Slot spacing 对应子项 margin，Content padding 对应本节点内部 padding，两者不混用。
+
+拖拽根据当前约束回写当前节点的 RML 内联样式，不修改共享 RCSS：
+
+- 靠 right/bottom 定位时更新对应边距；百分比尺寸和偏移保留百分比。
+- 双边拉伸且尺寸为 auto 时，调整拖动边的距离，保留拉伸语义。
+- Overlay 拖拽编辑子项 margin，保留对齐；排列中的 Flow 控件也保持 Flow。
+- 仅更新实际拖动的轴；内容尺寸在该轴被明确拉伸时转为固定尺寸。
+- Flex 的 Fill 由父级分配空间，直接拉伸该轴会被拒绝；需编辑父级间距、主轴分布或先改变尺寸模式，避免写入一个被布局忽略的宽度。
+
+拖动时 Layout／Inspector 的对应数值实时更新，松开只产生一次 Undo；Esc 取消。源的复杂表达式无法可靠换算时，拒绝该次拖动并保留原内容。已有 px、%、dp、em、rem、vw、vh、pt 值按对应参照换算；这不代表所有手写 RCSS 都能转换为有限预设。
+
+Design 顶部可输入预览宽高，选择 720p／1080p／Wide／Portrait，并用 Fit／100% 调整显示缩放；右下角可拖动预览尺寸。宽高与缩放属于当前编辑器实例的临时环境，不改变资产 dirty、文档 revision 或 Undo，不写进 RML。缩放后的鼠标距离会换算回画布距离。预览工厂通过 `EditorUiPreviewSource.Width/Height` 获得这组尺寸。
+
+布局意图保存为 `data-ui-layout="free|horizontal|vertical|overlay"` 与 `data-ui-align-x/y="start|center|end"`，全部为字面作者元数据；未知值拒绝加载。具体效果由同时保存的 RCSS 声明执行，Game 不需要另一套布局解释器。若手写样式与预设意图不一致，编辑器回到 Custom，而不会覆盖源。
+
+当前有限编辑范围不包含可视化媒体查询、任意变换和平台安全区域。Design 仍与宿主共享 RmlUi 上下文；百分比与父容器布局可随预览宽高变化，`vw/vh` 和 `@media` 的完整屏幕预览一致性仍需独立上下文接入，不能把调整画布宽高当成这部分已完成。C# `UiScreenRequest` 的默认 1280×720 仍是组合调用参数，不是此处预览环境的持久化设置；有限布局直接使用 RML/RCSS 适配，避免依赖它生成固定几何。
+
+Sandbox 的 `project://ui/controls-lab/responsive` 展示 Free 的右侧百分比定位／双边拉伸、Overlay 居中留白、Horizontal 的 Fixed／Content／Fill，以及 Vertical 页面。示例与默认启动界面隔离。
+
 ## 控件树与基础控件
 
 Controls 面板提供 10 类基础控件：Container、Horizontal Layout、Vertical Layout、Text、Image、Button、Text Input、Checkbox、Slider、Progress Bar。先在 Widget Tree 选中目标容器，再点击 Controls 中的类型；选中的是叶子时插入到它的父级。创建、显示名称、专属属性和布局修改共用文档事务，Save 才写回源文件。重复创建生成独立节点与唯一 id。

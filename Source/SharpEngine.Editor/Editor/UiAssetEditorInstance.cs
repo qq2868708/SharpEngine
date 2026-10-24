@@ -8,7 +8,7 @@ namespace SharpEngine.Editor;
 
 /// <summary>Formal RML UI asset editor. The authored RML source stays authoritative;
 /// selection, resolved styles, diagnostics and drag transactions are editor state.</summary>
-internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview,
+internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview,
     IAssetEditorDocumentPreview
 {
     private readonly EditorAssetOpenContext Context;
@@ -16,6 +16,7 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     private readonly IEditorUiPreview? Preview;
     private readonly List<AssetEditorLiveProperty> PendingLiveProperties = [];
     private bool MarkupRefreshRequested;
+    private (int Width, int Height)? PreviewResize;
 
     public UiAssetEditorInstance(EditorAssetOpenContext Context, IEditorUiPreview? Preview = null)
     {
@@ -51,7 +52,7 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     public string PreviewElementId => "uiRuntimePreview";
     public bool IsDirty => Document.IsDirty;
     public bool IsReadOnly => Document.IsReadOnly;
-    public bool SuppressMarkupRefresh => Document.IsGesturing && !Document.IsReadOnly;
+    public bool SuppressMarkupRefresh => PreviewResize is not null || Document.IsGesturing && !Document.IsReadOnly;
 
     public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; } =
     [
@@ -59,6 +60,7 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
         new("elements", "Widget Tree"),
         new("controls", "Controls"),
         new("inspector", "Inspector"),
+        new("layout", "Layout"),
         new("style", "Styles"),
         new("diagnostics", "Diagnostics"),
         new("source", "Source"),
@@ -115,7 +117,7 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                             Second = Tabs("ui.bottom", "ui.bottom.tabs", "style",
                                 "diagnostics", "source"),
                         },
-                        Second = Tabs("ui.inspector", "ui.inspector.tabs", "inspector"),
+                        Second = Tabs("ui.inspector", "ui.inspector.tabs", "inspector", "layout"),
                     },
                 },
             },
@@ -182,6 +184,10 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
 
     public bool TryHandleAction(string Action)
     {
+        if (TryHandleLayoutAction(Action))
+        {
+            return true;
+        }
         if (Action.StartsWith("editor.ui-control-add:", StringComparison.Ordinal))
         {
             Report(Document.AddControl(Action["editor.ui-control-add:".Length..], out var Message), Message);
@@ -318,6 +324,12 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
         }
         if (Action == "editor.ui-drag-end")
         {
+            if (PreviewResize is not null)
+            {
+                PreviewResize = null;
+                MarkupRefreshRequested = true;
+                return true;
+            }
             Document.CommitGesture();
             MarkupRefreshRequested = true;
             Context.SetStatus(Document.IsDirty
@@ -327,6 +339,14 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
         }
         if (Action is "editor.ui-drag-cancel" or "editor.ui-drag-discard")
         {
+            if (PreviewResize is not null)
+            {
+                var Size = PreviewResize.Value;
+                PreviewResize = null;
+                Document.SetPreviewSize(Size.Width, Size.Height, out _);
+                MarkupRefreshRequested = true;
+                return true;
+            }
             Document.CancelGesture();
             MarkupRefreshRequested = true;
             Context.SetStatus("Element gesture canceled");
@@ -421,6 +441,8 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
             "inspector" => "<div class=\"ui-panel-title\">UI INSPECTOR</div>" +
                 "<div id=\"uiInspectorBody\" class=\"ui-element-inspector\">" +
                 UiEditorMarkup.BuildInspector(Document) + "</div>",
+            "layout" => "<div class=\"ui-panel-title\">VISUAL LAYOUT</div><div class=\"ui-element-inspector\">" +
+                UiEditorMarkup.BuildLayoutInspector(Document) + "</div>",
             "style" => "<div class=\"ui-panel-title\">STYLES</div>" +
                 BuildStyleLinks() + UiEditorMarkup.BuildStylePane(Document),
             "diagnostics" => "<div class=\"ui-panel-title\">DIAGNOSTICS</div>" +
@@ -440,6 +462,12 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     {
         _ = DeltaSeconds;
         MarkupRefreshRequested |= Document.RefreshChangedDependencies();
+        var Metrics = UiLayoutMetrics.Read(Context.ReadElementLayout(SelectedPreviewId));
+        if (Metrics is not null)
+        {
+            PendingLiveProperties.Add(new("uiLayoutPixels-width", "text-content", Math.Round(Metrics.Width, 1) + " px"));
+            PendingLiveProperties.Add(new("uiLayoutPixels-height", "text-content", Math.Round(Metrics.Height, 1) + " px"));
+        }
     }
 
     private string BuildStyleLinks()
@@ -493,13 +521,14 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
                 Contract.Key.Equals(Document.ViewModelContract, StringComparison.Ordinal));
         State["panes"] = new JsonArray(Panes.Select(Pane => (JsonNode)Pane.PaneId).ToArray());
         State["runtimePreview"] = Preview?.Describe();
+        State["layoutMeasurement"] = Context.ReadElementLayout(SelectedPreviewId);
         return State;
     }
 
     public EditorUiPreviewDocument? BuildPreviewDocument()
     {
         return Preview?.BuildDocument(new EditorUiPreviewSource(Asset.Id, Context.Path,
-            Document.SerializeForSave(), Document.Revision, Document.DependencyRevision));
+            Document.SerializeForSave(), Document.Revision, Document.DependencyRevision, Document.PreviewWidth, Document.PreviewHeight));
     }
 
     public void Dispose()
@@ -513,14 +542,20 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
         var Separator = Payload.IndexOf('|');
         var Handle = Separator < 0 ? Payload : Payload[..Separator];
         var NodeKey = Separator < 0 ? string.Empty : Payload[(Separator + 1)..];
+        if (Handle == "viewport-resize")
+        {
+            PreviewResize = (Document.PreviewWidth, Document.PreviewHeight);
+            return;
+        }
         if (NodeKey.Length != 0 && !Document.Select(NodeKey))
         {
             Context.SetStatus($"Unknown design node '{NodeKey}'");
             return;
         }
         var Bounds = CanvasRelativeSelectionRect();
+        var Metrics = UiLayoutMetrics.Read(Context.ReadElementLayout(SelectedPreviewId));
         var Started = Document.BeginGesture(Handle, Bounds.X, Bounds.Y, Bounds.Width,
-            Bounds.Height, out var Message);
+            Bounds.Height, out var Message, Metrics);
         MarkupRefreshRequested = false;
         if (!Started)
         {
@@ -557,15 +592,32 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
     private void ApplyGesture(string Payload)
     {
         var Parts = Payload.Split(':', 4);
-        if (Parts.Length != 4 ||
-            !int.TryParse(Parts[1], System.Globalization.NumberStyles.Integer,
-                System.Globalization.CultureInfo.InvariantCulture, out var DeltaX) ||
-            !int.TryParse(Parts[2], System.Globalization.NumberStyles.Integer,
-                System.Globalization.CultureInfo.InvariantCulture, out var DeltaY))
+        var DeltaX = 0;
+        var DeltaY = 0;
+        var Valid = Parts.Length == 4 &&
+            int.TryParse(Parts[1], System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out DeltaX) &&
+            int.TryParse(Parts[2], System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out DeltaY);
+        if (!Valid)
         {
             return;
         }
         var Snap = Parts[3] == "snap";
+        if (PreviewResize is not null)
+        {
+            var Size = PreviewResize.Value;
+            var Width = Math.Clamp(Size.Width + DeltaX, 160, 7680);
+            var Height = Math.Clamp(Size.Height + DeltaY, 120, 4320);
+            Document.SetPreviewSize(Width, Height, out _);
+            PendingLiveProperties.Add(new("uiDesignCanvas", "width", Width + "px"));
+            PendingLiveProperties.Add(new("uiDesignCanvas", "height", Height + "px"));
+            PendingLiveProperties.Add(new("uiDesignSurface", "width", (Width * Document.PreviewZoom).ToString(System.Globalization.CultureInfo.InvariantCulture) + "px"));
+            PendingLiveProperties.Add(new("uiDesignSurface", "height", (Height * Document.PreviewZoom).ToString(System.Globalization.CultureInfo.InvariantCulture) + "px"));
+            PendingLiveProperties.Add(new("uiPreviewWidth", "value", Width.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            PendingLiveProperties.Add(new("uiPreviewHeight", "value", Height.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            return;
+        }
         var Applied = Parts[0] == "move"
             ? Document.ApplyGestureMove(Parts[0], DeltaX, DeltaY, Snap, out var Message)
             : Document.ApplyGestureResize(Parts[0], DeltaX, DeltaY, Snap, out Message);
@@ -592,6 +644,8 @@ internal sealed class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditor
         foreach (var (Name, Value) in Document.LiveStyleProperties())
         {
             PendingLiveProperties.Add(new(ElementId, Name, Value));
+            PendingLiveProperties.Add(new("uiStyleField-" + Name, "value", Value));
+            PendingLiveProperties.Add(new("uiLayoutValue-" + Name, "value", Value));
         }
     }
 

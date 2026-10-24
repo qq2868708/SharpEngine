@@ -289,7 +289,6 @@ viewport { display: block; }
 .ui-design-canvas { position: relative; flex-shrink: 0; overflow: hidden; background-color: #202833; border: 1px #4b5766; }
 .ui-design-empty { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 24px; color: #718096; font-size: 11px; }
 .ui-design-node { min-width: 1px; min-height: 1px; }
-.ui-design-selected { border: 1px #72b7f2; }
 .ui-design-outline { position: absolute; left: -1px; top: -1px; right: -1px; bottom: -1px; border: 1px #72b7f2; pointer-events: none; }
 .ui-design-size-tag { position: absolute; left: 0px; top: -18px; height: 16px; padding: 0px 5px; color: #0d1116; background-color: #72b7f2; border-radius: 2px; font-size: 9px; pointer-events: none; }
 .ui-design-handle { position: absolute; width: 8px; height: 8px; background-color: #dbe9f7; border: 1px #2c6f9f; border-radius: 1px; cursor: pointer; }
@@ -538,3 +537,30 @@ viewport { display: block; }
 .ui-class-chip, .ui-class-suggestion { display: inline-block; position: relative; flex-shrink: 0; max-width: 206px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .ui-class-suggestion { display: block; width: 206px; min-width: 206px; height: 24px; text-align: left; }
+
+.ui-preview-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; flex-shrink: 0; padding: 5px 8px; color: #9eafc3; font-size: 10px; }
+.ui-preview-controls input { width: 58px; height: 24px; background-color: #151c25; color: #e3edf7; border: 1px #405168; padding: 3px; }
+.ui-preview-resize { position: absolute; right: 0px; bottom: 0px; width: 22px; height: 22px; color: #b8d9ef; background-color: #37536b; cursor: move; text-align: center; z-index: 30; }
+.ui-layout-editor { display: block; width: 220px; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px #435365; }
+.ui-layout-options { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0px 5px; }
+.ui-layout-option { height: 24px; padding: 3px 6px; flex-shrink: 0; color: #a7bdd2; background-color: #273342; border: 1px #405269; font-size: 10px; }
+.ui-layout-option.active { color: #c7f3e6; background-color: #285348; border-color: #62ad97; }
+.ui-layout-option:disabled { color: #627485; background-color: #1d2731; border-color: #303f50; }
+.ui-layout-parent, .ui-layout-note { color: #95abc1; font-size: 10px; line-height: 16px; margin-bottom: 6px; }
+.ui-layout-value { display: flex; align-items: center; margin-bottom: 5px; }
+.ui-layout-value input { width: 126px; height: 25px; background-color: #151c25; color: #e3edf7; border: 1px #405168; padding: 3px 5px; font-size: 11px; }
+.ui-layout-measured { color: #8ba9bf; margin-left: 6px; font-size: 10px; }
+.ui-layout-spacing { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0px 8px; }
+.ui-layout-spacing label { display: block; width: 50px; color: #8ba2b9; font-size: 9px; }
+.ui-layout-spacing input { display: block; width: 50px; height: 25px; padding: 3px; background-color: #151c25; color: #d6e5f2; border: 1px #405168; font-size: 10px; }
+.ui-element-inspector scrollbarvertical { width: 10px; background-color: #191d24; }
+.ui-element-inspector scrollbarvertical sliderbar { width: 6px; min-height: 24px; margin-left: 2px; background-color: #485e74; border-radius: 3px; }
+.ui-element-inspector scrollbarhorizontal { height: 10px; background-color: #191d24; }
+.ui-element-inspector scrollbarhorizontal sliderbar { height: 6px; min-width: 24px; margin-top: 2px; background-color: #485e74; border-radius: 3px; }
+.ui-design-scroll scrollbarvertical { width: 10px; background-color: #191d24; }
+.ui-design-scroll scrollbarvertical sliderbar { width: 6px; min-height: 24px; margin-left: 2px; background-color: #485e74; border-radius: 3px; }
+.ui-design-scroll scrollbarhorizontal { height: 10px; background-color: #191d24; }
+.ui-design-scroll scrollbarhorizontal sliderbar { height: 6px; min-width: 24px; margin-top: 2px; background-color: #485e74; border-radius: 3px; }
+.ui-design-surface { position: relative; flex-shrink: 0; border: 1px #4b5766; }
+.ui-design-surface .ui-design-canvas { position: absolute; left: 0px; top: 0px; border-width: 0px; }
+.ui-design-template-note { position: absolute; left: 0px; top: 0px; z-index: 40; pointer-events: none; }

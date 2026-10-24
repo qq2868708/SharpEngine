@@ -32,6 +32,7 @@ public sealed class EditorAssetOpenContext : SharpEngine.UI.IViewport3DHost
     public void ShowPane(string PaneId) => Runtime.ShowPane(PaneId);
     public bool TryGetElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds) =>
         Runtime.TryGetAssetEditorElementRect(EditorRootId, ElementId, out Bounds);
+    internal JsonObject? ReadElementLayout(string ElementId) => Runtime.ReadAssetEditorElementLayout(EditorRootId, ElementId);
     public void SubmitViewportFrame(string Kind, ViewportFrame Frame) =>
         Runtime.SubmitAssetEditorViewportFrame(EditorRootId, Kind, Frame);
     public void SetStatus(string Message) => Runtime.SetStatusFromExtension(Message);
