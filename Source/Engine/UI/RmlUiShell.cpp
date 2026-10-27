@@ -2839,6 +2839,7 @@ HWND RmlUiShell::CreateEditorHostWindow(std::string_view rootId,
         {
             return nullptr;
         }
+        existing->PendingDestroy = false;
         if (titleUtf8)
         {
             SetWindowTextW(existing->Window, Utf8ToWide(titleUtf8).c_str());

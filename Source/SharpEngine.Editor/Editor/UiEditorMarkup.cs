@@ -17,12 +17,22 @@ internal static partial class UiEditorMarkup
         Builder.Append("<div class=\"ui-design-pane\"><div class=\"ui-preview-controls\">Preview <input id=\"uiPreviewWidth\" type=\"text\" value=\"")
             .Append(Document.PreviewWidth).Append("\" data-change-action=\"editor.ui-preview:width:\" /> x <input id=\"uiPreviewHeight\" type=\"text\" value=\"")
             .Append(Document.PreviewHeight).Append("\" data-change-action=\"editor.ui-preview:height:\" />")
-            .Append(ToolButton("editor.ui-preview-fit", "Fit", "Fit the preview into the available space", true))
-            .Append(ToolButton("editor.ui-preview-zoom:1", "100%", "Actual preview pixels", true))
-            .Append(ToolButton("editor.ui-preview-size:1280:720", "720p", "1280 x 720 preview", true))
-            .Append(ToolButton("editor.ui-preview-size:1920:1080", "1080p", "1920 x 1080 preview", true))
-            .Append(ToolButton("editor.ui-preview-size:2560:1080", "Wide", "2560 x 1080 preview", true))
-            .Append(ToolButton("editor.ui-preview-size:720:1280", "Portrait", "720 x 1280 preview", true)).Append("</div>")
+            .Append(ToolButton("ui-preview-fit", "editor.ui-preview-fit", "Fit", "Fit the preview into the available space", true))
+            .Append(ToolButton("ui-preview-zoom-50", "editor.ui-preview-zoom:0.5", "50%", "Show the preview at half size", true))
+            .Append(ToolButton("ui-preview-zoom-75", "editor.ui-preview-zoom:0.75", "75%", "Show the preview at three-quarter size", true))
+            .Append(ToolButton("ui-preview-zoom-100", "editor.ui-preview-zoom:1", "100%", "Actual preview pixels", true))
+            .Append(ToolButton("ui-preview-zoom-125", "editor.ui-preview-zoom:1.25", "125%", "Show the preview at one-and-a-quarter size", true))
+            .Append(ToolButton("ui-preview-zoom-150", "editor.ui-preview-zoom:1.5", "150%", "Show the preview at one-and-a-half size", true))
+            .Append(ToolButton("ui-preview-zoom-200", "editor.ui-preview-zoom:2", "200%", "Show the preview at double size", true))
+            .Append("<label class=\"ui-preview-zoom-caption\" for=\"uiPreviewZoom\">Zoom</label><input id=\"uiPreviewZoom\" type=\"range\" min=\"25\" max=\"200\" step=\"5\" value=\"")
+            .Append(MathF.Round(Document.PreviewZoom * 100).ToString(CultureInfo.InvariantCulture))
+            .Append("\" data-change-action=\"editor.ui-preview-zoom-percent:\" /><span id=\"uiPreviewZoomValue\" class=\"ui-preview-zoom-value\">")
+            .Append(MathF.Round(Document.PreviewZoom * 100).ToString(CultureInfo.InvariantCulture))
+            .Append("%</span>")
+            .Append(ToolButton("ui-preview-size-1280-720", "editor.ui-preview-size:1280:720", "720p", "1280 x 720 preview", true))
+            .Append(ToolButton("ui-preview-size-1920-1080", "editor.ui-preview-size:1920:1080", "1080p", "1920 x 1080 preview", true))
+            .Append(ToolButton("ui-preview-size-2560-1080", "editor.ui-preview-size:2560:1080", "Wide", "2560 x 1080 preview", true))
+            .Append(ToolButton("ui-preview-size-720-1280", "editor.ui-preview-size:720:1280", "Portrait", "720 x 1280 preview", true)).Append("</div>")
             .Append("<div class=\"ui-design-ruler\"><span class=\"ui-design-ruler-label\">")
             .Append(Document.PreviewWidth.ToString(CultureInfo.InvariantCulture))
             .Append(" x ")
@@ -86,13 +96,13 @@ internal static partial class UiEditorMarkup
         Builder.Append(Escape(Document.TreeSearch)).Append("\" placeholder=\"Search name, type or id\" data-change-action=\"editor.ui-tree-search:\" />")
             .Append("<button id=\"uiTreeClear\" class=\"ui-tool-button\" data-action=\"editor.ui-tree-search:\">Clear</button></div>")
             .Append("<div class=\"ui-element-tools ui-tree-tools\">")
-            .Append(ToolButton("editor.ui-tree-expand", "Expand", "Expand every branch", true))
-            .Append(ToolButton("editor.ui-tree-collapse", "Collapse", "Collapse every branch", true))
-            .Append(ToolButton("editor.ui-select-parent", "Parent", "Select parent", Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-move-up", "Up", "Move earlier", !Document.IsReadOnly && Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-move-down", "Down", "Move later", !Document.IsReadOnly && Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-indent", "Nest", "Nest into previous sibling", !Document.IsReadOnly && Document.SelectedKey is not null))
-            .Append(ToolButton("editor.ui-outdent", "Unnest", "Move out one level", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("ui-tree-expand", "editor.ui-tree-expand", "Expand", "Expand every branch", true))
+            .Append(ToolButton("ui-tree-collapse", "editor.ui-tree-collapse", "Collapse", "Collapse every branch", true))
+            .Append(ToolButton("ui-tree-select-parent", "editor.ui-select-parent", "Parent", "Select parent", Document.SelectedKey is not null))
+            .Append(ToolButton("ui-tree-move-up", "editor.ui-move-up", "Up", "Move earlier", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("ui-tree-move-down", "editor.ui-move-down", "Down", "Move later", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("ui-tree-indent", "editor.ui-indent", "Nest", "Nest into previous sibling", !Document.IsReadOnly && Document.SelectedKey is not null))
+            .Append(ToolButton("ui-tree-outdent", "editor.ui-outdent", "Unnest", "Move out one level", !Document.IsReadOnly && Document.SelectedKey is not null))
             .Append("</div><div class=\"ui-tree-scroll-slot\"><div class=\"ui-element-hierarchy\" id=\"uiWidgetTree\" data-ui-reveal-target=\"")
             .Append(Escape(Document.SelectedElement() is { } Selected ? "uiTreeSelect-" + UiEditorDocument.PreviewNodeIdOf(Selected) : string.Empty))
             .Append("\">");
@@ -444,10 +454,10 @@ internal static partial class UiEditorMarkup
             (ReadOnly ? " disabled=\"disabled\"" : string.Empty) + " /></div>";
     }
 
-    private static string ToolButton(string Action, string Label, string Tooltip,
+    private static string ToolButton(string Id, string Action, string Label, string Tooltip,
         bool Enabled)
     {
-        return "<button class=\"ui-tool-button\"" + AppendAvailability(Enabled) +
+        return "<button id=\"" + Escape(Id) + "\" class=\"ui-tool-button\"" + AppendAvailability(Enabled) +
             AppendAction(Action, Enabled) + " title=\"" + Escape(Tooltip) + "\">" +
             Escape(Label) + "</button>";
     }

@@ -130,6 +130,45 @@ internal static class UiControlsValidation
         var ImagePath = Path.GetFullPath(Path.Combine(Folder.FullName, "../Images/Logo.png")).Replace('\\', '/');
         Check(Markup.Contains(ImagePath, StringComparison.Ordinal),
             "Relative design images become filesystem texture paths anchored at the package, not document URL pipe paths");
+        var CanvasMarkup = XElement.Parse("<validation-root>" + Markup + "</validation-root>");
+        var PreviewButtons = CanvasMarkup.Descendants("button").ToArray();
+        var ExpectedPreviewButtons = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ui-preview-fit"] = "editor.ui-preview-fit",
+            ["ui-preview-zoom-50"] = "editor.ui-preview-zoom:0.5",
+            ["ui-preview-zoom-75"] = "editor.ui-preview-zoom:0.75",
+            ["ui-preview-zoom-100"] = "editor.ui-preview-zoom:1",
+            ["ui-preview-zoom-125"] = "editor.ui-preview-zoom:1.25",
+            ["ui-preview-zoom-150"] = "editor.ui-preview-zoom:1.5",
+            ["ui-preview-zoom-200"] = "editor.ui-preview-zoom:2",
+            ["ui-preview-size-1280-720"] = "editor.ui-preview-size:1280:720",
+            ["ui-preview-size-1920-1080"] = "editor.ui-preview-size:1920:1080",
+            ["ui-preview-size-2560-1080"] = "editor.ui-preview-size:2560:1080",
+            ["ui-preview-size-720-1280"] = "editor.ui-preview-size:720:1280",
+        };
+        Check(ExpectedPreviewButtons.All(Pair =>
+        {
+            var Button = PreviewButtons.SingleOrDefault(Item =>
+                (string?)Item.Attribute("id") == Pair.Key);
+            return Button is not null && (string?)Button.Attribute("action") == Pair.Value;
+        }), "Preview tool buttons expose stable IDs while retaining their typed actions");
+        var PreviewZoom = CanvasMarkup.Descendants("input").SingleOrDefault(Item =>
+            (string?)Item.Attribute("id") == "uiPreviewZoom");
+        Check(PreviewZoom is not null &&
+            (string?)PreviewZoom.Attribute("type") == "range" &&
+            (string?)PreviewZoom.Attribute("data-change-action") ==
+                "editor.ui-preview-zoom-percent:",
+            "Preview exposes a stable range control for continuous zoom");
+        var HierarchyMarkup = XElement.Parse("<validation-root>" +
+            UiEditorMarkup.BuildHierarchy(Document) + "</validation-root>");
+        var ExpectedTreeButtons = new[]
+        {
+            "ui-tree-expand", "ui-tree-collapse", "ui-tree-select-parent", "ui-tree-move-up",
+            "ui-tree-move-down", "ui-tree-indent", "ui-tree-outdent",
+        };
+        Check(ExpectedTreeButtons.All(Id => HierarchyMarkup.Descendants("button").Any(Item =>
+                (string?)Item.Attribute("id") == Id)),
+            "Widget tree tool buttons expose stable IDs for semantic discovery");
         var ReadOnly = UiEditorDocument.Load(new AssetDescriptor
         {
             Id = Asset.Id,

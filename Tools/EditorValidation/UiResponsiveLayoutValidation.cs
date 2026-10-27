@@ -36,8 +36,13 @@ internal static class UiResponsiveLayoutValidation
         Check(Document.SetPreviewSize(1920, 1080, out _) && Document.SetPreviewSize(720, 1280, out _) &&
             !Document.IsDirty && Document.Revision == Revision && Document.CanonicalSource == Initial && !Document.CanUndo,
             "Preview resolutions are per-instance environment, outside source, dirty state and Undo");
-        Check(Load().PreviewWidth == 1280 && Document.PreviewWidth == 720 && !Document.SetPreviewSize(0, 720, out _),
+        Check(Load().PreviewWidth == 1920 && Load().PreviewHeight == 1080 &&
+            Document.PreviewWidth == 720 && !Document.SetPreviewSize(0, 720, out _),
             "Preview size is bounded and isolated from another use of the same asset");
+        Check(Document.PreviewZoom == 1 && Document.SetPreviewZoom(0.5f) &&
+            Document.PreviewZoom == 0.5f && !Document.IsDirty && Document.Revision == Revision &&
+            !Document.CanUndo,
+            "Preview zoom is a transient per-instance setting outside source, dirty state and Undo");
         var Metrics = new UiLayoutMetrics(520, 20, 200, 40, 800, 600, 1920, 1080);
         string Style(string Name) => Document.Sheet.Compute(Document.SelectedElement()!).GetValueOrDefault(Name)?.Value ?? "";
         Document.Select("#right");
@@ -116,7 +121,8 @@ internal static class UiResponsiveLayoutValidation
             "Overlay children serialize real positioning and per-axis alignment");
         Document.Save();
         var Reloaded = Load();
-        Check(Reloaded.CanonicalSource == Document.CanonicalSource && !Reloaded.IsDirty && Reloaded.PreviewWidth == 1280,
+        Check(Reloaded.CanonicalSource == Document.CanonicalSource && !Reloaded.IsDirty &&
+            Reloaded.PreviewWidth == 1920 && Reloaded.PreviewHeight == 1080,
             "Visual layouts survive save/reopen, while preview environment stays transient");
         var Runtime = UiScreenComposer.Compose(UiDocumentAsset.Load(PathValue), new UiScreenRequest(Asset.Id));
         Check(Runtime.Contains("data-ui-layout=\"overlay\"", StringComparison.Ordinal) && Runtime.Contains("bottom: 0px", StringComparison.Ordinal),

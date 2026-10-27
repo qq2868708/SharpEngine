@@ -216,17 +216,74 @@ internal static class UiEditorUiValidation
             InitialState["selectedKey"]!.GetValue<string>() == "#screen" &&
             InitialState["elements"]!.AsArray().Count == 3,
             "UI editor publishes schema v3 identity for every screen element");
+        Check(!InitialState["panes"]!.AsArray().Any(Item =>
+                Item!.GetValue<string>() == "preview"),
+            "UI asset editor exposes Design without a Runtime Preview pane");
+        var PreviewActions = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ui-preview-fit"] = "editor.ui-preview-fit",
+            ["ui-preview-zoom-50"] = "editor.ui-preview-zoom:0.5",
+            ["ui-preview-zoom-75"] = "editor.ui-preview-zoom:0.75",
+            ["ui-preview-zoom-100"] = "editor.ui-preview-zoom:1",
+            ["ui-preview-zoom-125"] = "editor.ui-preview-zoom:1.25",
+            ["ui-preview-zoom-150"] = "editor.ui-preview-zoom:1.5",
+            ["ui-preview-zoom-200"] = "editor.ui-preview-zoom:2",
+            ["ui-preview-size-1280-720"] = "editor.ui-preview-size:1280:720",
+            ["ui-preview-size-1920-1080"] = "editor.ui-preview-size:1920:1080",
+            ["ui-preview-size-2560-1080"] = "editor.ui-preview-size:2560:1080",
+            ["ui-preview-size-720-1280"] = "editor.ui-preview-size:720:1280",
+        };
+        Check(PreviewActions.All(Pair =>
+        {
+            var Button = Element(Initial, Pair.Key);
+            return Button["visible"]!.GetValue<bool>() &&
+                Button["semanticId"]!.GetValue<string>() == Pair.Key &&
+                Button["actions"]!.AsArray().Any(Value =>
+                    Value!.GetValue<string>() == Pair.Value);
+        }), "Preview controls expose stable semantic IDs and their typed actions");
+        var ZoomSlider = Element(Initial, "uiPreviewZoom");
+        Check(ZoomSlider["role"]!.GetValue<string>() == "input" &&
+            ZoomSlider["visible"]!.GetValue<bool>() &&
+            ZoomSlider["hitTarget"]!.GetValue<bool>() &&
+            ZoomSlider["value"]!.GetValue<string>() == "100",
+            "Preview exposes a visible, focusable continuous zoom control");
         Check(Element(Initial, "uiDesignCanvas")["visible"]!.GetValue<bool>() &&
-            Element(Initial, "uiDesignCanvas")["bounds"]!["width"]!.GetValue<double>() == 1280 &&
-            Element(Initial, "uiDesignCanvas")["bounds"]!["height"]!.GetValue<double>() == 720,
+            Element(Initial, "uiDesignCanvas")["bounds"]!["width"]!.GetValue<double>() == 1920 &&
+            Element(Initial, "uiDesignCanvas")["bounds"]!["height"]!.GetValue<double>() == 1080,
             "The design canvas is a visible native element with the authored screen size");
+        Click("ui-preview-zoom-50");
+        var Zoomed = Observe();
+        var ZoomedState = State();
+        var ZoomedSurface = Element(Zoomed, "uiDesignSurface")["bounds"]!;
+        var ZoomedCanvas = Element(Zoomed, "uiDesignCanvas")["bounds"]!;
+        Check(ZoomedSurface["width"]!.GetValue<double>() == 960 &&
+            ZoomedSurface["height"]!.GetValue<double>() == 540 &&
+            ZoomedCanvas["width"]!.GetValue<double>() == 960 &&
+            ZoomedCanvas["height"]!.GetValue<double>() == 540 &&
+            ZoomedState["design"]!["zoom"]!.GetValue<double>() == 0.5 &&
+            !ZoomedState["dirty"]!.GetValue<bool>(),
+            $"A semantic zoom control scales the rendered desired-size frame and canvas " +
+            $"(surface={ZoomedSurface}, canvas={ZoomedCanvas})");
+        Click("ui-preview-size-1280-720");
+        var ResizedState = State();
+        Check(ResizedState["design"]!["width"]!.GetValue<int>() == 1280 &&
+            ResizedState["design"]!["height"]!.GetValue<int>() == 720 &&
+            ResizedState["design"]!["zoom"]!.GetValue<double>() == 0.5 &&
+            !ResizedState["dirty"]!.GetValue<bool>(),
+            "A preview size control changes the desired-size frame independently of zoom");
+        Click("ui-preview-size-1920-1080");
+        Click("ui-preview-zoom-100");
+        var RestoredPreviewState = State();
+        Check(RestoredPreviewState["design"]!["width"]!.GetValue<int>() == 1920 &&
+            RestoredPreviewState["design"]!["height"]!.GetValue<int>() == 1080 &&
+            RestoredPreviewState["design"]!["zoom"]!.GetValue<double>() == 1,
+            "The semantic preview checks restore the 1920 x 1080 default transient environment");
         var FirstNode = Element(Initial, "ui-design-node-0");
         Check(FirstNode["visible"]!.GetValue<bool>() &&
-            FirstNode["hitTarget"]!.GetValue<bool>() &&
             FirstNode["actions"]!.AsArray().Any(Value =>
                 Value!.GetValue<string>().StartsWith("editor.ui-select:",
                     StringComparison.Ordinal)),
-            "Authored screen elements are visible, selectable design nodes");
+            "Authored screen elements are visible and expose selectable design nodes");
         Check(InitialState["styleSheet"]!["files"]!.AsArray().Count == 1 &&
             InitialState["styleSheet"]!["inlineBlocks"]!.GetValue<int>() == 1 &&
             InitialState["styleSheet"]!["ruleCount"]!.GetValue<int>() == 4,
@@ -282,9 +339,9 @@ internal static class UiEditorUiValidation
             }
         }
 
-        Check(FieldHit["accepted"]?.GetValue<bool>() == true ||
+        Check(FieldHit is not null && (FieldHit["accepted"]?.GetValue<bool>() == true ||
             FieldHit["targetElementId"]?.GetValue<string>()?.EndsWith(
-                "/uiInspectorField-id", StringComparison.Ordinal) == true,
+                "/uiInspectorField-id", StringComparison.Ordinal) == true),
             "Pointer input resolves the inspector field through native hit testing");
 
         Click("ui-design-node-0-1");
@@ -332,11 +389,21 @@ internal static class UiEditorUiValidation
             "Typing into the inspector commits the attribute through the native input path");
         var ContentScale = Host(Observe())["contentScale"]?.GetValue<double>() ?? 1;
         var Delta = (int)Math.Round(40 * (ContentScale <= 0 ? 1 : ContentScale));
-        var BeforeBounds = Element(Observe(), "ui-design-node-0-1")["bounds"]!.AsObject();
-        var AnchorX = (int)(BeforeBounds["x"]!.GetValue<double>() +
-            BeforeBounds["width"]!.GetValue<double>() / 2);
-        var AnchorY = (int)(BeforeBounds["y"]!.GetValue<double>() +
-            BeforeBounds["height"]!.GetValue<double>() / 2);
+        var BeforeNode = Element(Observe(), "ui-design-node-0-1");
+        var BeforeBounds = BeforeNode["bounds"]!.AsObject();
+        var BeforeClip = BeforeNode["clip"]!.AsObject();
+        var AnchorLeft = Math.Max(BeforeBounds["x"]!.GetValue<double>(),
+            BeforeClip["x"]!.GetValue<double>());
+        var AnchorTop = Math.Max(BeforeBounds["y"]!.GetValue<double>(),
+            BeforeClip["y"]!.GetValue<double>());
+        var AnchorRight = Math.Min(
+            BeforeBounds["x"]!.GetValue<double>() + BeforeBounds["width"]!.GetValue<double>(),
+            BeforeClip["x"]!.GetValue<double>() + BeforeClip["width"]!.GetValue<double>());
+        var AnchorBottom = Math.Min(
+            BeforeBounds["y"]!.GetValue<double>() + BeforeBounds["height"]!.GetValue<double>(),
+            BeforeClip["y"]!.GetValue<double>() + BeforeClip["height"]!.GetValue<double>());
+        var AnchorX = (int)((AnchorLeft + AnchorRight) / 2);
+        var AnchorY = (int)((AnchorTop + AnchorBottom) / 2);
         void Raw(string Event, int X, int Y, string? Expected = null)
         {
             for (var Attempt = 0; Attempt < 10; Attempt++)
@@ -408,11 +475,21 @@ internal static class UiEditorUiValidation
              Undone["selected"]!["computed"]!["margin-left"]!["source"]!.GetValue<string>() != "inline"),
             "One Undo reverts the whole gesture instead of individual pointer steps");
 
-        var SecondAnchor = Element(Observe(), "ui-design-node-0-1")["bounds"]!.AsObject();
-        var SecondX = (int)(SecondAnchor["x"]!.GetValue<double>() +
-            SecondAnchor["width"]!.GetValue<double>() / 2);
-        var SecondY = (int)(SecondAnchor["y"]!.GetValue<double>() +
-            SecondAnchor["height"]!.GetValue<double>() / 2);
+        var SecondNode = Element(Observe(), "ui-design-node-0-1");
+        var SecondAnchor = SecondNode["bounds"]!.AsObject();
+        var SecondClip = SecondNode["clip"]!.AsObject();
+        var SecondLeft = Math.Max(SecondAnchor["x"]!.GetValue<double>(),
+            SecondClip["x"]!.GetValue<double>());
+        var SecondTop = Math.Max(SecondAnchor["y"]!.GetValue<double>(),
+            SecondClip["y"]!.GetValue<double>());
+        var SecondRight = Math.Min(
+            SecondAnchor["x"]!.GetValue<double>() + SecondAnchor["width"]!.GetValue<double>(),
+            SecondClip["x"]!.GetValue<double>() + SecondClip["width"]!.GetValue<double>());
+        var SecondBottom = Math.Min(
+            SecondAnchor["y"]!.GetValue<double>() + SecondAnchor["height"]!.GetValue<double>(),
+            SecondClip["y"]!.GetValue<double>() + SecondClip["height"]!.GetValue<double>());
+        var SecondX = (int)((SecondLeft + SecondRight) / 2);
+        var SecondY = (int)((SecondTop + SecondBottom) / 2);
         Raw("down", SecondX, SecondY,
             Element(Observe(), "ui-design-node-0-1")["elementId"]!.GetValue<string>());
         Raw("move", SecondX + Delta, SecondY);

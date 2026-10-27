@@ -24,6 +24,16 @@ internal sealed partial class UiAssetEditorInstance
             }
             return true;
         }
+        if (Action.StartsWith("editor.ui-preview-zoom-percent:", StringComparison.Ordinal))
+        {
+            var Valid = int.TryParse(Action["editor.ui-preview-zoom-percent:".Length..],
+                System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var Percent);
+            if (Valid)
+            {
+                MarkupRefreshRequested |= Document.SetPreviewZoom(Percent / 100f);
+            }
+            return true;
+        }
         if (Action.StartsWith("editor.ui-layout:", StringComparison.Ordinal))
         {
             var Measurements = new Dictionary<string, UiLayoutMetrics>(StringComparer.Ordinal);

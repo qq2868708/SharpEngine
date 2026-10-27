@@ -56,8 +56,8 @@ internal sealed class UiEditorGesture
 /// active drag transaction are derived or transient state of this editor instance.</summary>
 internal sealed partial class UiEditorDocument
 {
-    public const int DesignWidth = 1280;
-    public const int DesignHeight = 720;
+    public const int DesignWidth = 1920;
+    public const int DesignHeight = 1080;
 
     private static readonly Regex IdPattern = new("^[A-Za-z_][A-Za-z0-9._-]*$",
         RegexOptions.CultureInvariant);
@@ -73,12 +73,30 @@ internal sealed partial class UiEditorDocument
         StringComparer.OrdinalIgnoreCase)
     {
         "span", "label", "p", "h1", "h2", "h3", "h4", "h5", "h6", "button", "input",
-        "img", "text", "progress",
+        "img", "text", "progress", "br", "hr",
+    };
+    /// <summary>Inline content tags. RmlUi lays <c>br</c> out as a forced line break, so a
+    /// text tag holding one is ordinary markup rather than a nesting mistake.</summary>
+    private static readonly HashSet<string> InlineContentTags = new(
+        StringComparer.OrdinalIgnoreCase)
+    {
+        "br", "hr", "img", "span", "label", "a", "em", "strong", "small", "code", "b", "i",
     };
     private static readonly HashSet<string> ContainerTags = new(
         StringComparer.OrdinalIgnoreCase)
     {
         "div", "panel", "section", "ul", "ol", "li", "form",
+    };
+    /// <summary>Standard markup tags RmlUi instances through its <c>*</c> fallback and
+    /// lays out normally. They are not RML-specific controls, but warning about them is
+    /// noise: <c>pre</c>, <c>br</c> and friends are ordinary authoring vocabulary.</summary>
+    private static readonly HashSet<string> StandardContentTags = new(
+        StringComparer.OrdinalIgnoreCase)
+    {
+        "pre", "code", "blockquote", "a", "em", "strong", "small", "b", "i", "u", "s",
+        "del", "ins", "sup", "sub", "dl", "dt", "dd", "table", "thead", "tbody", "tr",
+        "td", "th", "header", "footer", "nav", "main", "aside", "article", "figure",
+        "figcaption", "hgroup", "br", "hr", "img", "progress",
     };
     /// <summary>Composition directives are valid template content even though RmlUi never
     /// sees them: they are resolved before the document is presented.</summary>
@@ -1079,13 +1097,16 @@ internal sealed partial class UiEditorDocument
                 $"Element id '{Duplicate.Key}' occurs more than once"));
         }
         foreach (var Leaf in Elements.Where(Value => Value.HasElements &&
-                     TextOnlyTags.Contains(Value.Name.LocalName)))
+                     TextOnlyTags.Contains(Value.Name.LocalName) &&
+                     Value.Elements().Any(Child => !InlineContentTags.Contains(
+                         Child.Name.LocalName))))
         {
             Diagnostics.Add(new("warning", "UI_ELEMENT_LEAF_HAS_CHILDREN",
-                $"<{Leaf.Name.LocalName}> is a leaf element but contains children"));
+                $"<{Leaf.Name.LocalName}> is a text element but contains block children"));
         }
         foreach (var Unknown in Elements.Where(Value => !LeafTags.Contains(
                      Value.Name.LocalName) && !ContainerTags.Contains(
+                     Value.Name.LocalName) && !StandardContentTags.Contains(
                      Value.Name.LocalName) && !DirectiveTags.Contains(
                      Value.Name.LocalName)))
         {

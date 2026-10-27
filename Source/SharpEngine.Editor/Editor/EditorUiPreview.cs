@@ -4,10 +4,10 @@ namespace SharpEngine.Editor;
 
 /// <summary>Current authoring input. Preview factories must not modify or save it.</summary>
 public sealed record EditorUiPreviewSource(string AssetId, string SourcePath,
-    string SourceText, long Revision, long DependencyRevision = 0, float Width = 1280, float Height = 720);
+    string SourceText, long Revision, long DependencyRevision = 0, float Width = 1920, float Height = 1080);
 
 public sealed record EditorUiPreviewDocument(string Rml, string SourcePath,
-    float Width = 1280, float Height = 720);
+    float Width = 1920, float Height = 1080);
 
 /// <summary>One editor-owned use of project UI code, independent of Game and World state.</summary>
 public interface IEditorUiPreview : IDisposable

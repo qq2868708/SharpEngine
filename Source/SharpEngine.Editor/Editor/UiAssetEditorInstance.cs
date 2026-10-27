@@ -8,8 +8,7 @@ namespace SharpEngine.Editor;
 
 /// <summary>Formal RML UI asset editor. The authored RML source stays authoritative;
 /// selection, resolved styles, diagnostics and drag transactions are editor state.</summary>
-internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview,
-    IAssetEditorDocumentPreview
+internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview
 {
     private readonly EditorAssetOpenContext Context;
     private readonly UiEditorDocument Document;
@@ -35,21 +34,12 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
             Document.SetGlobalStyleResolver(GlobalStyleSheetAsset.CreateResolver(Context.Runtime.Assets));
             Document.SetAssetResolver(UiLayoutAssets.CreateResolver(Context.Runtime.Assets));
         }
-        if (Preview is not null)
-        {
-            Panes = new[]
-            {
-                new AssetEditorPaneDefinition("preview", "Runtime Preview"),
-            }
-                .Concat(Panes).ToArray();
-        }
     }
 
     public AssetDescriptor Asset => Document.Asset;
     public string EditorId => "ui-editor";
     public string Title => Document.Title;
     public string PrimaryPaneId => "design";
-    public string PreviewElementId => "uiRuntimePreview";
     public bool IsDirty => Document.IsDirty;
     public bool IsReadOnly => Document.IsReadOnly;
     public bool SuppressMarkupRefresh => PreviewResize is not null || Document.IsGesturing && !Document.IsReadOnly;
@@ -112,8 +102,7 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
                             Kind = DockNodeKind.Split,
                             Orientation = DockSplitOrientation.Vertical,
                             Ratio = 0.74f,
-                            First = Tabs("ui.design", "ui.design.tabs",
-                                Preview is null ? ["design"] : ["design", "preview"]),
+                            First = Tabs("ui.design", "ui.design.tabs", "design"),
                             Second = Tabs("ui.bottom", "ui.bottom.tabs", "style",
                                 "diagnostics", "source"),
                         },
@@ -247,10 +236,6 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
             var Add = Action.StartsWith("editor.ui-global-style-add:", StringComparison.Ordinal);
             var Prefix = Add ? "editor.ui-global-style-add:" : "editor.ui-global-style-remove:";
             Report(Document.SetGlobalStyleReference(Action[Prefix.Length..].Trim(), Add, out var Message), Message);
-            return true;
-        }
-        if (Preview is not null && Preview.TryHandleAction(Action))
-        {
             return true;
         }
         if (Action.StartsWith("editor.ui-use-asset:", StringComparison.Ordinal))
@@ -431,9 +416,6 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
     {
         return PaneId switch
         {
-            "preview" => Preview is null
-                ? "<div class=\"ui-editor-empty\">No project preview factory is registered for this asset.</div>"
-                : "<div id=\"uiRuntimePreview\" class=\"ui-runtime-preview\"></div>",
             "design" => UiEditorMarkup.BuildCanvas(Document),
             "controls" => UiEditorMarkup.BuildControls(Document),
             "elements" => "<div class=\"ui-tree-panel\"><div class=\"ui-panel-title\">WIDGET TREE</div>" +
@@ -520,15 +502,8 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
             Context.Runtime.UiRuntime.ViewModelContracts.Any(Contract =>
                 Contract.Key.Equals(Document.ViewModelContract, StringComparison.Ordinal));
         State["panes"] = new JsonArray(Panes.Select(Pane => (JsonNode)Pane.PaneId).ToArray());
-        State["runtimePreview"] = Preview?.Describe();
         State["layoutMeasurement"] = Context.ReadElementLayout(SelectedPreviewId);
         return State;
-    }
-
-    public EditorUiPreviewDocument? BuildPreviewDocument()
-    {
-        return Preview?.BuildDocument(new EditorUiPreviewSource(Asset.Id, Context.Path,
-            Document.SerializeForSave(), Document.Revision, Document.DependencyRevision, Document.PreviewWidth, Document.PreviewHeight));
     }
 
     public void Dispose()

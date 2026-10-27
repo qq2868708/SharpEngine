@@ -12,7 +12,7 @@ Design 展开子结构用于显示，点击子结构选择父文档中的 ui-use
 
 Styles 的 Edit 按钮打开已注册的共享 RCSS。StyleSheet 的 Rules & Preview 面板以规则和属性字段编辑现有声明；修改进入该 RCSS 文档自己的 Undo/Redo，Save 原子写回源文件。源区间编辑保留无关注释、选择器、声明和嵌套规则；当前结构化面板不编辑 @ 规则内部，Source 仍保留完整原文。保存后引用画布检测依赖变化并刷新，不把共享变化写成父元素的行内覆盖。
 
-项目可注册 `EditorUiAssetEditor.Create(Context, IEditorUiPreview)`，运行预览与 Game 共用 `UiScreenComposer` 和项目行为代码，但创建独立实例。Design 为默认制作入口，Runtime Preview 为辅助 Tab；预览参数使用当前未保存源文本，不回写源。画布样式解析支持后代和子选择器，运行预览由原生 RmlUi 解析完整 RCSS。
+Design 是 UI 资产编辑器的制作入口；编辑器不再显示 Runtime Preview Tab，也不会向旧的运行预览锚点挂载文档。画布样式解析支持后代和子选择器，设计内容按完整 RCSS 级联结果布局。
 
 项目 UI 画面的权威源格式是 `.sui`：一个版本化 JSON 资产包，`rml` 成员保存权威 RML 文本。一个画面就是一个资产、一个身份、一次原子保存。早期直接注册的 `.rml`（`RmlDocument`）仍可打开编辑，行为不变。
 
@@ -34,7 +34,9 @@ Styles 的 Edit 按钮打开已注册的共享 RCSS。StyleSheet 的 Rules & Pre
 
 拖动时 Layout／Inspector 的对应数值实时更新，松开只产生一次 Undo；Esc 取消。源的复杂表达式无法可靠换算时，拒绝该次拖动并保留原内容。已有 px、%、dp、em、rem、vw、vh、pt 值按对应参照换算；这不代表所有手写 RCSS 都能转换为有限预设。
 
-Design 顶部可输入预览宽高，选择 720p／1080p／Wide／Portrait，并用 Fit／100% 调整显示缩放；右下角可拖动预览尺寸。宽高与缩放属于当前编辑器实例的临时环境，不改变资产 dirty、文档 revision 或 Undo，不写进 RML。缩放后的鼠标距离会换算回画布距离。预览工厂通过 `EditorUiPreviewSource.Width/Height` 获得这组尺寸。
+Design 顶部可输入预览宽高，选择 720p／1080p／Wide／Portrait，并用 Fit、50%／75%／100%／125%／150%／200% 或 Zoom 滑条调整显示缩放；右下角可拖动画布尺寸。默认 desired 画布为 1920×1080，画布保持透明，边框表示当前 desired 尺寸，内部设计内容按缩放档位显示。宽高与缩放属于当前编辑器实例的临时环境，不改变资产 dirty、文档 revision 或 Undo，不写进 RML。缩放后的鼠标距离会换算回画布距离。
+
+预览和 Widget Tree 的固定工具按钮具有稳定的 DOM id，并由 `ui.describe` 以同名 `semanticId` 暴露。预览按钮使用 `ui-preview-fit`、`ui-preview-zoom-50`、`ui-preview-zoom-75`、`ui-preview-zoom-100`、`ui-preview-zoom-125`、`ui-preview-zoom-150`、`ui-preview-zoom-200`、`uiPreviewZoom`、`ui-preview-size-1280-720`、`ui-preview-size-1920-1080`、`ui-preview-size-2560-1080` 和 `ui-preview-size-720-1280`；滑条通过 `editor.ui-preview-zoom-percent:` 调整缩放；树操作使用 `ui-tree-expand`、`ui-tree-collapse`、`ui-tree-select-parent`、`ui-tree-move-up`、`ui-tree-move-down`、`ui-tree-indent` 和 `ui-tree-outdent`。这些 ID 只定位控件，实际执行仍通过对应的 `editor.ui-*` action。
 
 布局意图保存为 `data-ui-layout="free|horizontal|vertical|overlay"` 与 `data-ui-align-x/y="start|center|end"`，全部为字面作者元数据；未知值拒绝加载。具体效果由同时保存的 RCSS 声明执行，Game 不需要另一套布局解释器。若手写样式与预设意图不一致，编辑器回到 Custom，而不会覆盖源。
 
@@ -83,7 +85,7 @@ Design 中的输入、复选框、滑条、进度和图片使用原生元素展�
 
 | 面板 | 内容 |
 | --- | --- |
-| Design | 1280×720 的设计画布，按已链接 RCSS 的级联结果渲染每个元素，并提供选中、拖动、缩放手柄 |
+| Design | 默认 1920×1080 的透明设计画布，边框表示 desired 尺寸，可用缩放档位查看布局细节，并按已链接 RCSS 的级联结果渲染每个元素 |
 | Controls | 创建布局、内容和交互类的 10 类基础控件 |
 | Widget Tree | 显示名称、类型和 id，支持折叠、搜索、祖先路径及画布选中联动 |
 | Inspector | 选中元素的属性、class 建议和按 Layout / Flex / Spacing / Text / Appearance 分组的样式字段 |
@@ -137,7 +139,9 @@ Document.CommitGesture();   // 整次拖动只产生一条 Undo 记录
 ## 保存和诊断
 
 - 重复 id 是 error，会阻止 Save；缺失 id 是 warning，元素仍可通过树位置选中并被赋予稳定 id。
-- 叶子标签包含子元素、未知布局标签会产生 warning。
+- 文本标签包含块级子元素会产生 `UI_ELEMENT_LEAF_HAS_CHILDREN`；内联内容（`br`、`img`、`span` 等）不算，因为 RmlUi 用 `<br>` 换行，这类写法是正常内容。
+- 既不属于 RML 控件、也不属于标准标记词汇的标签才报 `UI_ELEMENT_TAG_UNKNOWN`。`br`、`hr`、`pre`、`code`、列表与表格等标准标签由 RmlUi 的 `*` 回退实例化并正常布局，不再刷警告。
+
 - 链接样式表缺失、越界或无法读取会产生 error 或指向具体文件的诊断。
 - Save 前重新计算诊断，并校验打开时的源文件哈希；文件在编辑器之外被修改时拒绝覆盖。写入使用同目录临时文件加原子替换。
 - `.sui` 保存时写出临时文件后立即用 `UiDocumentAsset` 重新解析，并比对 RML 规范化结果；包外字段集合不变，因此不会因为编辑器写入丢失 envelope。`.rml` 资产仍写 XML 本身。
@@ -164,7 +168,7 @@ Document.CommitGesture();   // 整次拖动只产生一条 Undo 记录
   "selectedPreviewElementId": "ui-design-node-0-0",
   "viewModelContract": "validation.main@1",
   "elementCount": 3,
-  "design": { "width": 1280, "height": 720 },
+  "design": { "width": 1920, "height": 1080 },
   "elements": [],
   "styleSheet": { "files": ["Main.rcss"], "inlineBlocks": 0, "ruleCount": 3, "classes": [], "tags": [] },
   "diagnostics": []
