@@ -34,9 +34,9 @@ Design 是 UI 资产编辑器的制作入口；编辑器不再显示 Runtime Pre
 
 拖动时 Layout／Inspector 的对应数值实时更新，松开只产生一次 Undo；Esc 取消。源的复杂表达式无法可靠换算时，拒绝该次拖动并保留原内容。已有 px、%、dp、em、rem、vw、vh、pt 值按对应参照换算；这不代表所有手写 RCSS 都能转换为有限预设。
 
-Design 顶部可输入预览宽高，选择 720p／1080p／Wide／Portrait，并用 Fit、50%／75%／100%／125%／150%／200% 或 Zoom 滑条调整显示缩放；右下角可拖动画布尺寸。默认 desired 画布为 1920×1080，画布保持透明，边框表示当前 desired 尺寸，内部设计内容按缩放档位显示。宽高与缩放属于当前编辑器实例的临时环境，不改变资产 dirty、文档 revision 或 Undo，不写进 RML。缩放后的鼠标距离会换算回画布距离。
+Design 顶部可输入参考屏幕宽高，选择 720p／1080p／Wide／Portrait；工作区使用稍浅的背景，是可向四个方向连续平移的无限画布，不使用有限滚动区域。Fit 将参考屏幕缩放并居中到编辑区域内；滚轮以鼠标位置为中心按倍率缩放，右键拖拽自由平移，不设 25%～200% 缩放限制或平移边界。Fit 和滚轮都只改变视图缩放及平移，不改变参考屏幕宽高，也不改变 Runtime 的窗口尺寸。参考屏幕不提供右下角尺寸手柄，参考宽高通过顶部输入框或预设按钮调整。默认参考屏幕为 1920×1080，略深的底色和浅色虚线框表示预览范围；金色虚线框仍表示当前 RML/RCSS 布局实际产生的顶层内容边界。内容可越出参考框；Design 视口通过 RmlUi 的 `clip: always` 强制裁剪预览内容、虚线与选中框，边框越出视口时不会绘制到 Inspector 或下方工具面板。Vulkan 适配层也按窗口坐标应用 scissor，避免裁剪框被当前元素变换再次缩放。该显示裁剪不限制画布平移或缩放。参考屏幕尺寸只提供布局和预览上下文，Content（auto）仍按布局结果测量，不会被参考屏幕尺寸当成内容尺寸。参考宽高、缩放与平移偏移属于当前编辑器实例的临时环境，不改变资产 dirty、文档 revision 或 Undo，不写进 RML。缩放后的鼠标距离会换算回画布距离。
 
-预览和 Widget Tree 的固定工具按钮具有稳定的 DOM id，并由 `ui.describe` 以同名 `semanticId` 暴露。预览按钮使用 `ui-preview-fit`、`ui-preview-zoom-50`、`ui-preview-zoom-75`、`ui-preview-zoom-100`、`ui-preview-zoom-125`、`ui-preview-zoom-150`、`ui-preview-zoom-200`、`uiPreviewZoom`、`ui-preview-size-1280-720`、`ui-preview-size-1920-1080`、`ui-preview-size-2560-1080` 和 `ui-preview-size-720-1280`；滑条通过 `editor.ui-preview-zoom-percent:` 调整缩放；树操作使用 `ui-tree-expand`、`ui-tree-collapse`、`ui-tree-select-parent`、`ui-tree-move-up`、`ui-tree-move-down`、`ui-tree-indent` 和 `ui-tree-outdent`。这些 ID 只定位控件，实际执行仍通过对应的 `editor.ui-*` action。
+Design 和 Widget Tree 的固定工具按钮具有稳定的 DOM id，并由 `ui.describe` 以同名 `semanticId` 暴露。Fit 使用 `ui-preview-fit`，设计尺寸按钮使用 `ui-preview-size-1280-720`、`ui-preview-size-1920-1080`、`ui-preview-size-2560-1080` 和 `ui-preview-size-720-1280`；设计视口使用 `uiDesignViewport`，参考屏幕容器使用 `uiDesignCanvas`，虚线框使用 `uiDesignReferenceFrame`，实际内容边界框使用 `uiDesignContentBounds`，Fit 和画布滚轮分别通过 `editor.ui-preview-fit`、`editor.ui-preview-wheel:` 调整显示缩放，右键拖拽通过 `editor.ui-preview-pan:<x>:<y>` 同步工作区偏移；滚轮原生输入使用 `editor.ui-preview-wheel:<delta>:<x>:<y>`（锚点为相对视口的像素坐标），仅传 delta 时以视口原点为锚点。`design.offsetX/offsetY` 以视口像素暴露临时平移；这些动作不改变 Runtime 窗口尺寸。树操作使用 `ui-tree-expand`、`ui-tree-collapse`、`ui-tree-select-parent`、`ui-tree-move-up`、`ui-tree-move-down`、`ui-tree-indent` 和 `ui-tree-outdent`。这些 ID 只定位控件，实际执行仍通过对应的 `editor.ui-*` action。
 
 布局意图保存为 `data-ui-layout="free|horizontal|vertical|overlay"` 与 `data-ui-align-x/y="start|center|end"`，全部为字面作者元数据；未知值拒绝加载。具体效果由同时保存的 RCSS 声明执行，Game 不需要另一套布局解释器。若手写样式与预设意图不一致，编辑器回到 Custom，而不会覆盖源。
 
@@ -62,6 +62,25 @@ Inspector 顶部提供 Display name 和类型专属属性：布局间距、文�
 
 Design 中的输入、复选框、滑条、进度和图片使用原生元素展示，外围选中框拥有设计手势；点击用于选中，不会把运行时输入当作作者编辑。图片的文档相对路径按 `.sui` 所在目录解析，预览不会把解析出的本机路径写回源。设计态可根据已保存的 `checked` 和 `disabled` 计算对应伪类；hover/active/focus 等运行时状态仍交由实际 RmlUi 运行预览处理。
 
+## 制作 UI：样式与复用的分工
+
+RCSS 管外观与布局，`.sui` 模板管节点结构与组合，项目 C# 管运行时行为。一个可复用控件通常同时包含模板和自己的样式；只需要统一外观时，复用样式即可。
+
+| 要制作的内容 | 使用方式 |
+| --- | --- |
+| 字体、颜色、背景、边框、留白、间距、排列与尺寸约束 | 写 RCSS；单个界面或控件的规则优先保存在 `.sui` 的 `rcss` |
+| 多个界面共用的按钮外观、字体规范、主题配色与通用间距规则 | 独立 `.sglobalcss` 资产，通过各包的 `globalStyleSheets` 显式引用 |
+| 反复出现的“图标＋名称＋数量”、设置行、页签或确认框内容 | 抽成 `.sui` 的 `<template>`，通过 `ui-use` 引用同一定义 |
+| 某次使用的文字、图标、数量、唯一 ID 与状态外观所用的 class | 通过模板参数提供；固定初始值保存在当前 `ui-use` 的 `values` |
+| 子控件在本页面的位置、可用空间与外部间距 | 由父模板布局决定，必要时设置当前 `ui-use` 的 class/style |
+| 点击后的操作、数据更新、校验与独立交互状态 | 放在使用方的 C# 实例，通过已有动作路由和组合 API 更新表现 |
+
+例如背包页面可由 `Inventory.sui` 排列若干 `ItemSlot.sui`。`ItemSlot.sui` 定义图标、名称和数量的结构及 `.item-slot` 私有样式；每个使用方提供自己的物品数据和 ID。修改物品格定义会影响引用它的页面；调整背包中某一格的位置或参数，只编辑该使用位置。不同结构只碰巧长得相似时，可以共用样式而保留各自模板。
+
+包内“私有样式”表示源文件与保存归属，不提供自动选择器隔离。组合后的样式进入同一 RmlUi 文档，建议使用 `.item-slot`、`.inventory-screen` 等根 class 限定规则，避免用通用 `button`、`span` 规则意外影响同屏其他控件。当前 `ui-use` 不支持放入 `ui-repeat`，也不自动重命名子定义的 ID；多次使用时应通过参数生成不同 ID。
+
+模板的 `${...}` 在组合时求值，不是自动实时数据绑定。运行时数据变化后由项目逻辑触发相应更新，不能只写 `data-bind` 就假定画面会跟随业务数据。具有自有行为或代码创建内容的子功能可通过 `ui-slot`／`IUiLayoutPart` 组合，参见 [运行时 UI](RuntimeUiScreens.md) 和 [代码组合 UI](RuntimeUiComposition.md)。
+
 ## 包格式
 
 ```json
@@ -85,7 +104,7 @@ Design 中的输入、复选框、滑条、进度和图片使用原生元素展�
 
 | 面板 | 内容 |
 | --- | --- |
-| Design | 默认 1920×1080 的透明设计画布，边框表示 desired 尺寸，可用缩放档位查看布局细节，并按已链接 RCSS 的级联结果渲染每个元素 |
+| Design | 无限平移的浅色工作区，默认 1920×1080 的参考预览范围用浅色虚线框标出，金色虚线表示实际内容边界；滚轮以鼠标为中心自由缩放，并按已链接 RCSS 的级联结果渲染每个元素 |
 | Controls | 创建布局、内容和交互类的 10 类基础控件 |
 | Widget Tree | 显示名称、类型和 id，支持折叠、搜索、祖先路径及画布选中联动 |
 | Inspector | 选中元素的属性、class 建议和按 Layout / Flex / Spacing / Text / Appearance 分组的样式字段 |
@@ -168,14 +187,23 @@ Document.CommitGesture();   // 整次拖动只产生一条 Undo 记录
   "selectedPreviewElementId": "ui-design-node-0-0",
   "viewModelContract": "validation.main@1",
   "elementCount": 3,
-  "design": { "width": 1920, "height": 1080 },
+  "design": {
+    "width": 1920,
+    "height": 1080,
+    "referenceWidth": 1920,
+    "referenceHeight": 1080,
+    "zoom": 1,
+    "offsetX": 28,
+    "offsetY": 28,
+    "contentBounds": null
+  },
   "elements": [],
   "styleSheet": { "files": ["Main.rcss"], "inlineBlocks": 0, "ruleCount": 3, "classes": [], "tags": [] },
   "diagnostics": []
 }
 ```
 
-`format` 为 `package`（`.sui`）或 `rml`（旧式裸 RML 资产），`packageName` 是包内 `name`；裸 RML 资产的 `packageName` 等于资产名。
+`design.width`/`height` 和 `referenceWidth`/`referenceHeight` 是 transient 的参考屏幕尺寸，不是内容的 desired 尺寸。`contentBounds` 是原生 RmlUi 在该参考屏幕上下文中测得的顶层内容边界；没有可见内容时为 `null`。`format` 为 `package`（`.sui`）或 `rml`（旧式裸 RML 资产），`packageName` 是包内 `name`；裸 RML 资产的 `packageName` 等于资产名。
 
 状态新增 `controls`（可创建类型目录）、`tree.search/collapsedKeys/visibleKeys`（临时视图）；选中节点增加 `controlProperties`（name/label/kind/value）。每个元素条目新增 `displayName`、`controlType`、`controlLabel`、`expanded`，并包含 `key`、`elementId`、`tag`、`previewElementId`、`depth`、`children`、`attributes` 和行内 `style`。选中元素还包含 `classes`、`text` 和 `computed`（每个生效声明的值及其来源：选择器文本或 `inline`）。
 

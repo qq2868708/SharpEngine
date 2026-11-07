@@ -62,7 +62,10 @@ propagation can be checked with
 
 The backend owns the window graphics context, UI render interface, GPU frame
 boundaries, presentation, and frame readback. UI hosts own RmlUi contexts,
-documents, input routing, and button behavior. Editor renders its scene inside
+documents, input routing, and button behavior. RmlUi scissor rectangles use window
+coordinates independently of the active element transform. The Vulkan UI adapter
+preserves this contract when forwarding to the legacy renderer; element transforms
+continue to apply to geometry. Editor renders its scene inside
 the UI viewport; Game renders the scene followed by its runtime UI. Neither
 graphics implementation depends on `SHARPENGINE_GAME`.
 
@@ -89,6 +92,10 @@ scene/UI presentation and BMP readback, and headless-mode conflicts. The MCP
 checks exercise coordinate input, focus, keyboard routing and pinned UI frames.
 Game publishes the same `ui.describe`, `ui.pointer`, `ui.key` and pinned PNG
 frame contracts through its own MCP endpoint, without loading Editor assemblies:
+
+Game requests an explicit readback before presenting a frame for a new snapshot
+or input result. Vulkan readback is demand-driven; an idle frame without a request
+does not replace pinned pixels. Snapshot semantics and PNGs stay bound to one frame.
 
 ```powershell
 python Tools/ValidateGameUiMcp.py --project C:\Games\Demo\Demo.sharpproject --render-backend opengl

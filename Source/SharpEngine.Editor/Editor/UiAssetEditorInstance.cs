@@ -15,7 +15,7 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
     private readonly IEditorUiPreview? Preview;
     private readonly List<AssetEditorLiveProperty> PendingLiveProperties = [];
     private bool MarkupRefreshRequested;
-    private (int Width, int Height)? PreviewResize;
+    private DesignContentBounds? PublishedDesignContentBounds;
 
     public UiAssetEditorInstance(EditorAssetOpenContext Context, IEditorUiPreview? Preview = null)
     {
@@ -42,7 +42,13 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
     public string PrimaryPaneId => "design";
     public bool IsDirty => Document.IsDirty;
     public bool IsReadOnly => Document.IsReadOnly;
-    public bool SuppressMarkupRefresh => PreviewResize is not null || Document.IsGesturing && !Document.IsReadOnly;
+    public bool SuppressMarkupRefresh
+    {
+        get
+        {
+            return Document.IsGesturing && !Document.IsReadOnly;
+        }
+    }
 
     public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; } =
     [
@@ -309,12 +315,6 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
         }
         if (Action == "editor.ui-drag-end")
         {
-            if (PreviewResize is not null)
-            {
-                PreviewResize = null;
-                MarkupRefreshRequested = true;
-                return true;
-            }
             Document.CommitGesture();
             MarkupRefreshRequested = true;
             Context.SetStatus(Document.IsDirty
@@ -324,14 +324,6 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
         }
         if (Action is "editor.ui-drag-cancel" or "editor.ui-drag-discard")
         {
-            if (PreviewResize is not null)
-            {
-                var Size = PreviewResize.Value;
-                PreviewResize = null;
-                Document.SetPreviewSize(Size.Width, Size.Height, out _);
-                MarkupRefreshRequested = true;
-                return true;
-            }
             Document.CancelGesture();
             MarkupRefreshRequested = true;
             Context.SetStatus("Element gesture canceled");
@@ -414,6 +406,10 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
 
     public string BuildPaneMarkup(string PaneId)
     {
+        if (PaneId == "design")
+        {
+            PublishedDesignContentBounds = null;
+        }
         return PaneId switch
         {
             "design" => UiEditorMarkup.BuildCanvas(Document),
@@ -444,6 +440,7 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
     {
         _ = DeltaSeconds;
         MarkupRefreshRequested |= Document.RefreshChangedDependencies();
+        UpdateDesignContentBounds();
         var Metrics = UiLayoutMetrics.Read(Context.ReadElementLayout(SelectedPreviewId));
         if (Metrics is not null)
         {
@@ -496,7 +493,23 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
 
     public JsonObject Describe()
     {
+        UpdateDesignContentBounds();
         var State = Document.Describe();
+        var Design = State["design"]?.AsObject();
+        if (Design is not null)
+        {
+            Design["referenceWidth"] = Document.PreviewWidth;
+            Design["referenceHeight"] = Document.PreviewHeight;
+            Design["contentBounds"] = PublishedDesignContentBounds is { } Bounds
+                ? new JsonObject
+                {
+                    ["x"] = Bounds.X,
+                    ["y"] = Bounds.Y,
+                    ["width"] = Bounds.Width,
+                    ["height"] = Bounds.Height,
+                }
+                : null;
+        }
         State["editorRootId"] = Context.EditorRootId;
         State["viewModelContractAvailable"] = Document.ViewModelContract.Length == 0 ||
             Context.Runtime.UiRuntime.ViewModelContracts.Any(Contract =>
@@ -517,11 +530,6 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
         var Separator = Payload.IndexOf('|');
         var Handle = Separator < 0 ? Payload : Payload[..Separator];
         var NodeKey = Separator < 0 ? string.Empty : Payload[(Separator + 1)..];
-        if (Handle == "viewport-resize")
-        {
-            PreviewResize = (Document.PreviewWidth, Document.PreviewHeight);
-            return;
-        }
         if (NodeKey.Length != 0 && !Document.Select(NodeKey))
         {
             Context.SetStatus($"Unknown design node '{NodeKey}'");
@@ -579,20 +587,6 @@ internal sealed partial class UiAssetEditorInstance : IAssetEditorInstance, IAss
             return;
         }
         var Snap = Parts[3] == "snap";
-        if (PreviewResize is not null)
-        {
-            var Size = PreviewResize.Value;
-            var Width = Math.Clamp(Size.Width + DeltaX, 160, 7680);
-            var Height = Math.Clamp(Size.Height + DeltaY, 120, 4320);
-            Document.SetPreviewSize(Width, Height, out _);
-            PendingLiveProperties.Add(new("uiDesignCanvas", "width", Width + "px"));
-            PendingLiveProperties.Add(new("uiDesignCanvas", "height", Height + "px"));
-            PendingLiveProperties.Add(new("uiDesignSurface", "width", (Width * Document.PreviewZoom).ToString(System.Globalization.CultureInfo.InvariantCulture) + "px"));
-            PendingLiveProperties.Add(new("uiDesignSurface", "height", (Height * Document.PreviewZoom).ToString(System.Globalization.CultureInfo.InvariantCulture) + "px"));
-            PendingLiveProperties.Add(new("uiPreviewWidth", "value", Width.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-            PendingLiveProperties.Add(new("uiPreviewHeight", "value", Height.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-            return;
-        }
         var Applied = Parts[0] == "move"
             ? Document.ApplyGestureMove(Parts[0], DeltaX, DeltaY, Snap, out var Message)
             : Document.ApplyGestureResize(Parts[0], DeltaX, DeltaY, Snap, out Message);

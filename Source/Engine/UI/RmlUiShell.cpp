@@ -535,6 +535,16 @@ struct RmlUiShell::Impl
         bool Active{};
     } ElementGesture;
 
+    struct PreviewPanState
+    {
+        Host* SourceHost{};
+        Rml::Element* Surface{};
+        POINT StartScreen{};
+        float StartOffsetX{};
+        float StartOffsetY{};
+        bool Active{};
+    } PreviewPan;
+
     HWND ViewportCaptureWindow{};
     SharpEngine::Windows::GameplayInputCapture GameplayCapture;
     int GameplayCaptureRequest = -1;
@@ -793,6 +803,8 @@ struct RmlUiShell::Impl
         return role == "splitter" || role == "tab" || role == "button" || role == "menu" ||
             role == "input" || role == "viewport" || role == "menu-item" ||
             element->HasAttribute("data-input-surface") ||
+            element->HasAttribute("data-ui-preview-pan") ||
+            element->HasAttribute("data-ui-preview-pan-target") ||
             element->HasAttribute("data-ui-gesture") ||
             element->HasAttribute("data-timeline-ruler") ||
             element->HasAttribute("action") || element->HasAttribute("data-action");
@@ -1919,7 +1931,11 @@ struct RmlUiShell::Impl
         if (!host || !host->Context) return;
         // Pointer deltas are screen pixels; authoring zoom changes their scale.
         // Individual RCSS units (including dp) are converted by the layout editor.
-        const float ratio = (std::max)(0.01f, ElementGesture.DesignScale);
+        const float ratio = ElementGesture.DesignScale;
+        if (!std::isfinite(ratio) || ratio <= 0.0f)
+        {
+            return;
+        }
         const int dx = static_cast<int>(std::lround(
             (screen.x - ElementGesture.StartScreen.x) / ratio));
         const int dy = static_cast<int>(std::lround(
@@ -1948,6 +1964,54 @@ struct RmlUiShell::Impl
         if (host) QueueAction(*host, ElementGesture.Active
             ? "editor.ui-drag-cancel" : "editor.ui-drag-discard");
         ClearElementGesture();
+    }
+
+    bool BeginPreviewPan(Host& host, Rml::Element* target, POINT screen)
+    {
+        auto* Viewport = FindAttributeElement(target, "data-ui-preview-pan");
+        if (!Viewport)
+        {
+            return false;
+        }
+        auto* Surface = FindDescendantWithAttribute(Viewport, "data-ui-preview-pan-target", "true");
+        if (!Surface)
+        {
+            return false;
+        }
+        PreviewPan.SourceHost = &host;
+        PreviewPan.Surface = Surface;
+        PreviewPan.StartScreen = screen;
+        PreviewPan.StartOffsetX = Surface->GetAttribute<float>("data-ui-offset-x", 28.0f);
+        PreviewPan.StartOffsetY = Surface->GetAttribute<float>("data-ui-offset-y", 28.0f);
+        PreviewPan.Active = true;
+        SetCapture(host.Window);
+        return true;
+    }
+
+    void UpdatePreviewPan(POINT screen)
+    {
+        if (!PreviewPan.Active || !PreviewPan.Surface || !PreviewPan.SourceHost)
+        {
+            return;
+        }
+        const float X = PreviewPan.StartOffsetX + static_cast<float>(screen.x - PreviewPan.StartScreen.x);
+        const float Y = PreviewPan.StartOffsetY + static_cast<float>(screen.y - PreviewPan.StartScreen.y);
+        SetPixelProperty(PreviewPan.Surface, "left", X);
+        SetPixelProperty(PreviewPan.Surface, "top", Y);
+        PreviewPan.Surface->SetAttribute("data-ui-offset-x", X);
+        PreviewPan.Surface->SetAttribute("data-ui-offset-y", Y);
+        QueueAction(*PreviewPan.SourceHost, "editor.ui-preview-pan:" +
+            std::to_string(X) + ":" + std::to_string(Y));
+    }
+
+    void FinishPreviewPan()
+    {
+        PreviewPan = {};
+    }
+
+    void CancelPreviewPan()
+    {
+        PreviewPan = {};
     }
 
     void BeginPointerDrag(Host& host, Rml::Element* target, POINT screen)
@@ -2304,6 +2368,23 @@ struct RmlUiShell::Impl
         }
         const int MouseX = event.GetParameter<int>("mouse_x", 0);
         const int MouseY = event.GetParameter<int>("mouse_y", 0);
+        if (EventId == Rml::EventId::Mousescroll)
+        {
+            auto* Preview = FindAttributeElement(target, "data-ui-preview-wheel");
+            if (Preview)
+            {
+                const float Delta = -event.GetParameter<float>("wheel_delta_y", 0);
+                if (std::isfinite(Delta) && Delta != 0.0f)
+                {
+                    QueueAction(host, "editor.ui-preview-wheel:" +
+                        std::to_string(Delta) + ":" +
+                        std::to_string(MouseX - Preview->GetAbsoluteOffset().x) + ":" +
+                        std::to_string(MouseY - Preview->GetAbsoluteOffset().y));
+                }
+                event.StopPropagation();
+                return;
+            }
+        }
         auto* Timeline = FindAttributeElement(target, "data-timeline-id");
         auto* Ruler = FindAttributeElement(target, "data-timeline-ruler");
         if (EventId == Rml::EventId::Mousedown && Ruler && Timeline &&
@@ -2679,6 +2760,10 @@ struct RmlUiShell::Impl
             CancelSplitterDrag();
         if (ElementGesture.SourceHost == &host)
             CancelElementGesture();
+        if (PreviewPan.SourceHost == &host)
+        {
+            CancelPreviewPan();
+        }
         SetCurrentHost(host);
         if (host.Context)
         {
@@ -3077,6 +3162,7 @@ void RmlUiShell::Shutdown()
     state.GameplayCaptureRequest = -1;
     state.GameplayCapture.Release();
     state.CancelDockDrag();
+    state.CancelPreviewPan();
     if (state.DockGhostWindow)
     {
         DestroyWindow(state.DockGhostWindow);
@@ -3270,6 +3356,7 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     uint32_t pointerButtons = 0;
     uint32_t pointerCode = 0;
     bool pointerMoveHandled = false;
+    bool previewPanHandled = false;
     if (buttonMessage || message == WM_MOUSEMOVE || message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL)
     {
         int x = static_cast<short>(LOWORD(lParam));
@@ -3301,16 +3388,40 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
             message == WM_MBUTTONDBLCLK || message == WM_XBUTTONDOWN;
         if (buttonDown && viewport)
             state.ViewportCaptureWindow = window;
+        if (!GameplayPointer && (message == WM_RBUTTONDOWN ||
+            message == WM_RBUTTONDBLCLK))
+        {
+            previewPanHandled = state.BeginPreviewPan(
+                *host, host->Context->GetHoverElement(), screen);
+        }
         if (!GameplayPointer && (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK))
         {
             state.BeginPointerDrag(*host, host->Context->GetHoverElement(), screen);
         }
         if (!GameplayPointer && message == WM_MOUSEMOVE)
         {
-            if (state.SplitterDrag.Active) state.UpdateSplitterRatio(screen);
+            if (state.PreviewPan.Active)
+            {
+                state.UpdatePreviewPan(screen);
+                previewPanHandled = true;
+            }
+            else if (state.SplitterDrag.Active)
+            {
+                state.UpdateSplitterRatio(screen);
+            }
             else if (state.ElementGesture.Pending || state.ElementGesture.Active)
+            {
                 state.UpdateElementGesture(screen, (wParam & MK_SHIFT) != 0);
-            else state.UpdateDockDrag(screen);
+            }
+            else
+            {
+                state.UpdateDockDrag(screen);
+            }
+        }
+        if (message == WM_RBUTTONUP && state.PreviewPan.Active)
+        {
+            state.FinishPreviewPan();
+            previewPanHandled = true;
         }
         if (message == WM_LBUTTONUP)
         {
@@ -3378,13 +3489,20 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         state.CancelDockDrag();
         state.CancelSplitterDrag();
         state.CancelElementGesture();
+        state.CancelPreviewPan();
         if (state.InputEvent)
             state.InputEvent(host->Id.c_str(), 7, 0, 0, 0, 0, 0, 0,
                 static_cast<uint32_t>(state.ModifierState()), true, false);
     }
     bool propagate = true;
-    if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+    if (previewPanHandled)
+    {
+        propagate = false;
+    }
+    else if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+    {
         propagate = host->Context->ProcessKeyDown(RmlWin32::ConvertKey(static_cast<int>(wParam)), state.ModifierState());
+    }
     else if (message == WM_KEYUP || message == WM_SYSKEYUP)
         propagate = host->Context->ProcessKeyUp(RmlWin32::ConvertKey(static_cast<int>(wParam)), state.ModifierState());
     else if (message == WM_MOUSEMOVE) propagate = !pointerMoveHandled;
@@ -3400,6 +3518,13 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         propagate = host->Context->ProcessMouseButtonDown(2, state.ModifierState());
     else if (message == WM_MOUSEHWHEEL)
         propagate = host->Context->ProcessMouseWheel({static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / WHEEL_DELTA, 0}, state.ModifierState());
+    else if (message == WM_MOUSEWHEEL && state.InjectedModifiers < 0)
+    {
+        propagate = host->Context->ProcessMouseWheel(
+            static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) /
+                static_cast<float>(-WHEEL_DELTA),
+            state.ModifierState());
+    }
     else if (message == WM_LBUTTONUP &&
         (state.GameplayCapture.IsActive() || host->TimelineScrubbing))
     {
@@ -4107,6 +4232,7 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
          (state.SplitterDrag.Active && state.SplitterDrag.HostWindow == host) ||
          ((state.ElementGesture.Active || state.ElementGesture.Pending) &&
           state.ElementGesture.SourceHost == host) ||
+         (state.PreviewPan.Active && state.PreviewPan.SourceHost == host) ||
          ((state.DockDrag.Active || state.DockDrag.Pending) &&
           state.DockDrag.SourceHost == host));
     if ((!expectedFrame && !(event == 3 && continuingCapture)) ||

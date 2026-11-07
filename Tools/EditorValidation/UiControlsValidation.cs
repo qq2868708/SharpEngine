@@ -135,12 +135,6 @@ internal static class UiControlsValidation
         var ExpectedPreviewButtons = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ui-preview-fit"] = "editor.ui-preview-fit",
-            ["ui-preview-zoom-50"] = "editor.ui-preview-zoom:0.5",
-            ["ui-preview-zoom-75"] = "editor.ui-preview-zoom:0.75",
-            ["ui-preview-zoom-100"] = "editor.ui-preview-zoom:1",
-            ["ui-preview-zoom-125"] = "editor.ui-preview-zoom:1.25",
-            ["ui-preview-zoom-150"] = "editor.ui-preview-zoom:1.5",
-            ["ui-preview-zoom-200"] = "editor.ui-preview-zoom:2",
             ["ui-preview-size-1280-720"] = "editor.ui-preview-size:1280:720",
             ["ui-preview-size-1920-1080"] = "editor.ui-preview-size:1920:1080",
             ["ui-preview-size-2560-1080"] = "editor.ui-preview-size:2560:1080",
@@ -152,13 +146,14 @@ internal static class UiControlsValidation
                 (string?)Item.Attribute("id") == Pair.Key);
             return Button is not null && (string?)Button.Attribute("action") == Pair.Value;
         }), "Preview tool buttons expose stable IDs while retaining their typed actions");
-        var PreviewZoom = CanvasMarkup.Descendants("input").SingleOrDefault(Item =>
-            (string?)Item.Attribute("id") == "uiPreviewZoom");
-        Check(PreviewZoom is not null &&
-            (string?)PreviewZoom.Attribute("type") == "range" &&
-            (string?)PreviewZoom.Attribute("data-change-action") ==
-                "editor.ui-preview-zoom-percent:",
-            "Preview exposes a stable range control for continuous zoom");
+        var PreviewViewport = CanvasMarkup.Descendants("div").SingleOrDefault(Item =>
+            (string?)Item.Attribute("id") == "uiDesignViewport");
+        Check(PreviewViewport is not null &&
+            (string?)PreviewViewport.Attribute("data-ui-preview-wheel") == "true" &&
+            (string?)PreviewViewport.Attribute("data-ui-preview-pan") == "true" &&
+            CanvasMarkup.Descendants("input").All(Item =>
+                (string?)Item.Attribute("id") is not ("uiPreviewZoom" or "uiPreviewZoomValue")),
+            "Preview exposes wheel zoom and right-drag panning without redundant zoom controls");
         var HierarchyMarkup = XElement.Parse("<validation-root>" +
             UiEditorMarkup.BuildHierarchy(Document) + "</validation-root>");
         var ExpectedTreeButtons = new[]

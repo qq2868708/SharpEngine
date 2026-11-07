@@ -363,7 +363,7 @@ internal static class GameUiValidation
         return Manifest;
     }
 
-    internal static void Run(string Root, string Configuration, Action<bool, string> Check)
+    internal static void Run(string Root, string Configuration, Action<bool, string> Check, string? RenderBackend = null)
     {
         var Manifest = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
         if (string.IsNullOrWhiteSpace(Manifest))
@@ -392,6 +392,10 @@ internal static class GameUiValidation
         Start.ArgumentList.Add(Manifest);
         Start.ArgumentList.Add("--mcp-session-id");
         Start.ArgumentList.Add(SessionId);
+        if (RenderBackend is not null)
+        {
+            Start.ArgumentList.Add(RenderBackend);
+        }
         using var Game = Process.Start(Start) ??
             throw new IOException("Could not start the Game executable");
         var GameOutput = Game.StandardOutput.ReadToEndAsync();
@@ -446,6 +450,22 @@ internal static class GameUiValidation
                     ["name"] = Name,
                     ["arguments"] = Arguments,
                 });
+
+            var CatalogDirectory = Path.Combine(Output, "McpUiCatalogs", SessionId);
+            Directory.CreateDirectory(CatalogDirectory);
+            foreach (var Catalog in new[]
+            {
+                "tools", "resources", "resources/templates",
+            })
+            {
+                File.WriteAllText(Path.Combine(CatalogDirectory, Catalog.Replace('/', '-') + ".json"),
+                    Call(Catalog + "/list", new JsonObject()).ToJsonString());
+            }
+            var Render = Tool("render.describe", new JsonObject())["result"]!["structuredContent"]!;
+            var ExpectedBackend = RenderBackend?.Split('=').Last() ?? "opengl";
+            Check(Render["backend"]!.GetValue<string>() == ExpectedBackend,
+                "Game UI validation uses the requested native graphics backend");
+            File.WriteAllText(Path.Combine(CatalogDirectory, "render.json"), Render.ToJsonString());
 
             // Frame pinning needs one completed presentation; poll until the Game has
             // rendered, exactly as an MCP client must.

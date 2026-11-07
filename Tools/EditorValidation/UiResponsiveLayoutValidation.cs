@@ -43,6 +43,18 @@ internal static class UiResponsiveLayoutValidation
             Document.PreviewZoom == 0.5f && !Document.IsDirty && Document.Revision == Revision &&
             !Document.CanUndo,
             "Preview zoom is a transient per-instance setting outside source, dirty state and Undo");
+        Check(Document.SetPreviewZoom(0.001f) && Document.SetPreviewZoom(16) &&
+            !Document.SetPreviewZoom(0) && !Document.SetPreviewZoom(float.PositiveInfinity) &&
+            !Document.SetPreviewZoom(float.NaN),
+            "Zoom accepts values beyond former limits and rejects non-positive or non-finite transforms");
+        Check(Document.SetPreviewOffset(-120000, 80000) &&
+            Document.Describe()["design"]!["offsetX"]!.GetValue<float>() == -120000 &&
+            Document.Describe()["design"]!["offsetY"]!.GetValue<float>() == 80000 &&
+            !Document.SetPreviewOffset(float.NaN, 0) &&
+            Load().PreviewOffsetX == 28 && !Document.IsDirty && !Document.CanUndo &&
+            Document.Revision == Revision && Document.CanonicalSource == Initial,
+            "Unbounded pan is observable, isolated per instance and never changes asset history or source");
+        Document.SetPreviewZoom(0.5f);
         var Metrics = new UiLayoutMetrics(520, 20, 200, 40, 800, 600, 1920, 1080);
         string Style(string Name) => Document.Sheet.Compute(Document.SelectedElement()!).GetValueOrDefault(Name)?.Value ?? "";
         Document.Select("#right");

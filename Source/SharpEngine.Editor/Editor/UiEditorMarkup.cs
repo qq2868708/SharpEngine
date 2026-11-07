@@ -14,36 +14,26 @@ internal static partial class UiEditorMarkup
     {
         var Body = Document.DesignBodyElement;
         var Builder = new StringBuilder();
-        Builder.Append("<div class=\"ui-design-pane\"><div class=\"ui-preview-controls\">Preview ")
-            .Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiPreviewWidth",
-                Document.PreviewWidth.ToString(CultureInfo.InvariantCulture), "editor.ui-preview:width:", Kind: "integer")))
-            .Append(" x ")
-            .Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiPreviewHeight",
-                Document.PreviewHeight.ToString(CultureInfo.InvariantCulture), "editor.ui-preview:height:", Kind: "integer")))
-            .Append(ToolButton("ui-preview-fit", "editor.ui-preview-fit", "Fit", "Fit the preview into the available space", true))
-            .Append(ToolButton("ui-preview-zoom-50", "editor.ui-preview-zoom:0.5", "50%", "Show the preview at half size", true))
-            .Append(ToolButton("ui-preview-zoom-75", "editor.ui-preview-zoom:0.75", "75%", "Show the preview at three-quarter size", true))
-            .Append(ToolButton("ui-preview-zoom-100", "editor.ui-preview-zoom:1", "100%", "Actual preview pixels", true))
-            .Append(ToolButton("ui-preview-zoom-125", "editor.ui-preview-zoom:1.25", "125%", "Show the preview at one-and-a-quarter size", true))
-            .Append(ToolButton("ui-preview-zoom-150", "editor.ui-preview-zoom:1.5", "150%", "Show the preview at one-and-a-half size", true))
-            .Append(ToolButton("ui-preview-zoom-200", "editor.ui-preview-zoom:2", "200%", "Show the preview at double size", true))
-            .Append("<label class=\"ui-preview-zoom-caption\" for=\"uiPreviewZoom\">Zoom</label><input id=\"uiPreviewZoom\" type=\"range\" min=\"25\" max=\"200\" step=\"5\" value=\"")
-            .Append(MathF.Round(Document.PreviewZoom * 100).ToString(CultureInfo.InvariantCulture))
-            .Append("\" data-change-action=\"editor.ui-preview-zoom-percent:\" /><span id=\"uiPreviewZoomValue\" class=\"ui-preview-zoom-value\">")
-            .Append(MathF.Round(Document.PreviewZoom * 100).ToString(CultureInfo.InvariantCulture))
-            .Append("%</span>")
-            .Append(ToolButton("ui-preview-size-1280-720", "editor.ui-preview-size:1280:720", "720p", "1280 x 720 preview", true))
-            .Append(ToolButton("ui-preview-size-1920-1080", "editor.ui-preview-size:1920:1080", "1080p", "1920 x 1080 preview", true))
-            .Append(ToolButton("ui-preview-size-2560-1080", "editor.ui-preview-size:2560:1080", "Wide", "2560 x 1080 preview", true))
-            .Append(ToolButton("ui-preview-size-720-1280", "editor.ui-preview-size:720:1280", "Portrait", "720 x 1280 preview", true)).Append("</div>")
-            .Append("<div class=\"ui-design-ruler\"><span class=\"ui-design-ruler-label\">")
+        Builder.Append("<div class=\"ui-design-pane\"><div class=\"ui-preview-controls\">Reference screen ")
+            .Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiPreviewWidth", Document.PreviewWidth.ToString(CultureInfo.InvariantCulture), "editor.ui-preview:width:", Kind: "integer")))
+            .Append(" x ").Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiPreviewHeight", Document.PreviewHeight.ToString(CultureInfo.InvariantCulture), "editor.ui-preview:height:", Kind: "integer")))
+            .Append(ToolButton("ui-preview-fit", "editor.ui-preview-fit", "Fit", "Fit the reference screen into the available editor space", true))
+            .Append(ToolButton("ui-preview-size-1280-720", "editor.ui-preview-size:1280:720", "720p", "Use a 1280 x 720 reference screen", true))
+            .Append(ToolButton("ui-preview-size-1920-1080", "editor.ui-preview-size:1920:1080", "1080p", "Use a 1920 x 1080 reference screen", true))
+            .Append(ToolButton("ui-preview-size-2560-1080", "editor.ui-preview-size:2560:1080", "Wide", "Use a 2560 x 1080 reference screen", true))
+            .Append(ToolButton("ui-preview-size-720-1280", "editor.ui-preview-size:720:1280", "Portrait", "Use a 720 x 1280 reference screen", true)).Append("</div>")
+            .Append("<div class=\"ui-design-ruler\"><span class=\"ui-design-ruler-label\">Reference screen: ")
             .Append(Document.PreviewWidth.ToString(CultureInfo.InvariantCulture))
             .Append(" x ")
             .Append(Document.PreviewHeight.ToString(CultureInfo.InvariantCulture))
             .Append("</span><div class=\"grow\" /><span class=\"ui-design-hint\">")
-            .Append(Document.IsReadOnly ? "Read only document" : "Drag to move, Shift for 10px steps")
+            .Append(Document.IsReadOnly ? "Read only document" : "Wheel to zoom at pointer, right-drag to pan · dashed frame = reference screen")
             .Append("</span></div>")
-            .Append("<div id=\"uiDesignViewport\" class=\"ui-design-scroll\"><div id=\"uiDesignSurface\" class=\"ui-design-surface\" style=\"width:")
+            .Append("<div id=\"uiDesignViewport\" class=\"ui-design-scroll\" data-ui-preview-wheel=\"true\" data-ui-preview-pan=\"true\"><div id=\"uiDesignSurface\" class=\"ui-design-surface\" data-ui-preview-pan-target=\"true\" data-ui-offset-x=\"")
+            .Append(Document.PreviewOffsetX.ToString(CultureInfo.InvariantCulture)).Append("\" data-ui-offset-y=\"")
+            .Append(Document.PreviewOffsetY.ToString(CultureInfo.InvariantCulture)).Append("\" style=\"left:")
+            .Append(Document.PreviewOffsetX.ToString(CultureInfo.InvariantCulture)).Append("px;top:")
+            .Append(Document.PreviewOffsetY.ToString(CultureInfo.InvariantCulture)).Append("px;width:")
             .Append((Document.PreviewWidth * Document.PreviewZoom).ToString(CultureInfo.InvariantCulture)).Append("px;height:")
             .Append((Document.PreviewHeight * Document.PreviewZoom).ToString(CultureInfo.InvariantCulture))
             .Append("px;\"><div id=\"uiDesignCanvas\" class=\"ui-design-canvas\" data-ui-scale=\"")
@@ -71,10 +61,46 @@ internal static partial class UiEditorMarkup
                 AppendNode(Builder, Document, Element);
             }
         }
-        Builder.Append("<div id=\"uiPreviewResize\" class=\"ui-preview-resize\" data-ui-gesture=\"viewport-resize\" title=\"Drag to resize the preview environment\" style=\"width:")
-            .Append((22 / Document.PreviewZoom).ToString(CultureInfo.InvariantCulture)).Append("px;height:")
-            .Append((22 / Document.PreviewZoom).ToString(CultureInfo.InvariantCulture)).Append("px;\">↘</div></div></div></div></div>");
+        Builder.Append("<div id=\"uiDesignReferenceFrame\" class=\"ui-design-reference-frame\">");
+        AppendFrameDashes(Builder, Document.PreviewZoom);
+        Builder.Append("</div>");
+        Builder.Append("<div id=\"uiDesignContentBounds\" class=\"ui-design-content-bounds\" data-ui-content-bounds=\"true\" style=\"display:none;left:0px;top:0px;width:0px;height:0px;\">")
+            .Append("<span id=\"uiDesignContentBoundsLabel\" class=\"ui-design-content-bounds-label\"></span>");
+        AppendFrameDashes(Builder, Document.PreviewZoom);
+        Builder.Append("</div>");
+        Builder.Append("</div></div></div></div>");
         return Builder.ToString();
+    }
+
+    private static void AppendFrameDashes(StringBuilder Builder, float Zoom)
+    {
+        // RmlUi has no CSS border-style. Explicit segments render on every backend.
+        // Percentage positions follow live reference/content resizing without rebuilding.
+        const int SegmentCount = 64;
+        var Thickness = (1 / Zoom).ToString(CultureInfo.InvariantCulture);
+        var Length = (50f / SegmentCount).ToString(CultureInfo.InvariantCulture);
+        for (var Index = 0; Index < SegmentCount; Index++)
+        {
+            var Position = (Index * 100f / SegmentCount).ToString(CultureInfo.InvariantCulture);
+            foreach (var Edge in new[]
+            {
+                "top", "bottom",
+            })
+            {
+                Builder.Append("<div class=\"ui-design-frame-dash\" style=\"left:")
+                    .Append(Position).Append("%;").Append(Edge).Append(":0px;width:")
+                    .Append(Length).Append("%;height:").Append(Thickness).Append("px;\" />");
+            }
+            foreach (var Edge in new[]
+            {
+                "left", "right",
+            })
+            {
+                Builder.Append("<div class=\"ui-design-frame-dash\" style=\"top:")
+                    .Append(Position).Append("%;").Append(Edge).Append(":0px;height:")
+                    .Append(Length).Append("%;width:").Append(Thickness).Append("px;\" />");
+            }
+        }
     }
 
     public static string BuildControls(UiEditorDocument Document)

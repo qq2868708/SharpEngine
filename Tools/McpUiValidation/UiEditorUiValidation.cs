@@ -89,7 +89,8 @@ internal static class UiEditorUiValidation
 
     internal static void Run(string Root, Action<bool, string> Check,
         Func<int, string, JsonObject, JsonObject> Tool,
-        Func<int, string, JsonObject?, JsonObject> Call)
+        Func<int, string, JsonObject?, JsonObject> Call,
+        Func<byte[], DecodedPng> DecodeFrame)
     {
         var Output = Path.Combine(Root, "Saved", "Validation", "UiEditor");
         Directory.CreateDirectory(Output);
@@ -142,6 +143,24 @@ internal static class UiEditorUiValidation
         {
             return Host(Ui)["elements"]!.AsArray()
                 .Single(Item => Item!["semanticId"]?.GetValue<string>() == Id)!.AsObject();
+        }
+        void CheckDesignClip(JsonObject Ui)
+        {
+            var Viewport = Element(Ui, "uiDesignViewport")["bounds"]!.AsObject();
+            foreach (var Id in new[]
+            {
+                "uiDesignCanvas", "uiDesignReferenceFrame", "uiDesignContentBounds", "ui-design-node-0",
+            })
+            {
+                var Clip = Element(Ui, Id)["clip"]!.AsObject();
+                Check(Clip["x"]!.GetValue<double>() >= Viewport["x"]!.GetValue<double>() - 1 &&
+                    Clip["y"]!.GetValue<double>() >= Viewport["y"]!.GetValue<double>() - 1 &&
+                    Clip["x"]!.GetValue<double>() + Clip["width"]!.GetValue<double>() <=
+                        Viewport["x"]!.GetValue<double>() + Viewport["width"]!.GetValue<double>() + 1 &&
+                    Clip["y"]!.GetValue<double>() + Clip["height"]!.GetValue<double>() <=
+                        Viewport["y"]!.GetValue<double>() + Viewport["height"]!.GetValue<double>() + 1,
+                    $"Design element {Id} is clipped to the viewport even when the canvas overflows (clip={Clip}, viewport={Viewport})");
+            }
         }
         void Pointer(string Id, string Event, int OffsetX = 0, int OffsetY = 0)
         {
@@ -196,7 +215,7 @@ internal static class UiEditorUiValidation
             {
                 File.WriteAllBytes(Path.Combine(Output, "pointer-failed.png"), Convert.FromBase64String(Blob));
             }
-            throw new InvalidOperationException("Retained input unavailable for " + Id + ": " + LastResult);
+            throw new InvalidOperationException("Retained input unavailable for " + Id + " event=" + Event + ": " + LastResult);
         }
         void Click(string Id)
         {
@@ -205,6 +224,7 @@ internal static class UiEditorUiValidation
         }
 
         var Initial = Observe();
+        CheckDesignClip(Initial);
         File.WriteAllText(Path.Combine(Output, "initial-host.json"),
             Host(Initial).ToJsonString(new System.Text.Json.JsonSerializerOptions(
                 System.Text.Json.JsonSerializerOptions.Default)
@@ -222,12 +242,6 @@ internal static class UiEditorUiValidation
         var PreviewActions = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["ui-preview-fit"] = "editor.ui-preview-fit",
-            ["ui-preview-zoom-50"] = "editor.ui-preview-zoom:0.5",
-            ["ui-preview-zoom-75"] = "editor.ui-preview-zoom:0.75",
-            ["ui-preview-zoom-100"] = "editor.ui-preview-zoom:1",
-            ["ui-preview-zoom-125"] = "editor.ui-preview-zoom:1.25",
-            ["ui-preview-zoom-150"] = "editor.ui-preview-zoom:1.5",
-            ["ui-preview-zoom-200"] = "editor.ui-preview-zoom:2",
             ["ui-preview-size-1280-720"] = "editor.ui-preview-size:1280:720",
             ["ui-preview-size-1920-1080"] = "editor.ui-preview-size:1920:1080",
             ["ui-preview-size-2560-1080"] = "editor.ui-preview-size:2560:1080",
@@ -241,38 +255,37 @@ internal static class UiEditorUiValidation
                 Button["actions"]!.AsArray().Any(Value =>
                     Value!.GetValue<string>() == Pair.Value);
         }), "Preview controls expose stable semantic IDs and their typed actions");
-        var ZoomSlider = Element(Initial, "uiPreviewZoom");
-        Check(ZoomSlider["role"]!.GetValue<string>() == "input" &&
-            ZoomSlider["visible"]!.GetValue<bool>() &&
-            ZoomSlider["hitTarget"]!.GetValue<bool>() &&
-            ZoomSlider["value"]!.GetValue<string>() == "100",
-            "Preview exposes a visible, focusable continuous zoom control");
+        Check(Host(Initial)["elements"]!.AsArray()
+            .All(Item =>
+            {
+                var SemanticId = Item!["semanticId"]?.GetValue<string>() ?? string.Empty;
+                return !SemanticId.StartsWith("ui-preview-zoom-", StringComparison.Ordinal) &&
+                    SemanticId is not ("uiPreviewZoom" or "uiPreviewZoomValue");
+            }),
+            "Preview exposes no redundant zoom controls");
         Check(Element(Initial, "uiDesignCanvas")["visible"]!.GetValue<bool>() &&
             Element(Initial, "uiDesignCanvas")["bounds"]!["width"]!.GetValue<double>() == 1920 &&
             Element(Initial, "uiDesignCanvas")["bounds"]!["height"]!.GetValue<double>() == 1080,
-            "The design canvas is a visible native element with the authored screen size");
-        Click("ui-preview-zoom-50");
-        var Zoomed = Observe();
-        var ZoomedState = State();
-        var ZoomedSurface = Element(Zoomed, "uiDesignSurface")["bounds"]!;
-        var ZoomedCanvas = Element(Zoomed, "uiDesignCanvas")["bounds"]!;
-        Check(ZoomedSurface["width"]!.GetValue<double>() == 960 &&
-            ZoomedSurface["height"]!.GetValue<double>() == 540 &&
-            ZoomedCanvas["width"]!.GetValue<double>() == 960 &&
-            ZoomedCanvas["height"]!.GetValue<double>() == 540 &&
-            ZoomedState["design"]!["zoom"]!.GetValue<double>() == 0.5 &&
-            !ZoomedState["dirty"]!.GetValue<bool>(),
-            $"A semantic zoom control scales the rendered desired-size frame and canvas " +
-            $"(surface={ZoomedSurface}, canvas={ZoomedCanvas})");
+            "The design reference frame is a visible native element with the reference screen size");
+        var ContentBoundsElement = Element(Initial, "uiDesignContentBounds");
+        var ContentBounds = InitialState["design"]!["contentBounds"]?.AsObject();
+        Check(ContentBoundsElement["visible"]!.GetValue<bool>() &&
+            ContentBounds is not null &&
+            ContentBounds["width"]!.GetValue<double>() > 0 &&
+            ContentBounds["height"]!.GetValue<double>() > 0 &&
+            ContentBounds["width"]!.GetValue<double>() <= 1920 &&
+            ContentBounds["height"]!.GetValue<double>() <= 1080,
+            "The design view exposes measured content bounds separately from the reference screen");
         Click("ui-preview-size-1280-720");
         var ResizedState = State();
         Check(ResizedState["design"]!["width"]!.GetValue<int>() == 1280 &&
             ResizedState["design"]!["height"]!.GetValue<int>() == 720 &&
-            ResizedState["design"]!["zoom"]!.GetValue<double>() == 0.5 &&
+            ResizedState["design"]!["referenceWidth"]!.GetValue<int>() == 1280 &&
+            ResizedState["design"]!["referenceHeight"]!.GetValue<int>() == 720 &&
+            ResizedState["design"]!["zoom"]!.GetValue<double>() == 1 &&
             !ResizedState["dirty"]!.GetValue<bool>(),
-            "A preview size control changes the desired-size frame independently of zoom");
+            "A preview size control changes the reference screen independently of zoom and source state");
         Click("ui-preview-size-1920-1080");
-        Click("ui-preview-zoom-100");
         var RestoredPreviewState = State();
         Check(RestoredPreviewState["design"]!["width"]!.GetValue<int>() == 1920 &&
             RestoredPreviewState["design"]!["height"]!.GetValue<int>() == 1080 &&
@@ -387,6 +400,218 @@ internal static class UiEditorUiValidation
                 .Any(Attributes => Attributes?["data-bind"]?.GetValue<string>()?
                     .Contains("ALT", StringComparison.Ordinal) == true),
             "Typing into the inspector commits the attribute through the native input path");
+        void Wheel(string Id, float WheelY)
+        {
+            JsonObject? LastResult = null;
+            for (var Attempt = 0; Attempt < 10; Attempt++)
+            {
+                var Ui = Observe();
+                var Target = Element(Ui, Id);
+                var Bounds = Target["bounds"]!.AsObject();
+                var Clip = Target["clip"]!.AsObject();
+                var Left = Math.Max(Bounds["x"]!.GetValue<double>(), Clip["x"]!.GetValue<double>());
+                var Top = Math.Max(Bounds["y"]!.GetValue<double>(), Clip["y"]!.GetValue<double>());
+                var Right = Math.Min(Bounds["x"]!.GetValue<double>() +
+                    Bounds["width"]!.GetValue<double>(),
+                    Clip["x"]!.GetValue<double>() + Clip["width"]!.GetValue<double>());
+                var Bottom = Math.Min(Bounds["y"]!.GetValue<double>() +
+                    Bounds["height"]!.GetValue<double>(),
+                    Clip["y"]!.GetValue<double>() + Clip["height"]!.GetValue<double>());
+                LastResult = Invoke("ui.pointer", new JsonObject
+                {
+                    ["hostId"] = RootId,
+                    ["event"] = "wheel",
+                    ["button"] = "none",
+                    ["x"] = (int)((Left + Right) / 2),
+                    ["y"] = (int)((Top + Bottom) / 2),
+                    ["buttons"] = new JsonArray(),
+                    ["modifiers"] = new JsonArray(),
+                    ["pointerId"] = 0,
+                    ["wheelX"] = 0,
+                    ["wheelY"] = WheelY,
+                    ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+                });
+                if (LastResult["accepted"]?.GetValue<bool>() == true)
+                {
+                    return;
+                }
+                var Code = LastResult["diagnostics"]?.AsArray().FirstOrDefault()?["code"]
+                    ?.GetValue<string>();
+                if (Code is not ("UI_FRAME_STALE" or "UI_TARGET_CHANGED"))
+                {
+                    throw new InvalidOperationException(LastResult.ToJsonString());
+                }
+            }
+            throw new InvalidOperationException("Retained UI editor wheel input unavailable");
+        }
+        var BeforeZoomUi = Observe();
+        var BeforeZoomCanvas = Element(BeforeZoomUi, "uiDesignCanvas")["bounds"]!.AsObject();
+        var ZoomViewport = Element(BeforeZoomUi, "uiDesignViewport")["bounds"]!.AsObject();
+        var ZoomAnchorX = (int)(ZoomViewport["x"]!.GetValue<double>() + ZoomViewport["width"]!.GetValue<double>() / 2);
+        var ZoomAnchorY = (int)(ZoomViewport["y"]!.GetValue<double>() + ZoomViewport["height"]!.GetValue<double>() / 2);
+        void CaptureDesignClipEvidence(JsonObject Ui, string Name)
+        {
+            CheckDesignClip(Ui);
+            File.WriteAllText(Path.Combine(Output, Name + ".json"), Ui.ToJsonString());
+            var Frame = Call(Sequence++, "resources/read", new JsonObject
+            {
+                ["uri"] = $"sharpengine://ui/frames/{Ui["frameId"]}/{RootId}.png",
+            });
+            var Blob = Frame["result"]?["contents"]?[0]?["blob"]?.GetValue<string>();
+            Check(Blob is not null, $"{Name} publishes matching rendered evidence");
+            if (Blob is null)
+            {
+                return;
+            }
+            var Bytes = Convert.FromBase64String(Blob);
+            File.WriteAllBytes(Path.Combine(Output, Name + ".png"), Bytes);
+            var Pixels = DecodeFrame(Bytes);
+            var Viewport = Element(Ui, "uiDesignViewport")["bounds"]!.AsObject();
+            var Left = (int)Math.Floor(Viewport["x"]!.GetValue<double>());
+            var Top = (int)Math.Floor(Viewport["y"]!.GetValue<double>());
+            var Right = (int)Math.Ceiling(Viewport["x"]!.GetValue<double>() + Viewport["width"]!.GetValue<double>());
+            var Bottom = (int)Math.Ceiling(Viewport["y"]!.GetValue<double>() + Viewport["height"]!.GetValue<double>());
+            var InsideDashes = 0;
+            var LeakedContentDashes = 0;
+            var LeakedReferenceDashes = 0;
+            for (var Y = Math.Max(0, Top - 80); Y < Math.Min(Pixels.Height, Bottom + 80); Y++)
+            {
+                for (var X = Math.Max(0, Left - 80); X < Math.Min(Pixels.Width, Right + 80); X++)
+                {
+                    var Pixel = Pixels.Pixel(X, Y);
+                    var IsContentDash = Pixel.R == 214 && Pixel.G == 174 && Pixel.B == 109;
+                    var IsReferenceDash = Pixel.R == 146 && Pixel.G == 164 && Pixel.B == 185;
+                    if (!IsContentDash && !IsReferenceDash)
+                    {
+                        continue;
+                    }
+                    if (X >= Left && X < Right && Y >= Top && Y < Bottom)
+                    {
+                        InsideDashes++;
+                    }
+                    else if (X < Left - 1 || X > Right + 1 || Y < Top - 1 || Y > Bottom + 1)
+                    {
+                        if (IsContentDash)
+                        {
+                            LeakedContentDashes++;
+                        }
+                        else
+                        {
+                            LeakedReferenceDashes++;
+                        }
+                    }
+                }
+            }
+            Check(InsideDashes > 0, $"{Name} retains visible frame dashes inside Design");
+            Check(LeakedContentDashes == 0 && LeakedReferenceDashes == 0,
+                $"{Name} clips both frame colors on all four viewport edges " +
+                $"(contentLeaks={LeakedContentDashes}, referenceLeaks={LeakedReferenceDashes})");
+        }
+        Wheel("uiDesignViewport", -1);
+        var WheelZoomState = State();
+        Check(Math.Abs(WheelZoomState["design"]!["zoom"]!.GetValue<double>() - 1.1) < 0.0001,
+            "Wheel input over the design viewport changes preview zoom through the native RmlUi path");
+        var AfterZoomCanvas = Element(Observe(), "uiDesignCanvas")["bounds"]!.AsObject();
+        Check(Math.Abs(AfterZoomCanvas["x"]!.GetValue<double>() -
+                (ZoomAnchorX - (ZoomAnchorX - BeforeZoomCanvas["x"]!.GetValue<double>()) * 1.1)) < 1.5 &&
+            Math.Abs(AfterZoomCanvas["y"]!.GetValue<double>() -
+                (ZoomAnchorY - (ZoomAnchorY - BeforeZoomCanvas["y"]!.GetValue<double>()) * 1.1)) < 1.5,
+            "Native wheel zoom keeps the canvas point under the pointer stationary");
+        Wheel("uiDesignViewport", 1);
+        Check(Math.Abs(State()["design"]!["zoom"]!.GetValue<double>() - 1) < 0.0001,
+            "Wheel input can return the design preview to its default zoom");
+        var NavigationRevision = State()["revision"]!.GetValue<long>();
+        Wheel("uiDesignViewport", 20);
+        Check(State()["design"]!["zoom"]!.GetValue<double>() < 0.25,
+            "Native wheel zoom continues below the former 25 percent limit");
+        Wheel("uiDesignViewport", -40);
+        Check(State()["design"]!["zoom"]!.GetValue<double>() > 2,
+            "Native wheel zoom continues above the former 200 percent limit");
+        Wheel("uiDesignViewport", 20);
+        void RightDrag(string Id, int DeltaX, int DeltaY)
+        {
+            var InitialUi = Observe();
+            var Target = Element(InitialUi, Id);
+            var Bounds = Target["bounds"]!.AsObject();
+            var Clip = Target["clip"]!.AsObject();
+            var Left = Math.Max(Bounds["x"]!.GetValue<double>(), Clip["x"]!.GetValue<double>());
+            var Top = Math.Max(Bounds["y"]!.GetValue<double>(), Clip["y"]!.GetValue<double>());
+            var Right = Math.Min(Bounds["x"]!.GetValue<double>() +
+                Bounds["width"]!.GetValue<double>(),
+                Clip["x"]!.GetValue<double>() + Clip["width"]!.GetValue<double>());
+            var Bottom = Math.Min(Bounds["y"]!.GetValue<double>() +
+                Bounds["height"]!.GetValue<double>(),
+                Clip["y"]!.GetValue<double>() + Clip["height"]!.GetValue<double>());
+            var StartX = (int)((Left + Right) / 2);
+            var StartY = (int)((Top + Bottom) / 2);
+            void Send(string Event, int X, int Y, bool Held)
+            {
+                JsonObject? LastResult = null;
+                for (var Attempt = 0; Attempt < 10; Attempt++)
+                {
+                    var Ui = Observe();
+                    var Arguments = new JsonObject
+                    {
+                        ["hostId"] = RootId,
+                        ["event"] = Event,
+                        ["button"] = "right",
+                        ["x"] = X,
+                        ["y"] = Y,
+                        ["buttons"] = Held ? new JsonArray("right") : new JsonArray(),
+                        ["modifiers"] = new JsonArray(),
+                        ["pointerId"] = 0,
+                        ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+                    };
+                    var Result = Invoke("ui.pointer", Arguments);
+                    LastResult = Result;
+                    if (Result["accepted"]?.GetValue<bool>() == true)
+                    {
+                        return;
+                    }
+                    var Code = Result["diagnostics"]?.AsArray().FirstOrDefault()?["code"]
+                        ?.GetValue<string>();
+                    if (Code is not ("UI_FRAME_STALE" or "UI_TARGET_CHANGED"))
+                    {
+                        throw new InvalidOperationException(Result.ToJsonString());
+                    }
+                }
+                throw new InvalidOperationException(
+                    "Retained right-drag input frame unavailable: " +
+                    LastResult?.ToJsonString());
+            }
+            Send("down", StartX, StartY, true);
+            Send("move", StartX + DeltaX, StartY + DeltaY, true);
+            Send("up", StartX + DeltaX, StartY + DeltaY, false);
+        }
+        Wheel("uiDesignViewport", -1);
+        var BeforePanCanvas = Element(Observe(), "uiDesignCanvas")["bounds"]!.AsObject();
+        RightDrag("uiDesignViewport", -120, -80);
+        var NegativeOverflowUi = Observe();
+        var AfterPanCanvas = Element(NegativeOverflowUi, "uiDesignCanvas")["bounds"]!.AsObject();
+        var NegativeViewport = Element(NegativeOverflowUi, "uiDesignViewport")["bounds"]!.AsObject();
+        Check(AfterPanCanvas["x"]!.GetValue<double>() < NegativeViewport["x"]!.GetValue<double>() &&
+            AfterPanCanvas["y"]!.GetValue<double>() < NegativeViewport["y"]!.GetValue<double>() &&
+            AfterPanCanvas["x"]!.GetValue<double>() + AfterPanCanvas["width"]!.GetValue<double>() >
+                NegativeViewport["x"]!.GetValue<double>() + NegativeViewport["width"]!.GetValue<double>() &&
+            AfterPanCanvas["y"]!.GetValue<double>() + AfterPanCanvas["height"]!.GetValue<double>() >
+                NegativeViewport["y"]!.GetValue<double>() + NegativeViewport["height"]!.GetValue<double>(),
+            "Zoomed and panned reference frame extends beyond all four viewport edges");
+        CaptureDesignClipEvidence(NegativeOverflowUi, "negative-overflow-frame");
+        Check(AfterPanCanvas["x"]!.GetValue<double>() < BeforePanCanvas["x"]!.GetValue<double>() &&
+            Math.Abs(State()["design"]!["zoom"]!.GetValue<double>() - 1.1) < 0.0001,
+            $"Right-dragging the design viewport pans the canvas without changing document zoom " +
+            $"(before={BeforePanCanvas}, after={AfterPanCanvas}, state={State()["design"]})");
+        var NegativeOffset = State()["design"]!["offsetX"]!.GetValue<double>();
+        RightDrag("uiDesignViewport", 260, 160);
+        var OverflowUi = Observe();
+        CaptureDesignClipEvidence(OverflowUi, "overflow-frame");
+        Check(Math.Abs(State()["design"]!["offsetX"]!.GetValue<double>() - NegativeOffset - 260) < 1 &&
+            Element(Observe(), "uiDesignCanvas")["bounds"]!["x"]!.GetValue<double>() >
+                BeforePanCanvas["x"]!.GetValue<double>() &&
+            State()["revision"]!.GetValue<long>() == NavigationRevision,
+            "Right-drag crosses the old scroll origin in both directions without clamping or authoring edits");
+        RightDrag("uiDesignViewport", -140, -80);
+        Wheel("uiDesignViewport", 1);
         var ContentScale = Host(Observe())["contentScale"]?.GetValue<double>() ?? 1;
         var Delta = (int)Math.Round(40 * (ContentScale <= 0 ? 1 : ContentScale));
         var BeforeNode = Element(Observe(), "ui-design-node-0-1");
@@ -576,6 +801,16 @@ internal static class UiEditorUiValidation
             Checkbox["attributes"]!["checked"] is not null &&
             !File.ReadAllText(PackagePath).Contains("Accept terms", StringComparison.Ordinal),
             "Typing a readable control name preserves its ID and remains unsaved until Save");
+        var BeforeFit = State();
+        Click("ui-preview-fit");
+        var FitState = State();
+        Check(FitState["design"]!["width"]!.GetValue<int>() ==
+                BeforeFit["design"]!["width"]!.GetValue<int>() &&
+            FitState["design"]!["height"]!.GetValue<int>() ==
+                BeforeFit["design"]!["height"]!.GetValue<int>() &&
+            FitState["design"]!["zoom"]!.GetValue<double>() <= 1 &&
+            FitState["dirty"]!.GetValue<bool>() == BeforeFit["dirty"]!.GetValue<bool>(),
+            "Fit changes only the Design view zoom and preserves the desired canvas size and document state");
         _ = Invoke("editor.action", new JsonObject
         {
             ["action"] = $"editor.host-action:{RootId}:editor.asset-save",
@@ -599,7 +834,18 @@ internal static class UiEditorUiValidation
             {
                 WriteIndented = true,
             }));
-        var FrameId = Observe()["frameId"]!.GetValue<ulong>();
+        Click("ui-preview-fit");
+        var FittedUi = Observe();
+        var FittedViewport = Element(FittedUi, "uiDesignViewport")["bounds"]!.AsObject();
+        var FittedCanvas = Element(FittedUi, "uiDesignCanvas")["bounds"]!.AsObject();
+        Check(Math.Abs(FittedCanvas["x"]!.GetValue<double>() + FittedCanvas["width"]!.GetValue<double>() / 2 -
+                FittedViewport["x"]!.GetValue<double>() - FittedViewport["width"]!.GetValue<double>() / 2) < 1.5 &&
+            Math.Abs(FittedCanvas["y"]!.GetValue<double>() + FittedCanvas["height"]!.GetValue<double>() / 2 -
+                FittedViewport["y"]!.GetValue<double>() - FittedViewport["height"]!.GetValue<double>() / 2) < 1.5 &&
+            Element(FittedUi, "uiDesignReferenceFrame")["visible"]!.GetValue<bool>(),
+            "Fit centers the reference preview and keeps its dashed frame visible");
+        File.WriteAllText(Path.Combine(Output, "ui-editor-frame.json"), FittedUi.ToJsonString());
+        var FrameId = FittedUi["frameId"]!.GetValue<ulong>();
         var Frame = Call(Sequence++, "resources/read", new JsonObject
         {
             ["uri"] = $"sharpengine://ui/frames/{FrameId}/{RootId}.png",

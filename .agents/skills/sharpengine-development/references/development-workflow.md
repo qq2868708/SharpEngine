@@ -116,10 +116,19 @@ For UI visual layout authoring, retain the supported container/slot semantics an
 the authored RCSS unit when manipulating geometry. RML/RCSS remain authoritative;
 `data-ui-layout` and `data-ui-align-x/y` carry validated literal editing intent,
 not a second runtime layout graph. Preview dimensions/zoom are per-instance
-transient state. Do not rewrite arbitrary custom styles into presets on open or
+transient state. Reference screen dimensions define preview layout, not workspace
+navigation bounds. Keep the reference frame distinct from the infinite workspace.
+Preserve independent transient pan offsets and cursor-anchored zoom. Do not rewrite
+arbitrary custom styles into presets on open or
 selection. Native layout measurements and real transformed hit tests are required
 for drag acceptance; a canvas resize does not establish viewport-unit/media-query
 parity when the Design canvas still shares its host context.
+
+Validate clipping with both reference/content frames extending beyond all four
+viewport edges after zoom and pan. Keep matching snapshots and PNGs; Fit alone
+cannot prove clipping. RmlUi transformed content needs an explicit `clip: always`
+viewport boundary, and Vulkan scissor coordinates must not receive the current
+element transform a second time.
 
 Before delivery inspect the final diff and run `git diff --check` over the relevant change. Review new/changed source and code examples against `engine-code-style`; preserve required external/serialized identifiers. Do not format unrelated files.
 

@@ -96,7 +96,7 @@ var McpValidationPath = args.Contains("--mcp-only", StringComparer.Ordinal)
 // runs before the editor launch below.
 if (args.Contains("--game-ui-only", StringComparer.Ordinal))
 {
-    GameUiValidation.Run(root, configuration, Require);
+    GameUiValidation.Run(root, configuration, Require, RenderBackend);
     Console.WriteLine($"PASS: {assertions} Game UI runtime screen assertions");
     return;
 }
@@ -259,7 +259,7 @@ try
     }
     if (args.Contains("--ui-editor-only", StringComparer.Ordinal))
     {
-        UiEditorUiValidation.Run(root, Require, Tool, Call);
+        UiEditorUiValidation.Run(root, Require, Tool, Call, DecodePng);
         Console.WriteLine($"PASS: {assertions} formal UI editor rendered assertions");
         return;
     }

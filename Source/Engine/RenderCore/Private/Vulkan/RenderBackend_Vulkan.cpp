@@ -108,6 +108,35 @@ struct RenderBackend_Vulkan::Surface
         {
         }
         uint32_t DrawCalls = 0;
+        Rml::Matrix4f TransformMatrix = Rml::Matrix4f::Identity();
+        bool HasTransform = false;
+
+        void SetTransform(const Rml::Matrix4f* Transform) override
+        {
+            HasTransform = Transform != nullptr;
+            if (HasTransform)
+            {
+                TransformMatrix = *Transform;
+            }
+            RenderInterface_VK::SetTransform(Transform);
+        }
+
+        void EnableScissorRegion(bool Enable) override
+        {
+            // The current RmlUi API supplies window coordinates. The legacy
+            // Vulkan backend otherwise applies the active element transform again.
+            RenderInterface_VK::SetTransform(nullptr);
+            RenderInterface_VK::EnableScissorRegion(Enable);
+            RenderInterface_VK::SetTransform(HasTransform ? &TransformMatrix : nullptr);
+        }
+
+        void SetScissorRegion(Rml::Rectanglei Region) override
+        {
+            RenderInterface_VK::SetTransform(nullptr);
+            RenderInterface_VK::SetScissorRegion(Region);
+            RenderInterface_VK::SetTransform(HasTransform ? &TransformMatrix : nullptr);
+        }
+
         void RenderGeometry(Rml::CompiledGeometryHandle handle, Rml::Vector2f translation, Rml::TextureHandle texture) override
         {
             ++DrawCalls;

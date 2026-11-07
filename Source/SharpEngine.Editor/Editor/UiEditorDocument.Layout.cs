@@ -178,9 +178,33 @@ internal sealed partial class UiEditorDocument
         private set;
     } = 1;
 
+    internal float PreviewOffsetX
+    {
+        get;
+        private set;
+    } = 28;
+
+    internal float PreviewOffsetY
+    {
+        get;
+        private set;
+    } = 28;
+
+    internal bool SetPreviewOffset(float X, float Y)
+    {
+        if (!float.IsFinite(X) || !float.IsFinite(Y) || IsGesturing)
+        {
+            return false;
+        }
+        PreviewOffsetX = X;
+        PreviewOffsetY = Y;
+        return true;
+    }
+
     internal bool SetPreviewZoom(float Zoom)
     {
-        if (!float.IsFinite(Zoom) || Zoom is < 0.01f or > 2 || IsGesturing)
+        if (!float.IsFinite(Zoom) || Zoom <= 0 ||
+            !float.IsFinite(PreviewWidth * Zoom) || !float.IsFinite(PreviewHeight * Zoom) || IsGesturing)
         {
             return false;
         }

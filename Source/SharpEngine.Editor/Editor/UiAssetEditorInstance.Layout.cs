@@ -1,7 +1,11 @@
+using System.Globalization;
+
 namespace SharpEngine.Editor;
 
 internal sealed partial class UiAssetEditorInstance
 {
+    private readonly record struct DesignContentBounds(float X, float Y, float Width, float Height);
+
     private bool TryHandleLayoutAction(string Action)
     {
         if (Action == "editor.ui-preview-fit")
@@ -9,28 +13,53 @@ internal sealed partial class UiAssetEditorInstance
             var Found = Context.TryGetElementRect("uiDesignViewport", out var Bounds);
             if (Found)
             {
-                var Zoom = Math.Min((Bounds.Width - 76) / Document.PreviewWidth, (Bounds.Height - 76) / Document.PreviewHeight);
-                MarkupRefreshRequested |= Document.SetPreviewZoom(Math.Clamp(Zoom, 0.01f, 1));
+                var Zoom = Math.Min((Bounds.Width - 76) / Document.PreviewWidth,
+                    (Bounds.Height - 76) / Document.PreviewHeight);
+                if (Document.SetPreviewZoom(Zoom))
+                {
+                    Document.SetPreviewOffset((Bounds.Width - Document.PreviewWidth * Zoom) / 2,
+                        (Bounds.Height - Document.PreviewHeight * Zoom) / 2);
+                    MarkupRefreshRequested = true;
+                }
             }
             return true;
         }
-        if (Action.StartsWith("editor.ui-preview-zoom:", StringComparison.Ordinal))
+        if (Action.StartsWith("editor.ui-preview-wheel:", StringComparison.Ordinal))
         {
-            var Valid = float.TryParse(Action["editor.ui-preview-zoom:".Length..],
-                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var Zoom);
-            if (Valid)
+            var Parts = Action["editor.ui-preview-wheel:".Length..].Split(':');
+            var Valid = float.TryParse(Parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var Delta);
+            var AnchorX = 0f;
+            var AnchorY = 0f;
+            if (Valid && Parts.Length == 3)
             {
-                MarkupRefreshRequested |= Document.SetPreviewZoom(Zoom);
+                Valid = float.TryParse(Parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out AnchorX) &&
+                    float.TryParse(Parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out AnchorY);
+            }
+            if (Valid && float.IsFinite(Delta) && float.IsFinite(AnchorX) && float.IsFinite(AnchorY))
+            {
+                var Zoom = Document.PreviewZoom * MathF.Pow(1.1f, Delta);
+                var Ratio = Zoom / Document.PreviewZoom;
+                var X = AnchorX - (AnchorX - Document.PreviewOffsetX) * Ratio;
+                var Y = AnchorY - (AnchorY - Document.PreviewOffsetY) * Ratio;
+                if (float.IsFinite(X) && float.IsFinite(Y) && Document.SetPreviewZoom(Zoom))
+                {
+                    Document.SetPreviewOffset(X, Y);
+                    MarkupRefreshRequested = true;
+                }
             }
             return true;
         }
-        if (Action.StartsWith("editor.ui-preview-zoom-percent:", StringComparison.Ordinal))
+        if (Action.StartsWith("editor.ui-preview-pan:", StringComparison.Ordinal))
         {
-            var Valid = int.TryParse(Action["editor.ui-preview-zoom-percent:".Length..],
-                System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var Percent);
+            var Parts = Action["editor.ui-preview-pan:".Length..].Split(':', 2);
+            var X = 0f;
+            var Y = 0f;
+            var Valid = Parts.Length == 2 &&
+                float.TryParse(Parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out X) &&
+                float.TryParse(Parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out Y);
             if (Valid)
             {
-                MarkupRefreshRequested |= Document.SetPreviewZoom(Percent / 100f);
+                Document.SetPreviewOffset(X, Y);
             }
             return true;
         }
@@ -81,7 +110,7 @@ internal sealed partial class UiAssetEditorInstance
             {
                 var Changed = Document.SetPreviewSize(Width, Height, out var Message);
                 MarkupRefreshRequested |= Changed;
-                Context.SetStatus(Changed ? "Preview environment changed; source layout preserved" : Message);
+                Context.SetStatus(Changed ? "Design canvas size changed; Runtime window size unchanged" : Message);
             }
             return true;
         }
@@ -95,10 +124,68 @@ internal sealed partial class UiAssetEditorInstance
                 var Changed = Document.SetPreviewSize(Parts[0] == "width" ? Size : Document.PreviewWidth,
                     Parts[0] == "height" ? Size : Document.PreviewHeight, out var Message);
                 MarkupRefreshRequested |= Changed;
-                Context.SetStatus(Changed ? "Preview environment changed; source layout preserved" : Message);
+                Context.SetStatus(Changed ? "Design canvas size changed; Runtime window size unchanged" : Message);
             }
             return true;
         }
         return false;
+    }
+
+    private void UpdateDesignContentBounds()
+    {
+        var Bounds = ReadDesignContentBounds();
+        if (Bounds == PublishedDesignContentBounds)
+        {
+            return;
+        }
+        PublishedDesignContentBounds = Bounds;
+        PendingLiveProperties.Add(new("uiDesignContentBounds", "display",
+            Bounds is null ? "none" : "block"));
+        if (Bounds is null)
+        {
+            return;
+        }
+        PendingLiveProperties.Add(new("uiDesignContentBounds", "left",
+            FormatPixels(Bounds.Value.X)));
+        PendingLiveProperties.Add(new("uiDesignContentBounds", "top",
+            FormatPixels(Bounds.Value.Y)));
+        PendingLiveProperties.Add(new("uiDesignContentBounds", "width",
+            FormatPixels(Bounds.Value.Width)));
+        PendingLiveProperties.Add(new("uiDesignContentBounds", "height",
+            FormatPixels(Bounds.Value.Height)));
+        PendingLiveProperties.Add(new("uiDesignContentBoundsLabel", "text-content",
+            Math.Round(Bounds.Value.Width, 1).ToString("0.#", CultureInfo.InvariantCulture) +
+            " x " + Math.Round(Bounds.Value.Height, 1).ToString("0.#", CultureInfo.InvariantCulture)));
+    }
+
+    private DesignContentBounds? ReadDesignContentBounds()
+    {
+        var HasBounds = false;
+        var MinX = float.MaxValue;
+        var MinY = float.MaxValue;
+        var MaxX = float.MinValue;
+        var MaxY = float.MinValue;
+        foreach (var Element in Document.DesignBodyElement?.Elements() ?? [])
+        {
+            var Metrics = UiLayoutMetrics.Read(
+                Context.ReadElementLayout(UiEditorDocument.PreviewNodeIdOf(Element)));
+            if (Metrics is null || !float.IsFinite(Metrics.X) || !float.IsFinite(Metrics.Y) ||
+                !float.IsFinite(Metrics.Width) || !float.IsFinite(Metrics.Height) ||
+                Metrics.Width <= 0 || Metrics.Height <= 0)
+            {
+                continue;
+            }
+            HasBounds = true;
+            MinX = Math.Min(MinX, Metrics.X);
+            MinY = Math.Min(MinY, Metrics.Y);
+            MaxX = Math.Max(MaxX, Metrics.X + Metrics.Width);
+            MaxY = Math.Max(MaxY, Metrics.Y + Metrics.Height);
+        }
+        return HasBounds ? new DesignContentBounds(MinX, MinY, MaxX - MinX, MaxY - MinY) : null;
+    }
+
+    private static string FormatPixels(float Value)
+    {
+        return Math.Round(Value, 2).ToString("0.##", CultureInfo.InvariantCulture) + "px";
     }
 }

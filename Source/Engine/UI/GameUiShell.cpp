@@ -214,16 +214,25 @@ struct GameUiShell::Impl
         return nullptr;
     }
 
-    bool PinFrame()
+    bool PinFrame(bool ForcePresentation = false)
     {
-        if (FindFrame(FrameId))
+        if (!ForcePresentation && FindFrame(FrameId))
         {
             return true;
+        }
+        auto* backend = GetActiveRenderBackend();
+        if (!backend || !Present)
+        {
+            return false;
+        }
+        backend->RequestReadback();
+        if (!Present())
+        {
+            return false;
         }
         Frame frame;
         frame.Id = FrameId;
         frame.Revision = StateRevision;
-        auto* backend = GetActiveRenderBackend();
         if (!FrameId || !backend || !backend->ReadPixels(frame.Pixels, frame.Width, frame.Height))
         {
             return false;
@@ -266,7 +275,7 @@ struct GameUiShell::Impl
             }
         }
         path << ']';
-        if (!Present || !Present() || !PinFrame())
+        if (!PinFrame(true))
         {
             return Failure("UI_RENDER_UNAVAILABLE", "frameId", "a completed presentation", "unavailable");
         }

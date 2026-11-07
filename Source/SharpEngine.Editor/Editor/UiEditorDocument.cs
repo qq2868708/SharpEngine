@@ -936,6 +936,8 @@ internal sealed partial class UiEditorDocument
                 ["width"] = PreviewWidth,
                 ["height"] = PreviewHeight,
                 ["zoom"] = PreviewZoom,
+                ["offsetX"] = PreviewOffsetX,
+                ["offsetY"] = PreviewOffsetY,
             },
             ["elements"] = Elements,
             ["tree"] = DescribeTree(),
