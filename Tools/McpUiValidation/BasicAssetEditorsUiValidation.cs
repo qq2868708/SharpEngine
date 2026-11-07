@@ -144,7 +144,7 @@ internal static class BasicAssetEditorsUiValidation
             }
             throw new InvalidOperationException("Could not obtain a current key frame.");
         }
-        void Capture(string Name, string SemanticId, bool Image)
+        void Capture(string Name, string SemanticId, bool? Image)
         {
             var Ui = Observe();
             var Target = Find(Ui, SemanticId);
@@ -155,6 +155,10 @@ internal static class BasicAssetEditorsUiValidation
             var Bytes = Convert.FromBase64String(Frame["result"]!["contents"]![0]!["blob"]!.GetValue<string>());
             File.WriteAllBytes(Path.Combine(Output, Name + ".png"), Bytes);
             File.WriteAllText(Path.Combine(Output, Name + ".json"), Ui.ToJsonString());
+            if (Image is null)
+            {
+                return;
+            }
             var Pixels = DecodeFrame(Bytes);
             var Bounds = Target["bounds"]!;
             var Matched = 0;
@@ -169,14 +173,14 @@ internal static class BasicAssetEditorsUiValidation
                         continue;
                     }
                     var Pixel = Pixels.Pixel(X, Y);
-                    if (Image ? Pixel.R > 170 && Pixel.G > 120 && Pixel.B < 110 :
+                    if (Image.Value ? Pixel.R > 170 && Pixel.G > 120 && Pixel.B < 110 :
                         Pixel.G > 130 && Pixel.G > Pixel.R + 40 && Pixel.B > 100)
                     {
                         Matched++;
                     }
                 }
             }
-            Check(Matched >= (Image ? 100 : 5), Name + " renders expected pixels in its matching retained frame");
+            Check(Matched >= (Image.Value ? 100 : 5), Name + " renders expected pixels in its matching retained frame");
         }
         var SocketAssetId = StaticMeshOnly ? BasicAssetFixture.StaticMeshId : BasicAssetFixture.SkeletonId;
         var SocketViewportId = StaticMeshOnly ? "meshPreviewViewport" : "skeletonPreviewViewport";
@@ -409,6 +413,19 @@ internal static class BasicAssetEditorsUiValidation
                 ToolName + " Gizmo pixels match its advertised handle paths in the retained frame");
         }
         var SocketId = RigState()[StaticMeshOnly ? "selectedSocketId" : "selectedId"]!.GetValue<string>();
+        var SelectionDocument = RigState()["document"]!.ToJsonString();
+        var SelectionRevision = RigState()["documentRevision"]!.GetValue<ulong>();
+        Click(StaticMeshOnly ? "meshSocketRoot" : "editor.skeleton:select:bone:hand");
+        Check(!RigState()["gizmo"]!["editable"]!.GetValue<bool>() &&
+            RigState()["gizmo"]!["handles"]!.AsArray().Count == 0,
+            "Changing native selection away from the Socket hides every manipulation handle");
+        Capture(StaticMeshOnly ? "staticmesh-selection-hidden" : "skeleton-selection-hidden", SocketViewportId, null);
+        Click((StaticMeshOnly ? "editor.mesh-socket:select:" : "editor.skeleton:select:socket:") + SocketId);
+        Check(RigState()["gizmo"]!["handles"]!.AsArray().Count == 3 &&
+            RigState()["document"]!.ToJsonString() == SelectionDocument &&
+            RigState()["documentRevision"]!.GetValue<ulong>() == SelectionRevision,
+            "Selecting the Socket again restores only its handles without an authoring transaction");
+        CaptureGizmo("selected");
         foreach (var ToolName in new[]
         {
             "move", "rotate", "scale",

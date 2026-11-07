@@ -177,19 +177,6 @@ public sealed class AssetPreviewWorld
                 var Origin = Transform.Translation;
                 SceneRenderer.AddLine(Lines, BonePositions[Socket.ParentBoneId], Origin,
                     Matrix, Frame.Bounds, new Vector4(0.8f, 0.4f, 1, 1));
-                var Axes = new[]
-                {
-                    Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ,
-                };
-                var Colors = new[]
-                {
-                    new Vector4(1, 0.2f, 0.2f, 1), new Vector4(0.2f, 1, 0.2f, 1), new Vector4(0.2f, 0.5f, 1, 1),
-                };
-                for (var Index = 0; Index < Axes.Length; Index++)
-                {
-                    var End = Origin + VectorMath.NormalizeOrZero(Vector3.TransformNormal(Axes[Index], Transform)) * 0.15f;
-                    SceneRenderer.AddLine(Lines, Origin, End, Matrix, Frame.Bounds, Colors[Index]);
-                }
             }
         }
         return Frame with

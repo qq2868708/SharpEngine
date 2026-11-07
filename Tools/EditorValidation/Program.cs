@@ -608,6 +608,7 @@ try
 
     SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
     StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
+    SocketGizmoVisibilityValidation.Run(runtime, temporary.FullName, Require);
 
     var initialCameraPosition = runtime.World!.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);
