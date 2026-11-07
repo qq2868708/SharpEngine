@@ -15,13 +15,14 @@ public sealed record EditorAssetOpenResult(bool Success, string Code, string Ass
 public sealed class EditorAssetOpenContext : SharpEngine.UI.IViewport3DHost
 {
     internal EditorAssetOpenContext(EditorRuntime Runtime, AssetDescriptor Asset, string Path,
-        string EditorId, string EditorRootId)
+        string EditorId, string EditorRootId, bool IsSourceFile = false)
     {
         this.Runtime = Runtime;
         this.Asset = Asset;
         this.Path = Path;
         this.EditorId = EditorId;
         this.EditorRootId = EditorRootId;
+        this.IsSourceFile = IsSourceFile;
     }
 
     public EditorRuntime Runtime { get; }
@@ -29,6 +30,11 @@ public sealed class EditorAssetOpenContext : SharpEngine.UI.IViewport3DHost
     public string Path { get; }
     public string EditorId { get; }
     public string EditorRootId { get; }
+    /// <summary>A transient source-file preview, outside the manifest-backed asset registry.</summary>
+    public bool IsSourceFile
+    {
+        get;
+    }
     public void ShowPane(string PaneId) => Runtime.ShowPane(PaneId);
     public bool TryGetElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds)
     {
@@ -170,11 +176,30 @@ public sealed class EditorAssetOpenerRegistry
     {
         EnsureOwnerThread();
         var Asset = Runtime.Assets?.Find(AssetId);
-        var Opener = Asset is null ? null : Resolve(Asset);
         if (Asset is null)
         {
             return Complete(false, "ASSET_NOT_FOUND", AssetId, null, "Asset was not found");
         }
+        try
+        {
+            return OpenDocument(Asset, Runtime.Assets!.ResolvePath(Asset), false);
+        }
+        catch (InvalidDataException Error)
+        {
+            return Complete(false, "ASSET_OPEN_FAILED", Asset.Id, null, Error.Message);
+        }
+    }
+
+    internal EditorAssetOpenResult? OpenSourceFile(ContentManager Manager)
+    {
+        EnsureOwnerThread();
+        var Preview = Manager.SelectedSourcePreview();
+        return Preview is null ? null : OpenDocument(Preview.Value.Asset, Preview.Value.Path, true);
+    }
+
+    private EditorAssetOpenResult OpenDocument(AssetDescriptor Asset, string? Path, bool IsSourceFile)
+    {
+        var Opener = Resolve(Asset);
         if (Opener is null)
         {
             return Complete(false, "ASSET_OPENER_UNAVAILABLE", Asset.Id, null,
@@ -183,7 +208,6 @@ public sealed class EditorAssetOpenerRegistry
 
         try
         {
-            var Path = Runtime.Assets!.ResolvePath(Asset);
             if (Path is null || !File.Exists(Path))
             {
                 return Complete(false, "ASSET_FILE_MISSING", Asset.Id, Opener.Id, "Asset file is missing");
@@ -198,7 +222,7 @@ public sealed class EditorAssetOpenerRegistry
 
             var RootId = AssetEditorHost.CreateRootId(Asset.Id);
             var Context = new EditorAssetOpenContext(Runtime, Asset, Path, Opener.EditorId,
-                RootId);
+                RootId, IsSourceFile);
             if (Opener.Create is not null)
             {
                 var Instance = Opener.Create(Context);

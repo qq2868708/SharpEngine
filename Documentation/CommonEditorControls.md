@@ -26,7 +26,7 @@ Content Manager 的文件夹/资源浏览是目录列表，不把它伪装成递
 
 类型呈现是 UI 契约，不修改源资产的 JSON 字段、坐标系或四元数存储，不把所有 Quaternion 自动解释成 Rotator。主场景 Transform 和 Socket 旋转使用各自既有的领域转换；修改一个分量保留其他分量。
 
-统一入口包括主场景组件 Inspector（含嵌套值和列表元素）、StaticMesh/Skeleton Socket、共享资产字段（Material、Input、DataAsset、StyleSheet）、编辑器设置、源码/资源创建表单、UI 属性/样式/布局/参考尺寸。枚举和引用使用 Choice，布尔使用 Boolean；搜索仍即时响应，原始源文本、复杂 JSON 及 UI 布局长度（如 px、%、auto）保留其文本语义，不猜测成 Vector。
+统一入口包括主场景组件 Inspector（含嵌套值和列表元素）、StaticMesh/Skeleton Socket、共享资产字段（Material、Input、DataAsset、StyleSheet、动画状态机）、编辑器设置、源码/资源创建表单、UI 属性/样式/布局/参考尺寸，以及动画状态机预览参数。媒体源预览的只读信息也复用相同字段。枚举和引用使用 Choice，布尔使用 Boolean；搜索仍即时响应，原始源文本、复杂 JSON 及 UI 布局长度（如 px、%、auto）保留其文本语义，不猜测成 Vector。
 
 ## 提交、撤销与焦点
 

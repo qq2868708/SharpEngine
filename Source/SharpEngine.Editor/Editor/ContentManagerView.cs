@@ -73,7 +73,7 @@ internal sealed class ContentManagerView : IDisposable
             var Selected = Model.SelectedSource == Source &&
                 string.Equals(Model.SelectedPath, Entry.RelativePath, StringComparison.OrdinalIgnoreCase);
             var Action = Entry.IsDirectory ? $"editor.content.select-folder:{PaneId}:{SourceName}|{Entry.RelativePath}" :
-                Entry.AssetId is null ? $"editor.content.open:{PaneId}:{SourceName}|{Entry.RelativePath}" :
+                Entry.AssetId is null ? $"editor.content.select-file:{PaneId}:{SourceName}|{Entry.RelativePath}" :
                 $"editor.content.select:{PaneId}:{Entry.AssetId}";
             var Item = new XElement("button",
                 new XAttribute("class", "asset-item " + (Tile ? "tile-item" : "list-item") +
@@ -92,6 +92,10 @@ internal sealed class ContentManagerView : IDisposable
             else if (Entry.AssetId is not null)
             {
                 Item.SetAttributeValue("data-double-click-action", $"editor.content.open-asset:{PaneId}:{Entry.AssetId}");
+            }
+            else
+            {
+                Item.SetAttributeValue("data-double-click-action", $"editor.content.open:{PaneId}:{SourceName}|{Entry.RelativePath}");
             }
             if (Entry.Type.Equals("Prefab", StringComparison.OrdinalIgnoreCase))
             {

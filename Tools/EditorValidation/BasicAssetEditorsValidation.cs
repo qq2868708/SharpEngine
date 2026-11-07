@@ -11,7 +11,7 @@ internal static class BasicAssetEditorsValidation
             (IEditorExtension)Activator.CreateInstance(ExtensionType, true)!);
         foreach (var Id in new[]
         {
-            BasicAssetFixture.StateMachineId,
+            BasicAssetFixture.StateMachineId, BasicAssetFixture.TextureId, BasicAssetFixture.AudioId,
         })
         {
             var Opened = Runtime.OpenAsset(Id);
@@ -137,5 +137,46 @@ internal static class BasicAssetEditorsValidation
         Check(Runtime.OpenAsset(BasicAssetFixture.StateMachineId).Code == "ASSET_EDITOR_REUSED",
             "Project state machines reuse their document root");
 
+        var Texture = Editor(BasicAssetFixture.TextureId)["state"]!;
+        Check(Texture["width"]!.GetValue<int>() == 64 && Texture["height"]!.GetValue<int>() == 32 &&
+            Texture["diagnostic"]!.GetValue<string>().Length == 0 &&
+            Texture["readOnly"]!.GetValue<bool>(), "Texture source preview decodes dimensions without authoring");
+        using (File.Open(Path.Combine(ProjectRoot, "Content", "Media", "Preview.png"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            Check(true, "Image decoding releases the original source-file handle");
+        }
+        var OwnedPreview = new SourceImagePreview(Path.Combine(ProjectRoot, "Content", "Media", "Preview.png"));
+        var TemporaryImagePath = OwnedPreview.PreviewPath;
+        Check(File.Exists(TemporaryImagePath), "The image decoder owns an available derived preview");
+        OwnedPreview.Dispose();
+        Check(!File.Exists(TemporaryImagePath), "Disposing the image decoder deletes its derived preview");
+        var Audio = Editor(BasicAssetFixture.AudioId)["state"]!;
+        Check(Audio["duration"]!.GetValue<double>() == 5 && Audio["channels"]!.GetValue<int>() == 1 &&
+            Audio["sampleRate"]!.GetValue<int>() == 8000 && Audio["waveform"]!.AsArray().Count == 128 &&
+            Audio["waveform"]!.AsArray().Max(Node => Node!.GetValue<double>()) > 0.4,
+            "WAV preview reports duration, channels, sample rate and a sampled waveform");
+        var RegistryCount = Runtime.Assets!.Assets.Count;
+        Runtime.InvokeUiAction("editor.content.open:content:project|Media/Loose.png");
+        var Loose = Editor(BasicAssetFixture.LooseImageId);
+        Check(Loose["state"]!["sourceFile"]!.GetValue<bool>() && Runtime.Assets.Assets.Count == RegistryCount &&
+            Runtime.Assets.Find(BasicAssetFixture.LooseImageId) is null,
+            "Loose media opens a transient source preview without registering a runtime asset");
+        var LooseRoot = Loose["rootId"]!.GetValue<string>();
+        Runtime.InvokeUiAction("editor.content.open:content:project|Media/Loose.png");
+        Check(Editor(BasicAssetFixture.LooseImageId)["rootId"]!.GetValue<string>() == LooseRoot,
+            "Repeated source-file opening reuses the existing preview");
+        File.WriteAllText(Path.Combine(ProjectRoot, "Content", "Media", "Loose.png"), "corrupted");
+        Runtime.InvokeUiAction($"editor.host-action:{LooseRoot}:editor.asset-command:reload");
+        Check(Editor(BasicAssetFixture.LooseImageId)["state"]!["diagnostic"]!.GetValue<string>().Length != 0,
+            "Corrupted image reload remains an inspectable editor with a diagnostic");
+        File.Copy(Path.Combine(ProjectRoot, "Content", "Media", "Preview.png"),
+            Path.Combine(ProjectRoot, "Content", "Media", "Loose.png"), true);
+        Runtime.InvokeUiAction($"editor.host-action:{LooseRoot}:editor.asset-command:reload");
+        Check(Editor(BasicAssetFixture.LooseImageId)["state"]!["width"]!.GetValue<int>() == 64 &&
+            Editor(BasicAssetFixture.LooseImageId)["state"]!["diagnostic"]!.GetValue<string>().Length == 0,
+            "Reload recovers after the image source is repaired");
+        Check(!Editor(BasicAssetFixture.TextureId)["dirty"]!.GetValue<bool>() &&
+            !Editor(BasicAssetFixture.AudioId)["dirty"]!.GetValue<bool>(),
+            "State machine edits and media reloads do not dirty independent source previews");
     }
 }

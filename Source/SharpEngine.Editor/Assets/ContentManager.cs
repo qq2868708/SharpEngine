@@ -330,6 +330,38 @@ public sealed class ContentManager
         return true;
     }
 
+    internal (AssetDescriptor Asset, string Path)? SelectedSourcePreview()
+    {
+        if (_selectedSource is null || _selectedPath is null || SelectedAsset is not null)
+        {
+            return null;
+        }
+        var Type = InferType(_selectedPath);
+        if (Type is not ("Texture" or "Audio"))
+        {
+            return null;
+        }
+        var RelativePath = NormalizeFolder(_selectedPath);
+        var FullPath = ResolveBrowsePath(_selectedSource.Value, RelativePath);
+        if (!File.Exists(FullPath))
+        {
+            return null;
+        }
+        var SourceName = _selectedSource.Value.ToString().ToLowerInvariant();
+        var Identity = string.Join('/', RelativePath.Split('/').Select(Segment =>
+            Uri.EscapeDataString(Segment.ToLowerInvariant())));
+        return (new AssetDescriptor
+        {
+            Id = $"source-file://{SourceName}/{Identity}",
+            Type = Type,
+            Name = Path.GetFileName(RelativePath),
+            RelativePath = RelativePath,
+            Source = _selectedSource.Value,
+            ReadOnly = true,
+            Exists = true,
+        }, FullPath);
+    }
+
     public bool SelectFolder(AssetSource source, string relativePath)
     {
         var normalized = NormalizeFolder(relativePath);
@@ -601,7 +633,7 @@ public sealed class ContentManager
             ".sglobalcss" => "GlobalStyleSheet",
             ".xml" => "Xml",
             ".json" => "Json",
-            ".png" or ".jpg" or ".jpeg" or ".tga" => "Texture",
+            ".png" or ".jpg" or ".jpeg" or ".tga" or ".bmp" => "Texture",
             ".wav" or ".ogg" or ".mp3" => "Audio",
             _ => "File",
         };

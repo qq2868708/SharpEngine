@@ -15,7 +15,7 @@ internal static class BasicAssetEditorsUiValidation
     internal static void Run(string Root, Action<bool, string> Check,
         Func<int, string, JsonObject, JsonObject> Tool,
         Func<int, string, JsonObject?, JsonObject> Call, Func<byte[], DecodedPng> DecodeFrame,
-        bool SkeletonOnly = false, bool StateMachineOnly = false, bool StaticMeshOnly = false, bool MeasurePerformance = true)
+        bool SkeletonOnly = false, bool StateMachineOnly = false, bool StaticMeshOnly = false, bool MeasurePerformance = true, bool MediaOnly = false)
     {
         const double HierarchyFrameAverageBudgetMs = 18;
         const double HierarchyFrameP95BudgetMs = 25;
@@ -144,6 +144,38 @@ internal static class BasicAssetEditorsUiValidation
             }
             throw new InvalidOperationException("Could not obtain a current key frame.");
         }
+        void DoubleClick(string Id)
+        {
+            var Ui = Observe();
+            var Element = Find(Ui, Id);
+            var Bounds = Element["bounds"]!;
+            var Frame = Ui["frameId"]!.DeepClone();
+            for (var Index = 0; Index < 2; Index++)
+            {
+                foreach (var Event in new[]
+                {
+                    "down", "up",
+                })
+                {
+                    var Result = Invoke("ui.pointer", new JsonObject
+                    {
+                        ["hostId"] = HostId,
+                        ["event"] = Event,
+                        ["button"] = "left",
+                        ["x"] = (int)(Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>() / 2),
+                        ["y"] = (int)(Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() / 2),
+                        ["buttons"] = new JsonArray(),
+                        ["modifiers"] = new JsonArray(),
+                        ["pointerId"] = 0,
+                        ["expectedFrameId"] = Frame.DeepClone(),
+                        ["expectedElementId"] = Element["elementId"]!.DeepClone(),
+                    });
+                    Check(Result["accepted"]?.GetValue<bool>() == true,
+                        "The source-file double-click press reaches the retained native target");
+                    Frame = Result["frameId"]!.DeepClone();
+                }
+            }
+        }
         void Capture(string Name, string SemanticId, bool? Image)
         {
             var Ui = Observe();
@@ -250,7 +282,7 @@ internal static class BasicAssetEditorsUiValidation
             return Samples;
         }
 
-        if (!SkeletonOnly && !StaticMeshOnly)
+        if (!SkeletonOnly && !StaticMeshOnly && !MediaOnly)
         {
             Open(BasicAssetFixture.StateMachineId);
             Check(!Editor(BasicAssetFixture.StateMachineId)["readOnly"]!.GetValue<bool>(),
@@ -360,6 +392,11 @@ internal static class BasicAssetEditorsUiValidation
             }
         }
 
+        if (MediaOnly)
+        {
+            ValidateMedia();
+            return;
+        }
         var SocketAssetId = StaticMeshOnly ? BasicAssetFixture.StaticMeshId : BasicAssetFixture.SkeletonId;
         var SocketViewportId = StaticMeshOnly ? "meshPreviewViewport" : "skeletonPreviewViewport";
         Open(SocketAssetId);
@@ -959,5 +996,74 @@ internal static class BasicAssetEditorsUiValidation
             return;
         }
 
+
+        ValidateMedia();
+
+        void ValidateMedia()
+        {
+            Open(BasicAssetFixture.TextureId);
+            Capture("texture", "texturePreviewImage", true);
+            Click("editor.asset-command:background");
+            Check(Editor(BasicAssetFixture.TextureId)["state"]!["background"]!.GetValue<string>() == "dark",
+                "Texture preview background toggles through a real toolbar click");
+            Click("editor.asset-command:reload");
+            Check(Editor(BasicAssetFixture.TextureId)["state"]!["width"]!.GetValue<int>() == 64,
+                "Texture Reload restores a decoded preview");
+
+            Open(BasicAssetFixture.AudioId);
+            Capture("waveform", "audioWaveform", false);
+            Click("editor.asset-command:play");
+            Check(Editor(BasicAssetFixture.AudioId)["state"]!["playing"]!.GetValue<bool>(),
+                "WAV preview opens its owned media device and starts from a native click");
+            Click("editor.asset-command:stop");
+            Check(!Editor(BasicAssetFixture.AudioId)["state"]!["playing"]!.GetValue<bool>(),
+                "The audio Stop toolbar action stops the owning preview");
+
+            HostId = "main";
+            Invoke("editor.action", new JsonObject
+            {
+                ["action"] = "editor.content.source:content:project",
+            });
+            Invoke("editor.action", new JsonObject
+            {
+                ["action"] = "editor.content.open:content:project|Media",
+            });
+            Click("editor.content.select-file:content:project|Media/Loose.png");
+            Check(!Invoke("editor.describe")["assetTools"]!["editors"]!.AsArray().Any(Node =>
+                    Node!["assetId"]!.GetValue<string>() == BasicAssetFixture.LooseImageId),
+                "A single click selects a loose image without opening an editor");
+            // An already-selected file is opened with the same two-press route used by native double click.
+            DoubleClick("editor.content.select-file:content:project|Media/Loose.png");
+            HostId = Editor(BasicAssetFixture.LooseImageId)["rootId"]!.GetValue<string>();
+            Check(Editor(BasicAssetFixture.LooseImageId)["state"]!["sourceFile"]!.GetValue<bool>(),
+                "A loose Content image opens a source preview through native double-click input");
+            Capture("loose-texture", "texturePreviewImage", true);
+            Invoke("editor.action", new JsonObject
+            {
+                ["action"] = $"editor.host-action:{HostId}:window.close-requested",
+            });
+            Check(!Invoke("editor.describe")["assetTools"]!["editors"]!.AsArray().Any(Node =>
+                    Node!["assetId"]!.GetValue<string>() == BasicAssetFixture.LooseImageId),
+                "Closing a source preview removes its owned editor host");
+            foreach (var Id in new[]
+            {
+                BasicAssetFixture.StateMachineId, BasicAssetFixture.TextureId, BasicAssetFixture.AudioId, BasicAssetFixture.SkeletonId,
+            })
+            {
+                var OpenEditors = Invoke("editor.describe")["assetTools"]!["editors"]!.AsArray();
+                if (!OpenEditors.Any(Node => Node!["assetId"]!.GetValue<string>() == Id))
+                {
+                    continue;
+                }
+                var ClosingRoot = Editor(Id)["rootId"]!.GetValue<string>();
+                Invoke("editor.action", new JsonObject
+                {
+                    ["action"] = $"editor.host-action:{ClosingRoot}:window.close-requested",
+                });
+                Check(!Observe()["hosts"]!.AsArray().Any(Node =>
+                        Node!["hostId"]!.GetValue<string>() == ClosingRoot),
+                    "Closing " + Id + " releases its owned native host");
+            }
+        }
     }
 }

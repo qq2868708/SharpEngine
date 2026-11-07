@@ -155,6 +155,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>Content Manager 支持双击图片和音频源文件打开独立只读预览。图片提供尺寸与明暗背景，WAV 提供波形，WAV/MP3 可试播；未登记文件不加入运行时资产清单。Reload 可从缺失或损坏恢复，关闭窗口释放预览文件和播放设备。详见<a href="../../../../BasicAssetEditors.md">图片与音频源预览</a>。</p>
       <p>动画状态机支持状态、参数、转换和条件的结构化编辑、Undo/Redo 与显式保存。Preview 与 Runtime 共用过渡混合，支持秒数、Linear/SmoothStep、临时参数、单步与独立预览模型；旧 v1 资产按零秒 Linear 读取，内置 mannequin 使用 0.2 秒 SmoothStep。详见<a href="../../../../BasicAssetEditors.md">状态机编辑器</a>。</p>
       <p>StaticMesh/Skeleton 预览仅在选中可写 Socket 时显示操作 Gizmo；移除所有 Socket 的常驻 RGB 局部轴，父子与骨骼连线继续显示。选择 Mesh 根、骨骼或虚拟骨时隐藏操作手柄。</p>
       <p>统一可编辑和只读字段的区分：只读值保留类型布局，采用 disabled 灰态并禁用输入、焦点与修改；统计信息和只读资源也复用同一套控件。可写字段保持正常输入表现，树仍可选择和展开。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>

@@ -53,6 +53,12 @@ public sealed partial class EditorRuntime
         AssetOpeners.Register(new EditorAssetOpener("engine.material-editor", "Material",
             Context => new MaterialAssetEditorInstance(Context), Priority: -100,
             EditorId: "material-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.texture-editor", "Texture",
+            Context => new MediaAssetEditorInstance(Context), Priority: -100,
+            EditorId: "texture-editor"));
+        AssetOpeners.Register(new EditorAssetOpener("engine.audio-editor", "Audio",
+            Context => new MediaAssetEditorInstance(Context), Priority: -100,
+            EditorId: "audio-editor"));
         AssetOpeners.Register(new EditorAssetOpener("engine.stylesheet-editor", "StyleSheet",
             Context => new StyleSheetAssetEditorInstance(Context), Priority: -100,
             EditorId: "stylesheet-editor"));

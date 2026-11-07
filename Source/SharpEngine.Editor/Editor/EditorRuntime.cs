@@ -1143,6 +1143,11 @@ public sealed partial class EditorRuntime
             OpenAsset(contentValue);
             return;
         }
+        if (TryContentAction(action, "select-file", out contentPaneId, out contentValue))
+        {
+            OpenContentEntry(contentPaneId, contentValue, false);
+            return;
+        }
         if (TryContentAction(action, "open", out contentPaneId, out contentValue))
         {
             OpenContentEntry(contentPaneId, contentValue);
@@ -1358,59 +1363,75 @@ public sealed partial class EditorRuntime
         CommitContentManagerState($"Selected {asset.Id}");
     }
 
-    private void OpenContentEntry(string managerId, string payload)
+    private void OpenContentEntry(string ManagerId, string Payload, bool OpenEditor = true)
     {
-        var separator = payload.IndexOf('|');
-        var manager = ActivateContentManager(managerId);
-        if (separator <= 0 || manager is null) return;
-        var source = payload[..separator].Equals("engine", StringComparison.OrdinalIgnoreCase)
-            ? AssetSource.Engine : AssetSource.Project;
-        var relativePath = payload[(separator + 1)..];
-        var root = source == AssetSource.Engine ? _engineRoot : _projectRoot;
-        if (root is null) return;
-        var browserRoot = relativePath.StartsWith("Plugins/",
-            StringComparison.OrdinalIgnoreCase) ? root : Path.Combine(root, "Content");
-        var fullPath = Path.Combine(browserRoot,
-            relativePath.Replace('/', Path.DirectorySeparatorChar));
-        if (Directory.Exists(fullPath))
+        var Separator = Payload.IndexOf('|');
+        var Manager = ActivateContentManager(ManagerId);
+        if (Separator <= 0 || Manager is null)
         {
-            if (manager.OpenFolder(relativePath))
+            return;
+        }
+        var Source = Payload[..Separator].Equals("engine", StringComparison.OrdinalIgnoreCase)
+            ? AssetSource.Engine : AssetSource.Project;
+        var RelativePath = Payload[(Separator + 1)..];
+        var Root = Source == AssetSource.Engine ? _engineRoot : _projectRoot;
+        if (Root is null)
+        {
+            return;
+        }
+        var BrowserRoot = RelativePath.StartsWith("Plugins/",
+            StringComparison.OrdinalIgnoreCase) ? Root : Path.Combine(Root, "Content");
+        var FullPath = Path.Combine(BrowserRoot,
+            RelativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (Directory.Exists(FullPath))
+        {
+            if (Manager.OpenFolder(RelativePath))
             {
-                _selection = new EditorSelection(EditorSelectionKind.Folder, Path: relativePath,
-                    Source: source);
+                _selection = new EditorSelection(EditorSelectionKind.Folder, Path: RelativePath,
+                    Source: Source);
                 MarkExtensionUiDirty();
                 RefreshHierarchy();
                 RefreshViewportModeUi();
                 CommitContentManagerState(
-                    $"{ContentManagerLabel(managerId)} · {manager.CurrentFolderDisplay}");
+                    $"{ContentManagerLabel(ManagerId)} · {Manager.CurrentFolderDisplay}");
             }
             return;
         }
 
-        if (!manager.SelectFile(source, relativePath)) return;
-        var asset = manager.SelectedAsset;
-        if (asset is not null)
+        if (!Manager.SelectFile(Source, RelativePath))
         {
-            SelectAsset(asset.Id);
-            OpenAsset(asset.Id);
+            return;
+        }
+        var Asset = Manager.SelectedAsset;
+        if (Asset is not null)
+        {
+            SelectAsset(Asset.Id);
+            if (OpenEditor)
+            {
+                OpenAsset(Asset.Id);
+            }
             return;
         }
 
-        _selection = new EditorSelection(EditorSelectionKind.Asset, Path: relativePath,
-            Source: source);
+        _selection = new EditorSelection(EditorSelectionKind.Asset, Path: RelativePath,
+            Source: Source);
         MarkExtensionUiDirty();
         RefreshHierarchy();
         RefreshViewportModeUi();
-        var entry = manager.VisibleEntries.FirstOrDefault(candidate =>
-            string.Equals(candidate.RelativePath, relativePath,
+        var Entry = Manager.VisibleEntries.FirstOrDefault(Candidate =>
+            string.Equals(Candidate.RelativePath, RelativePath,
                 StringComparison.OrdinalIgnoreCase));
-        SetText("selectedObject", Path.GetFileName(relativePath));
-        SetText("selectedKind", $"{entry?.Type ?? "File"} · {source} · Editable");
+        SetText("selectedObject", Path.GetFileName(RelativePath));
+        SetText("selectedKind", $"{Entry?.Type ?? "File"} · {Source} · Source file");
         SetText("parent", "Content");
-        SetText("position", relativePath);
+        SetText("position", RelativePath);
         SetText("rotation", "—");
-        SetText("scale", File.Exists(fullPath) ? "Available" : "Missing");
-        CommitContentManagerState($"Selected Content/{relativePath}");
+        SetText("scale", File.Exists(FullPath) ? "Available" : "Missing");
+        CommitContentManagerState($"Selected Content/{RelativePath}");
+        if (OpenEditor)
+        {
+            AssetOpeners.OpenSourceFile(Manager);
+        }
     }
 
     private bool TryBeginGizmoDrag(int x, int y)

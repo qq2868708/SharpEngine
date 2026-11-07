@@ -581,3 +581,8 @@ viewport { display: block; }
 .animation-state-machine-state strong, .animation-state-machine-state span { display: block; margin-bottom: 4px; }
 #stateMachineAuthoring scrollbarvertical { width: 10px; background-color: #191d24; }
 #stateMachineAuthoring scrollbarvertical sliderbar { width: 6px; min-height: 24px; margin-left: 2px; background-color: #485e74; }
+.media-image-preview { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 240px; background-color: #151c25; overflow: auto; }
+.media-image-preview.light { background-color: #b7bec6; }
+.media-image-preview img { max-width: 100%; height: auto; }
+.media-waveform { display: flex; align-items: center; width: 100%; height: 200px; margin: 12px 0px; background-color: #151c25; }
+.media-waveform-bar { flex: 1 1 0px; min-width: 1px; background-color: #6cc7af; }

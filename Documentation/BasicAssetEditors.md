@@ -1,4 +1,4 @@
-# 网格与 Socket 资产编辑器
+# 基础资产编辑器
 
 ## StaticMesh Socket
 
@@ -107,3 +107,51 @@ dotnet Tools/McpUiValidation/bin/Development/net8.0/SharpEngine.McpUiValidation.
 构建当前 Editor；验证工具只创建并清理自己的隔离进程。
 `Tools/AnimationValidation` 覆盖实际 RuntimeWorld 的混合姿态和热重载；
 这些检查不代替完整 Cook 或发布包验收。
+
+## 图片与音频源文件
+
+音频首次播放时建立临时副本，避开旧式 Windows 播放驱动的文件名长度限制；关闭或重新加载时释放设备并删除副本，原始源文件保持只读。
+
+已登记的 Texture/Audio 通过普通资产打开器进入预览。未登记的 Content 图片和音频
+也能双击预览，单击只选择。预览不自动修改资产清单。
+
+未登记文件使用临时 `source-file://<engine|project>/<编码后的浏览路径>` 身份，
+只存在于当前编辑器会话及 `editor.describe.assetTools.editors`；
+它不进入 `assets.describe`，不作为运行时资产引用。插件 Content 使用所属浏览器的路径解析。
+`EditorAssetOpenContext.IsSourceFile` 可供打开器判断这一边界。
+公开快照仅包含逻辑相对路径，不包含临时预览文件或本机根目录。
+
+图片支持 Windows PNG/JPEG/BMP 解码和无色表的 24/32 位 TGA（未压缩或 RLE）。
+原始尺寸单独保留；预览最长边最多 1024 像素，源文件限制 256 MiB / 64 megapixels。
+为兼容 OpenGL/Vulkan 的 RmlUi 图片加载器，生成编辑器持有的临时 32 位 TGA，
+关闭或 Reload File 时清理。切换明暗背景有助于检查透明区域；原图不被改写。
+
+WAV 显示时长、声道、采样率、位深；PCM 8/16/24/32 位及 IEEE float32 提供
+128 栏采样波形（最多检查 65536 个均匀分布的采样帧，并非精确峰值分析）。
+Play From Start / Stop 使用各预览实例自己的 Windows 媒体设备别名，关闭或重新加载时释放。
+WAV/MP3 试播依赖本机媒体驱动；MP3 时长在打开播放设备后取得。
+OGG 目前只显示文件格式和大小，不解码、不播放。格式损坏、缺失源文件和播放失败显示明确诊断；
+修复文件后可以 Reload File 恢复。
+
+## 验证
+
+语义测试入口：
+
+```powershell
+dotnet run --project Tools/EditorValidation/SharpEngine.EditorValidation.csproj -c Development -- .
+```
+
+真实输入与渲染测试使用自己创建的隔离项目及 Editor，不绑定用户会话：
+
+```powershell
+./Tools/SharpEngineBuild.ps1 -Target Editor -Configuration Development -RenderBackends Both
+dotnet run --project Tools/McpUiValidation/SharpEngine.McpUiValidation.csproj -c Development -- Development --basic-asset-editors-only --render-backend=opengl --render-vsync=off
+```
+
+可将 backend 改为 `vulkan`。`--media-only` 仅运行图片、音频和未登记源预览检查。
+完整模式验证状态添加、Undo、字段键盘输入、Save、图片像素、
+背景切换、波形像素、播放与停止、未登记源文件选择及双击、关闭。匹配的 PNG 和 UI 快照
+保存在 `Saved/Validation/BasicAssetEditors`。两个后端连续运行时需分别保存证据副本。
+语义与 UI 测试不覆盖新音视频编解码器、运行时 Texture/Audio、Cook 或项目模块启动。
+
+树节点样式与基础类型输入统一复用 [通用控件](CommonEditorControls.md)，Enter/失焦校验后提交，Esc 放弃当前草稿。
