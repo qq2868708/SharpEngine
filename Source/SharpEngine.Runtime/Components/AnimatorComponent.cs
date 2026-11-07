@@ -18,7 +18,7 @@ public sealed partial class AnimatorComponent : SharpComponent
     public bool Playing = true;
     public bool Loop = true;
     public AssetRef<AnimationStateMachineAsset> Controller;
-    [Tooltip("Empty selects the controller's initial state. Changing a state resets Time at the next evaluation.")]
+    [Tooltip("Empty selects the initial state. A state request uses its declared blend; overriding an active blend resets it.")]
     public string StateId = "";
     public List<AnimatorParameter> Parameters = [];
     public MovementComponent? MovementSource;
@@ -45,7 +45,8 @@ public sealed partial class AnimatorComponent : SharpComponent
     private AssetRegistry? ControllerAssets;
     private Dictionary<string, double> EffectiveParameters = new(StringComparer.Ordinal);
     private string? TransitionId;
-    private string? BoundStateId;
+    private AnimationStateMachinePlayer? ControllerPlayer;
+    private ulong SampledControllerRevision;
     private Matrix4x4 PendingRootDelta = Matrix4x4.Identity;
     private double PendingRootAdvance;
     private Vector3 AppliedRootTranslation;
@@ -113,7 +114,7 @@ public sealed partial class AnimatorComponent : SharpComponent
             Playable = null;
             Pose = null;
             ControllerBinding = null;
-            BoundStateId = null;
+            ControllerPlayer = null;
         }
         Message = null;
         Status = "Idle";
@@ -136,6 +137,10 @@ public sealed partial class AnimatorComponent : SharpComponent
         {
             Playable = null;
             Pose = null;
+            ControllerPlayer = null;
+            ControllerBinding = null;
+            TransitionId = null;
+            EffectiveParameters.Clear();
             return;
         }
         Status = "Unavailable";
@@ -161,14 +166,18 @@ public sealed partial class AnimatorComponent : SharpComponent
                     _ = Candidate.Asset.State(StateId == "" ? Candidate.Asset.InitialStateId : StateId);
                     _ = Candidate.Asset.ResolveParameters(Parameters);
                     ValidateMovementBinding(Candidate.Asset);
+                    var CandidatePlayer = new AnimationStateMachinePlayer(Candidate.Asset, Candidate.Clips,
+                        AnimatorContent.Mesh(Assets, Target.Mesh.Id).Bones,
+                        StateId == "" ? Candidate.Asset.InitialStateId : StateId, Time);
                     ControllerBinding = Candidate;
+                    ControllerPlayer = CandidatePlayer;
+                    SampledControllerRevision = ulong.MaxValue;
                     ControllerAssets = Assets;
                     BoundController = Controller.Id;
                     ControllerGeneration = Generation;
                 }
                 var Graph = ControllerBinding.Asset;
                 var State = Graph.State(StateId == "" ? Graph.InitialStateId : StateId);
-                var StateChanged = BoundStateId is not null && BoundStateId != State.StateId;
                 var Values = Graph.ResolveParameters(Parameters);
                 ValidateMovementBinding(Graph);
                 if (MovementSource is not null && MovementSpeedParameter != "")
@@ -176,34 +185,31 @@ public sealed partial class AnimatorComponent : SharpComponent
                     Values[MovementSpeedParameter] = MovementSource.IsAlive && MovementSource.Enabled && MovementSource.Entity.ActiveInHierarchy
                         ? MovementSource.AnimationIntentVelocity.Length() : 0;
                 }
-                var NextTime = StateChanged ? 0 : Time;
-                RootFromTime = NextTime;
-                if (DeltaSeconds > 0 && Playing)
+                var Player = ControllerPlayer!;
+                if (Player.StateId != State.StateId)
                 {
-                    RootAdvance = (double)DeltaSeconds * Speed * State.Speed;
-                    NextTime += RootAdvance;
-                    if (!double.IsFinite(NextTime))
+                    if (Player.IsBlending)
                     {
-                        throw new InvalidDataException("Animation advancement must remain finite.");
-                    }
-                    var Duration = ControllerBinding.Clips[State.ClipId].Duration;
-                    var Transition = Graph.SelectTransition(State.StateId, NextTime / Duration, Values);
-                    TransitionId = Transition?.TransitionId;
-                    if (Transition is not null)
-                    {
-                        State = Graph.State(Transition.ToStateId);
-                        NextTime = 0;
-                        RootFromTime = 0;
-                        RootAdvance = 0;
+                        Player.Seek(State.StateId, 0);
                     }
                     else
                     {
-                        NextTime = State.Loop ? NextTime % Duration : Math.Min(NextTime, Duration);
+                        Player.RequestState(State.StateId);
                     }
                 }
-                StateId = State.StateId;
-                BoundStateId = State.StateId;
-                Time = NextTime;
+                else if (Player.Time != Time)
+                {
+                    Player.Seek(State.StateId, Time);
+                }
+                if (DeltaSeconds > 0 && Playing)
+                {
+                    Player.Advance((double)DeltaSeconds * Speed, Values);
+                    RootAdvance = (double)DeltaSeconds * Speed;
+                }
+                StateId = Player.StateId;
+                State = Graph.State(StateId);
+                TransitionId = Player.TransitionId;
+                Time = Player.Time;
                 EffectiveParameters = Values;
                 ClipId = State.ClipId;
                 ClipLoop = State.Loop;
@@ -213,7 +219,7 @@ public sealed partial class AnimatorComponent : SharpComponent
                 EffectiveParameters.Clear();
                 TransitionId = null;
                 ControllerBinding = null;
-                BoundStateId = null;
+                ControllerPlayer = null;
             }
             if (Playable is null || BoundAssets != Assets || BoundGeneration != Generation || BoundClip != ClipId || BoundMesh != Target.Mesh.Id || BoundLoop != ClipLoop)
             {
@@ -244,7 +250,8 @@ public sealed partial class AnimatorComponent : SharpComponent
                 Time = Playable.Time;
                 Playing = Playable.State == PlayableState.Playing;
             }
-            if (Pose is null || SampledTime != Playable.Time)
+            if (Pose is null || SampledTime != Playable.Time ||
+                (ControllerPlayer is not null && SampledControllerRevision != ControllerPlayer.StateRevision))
             {
                 if (DeltaSeconds == 0)
                 {
@@ -255,12 +262,23 @@ public sealed partial class AnimatorComponent : SharpComponent
                     RootConsumedBy = null;
                     RootCode = "ROOT_MOTION_DISABLED";
                 }
-                Output.Clear();
-                Playable.Evaluate(new(Playable.Time, DeltaSeconds, 0, DeltaSeconds == 0), Output);
+                if (ControllerPlayer is null)
+                {
+                    Output.Clear();
+                    Playable.Evaluate(new(Playable.Time, DeltaSeconds, 0, DeltaSeconds == 0), Output);
+                }
+                else
+                {
+                    Pose = ControllerPlayer.Sample();
+                    SampledControllerRevision = ControllerPlayer.StateRevision;
+                }
                 SampledTime = Playable.Time;
                 SampleCount++;
             }
-            if (Playable.Asset.RootMotion.Enabled)
+            var ControllerRootMotion = ControllerPlayer is not null &&
+                (ControllerPlayer.RootMotionEnabled ||
+                    (DeltaSeconds > 0 && Playing && ControllerPlayer.RootDelta != Matrix4x4.Identity));
+            if (ControllerPlayer is null ? Playable.Asset.RootMotion.Enabled : ControllerRootMotion)
             {
                 var Candidate = MovementSource?.Entity ?? Entity;
                 var Ancestor = Target.Entity;
@@ -276,13 +294,16 @@ public sealed partial class AnimatorComponent : SharpComponent
                 if (DeltaSeconds > 0)
                 {
                     PendingRootAdvance = RootAdvance;
-                    PendingRootDelta = RootMotionSampler.Delta(Playable.Asset, RootFromTime, RootAdvance, ClipLoop);
+                    PendingRootDelta = ControllerPlayer is null
+                        ? RootMotionSampler.Delta(Playable.Asset, RootFromTime, RootAdvance, ClipLoop)
+                        : Playing ? ControllerPlayer.RootDelta : Matrix4x4.Identity;
                 }
                 if (RootCode == "ROOT_MOTION_DISABLED")
                 {
                     RootCode = "ROOT_MOTION_READY";
                 }
-                Target.SetPose(this, RootMotionSampler.RemoveRootMotion(Playable.Asset, Pose!));
+                Target.SetPose(this, ControllerPlayer is null
+                    ? RootMotionSampler.RemoveRootMotion(Playable.Asset, Pose!) : Pose);
             }
             else
             {
@@ -376,13 +397,14 @@ public sealed partial class AnimatorComponent : SharpComponent
         Playable = null;
         Pose = null;
         ControllerBinding = null;
+        ControllerPlayer = null;
     }
 
     protected internal override ComponentFrameState CaptureFrameState()
     {
         return new AnimatorFrameState(new JsonObject
         {
-            ["schemaVersion"] = 4,
+            ["schemaVersion"] = 5,
             ["entityId"] = Entity.EntityId,
             ["componentId"] = ComponentId,
             ["targetComponentId"] = Target?.ComponentId,
@@ -390,6 +412,7 @@ public sealed partial class AnimatorComponent : SharpComponent
             ["controllerId"] = Controller.Id,
             ["stateId"] = Controller.Id is null ? null : StateId,
             ["transitionId"] = TransitionId,
+            ["controllerPlayback"] = ControllerPlayer?.Describe(),
             ["parameters"] = new JsonObject(EffectiveParameters.OrderBy(Entry => Entry.Key, StringComparer.Ordinal)
                 .Select(Entry => new KeyValuePair<string, JsonNode?>(Entry.Key, JsonValue.Create(Entry.Value)))),
             ["status"] = Status,
@@ -400,7 +423,7 @@ public sealed partial class AnimatorComponent : SharpComponent
             ["sampleCount"] = SampleCount,
             ["rootMotion"] = new JsonObject
             {
-                ["enabled"] = Playable?.Asset.RootMotion.Enabled ?? false,
+                ["enabled"] = ControllerPlayer?.RootMotionEnabled ?? Playable?.Asset.RootMotion.Enabled ?? false,
                 ["boneId"] = Playable?.Asset.RootMotion.BoneId,
                 ["targetEntityId"] = RootMotionTarget?.EntityId,
                 ["applied"] = RootApplied,

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "kind": "animation-state-machine",
   "assetId": "engine://animation-state-machines/uefn-mannequin-locomotion",
   "name": "UEFN Mannequin Locomotion",
@@ -15,13 +15,13 @@
     { "stateId": "jump", "clipId": "engine://animations/uefn-mannequin-jump", "loop": false, "speed": 1 }
   ],
   "transitions": [
-    { "transitionId": "idle-to-jump", "fromStateId": "idle", "toStateId": "jump", "exitTime": null, "conditions": [{ "parameterId": "jump", "comparison": "GreaterOrEqual", "value": 1 }] },
-    { "transitionId": "idle-to-walk", "fromStateId": "idle", "toStateId": "walk", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "Greater", "value": 0.1 }] },
-    { "transitionId": "walk-to-jump", "fromStateId": "walk", "toStateId": "jump", "exitTime": null, "conditions": [{ "parameterId": "jump", "comparison": "GreaterOrEqual", "value": 1 }] },
-    { "transitionId": "walk-to-run", "fromStateId": "walk", "toStateId": "run", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "GreaterOrEqual", "value": 3 }] },
-    { "transitionId": "walk-to-idle", "fromStateId": "walk", "toStateId": "idle", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "LessOrEqual", "value": 0.1 }] },
-    { "transitionId": "run-to-jump", "fromStateId": "run", "toStateId": "jump", "exitTime": null, "conditions": [{ "parameterId": "jump", "comparison": "GreaterOrEqual", "value": 1 }] },
-    { "transitionId": "run-to-walk", "fromStateId": "run", "toStateId": "walk", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "Less", "value": 3 }] },
-    { "transitionId": "jump-to-idle", "fromStateId": "jump", "toStateId": "idle", "exitTime": 0.95, "conditions": [{ "parameterId": "jump", "comparison": "Less", "value": 1 }] }
+    { "transitionId": "idle-to-jump", "fromStateId": "idle", "toStateId": "jump", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "jump", "comparison": "GreaterOrEqual", "value": 1 }] },
+    { "transitionId": "idle-to-walk", "fromStateId": "idle", "toStateId": "walk", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "Greater", "value": 0.1 }] },
+    { "transitionId": "walk-to-jump", "fromStateId": "walk", "toStateId": "jump", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "jump", "comparison": "GreaterOrEqual", "value": 1 }] },
+    { "transitionId": "walk-to-run", "fromStateId": "walk", "toStateId": "run", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "GreaterOrEqual", "value": 3 }] },
+    { "transitionId": "walk-to-idle", "fromStateId": "walk", "toStateId": "idle", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "LessOrEqual", "value": 0.1 }] },
+    { "transitionId": "run-to-jump", "fromStateId": "run", "toStateId": "jump", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "jump", "comparison": "GreaterOrEqual", "value": 1 }] },
+    { "transitionId": "run-to-walk", "fromStateId": "run", "toStateId": "walk", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": null, "conditions": [{ "parameterId": "speed", "comparison": "Less", "value": 3 }] },
+    { "transitionId": "jump-to-idle", "fromStateId": "jump", "toStateId": "idle", "blendDuration": 0.2, "blendCurve": "SmoothStep", "exitTime": 0.95, "conditions": [{ "parameterId": "jump", "comparison": "Less", "value": 1 }] }
   ]
 }

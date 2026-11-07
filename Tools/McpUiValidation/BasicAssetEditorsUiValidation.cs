@@ -15,7 +15,7 @@ internal static class BasicAssetEditorsUiValidation
     internal static void Run(string Root, Action<bool, string> Check,
         Func<int, string, JsonObject, JsonObject> Tool,
         Func<int, string, JsonObject?, JsonObject> Call, Func<byte[], DecodedPng> DecodeFrame,
-        bool SkeletonOnly = false, bool StaticMeshOnly = false, bool MeasurePerformance = true)
+        bool SkeletonOnly = false, bool StateMachineOnly = false, bool StaticMeshOnly = false, bool MeasurePerformance = true)
     {
         const double HierarchyFrameAverageBudgetMs = 18;
         const double HierarchyFrameP95BudgetMs = 25;
@@ -182,6 +182,184 @@ internal static class BasicAssetEditorsUiValidation
             }
             Check(Matched >= (Image.Value ? 100 : 5), Name + " renders expected pixels in its matching retained frame");
         }
+        void Reveal(string Id, string ScrollOwner)
+        {
+            for (var Attempt = 0; Attempt < 40; Attempt++)
+            {
+                var Ui = Observe();
+                var Owner = Find(Ui, ScrollOwner);
+                var Target = Host(Ui)["elements"]!.AsArray().Single(Node =>
+                    Node!["semanticId"]?.GetValue<string>() == Id ||
+                    Node!["actions"]!.AsArray().Any(Action => Action!.GetValue<string>() == Id))!;
+                var Bounds = Target["bounds"]!;
+                var OwnerBounds = Owner["bounds"]!;
+                var Top = OwnerBounds["y"]!.GetValue<double>();
+                var Bottom = Top + OwnerBounds["height"]!.GetValue<double>();
+                if (Target["visible"]!.GetValue<bool>() && Bounds["y"]!.GetValue<double>() >= Top &&
+                    Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() <= Bottom)
+                {
+                    return;
+                }
+                var Result = Invoke("ui.pointer", new JsonObject
+                {
+                    ["hostId"] = HostId,
+                    ["event"] = "wheel",
+                    ["button"] = "none",
+                    ["buttons"] = new JsonArray(),
+                    ["modifiers"] = new JsonArray(),
+                    ["pointerId"] = 0,
+                    ["x"] = (int)(OwnerBounds["x"]!.GetValue<double>() + OwnerBounds["width"]!.GetValue<double>() / 2),
+                    ["y"] = (int)((Top + Bottom) / 2),
+                    ["wheelY"] = Bounds["y"]!.GetValue<double>() < Top ? -1 : 1,
+                    ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+                });
+                Check(Result["accepted"]?.GetValue<bool>() == true ||
+                    Result["diagnostics"]?[0]?["code"]?.GetValue<string>() == "UI_FRAME_STALE",
+                    "Native scroll reaches " + ScrollOwner);
+            }
+            throw new InvalidOperationException("Could not reveal " + Id);
+        }
+        IReadOnlyList<int> CaptureStateMachineViewport(string Name)
+        {
+            var Ui = Observe();
+            var Viewport = Find(Ui, "stateMachinePreviewViewport");
+            var Frame = Call(Sequence++, "resources/read", new JsonObject
+            {
+                ["uri"] = $"sharpengine://ui/frames/{Ui["frameId"]}/{HostId}.png",
+            });
+            var Bytes = Convert.FromBase64String(Frame["result"]!["contents"]![0]!["blob"]!.GetValue<string>());
+            File.WriteAllBytes(Path.Combine(Output, Name + ".png"), Bytes);
+            File.WriteAllText(Path.Combine(Output, Name + ".json"), Ui.ToJsonString());
+            var Image = DecodeFrame(Bytes);
+            var Bounds = Viewport["bounds"]!;
+            var Samples = new List<int>();
+            for (var Y = (int)Bounds["y"]!.GetValue<double>() + 10;
+                Y < Bounds["y"]!.GetValue<double>() + Bounds["height"]!.GetValue<double>() - 10; Y++)
+            {
+                for (var X = (int)Bounds["x"]!.GetValue<double>() + 10;
+                    X < Bounds["x"]!.GetValue<double>() + Bounds["width"]!.GetValue<double>() - 10; X++)
+                {
+                    var Pixel = Image.Pixel(X, Y);
+                    Samples.Add(Pixel.R);
+                    Samples.Add(Pixel.G);
+                    Samples.Add(Pixel.B);
+                }
+            }
+            Check(Samples.Count > 1000 && Samples.Count(Value => Value > 45) > 100,
+                "The matching retained preview frame contains rendered model pixels");
+            return Samples;
+        }
+
+        if (!SkeletonOnly && !StaticMeshOnly)
+        {
+            Open(BasicAssetFixture.StateMachineId);
+            Check(!Editor(BasicAssetFixture.StateMachineId)["readOnly"]!.GetValue<bool>(),
+                "The project state machine opens writable in its own native host");
+            Click("editor.asset-command:add-state");
+            Check(Editor(BasicAssetFixture.StateMachineId)["state"]!["stateCount"]!.GetValue<int>() == 3,
+                "Clicking Add State commits the structured document transaction");
+            Click("editor.asset-command:undo");
+            Check(Editor(BasicAssetFixture.StateMachineId)["state"]!["stateCount"]!.GetValue<int>() == 2,
+                "The document toolbar Undo restores the state graph");
+            Click("stateMachineField-name");
+            Key("down", 0x41, Control: true);
+            Key("up", 0x41, Control: true);
+            foreach (var Character in "Authored controller")
+            {
+                Key("text", 0, Character.ToString());
+            }
+            Key("down", 0x0D);
+            Key("up", 0x0D);
+            Check(Editor(BasicAssetFixture.StateMachineId)["state"]!["document"]!["name"]!.GetValue<string>() == "Authored controller",
+                "Continuous native typing preserves focus and commits every character through the shared action");
+            Click("editor.asset-save");
+            Check(File.ReadAllText(Path.Combine(ProjectRoot, "Content", "Media", "Controller.json"))
+                    .Contains("Authored controller", StringComparison.Ordinal) &&
+                !Editor(BasicAssetFixture.StateMachineId)["dirty"]!.GetValue<bool>(),
+                "Clicking Save writes the validated source and clears dirty state");
+            JsonObject StateMachine() => Editor(BasicAssetFixture.StateMachineId)["state"]!.AsObject();
+            Reveal("stateMachineField-transition-0-blendDuration", "stateMachineAuthoring");
+            Click("stateMachineField-transition-0-blendDuration");
+            Key("down", 0x41, Control: true);
+            Key("up", 0x41, Control: true);
+            Key("text", 0, "1");
+            Key("down", 0x0D);
+            Key("up", 0x0D);
+            Reveal("stateMachineCurve-0", "stateMachineAuthoring");
+            Click("stateMachineCurve-0");
+            Check(StateMachine()["document"]!["transitions"]![0]!["blendDuration"]!.GetValue<double>() == 1 &&
+                StateMachine()["document"]!["transitions"]![0]!["blendCurve"]!.GetValue<string>() == "SmoothStep",
+                "Native duration typing and curve toggle author the actual transition settings");
+            var BeforePreview = StateMachine()["document"]!.ToJsonString();
+            var BeforePreviewRevision = StateMachine()["documentRevision"]!.GetValue<ulong>();
+            Click("stateMachinePreviewParameter-Speed");
+            Key("down", 0x41, Control: true);
+            Key("up", 0x41, Control: true);
+            Key("text", 0, "1");
+            Key("down", 0x0D);
+            Key("up", 0x0D);
+            Check(StateMachine()["preview"]!["parameters"]!["Speed"]!.GetValue<double>() == 1,
+                "Real typing updates transient preview parameters");
+            var BeforePixels = CaptureStateMachineViewport("state-machine-before");
+            Click("editor.asset-command:step");
+            Check(StateMachine()["preview"]!["playback"]!["stateId"]!.GetValue<string>() == "Walk" &&
+                StateMachine()["preview"]!["playback"]!["blending"]!.GetValue<bool>(),
+                "A real Step click triggers the condition-driven state transition");
+            Click("editor.asset-command:step", 15);
+            var Weight = StateMachine()["preview"]!["playback"]!["blendWeight"]!.GetValue<double>();
+            Check(Weight > 0.15 && Weight < 0.17 && !StateMachine()["playing"]!.GetValue<bool>() &&
+                StateMachine()["preview"]!["pose"]!["bones"]!.AsArray().Count > 0,
+                "Repeated native Step clicks produce a paused intermediate blended pose");
+            Capture("state-machine-blend", "stateMachineBlendFill", false);
+            var BlendedPixels = CaptureStateMachineViewport("state-machine-pose");
+            Check(BeforePixels.Count == BlendedPixels.Count &&
+                BeforePixels.Zip(BlendedPixels).Count(Pair => Pair.First != Pair.Second) > 25,
+                "Native stepping changes the rendered skinned model inside the fixed preview camera");
+            Check(StateMachine()["document"]!.ToJsonString() == BeforePreview &&
+                StateMachine()["documentRevision"]!.GetValue<ulong>() == BeforePreviewRevision,
+                "Preview interaction leaves the authoring document and revision unchanged");
+            Click("editor.asset-command:play");
+            Check(StateMachine()["playing"]!.GetValue<bool>(), "Native Play starts the preview");
+            Click("editor.asset-command:pause");
+            Check(!StateMachine()["playing"]!.GetValue<bool>(), "Native Pause stops advancing the preview");
+            Click("editor.asset-command:stop");
+            Check(StateMachine()["preview"]!["playback"]!["stateId"]!.GetValue<string>() == "Idle" &&
+                !StateMachine()["preview"]!["playback"]!["blending"]!.GetValue<bool>(),
+                "Native Reset returns to the initial state and clears the blend");
+            Reveal("editor.state-machine-preview:state:Walk", "animationStateMachineGraph");
+            Click("editor.state-machine-preview:state:Walk");
+            Check(StateMachine()["preview"]!["playback"]!["blending"]!.GetValue<bool>(),
+                "A native state-switch click starts the declared blend while paused");
+            Click("editor.asset-command:stop");
+            Reveal("editor.state-machine-preview:transition:StartWalking", "animationStateMachineGraph");
+            Click("editor.state-machine-preview:transition:StartWalking");
+            Check(StateMachine()["preview"]!["playback"]!["transitionId"]!.GetValue<string>() == "StartWalking",
+                "The native Test Transition button starts the selected edge");
+            Click("editor.asset-command:stop");
+            Click("editor.asset-command:undo");
+            Click("editor.asset-command:undo");
+            Check(!StateMachine()["dirty"]!.GetValue<bool>(), "Undo still owns the authored duration after preview interaction");
+            if (StateMachineOnly)
+            {
+                var ProjectPreview = StateMachine()["preview"]!["playback"]!.ToJsonString();
+                var PresetId = "engine://animation-state-machines/uefn-mannequin-locomotion";
+                Open(PresetId);
+                Click("stateMachinePreviewParameter-speed");
+                Key("down", 0x41, Control: true);
+                Key("up", 0x41, Control: true);
+                Key("text", 0, "2");
+                Key("down", 0x0D);
+                Key("up", 0x0D);
+                Click("editor.asset-command:step");
+                Check(Editor(PresetId)["state"]!["preview"]!["playback"]!["blending"]!.GetValue<bool>() &&
+                    Editor(PresetId)["readOnly"]!.GetValue<bool>() && !Editor(PresetId)["dirty"]!.GetValue<bool>(),
+                    "Read-only presets permit native parameter preview while keeping authoring clean");
+                Check(StateMachine()["preview"]!["playback"]!.ToJsonString() == ProjectPreview,
+                    "Two state-machine windows retain independent preview clocks and parameters");
+                return;
+            }
+        }
+
         var SocketAssetId = StaticMeshOnly ? BasicAssetFixture.StaticMeshId : BasicAssetFixture.SkeletonId;
         var SocketViewportId = StaticMeshOnly ? "meshPreviewViewport" : "skeletonPreviewViewport";
         Open(SocketAssetId);

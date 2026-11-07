@@ -315,6 +315,7 @@ using (var Runtime = new RuntimeWorld(Dynamic, Registry, Assets))
 RootMotionValidation.Run(Root, Registry, Check);
 AnimationPipelineValidation.Run(Assets, Registry, Check);
 AnimationStateMachineValidation.Run(Root, Assets, Registry, Check);
+AnimationBlendValidation.Run(Root, Registry, Check);
 Console.WriteLine($"[AnimationValidation] PASS: {Count} assertions; Playable playback, component transactions and skinned frame geometry");
 
 [ComponentTypeId("57cd3ab0-aa35-4ce9-ad6c-71d71d812aef"), ComponentSchemaVersion(1)]

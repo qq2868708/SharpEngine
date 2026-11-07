@@ -9,12 +9,13 @@ public sealed record AnimationParameterDefinition(string ParameterId, double Def
 public sealed record AnimationStateDefinition(string StateId, string ClipId, bool Loop, double Speed);
 public sealed record AnimationCondition(string ParameterId, string Comparison, double Value);
 public sealed record AnimationTransitionDefinition(string TransitionId, string FromStateId,
-    string ToStateId, double? ExitTime, IReadOnlyList<AnimationCondition> Conditions);
+    string ToStateId, double? ExitTime, IReadOnlyList<AnimationCondition> Conditions,
+    double BlendDuration = 0, string BlendCurve = "Linear");
 
 /// <summary>Ordered, immutable animation decisions. Playables remain domain independent.</summary>
 public sealed class AnimationStateMachineAsset
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
     private readonly JsonObject Document;
 
     public string AssetId
@@ -49,7 +50,8 @@ public sealed class AnimationStateMachineAsset
     private AnimationStateMachineAsset(JsonObject Document)
     {
         Exact(Document, "schemaVersion", "kind", "assetId", "name", "initialStateId", "parameters", "states", "transitions");
-        if (Document["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion || Text(Document, "kind") != "animation-state-machine")
+        var Version = Document["schemaVersion"]!.GetValue<int>();
+        if ((Version != 1 && Version != CurrentSchemaVersion) || Text(Document, "kind") != "animation-state-machine")
         {
             throw new InvalidDataException("Unsupported animation state machine schema.");
         }
@@ -72,7 +74,13 @@ public sealed class AnimationStateMachineAsset
         Transitions = Array.AsReadOnly(Document["transitions"]!.AsArray().Select(Node =>
         {
             var Item = Node!.AsObject();
-            Exact(Item, "transitionId", "fromStateId", "toStateId", "exitTime", "conditions");
+            if (Version == 1)
+            {
+                Exact(Item, "transitionId", "fromStateId", "toStateId", "exitTime", "conditions");
+                Item["blendDuration"] = 0d;
+                Item["blendCurve"] = "Linear";
+            }
+            Exact(Item, "transitionId", "fromStateId", "toStateId", "exitTime", "conditions", "blendDuration", "blendCurve");
             var Conditions = Array.AsReadOnly(Item["conditions"]!.AsArray().Select(ConditionNode =>
             {
                 var Condition = ConditionNode!.AsObject();
@@ -80,7 +88,8 @@ public sealed class AnimationStateMachineAsset
                 return new AnimationCondition(Text(Condition, "parameterId"), Text(Condition, "comparison"), Number(Condition, "value"));
             }).ToArray());
             return new AnimationTransitionDefinition(Text(Item, "transitionId"), Text(Item, "fromStateId"),
-                Text(Item, "toStateId"), Item["exitTime"] is null ? null : Number(Item, "exitTime"), Conditions);
+                Text(Item, "toStateId"), Item["exitTime"] is null ? null : Number(Item, "exitTime"), Conditions,
+                Number(Item, "blendDuration"), Text(Item, "blendCurve"));
         }).ToArray());
         Unique(Parameters.Select(Parameter => Parameter.ParameterId), "parameter");
         Unique(States.Select(State => State.StateId), "state");
@@ -102,6 +111,10 @@ public sealed class AnimationStateMachineAsset
             {
                 throw new InvalidDataException("Transitions require distinct states and an exitTime in [0, 1] or null.");
             }
+            if (Transition.BlendDuration < 0 || Transition.BlendCurve is not ("Linear" or "SmoothStep"))
+            {
+                throw new InvalidDataException("Transitions require nonnegative blendDuration seconds and a Linear or SmoothStep blendCurve.");
+            }
             foreach (var Condition in Transition.Conditions)
             {
                 if (!ParameterIds.Contains(Condition.ParameterId) || !Comparisons.Contains(Condition.Comparison))
@@ -110,6 +123,7 @@ public sealed class AnimationStateMachineAsset
                 }
             }
         }
+        Document["schemaVersion"] = CurrentSchemaVersion;
         this.Document = (JsonObject)Document.DeepClone();
     }
 

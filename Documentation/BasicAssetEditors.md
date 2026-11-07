@@ -56,3 +56,54 @@ dotnet Tools/McpUiValidation/bin/Development/net8.0/SharpEngine.McpUiValidation.
 语义验证使用 `Tools/MeshAssetValidation` 和 `Tools/EditorValidation`，不代替 Cook 或发布包验证。
 MCP UI 验证在附加会话并收到目录变更通知后，重新读取完整 tools / resources / templates 目录，
 原始 JSON 与会话身份保存在 `Saved/Validation/McpUiCatalogs/<sessionId>`，不压缩目录或省略注册信息。
+
+## 动画状态机
+
+Animation.Editor 模块注册 `engine.animation-state-machine-editor`。
+保留已有 `timeline-editor` 窗口身份及 Preview / timeline / Details 面板 ID，
+其中 timeline 标签显示为 States & Transitions；Preview 显示兼容模型的实际动画。
+Details 提供名称、初始状态、状态 Clip、循环与速度、参数默认值、有序转换、条件及混合设置。
+
+- 工具栏可添加状态、参数和转换；转换至少需要两个状态，条件至少需要一个参数。
+- 状态重命名同步更新初始状态和转换端点；参数重命名同步更新条件引用。
+- Remove State + Transitions 一次删除状态及关联转换。若删除初始状态，则以剩余首个状态为初始状态；
+  不能删除最后一个状态。被条件引用的参数不能直接删除。
+- 转换按列表顺序首次匹配。Move Up / Move Down 修改真实的执行优先级。
+- `exitTime` 可留空表示 null；比较支持 Greater、GreaterOrEqual、Less、LessOrEqual、Equal、NotEqual。
+- `blendDuration` 是混合时长（秒），`0` 表示瞬切；点击 `blendCurve` 按钮在 `Linear` 和 `SmoothStep` 之间切换。
+  新增过渡默认 0.2 秒 SmoothStep；内置 mannequin locomotion 同样配置为 0.2 秒。
+- 编辑先验证完整 schema、引用和 Clip 依赖；错误显示在 Details 中且不改变文档、revision 或历史。
+- Undo/Redo、dirty、Save 都属于当前文档。Save 才原子写入文件；外部文件变化时拒绝覆盖并保留未保存内容。
+  引擎自带只读预设仍只能查看。
+
+试调时，先在 States & Transitions 顶部的 **Preview Parameters** 输入临时数值，再点击
+Play 或 **Step 1/60s**，条件满足后会开始切换。当前状态高亮，Preview 显示源→目标和混合进度条。
+Pause 冻结进度，Reset 返回初始状态并取消过渡。
+**Switch Preview State** 使用首条对应过渡，**Test Transition** 测试指定边；
+这两种手动试播忽略自动条件和退出时间，且要求当前未混合、源状态匹配。
+Details 的 Preview Mesh 只列出兼容所有状态 Clip 的模型。预览复用通用 Viewport3D，
+支持相机旋转、平移、缩放与 Focus；相机不随每帧动画自动重新取景。
+预览不会执行 Notify；混合不会打断正在进行的过渡。
+播放、参数、模型和相机属于每个窗口独立的临时会话，不进入资产或 Undo/Redo。
+作者修改、撤销或重做后暂停并重建预览，临时参数恢复文档默认值。
+无兼容模型时显示诊断，文档仍可编辑。引擎只读预设可试播但不能修改作者数据。
+
+状态机源文件 schema v2 支持显式读取 v1，迁移为零秒 Linear 后保留原行为，保存时写出 v2。
+编辑器快照 schema v4 新增 `preview` schema v1，可观察独立 revision、参数、混合状态、兼容模型候选和派生姿态。
+预览错误同时以 `diagnostic` 文本和结构化 `diagnostics` 数组提供，
+使用 `ANIMATION_PREVIEW_UNAVAILABLE` 或 `ANIMATION_PREVIEW_INVALID`，不修改作者数据。
+运行时与预览共用 `AnimationStateMachinePlayer`；根运动与打断边界见
+[动画与时间轴](AnimationAndTimeline.md#状态过渡与混合)。
+
+针对状态机的真实界面输入与匹配 PNG 验证：
+
+```powershell
+dotnet build Tools/McpUiValidation/SharpEngine.McpUiValidation.csproj -c Development
+dotnet Tools/McpUiValidation/bin/Development/net8.0/SharpEngine.McpUiValidation.dll Development --state-machine-only --render-backend=opengl --render-vsync=off
+dotnet Tools/McpUiValidation/bin/Development/net8.0/SharpEngine.McpUiValidation.dll Development --state-machine-only --render-backend=vulkan --render-vsync=off
+```
+
+先用标准 `Tools/SharpEngineBuild.ps1 -Target Editor -Configuration Development -RenderBackends Both`
+构建当前 Editor；验证工具只创建并清理自己的隔离进程。
+`Tools/AnimationValidation` 覆盖实际 RuntimeWorld 的混合姿态和热重载；
+这些检查不代替完整 Cook 或发布包验收。

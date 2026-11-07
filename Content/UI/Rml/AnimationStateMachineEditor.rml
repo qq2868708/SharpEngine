@@ -10,18 +10,33 @@
   </dock>
   <panes>
     <pane id="preview" label="Preview" closable="false">
-      <div id="animationStateMachinePreview" class="timeline-preview-info"><div class="timeline-preview-title">${Title}</div><div>Initial state: ${InitialState}</div><div>States: ${StateCount}</div><div>Transitions: ${TransitionCount}</div></div>
+      <div id="animationStateMachinePreview" class="state-machine-preview">
+        <div class="state-machine-preview-toolbar">
+          <button data-action="editor.asset-command:play" ui-disabled="Playing">Play</button>
+          <button data-action="editor.asset-command:pause" ui-disabled="Paused">Pause</button>
+          <button data-action="editor.asset-command:stop" ui-disabled="PreviewUnavailable">Reset</button>
+          <button data-action="editor.asset-command:step" ui-disabled="Playing">Step 1/60s</button>
+          <span>State: ${PreviewState} · ${PreviewTransition}</span>
+        </div>
+        <div class="state-machine-blend-bar"><div id="stateMachineBlendFill" class="state-machine-blend-fill" /></div>
+        <div class="state-machine-preview-viewport"><ui-slot name="Viewport" title="${Title}" /></div>
+        <div class="ui-diagnostic">${PreviewDiagnostic}</div>
+      </div>
     </pane>
-    <pane id="timeline" label="Timeline" closable="true">
+    <pane id="timeline" label="States &amp; Transitions" closable="true">
       <div id="animationStateMachineGraph" class="animation-state-machine-editor">
-        <div class="animation-state-machine-header"><strong>States</strong><span>${StateCount} states · ${TransitionCount} transitions</span></div>
+        <div id="stateMachineGraphHeader" class="animation-state-machine-header"><strong>States</strong><span>${StateCount} states · ${TransitionCount} transitions</span></div>
+        <div id="stateMachinePreviewParameters" class="state-machine-preview-parameters"><strong>Preview Parameters (session only)</strong>
+          <ui-slot name="ParameterEditors" />
+        </div>
         <div class="animation-state-machine-states">
-          <ui-repeat items="States"><div class="animation-state-machine-state${InitialClass}"><strong>${Id}</strong><span>Clip: ${Clip}</span></div></ui-repeat>
+          <ui-repeat items="States"><div class="animation-state-machine-state${InitialClass}"><strong>${Id}</strong><span>Clip: ${Clip}</span><button data-action="editor.state-machine-preview:state:${ActionId}" ui-disabled="SwitchDisabled">Switch Preview State</button></div></ui-repeat>
+          <ui-repeat items="Transitions"><div class="animation-state-machine-state"><strong>${Id}</strong><span>${From} → ${To} · ${ConditionCount} conditions · ${BlendDuration}s ${BlendCurve}</span><button data-action="editor.state-machine-preview:transition:${ActionId}" ui-disabled="TriggerDisabled">Test Transition</button></div></ui-repeat>
         </div>
       </div>
     </pane>
     <pane id="details" label="Details" closable="true">
-      <div class="asset-details-pane"><div class="asset-preview-mesh-picker"><strong>Preview Mesh</strong><span>No compatible meshes</span></div><pre class="timeline-details">${DetailsJson}</pre></div>
+      <div class="asset-details-pane"><pre class="timeline-details">${DetailsJson}</pre></div>
     </pane>
   </panes>
 </asset-editor-layout>

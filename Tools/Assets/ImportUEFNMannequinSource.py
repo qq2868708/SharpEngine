@@ -65,8 +65,14 @@ for Vertex in Mesh.data.vertices:
     Total = sum(Weight for Index, Weight in Items)
     Influences.append({'boneIndices': [Index for Index, Weight in Items], 'weights': [Weight / Total for Index, Weight in Items]})
 
-Skeleton = {'schemaVersion': 2, 'kind': 'skeleton', 'assetId': 'engine://skeletons/uefn-mannequin',
-    'name': 'UEFN Mannequin Skeleton', 'previewMeshId': 'engine://meshes/uefn-mannequin', 'bones': BoneRecords}
+PreviousSkeleton = json.loads((Root / 'Content/Assets/Skeletons/UEFNMannequin.sharpskeleton').read_text())
+if PreviousSkeleton['schemaVersion'] not in (1, 2, 3):
+    raise ValueError('Unsupported existing Skeleton schema; reimport would lose authored data')
+Skeleton = {'schemaVersion': 3, 'kind': 'skeleton', 'assetId': 'engine://skeletons/uefn-mannequin',
+    'name': 'UEFN Mannequin Skeleton', 'previewMeshId': PreviousSkeleton.get('previewMeshId'),
+    'bones': BoneRecords,
+    'sockets': PreviousSkeleton['sockets'] if PreviousSkeleton['schemaVersion'] == 3 else [],
+    'virtualBones': PreviousSkeleton['virtualBones'] if PreviousSkeleton['schemaVersion'] == 3 else []}
 SkeletalMesh = {'schemaVersion': 2, 'kind': 'skeletal-mesh', 'assetId': 'engine://meshes/uefn-mannequin',
     'name': 'UEFN Mannequin Skeletal Mesh', 'skeletonId': Skeleton['assetId'], 'bones': BoneRecords,
     'positions': Positions, 'indices': Triangles, 'influences': Influences, 'defaultMaterial': 'engine://materials/default'}
@@ -152,6 +158,8 @@ for Record in Manifest['assets']:
         if Record['type'] == 'SkeletalMesh':
             Record['metadata']['influences'] = str(max(len(Influence['weights']) for Influence in Influences))
             Record['metadata']['schemaVersion'] = '2'
+        if Record['type'] == 'Skeleton':
+            Record['metadata']['schemaVersion'] = '3'
         if Record['type'] == 'SkeletalAnimation':
             ClipName = Record['name'].split()[-1]
             Clip = next(Item for Item in Metadata['actions'] if Item['name'] == ClipName)

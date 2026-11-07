@@ -38,8 +38,8 @@ Undo/Redo 历史和 dirty 状态。
 `EditorAssetOpenerRegistry` 先匹配具体 `AssetId`，再匹配 `AssetType`，并按优先级解析；
 项目或插件可注册高优先级打开器覆写引擎默认打开器，释放注册句柄后恢复原打开器。
 
-`SkeletonAsset` schema v2 的显式可空 `previewMeshId` 是动画编辑器的默认 Preview Mesh。
-schema v1 读取后迁移为 null。一个 Skeleton 可以被多个 Skeletal Mesh 共享，因此编辑器不再
+`SkeletonAsset` schema v3 的显式可空 `previewMeshId` 是动画编辑器的默认 Preview Mesh。
+schema v1 读取后迁移为 null；v1/v2 的 Socket、虚拟骨集合迁移为空，详见 [骨骼编辑器](SkeletonEditor.md)。一个 Skeleton 可以被多个 Skeletal Mesh 共享，因此编辑器不再
 遍历资产注册表并选择第一个匹配项。Details 中的临时 Mesh 选择只改变当前编辑器实例的瞬态
 预览状态，不修改动画或 Skeleton；候选 Mesh 仍必须通过
 `SkeletalAnimationCompatibility.Validate`。
@@ -88,7 +88,7 @@ Prefab 内部引用重映射和删除时置空。Animator 每实体最多一个�
 
 `RuntimeWorld` 的可选第三参数为通用 `AssetRegistry` 服务，Editor Play 和 Game Session 均提供。
 `new AnimationSnapshot(Runtime.Frame).ToJson()` 只投影已提交数据：根 schemaVersion 为 2，
-包含 revision、animators 和 skeletons；各条目带 schemaVersion 1。Animator 条目记录目标、clip、
+包含 revision、animators 和 skeletons；Animator 帧 schema v5、Skeleton 帧 schema v2。Animator 条目记录目标、clip、
 播放状态、诊断、时长、采样时间和采样次数；骨骼条目记录局部姿态、模型矩阵与蒙皮矩阵。
 Editor `components.describe.animation` 暴露同一观察。观察不会加载资产、推进或采样，旧帧保持冻结。
 Playable、骨骼实例和资产绑定缓存是可重建的瞬态对象；局部姿态、矩阵与蒙皮顶点是只读派生结果，
@@ -102,14 +102,46 @@ Authoring 预览通过显式 `SceneRenderPreparation.Prepare(World, Assets)` 在
 可以通过 `Controller` 绑定状态机，通过 `MovementSource` 和
 `MovementSpeedParameter` 把 Movement 的意图速度写入数值参数，避免根运动的实际速度反馈。状态切换在全部 Movement
 求值完成后、LateUpdate 之前执行，组件 ID 顺序不会改变决策结果。状态图会在加载时解析
-全部 Clip 依赖，任一依赖无效则整张图报告绑定失败；切换采用直接采样，当前不做姿态混合；根运动使用各 Clip 的资产设置。状态机控制器的运行时状态（当前状态、过渡 ID、参数和播放时间）进入
+全部 Clip 依赖，任一依赖无效则整张图报告绑定失败；切换由 `AnimationStateMachinePlayer` 执行过渡混合，根运动使用各 Clip 的资产设置。状态机控制器的运行时状态（当前状态、过渡 ID、参数、播放时间和混合进度）进入
 Animator 帧观察，图资产和组件状态均可从最新提交快照重建。
 
 `engine://animation-state-machines/uefn-mannequin-locomotion` 是引擎提供的只读
 builtin/preset 资产，依赖 UEFN mannequin 骨骼和四个 Clip。Content Manager 双击
 `AnimationStateMachine` 资产时沿用 `EditorAssetOpenerRegistry` 与
 `EditorRuntime.OpenAsset` 的统一打开入口，由 `engine.animation-state-machine-editor`
-在独立顶层动画资产编辑器中显示状态和过渡图；它复用同一套资产打开和 editor-root 路由。
+在独立顶层动画资产编辑器中显示状态和过渡列表、参数试调与真实 3D 姿态预览；它复用同一套资产打开和 editor-root 路由。内置 locomotion 的过渡采用 0.2 秒 SmoothStep 混合。
+
+### 状态过渡与混合
+
+状态机源资产 schema v2 为每条过渡显式保存 `blendDuration`（有限非负秒数）和
+`blendCurve`（`Linear` 或 `SmoothStep`）。v1 明确迁移为 `0` 秒、`Linear`，
+保留原来的瞬切；保存写出 v2。新建过渡默认 0.2 秒 SmoothStep。未来版本、未知字段、
+缺失的 v2 字段、负时长或未知曲线均拒绝加载。
+
+自动切换按序检查条件和 `exitTime`，每次推进最多开始一条新过渡。
+开始过渡时目标时间为 0、权重为 0，保留已经推进的源姿态；之后源、目标各自按状态速度推进。
+位置与缩放线性插值，旋转以归一化四元数 Slerp 插值；未包含的骨骼使用网格绑定姿态。
+混合时钟受 Animator 总速度控制，独立于单个状态速度。完成后恢复目标状态的条件判断；
+自动条件不会打断正在进行的混合。大步长保留结束混合后剩余时段的目标根运动。
+
+Root Motion 在两个 Clip 分别提取和去除后混合：根增量按区间首尾权重的均值混合，
+网格收到去除根运动后的局部混合姿态，避免双重位移。该根增量策略是离散帧近似，
+不承诺不同步长下旋转轨迹完全一致。Preview 保留启用 Root Motion 的源轨迹，
+不会移动主场景实体或执行 Notify。
+
+暂停与零速度冻结两侧时间和权重；Seek 取消混合且不产生根位移。
+显式 `StateId` 请求优先使用第一条对应过渡（不检查自动条件）；
+若当前混合尚未结束，直接的 Runtime 字段覆盖会重置到请求状态，避免悬挂请求。
+编辑器在混合期间禁用手动切换；Reset 始终可取消并返回初始状态。
+尚不提供可配置的打断规则、动画层、BlendSpace 或逐骨遮罩。
+
+`AnimationStateMachinePlayer` 是可独立使用的运行实例，接收不可变图、Clip 集合和目标绑定骨骼。
+每个实例独立拥有状态、双侧时间与混合进度，不保存回图资产。
+`Describe()` schema v1 公开 `stateRevision`、`stateId`、`time`、`clipId`、
+最后的 `transitionId`、`blending`、`sourceStateId/sourceTime`、
+`blendDuration/blendElapsed/blendCurve/blendWeight`。
+Animator 组件配置仍为 schema v3，帧 schema v5 新增 `controllerPlayback`；
+单 Clip 时该字段为 null，既有单 Clip 播放路径保持独立。
 
 验证入口：
 
@@ -157,7 +189,7 @@ TimelineView 拥有当前时间和播放推进；Play、Pause、Stop、Seek、Up
 
 骨骼动画的 JSON 事务与历史归属于该逻辑文件内部的 `SkeletalAnimationDocument`，Timeline 只是由动画生成的展示数据。`TimelineAssetToolDocument` 只处理 Timeline 资产，不能再通过资产类型分支编辑骨骼动画或状态机。通用 `TimelineNotifyEditing.TryAdd` 仅构建候选轨道数据，调用者决定提交到 Timeline 事务还是动画 JSON 事务，不取得历史与保存的所有权。
 
-状态机使用同模块内的 `AnimationStateMachineEditorExtension.cs` 与 `Content/UI/Rml/AnimationStateMachineEditor.rml`，保留 Preview/Timeline/Details、状态列表、初始状态标记及只读行为。稳定 Opener ID 为 `engine.animation-state-machine-editor`；Editor ID 仍使用原 `timeline-editor`，用于兼容窗口身份和已保存 Dock 布局，不表示它属于 Timeline 模块。状态机状态快照升级为 schemaVersion 3：保留图、计数、revision 与只读状态，增加 runtimeUi；移除未使用的 previewWorld、viewport 和预览网格字段，不再创建空的 3D 预览 World。骨骼动画编辑器快照仍为 v2，源动画/状态机/Timeline 格式不变。
+状态机使用同模块内的 `AnimationStateMachineEditorExtension.cs`、`AnimationStateMachineEditorInstance.Preview.cs` 与 `Content/UI/Rml/AnimationStateMachineEditor.rml`，保留 Preview/timeline/Details 面板身份；timeline 标签显示 States & Transitions。可写资产支持状态、参数、转换条件、混合设置、优先级排序、Undo/Redo 和 Save；引擎只读预设的作者数据保持只读，但可以试调预览参数。重命名同步更新引用，删除状态连同关联转换一起提交，保存检查外部修改。稳定 Opener ID 为 `engine.animation-state-machine-editor`；Editor ID 仍使用原 `timeline-editor`。编辑器快照 schema v4 新增独立 `preview` schema v1，公开会话 revision、参数、播放状态、共享 Player 快照、派生姿态、临时 World 和 Viewport。骨骼动画编辑器快照仍为 v2，源动画与 Timeline 格式不变。详细操作和真实输入验证入口见[基础资产编辑器](BasicAssetEditors.md)。
 
 父布局使用 `<ui-slot name="Viewport" />`、`<ui-slot name="Timeline" />` 引用实现 `IUiLayoutPart` 的子实例。Viewport3D 和 TimelineView 的内部标记分别由 `Content/UI/Rml/Viewport3D.rml`、`Content/UI/Rml/TimelineView.rml` 维护；父编辑器不拼接这些标记。通用 `UiLayoutTemplate` 按本次使用的数据展开文本、条件和重复项，并对文本及属性进行 XML 转义；插槽只接收 UI 布局契约，不接收任意业务对象。
 

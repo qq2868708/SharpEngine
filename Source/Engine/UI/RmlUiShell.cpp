@@ -2477,6 +2477,7 @@ struct RmlUiShell::Impl
                 // after this event dispatch instead of inside it.
                 if (target->HasAttribute("data-value-choice") || changeAction.find("editor.component-") == 0 ||
                     changeAction.find("editor.ui-") == 0 ||
+                    changeAction.find("editor.state-machine:") == 0 ||
                     changeAction.find("editor.mesh-socket:") == 0 ||
                     changeAction.find("editor.mesh-default-material:") == 0 ||
                     changeAction.find("editor.skeleton:") == 0 ||

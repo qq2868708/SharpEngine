@@ -46,7 +46,8 @@ if (args.Contains("--ui-editor-only", StringComparer.Ordinal))
 }
 if (args.Contains("--basic-asset-editors-only", StringComparer.Ordinal) ||
     args.Contains("--skeleton-gizmo-only", StringComparer.Ordinal) ||
-    args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal))
+    args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal) ||
+    args.Contains("--state-machine-only", StringComparer.Ordinal))
 {
     settingsProject = BasicAssetEditorsUiValidation.CreateProject(root);
 }
@@ -269,13 +270,15 @@ try
     }
     if (args.Contains("--basic-asset-editors-only", StringComparer.Ordinal) ||
         args.Contains("--skeleton-gizmo-only", StringComparer.Ordinal) ||
-        args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal))
+        args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal) ||
+        args.Contains("--state-machine-only", StringComparer.Ordinal))
     {
         var SkeletonOnly = args.Contains("--skeleton-gizmo-only", StringComparer.Ordinal);
+        var StateMachineOnly = args.Contains("--state-machine-only", StringComparer.Ordinal);
         var StaticMeshOnly = args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal);
         var FunctionalOnly = args.Contains("--functional-only", StringComparer.Ordinal);
-        BasicAssetEditorsUiValidation.Run(root, Require, Tool, Call, DecodePng, SkeletonOnly, StaticMeshOnly, !FunctionalOnly);
-        Console.WriteLine($"PASS: {assertions} {(StaticMeshOnly ? "StaticMesh Socket" : "Skeleton Gizmo")} rendered assertions{(FunctionalOnly ? "; performance excluded" : string.Empty)}");
+        BasicAssetEditorsUiValidation.Run(root, Require, Tool, Call, DecodePng, SkeletonOnly, StateMachineOnly, StaticMeshOnly, !FunctionalOnly);
+        Console.WriteLine($"PASS: {assertions} {(StateMachineOnly ? "State machine" : StaticMeshOnly ? "StaticMesh Socket" : "Skeleton Gizmo")} rendered assertions{(FunctionalOnly ? "; performance excluded" : string.Empty)}");
         return;
     }
     var tools = Call(5, "tools/list")["result"]?["tools"]?.AsArray() ?? [];

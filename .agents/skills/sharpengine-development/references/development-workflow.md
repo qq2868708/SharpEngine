@@ -74,6 +74,12 @@ Inspect each tool's current arguments before running it. Keep compilation, manag
 
 ## Shared Controls Validation
 
+For animation state-machine authoring or blending, run AnimationValidation,
+PrefabMovementValidation and EditorValidation, followed by
+`Tools/McpUiValidation --state-machine-only` on affected backends. Verify real
+parameter input, manual/automatic transitions, stepped blend pixels, read-only
+presets and independent preview instances; see Documentation/BasicAssetEditors.md.
+
 For StaticMesh Socket and shared Gizmo changes, run MeshAssetValidation,
 EditorValidation and the real-input McpUiValidation modes
 `--static-mesh-sockets-only` and `--skeleton-gizmo-only` on affected backends.

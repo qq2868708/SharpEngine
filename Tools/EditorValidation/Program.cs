@@ -196,7 +196,7 @@ try
         runtime.Menus.Items.Any(item => item.CommandId == "view.logs"),
         "View menu must expose independent Console and Logs commands");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
-    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 14,
+    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 17,
         "Public, project, and Plugin Content assets must both be available to a project editor");
     var pluginAsset = runtime.Assets.Find("project://plugins/validation.plugin/sample");
     Require(pluginAsset?.OwnerId == "validation.plugin" &&
@@ -606,6 +606,7 @@ try
     Require(!AssetEditorDirty("project://data/reload-rifle"),
         "Generic DataAsset editor must enforce reflected range constraints atomically");
 
+    BasicAssetEditorsValidation.Run(runtime, temporary.FullName, Require);
     SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
     StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
     SocketGizmoVisibilityValidation.Run(runtime, temporary.FullName, Require);

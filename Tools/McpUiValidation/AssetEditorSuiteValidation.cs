@@ -52,9 +52,9 @@ internal static class AssetEditorSuiteValidation
             {
                 var State = Editor["state"]!.AsObject();
                 Require(Editor["openerId"]!.GetValue<string>() == "engine.animation-state-machine-editor" &&
-                    State["schemaVersion"]!.GetValue<int>() == 3 && State["stateCount"]!.GetValue<int>() > 0 &&
-                    State["readOnly"]!.GetValue<bool>() && !State.ContainsKey("previewWorld"),
-                    "The Animation module presents a read-only state graph without allocating a placeholder World");
+                    State["schemaVersion"]!.GetValue<int>() == 4 && State["stateCount"]!.GetValue<int>() > 0 &&
+                    State["readOnly"]!.GetValue<bool>() && State["preview"]!["playback"] is not null,
+                    "The Animation module presents a read-only graph with an isolated pose preview");
             }
             if (ActivatePaneId is not null)
             {

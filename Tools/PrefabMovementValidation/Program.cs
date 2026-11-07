@@ -121,6 +121,10 @@ Runtime.Tick(0.1f);
 Check(Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["stateId"]?.GetValue<string>() == "walk",
     "The current Player enters Walk while keyboard movement accelerates");
 Runtime.Tick(0.1f);
+Check(Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["stateId"]?.GetValue<string>() == "walk" &&
+    Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["controllerPlayback"]!["blending"]!.GetValue<bool>(),
+    "The current Player finishes its Idle-to-Walk blend before considering the Run threshold");
+Runtime.Tick(0.1f);
 Check(Runtime.Frame.Get<AnimatorFrameState>(Animator.ComponentId)!.ToJson()["stateId"]?.GetValue<string>() == "run",
     "The current Player enters Run after its movement speed crosses the graph threshold");
 Runtime.Tick(0.1f);
