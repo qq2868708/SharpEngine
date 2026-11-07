@@ -118,8 +118,9 @@ public sealed partial class EditorRuntime
         html.Append("<div class=\"settings-field\"><div class=\"settings-field-copy\"><label>Namespace</label><span>From Module and directory</span></div><span id=\"source-namespace\">").Append(Escape(SourceNamespace())).Append("</span></div>");
         html.Append("<div class=\"settings-field\"><button id=\"source-create\" class=\"settings-action primary\" data-action=\"editor.source-create\">Create</button><button class=\"settings-action\" data-action=\"editor.source-cancel\">Close</button></div></div><div id=\"source-feedback\" class=\"settings-footer\" style=\"height: 46px;\"><span>Creates one .cs file. Existing files are never overwritten.</span></div></div></div>");
         _nativeApi.SetHostMarkup(SourceWizardHost, "workspace", html.ToString());
-        void Field(string id, string label, string value) => html.Append("<div class=\"settings-field\"><div class=\"settings-field-copy\"><label>").Append(label)
-            .Append("</label></div><div class=\"settings-control\"><input id=\"source-").Append(id).Append("\" value=\"").Append(Escape(value))
-            .Append("\" data-change-action=\"editor.source-").Append(id).Append(":\" /></div></div>");
+        void Field(string Id, string Label, string Value)
+        {
+            html.Append(SharpEngine.UI.UiValueEditors.Text(Label, new SharpEngine.UI.UiValueInput("source-" + Id, Value, "editor.source-" + Id + ":")));
+        }
     }
 }

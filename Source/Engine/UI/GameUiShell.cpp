@@ -1,3 +1,4 @@
+#include "RmlValueEditor.h"
 #include "GameUiShell.h"
 #include "RmlUiSourceUrl.h"
 #include "RmlUiResourcePath.h"
@@ -73,6 +74,41 @@ namespace
 
         void ProcessEvent(Rml::Event& event) override
         {
+            if (event.GetId() == Rml::EventId::Mousedown)
+            {
+                PointerDown = true;
+            }
+            if (RmlValueEditor::ProcessEvent(event, PointerDown, RmlWin32::GetKeyModifierState(),
+                [&](const Rml::String& Action)
+                {
+                    if (Action == "ui.value-end-pointer")
+                    {
+                        ValueEndOnRelease = true;
+                    }
+                    Pending->push_back(Action);
+                }))
+            {
+                return;
+            }
+            if (event.GetId() == Rml::EventId::Mouseup)
+            {
+                PointerDown = false;
+                if (ValueEndOnRelease)
+                {
+                    ValueEndOnRelease = false;
+                    Pending->push_back("ui.value-release");
+                }
+            }
+            if (event.GetId() == Rml::EventId::Change)
+            {
+                auto* Target = event.GetTargetElement();
+                const auto Action = Target->GetAttribute<Rml::String>("data-change-action", "");
+                if (!Action.empty())
+                {
+                    Pending->push_back(Action + Target->GetAttribute<Rml::String>("value", ""));
+                }
+                return;
+            }
             if (event.GetId() != Rml::EventId::Click || !Document || !*Document)
             {
                 return;
@@ -99,6 +135,8 @@ namespace
     private:
         Rml::ElementDocument** Document = nullptr;
         std::vector<std::string>* Pending = nullptr;
+        bool PointerDown{};
+        bool ValueEndOnRelease{};
     };
 
     // RmlUi's font-family default is empty, and an unresolved family produces
@@ -285,6 +323,12 @@ bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml
     if (state.Document)
     {
         state.Document->AddEventListener(Rml::EventId::Click, &state.Events);
+        state.Document->AddEventListener(Rml::EventId::Focus, &state.Events, true);
+        state.Document->AddEventListener(Rml::EventId::Blur, &state.Events, true);
+        state.Document->AddEventListener(Rml::EventId::Change, &state.Events);
+        state.Document->AddEventListener(Rml::EventId::Keydown, &state.Events, true);
+        state.Document->AddEventListener(Rml::EventId::Mousedown, &state.Events, true);
+        state.Document->AddEventListener(Rml::EventId::Mouseup, &state.Events);
         state.Document->Show();
         EngineLog::Info("RmlUi", "Game UI initialized document=" + documentPath.generic_string());
     }
@@ -320,6 +364,12 @@ bool GameUiShell::SetDocument(std::string_view rml, std::string_view sourcePath)
         return false;
     }
     state.Document->AddEventListener(Rml::EventId::Click, &state.Events);
+    state.Document->AddEventListener(Rml::EventId::Focus, &state.Events, true);
+    state.Document->AddEventListener(Rml::EventId::Blur, &state.Events, true);
+    state.Document->AddEventListener(Rml::EventId::Change, &state.Events);
+    state.Document->AddEventListener(Rml::EventId::Keydown, &state.Events, true);
+    state.Document->AddEventListener(Rml::EventId::Mousedown, &state.Events, true);
+    state.Document->AddEventListener(Rml::EventId::Mouseup, &state.Events);
     state.Document->Show();
     state.Semantic.clear();
     ++state.StateRevision;

@@ -14,9 +14,12 @@ internal static partial class UiEditorMarkup
     {
         var Body = Document.DesignBodyElement;
         var Builder = new StringBuilder();
-        Builder.Append("<div class=\"ui-design-pane\"><div class=\"ui-preview-controls\">Preview <input id=\"uiPreviewWidth\" type=\"text\" value=\"")
-            .Append(Document.PreviewWidth).Append("\" data-change-action=\"editor.ui-preview:width:\" /> x <input id=\"uiPreviewHeight\" type=\"text\" value=\"")
-            .Append(Document.PreviewHeight).Append("\" data-change-action=\"editor.ui-preview:height:\" />")
+        Builder.Append("<div class=\"ui-design-pane\"><div class=\"ui-preview-controls\">Preview ")
+            .Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiPreviewWidth",
+                Document.PreviewWidth.ToString(CultureInfo.InvariantCulture), "editor.ui-preview:width:", Kind: "integer")))
+            .Append(" x ")
+            .Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiPreviewHeight",
+                Document.PreviewHeight.ToString(CultureInfo.InvariantCulture), "editor.ui-preview:height:", Kind: "integer")))
             .Append(ToolButton("ui-preview-fit", "editor.ui-preview-fit", "Fit", "Fit the preview into the available space", true))
             .Append(ToolButton("ui-preview-zoom-50", "editor.ui-preview-zoom:0.5", "50%", "Show the preview at half size", true))
             .Append(ToolButton("ui-preview-zoom-75", "editor.ui-preview-zoom:0.75", "75%", "Show the preview at three-quarter size", true))
@@ -107,19 +110,29 @@ internal static partial class UiEditorMarkup
             .Append(Escape(Document.SelectedElement() is { } Selected ? "uiTreeSelect-" + UiEditorDocument.PreviewNodeIdOf(Selected) : string.Empty))
             .Append("\">");
         var Visible = Document.VisibleTreeElements();
-        var MaximumDepth = Visible.Count == 0 ? 0 : Visible.Max(UiEditorDocument.DepthOf);
-        Builder.Append("<div class=\"ui-tree-rows\" style=\"min-width:")
-            .Append(184 + MaximumDepth * 18).Append("px;\">");
-        if (Visible.Count == 0)
+        var Rows = Visible.Select(Element =>
         {
-            Builder.Append("<div class=\"ui-editor-empty\">").Append(Document.TreeSearch.Length > 0
-                ? "No matching controls" : "Add a control from the Controls panel").Append("</div>");
-        }
-        foreach (var Element in Visible)
-        {
-            AppendHierarchyRow(Builder, Document, Element);
-        }
-        return Builder.Append("</div></div></div>").ToString();
+            var Key = UiEditorDocument.KeyOf(Element);
+            var NodeId = UiEditorDocument.PreviewNodeIdOf(Element);
+            var Id = UiEditorDocument.ElementIdOf(Element);
+            var Type = Document.ControlLabel(Element);
+            var Reference = Element.Name.LocalName == "ui-use";
+            var Icon = Document.ControlOf(Element)?.Icon ?? Element.Name.LocalName switch
+            {
+                "ui-use" => "control-reference",
+                "ui-slot" => "control-slot",
+                "ui-if" => "filter",
+                "ui-repeat" => "reset",
+                _ => "ui",
+            };
+            return new SharpEngine.UI.UiTreeRow(Key, Document.DisplayName(Element), (Reference ? "REF / " : string.Empty) + Type + " / " + (Id.Length == 0 ? "anonymous" : "#" + Id),
+                EditorResourceUris.IconSource(Icon), UiEditorDocument.DepthOf(Element), Key == Document.SelectedKey,
+                Element.HasElements, Document.TreeExpanded(Element), "editor.ui-select:" + Key, "editor.ui-tree-toggle:" + Key,
+                "uiTreeSelect-" + NodeId, "uiTreeToggle-" + NodeId, ToggleEnabled: Document.TreeSearch.Length == 0, RowClass: Reference ? "reference" : string.Empty);
+        }).ToArray();
+        Document.TreeView.SetRows(Rows);
+        Builder.Append(Document.TreeView.BuildLayout(default));
+        return Builder.Append("</div></div>").ToString();
     }
 
     public static string BuildInspector(UiEditorDocument Document)
@@ -194,9 +207,8 @@ internal static partial class UiEditorMarkup
                     !ReadOnly)
                 .Append(">+ ").Append(Escape(ClassName)).Append("</button>");
         }
-        Builder.Append("</div></div><div class=\"ui-inspector-section\"><span class=\"ui-inspector-label\">Enabled</span><button")
-            .AppendAction(Element.Attribute("disabled") is null ? "editor.ui-enabled:0" : "editor.ui-enabled:1", !ReadOnly)
-            .Append('>').Append(Element.Attribute("disabled") is null ? "Enabled" : "Disabled").Append("</button></div>");
+        Builder.Append("</div></div>").Append(SharpEngine.UI.UiValueEditors.Boolean("Enabled", "uiElementEnabled",
+            Element.Attribute("disabled") is null, Element.Attribute("disabled") is null ? "editor.ui-enabled:0" : "editor.ui-enabled:1", ReadOnly));
         var Declarations = UiEditorDocument.DeclarationsOf(Element);
         var Computed = Document.Sheet.Compute(Element);
         var Absolute = Declarations.TryGetValue("position", out var Position) &&
@@ -413,17 +425,11 @@ internal static partial class UiEditorMarkup
         var OptionsHint = Field.Options.Count == 0
             ? string.Empty
             : " (" + string.Join(" | ", Field.Options) + ")";
-        Builder.Append("<input class=\"ui-style-input\" type=\"text\" id=\"uiStyleField-")
-            .Append(Escape(Field.Name)).Append("\" value=\"")
-            .Append(Escape(Inline ?? string.Empty))
-            .Append("\" placeholder=\"").Append(Escape(Hint + OptionsHint))
-            .Append("\" data-change-action=\"editor.ui-style:")
-            .Append(Field.Name).Append(":\"");
-        if (ReadOnly)
-        {
-            Builder.Append(" disabled=\"disabled\"");
-        }
-        Builder.Append(" />");
+        Builder.Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("uiStyleField-" + Field.Name,
+            Inline ?? string.Empty, "editor.ui-style:" + Field.Name + ":", ReadOnly, Attributes: new Dictionary<string, string>
+            {
+                ["placeholder"] = Hint + OptionsHint,
+            })));
         Builder.Append("<button class=\"ui-style-clear\" title=\"Remove inline value\"")
             .AppendAction("editor.ui-style-clear:" + Field.Name, !ReadOnly && HasInline)
             .Append(">x</button></div>");
@@ -446,12 +452,9 @@ internal static partial class UiEditorMarkup
         {
             FieldId = "uiPrivateStyle-" + Action["editor.ui-private-style:".Length..].Replace(':', '-');
         }
-        return "<div class=\"ui-inspector-section\" style=\"display: block; width: 220px;\"><label class=\"ui-inspector-label\">" +
-            Escape(Label) + "</label><input class=\"ui-inspector-input\" type=\"text\" style=\"width: 206px; box-sizing: border-box; max-width: none;\" id=\"" +
-            Escape(FieldId) + "\" value=\"" +
-            Escape(Value) + "\" placeholder=\"" + Escape(Placeholder) +
-            "\" data-change-action=\"" + Escape(Action) + ":\"" +
-            (ReadOnly ? " disabled=\"disabled\"" : string.Empty) + " /></div>";
+        return "<div class=\"ui-inspector-section\" style=\"width:220px;\">" +
+            SharpEngine.UI.UiValueEditors.Text(Label, new SharpEngine.UI.UiValueInput(FieldId, Value, Action + ":", ReadOnly), Placeholder) + "</div>";
+
     }
 
     private static string ToolButton(string Id, string Action, string Label, string Tooltip,
@@ -671,10 +674,8 @@ internal static partial class UiEditorMarkup
             var Action = "editor.ui-control-property:" + Property.Name;
             if (Property.Kind == UiControlPropertyKind.Boolean)
             {
-                Builder.Append("<div class=\"ui-inspector-section\"><label class=\"ui-inspector-label\">")
-                    .Append(Escape(Property.Label)).Append("</label><button class=\"ui-control-property-toggle\" id=\"uiControlField-")
-                    .Append(Property.Name).Append('"').AppendAction(Action + ":" + (Value == "true" ? "false" : "true"), !Document.IsReadOnly)
-                    .Append(AppendAvailability(!Document.IsReadOnly)).Append('>').Append(Value == "true" ? "On" : "Off").Append("</button></div>");
+                Builder.Append(SharpEngine.UI.UiValueEditors.Boolean(Property.Label, "uiControlField-" + Property.Name,
+                    Value == "true", Action + ":" + (Value == "true" ? "false" : "true"), Document.IsReadOnly));
             }
             else
             {
@@ -682,54 +683,6 @@ internal static partial class UiEditorMarkup
             }
         }
         return Builder.Append("</div>").ToString();
-    }
-
-    private static void AppendHierarchyRow(StringBuilder Builder, UiEditorDocument Document, XElement Element)
-    {
-        var Key = UiEditorDocument.KeyOf(Element);
-        var Id = UiEditorDocument.ElementIdOf(Element);
-        var NodeId = UiEditorDocument.PreviewNodeIdOf(Element);
-        var Selected = Key == Document.SelectedKey;
-        var Expanded = Document.TreeExpanded(Element);
-        var Reference = Element.Name.LocalName == "ui-use";
-        var Type = Document.ControlLabel(Element);
-        var Name = Document.DisplayName(Element);
-        var Asset = UiEditorDocument.AttributeOf(Element, "asset");
-        var Depth = UiEditorDocument.DepthOf(Element);
-        var Indent = 4 + Depth * 18;
-        var Icon = Document.ControlOf(Element)?.Icon ?? Element.Name.LocalName switch
-        {
-            "ui-use" => "control-reference",
-            "ui-slot" => "control-slot",
-            "ui-if" => "filter",
-            "ui-repeat" => "reset",
-            _ => "ui",
-        };
-        Builder.Append("<div class=\"ui-widget-row").Append(Selected ? " selected" : string.Empty)
-            .Append(Reference ? " reference" : string.Empty).Append("\">");
-        for (var Level = 0; Level < Depth; Level++)
-        {
-            Builder.Append("<span class=\"ui-tree-guide\" style=\"left:")
-                .Append(13 + Level * 18).Append("px;\"></span>");
-        }
-        if (Element.HasElements)
-        {
-            Builder.Append("<button class=\"ui-tree-toggle\" id=\"uiTreeToggle-").Append(NodeId).Append('"')
-                .Append(" style=\"left:").Append(Indent).Append("px;\"")
-                .AppendAction("editor.ui-tree-toggle:" + Key, Document.TreeSearch.Length == 0)
-                .Append(" title=\"").Append(Expanded ? "Collapse branch" : "Expand branch").Append("\">")
-                .Append("<img src=\"sharpengine-resource://engine/Resources/Editor/Icons/")
-                .Append(Expanded ? "chevron-down" : "chevron-right").Append(".tga\" /></button>");
-        }
-        Builder.Append("<button class=\"ui-tree-select\" id=\"uiTreeSelect-").Append(NodeId).Append('"')
-            .AppendAction("editor.ui-select:" + Key, true).Append(" title=\"")
-            .Append(Escape(Type + " | " + Name + " | " + (Id.Length == 0 ? Key : "#" + Id) + (Reference ? " | " + Asset : string.Empty)))
-            .Append("\"><img class=\"ui-tree-icon\" style=\"left:").Append(Indent + 22)
-            .Append("px;\" src=\"sharpengine-resource://engine/Resources/Editor/Icons/").Append(Icon)
-            .Append(".tga\" /><span class=\"ui-tree-copy\" style=\"left:").Append(Indent + 44)
-            .Append("px;\"><span class=\"ui-tree-name\">").Append(Escape(Name)).Append("</span><span class=\"ui-tree-detail\">")
-            .Append(Reference ? "REF / " : string.Empty).Append(Escape(Type))
-            .Append(" / ").Append(Escape(Id.Length == 0 ? "anonymous" : "#" + Id)).Append("</span></span></button></div>");
     }
 
     private static string AppendAvailability(bool Enabled) =>

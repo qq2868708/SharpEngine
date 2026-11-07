@@ -13,11 +13,13 @@ internal static class AnimatorContent
         internal int Generation;
         internal readonly ConcurrentDictionary<(string Clip, string Mesh), SkeletalAnimationAsset> Clips = new();
         internal readonly ConcurrentDictionary<string, SkeletalMeshAsset> Meshes = new(StringComparer.OrdinalIgnoreCase);
+        internal readonly ConcurrentDictionary<string, SkeletonAsset> Skeletons = new(StringComparer.OrdinalIgnoreCase);
     }
     private static readonly ConditionalWeakTable<AssetRegistry, ContentCache> Caches = new();
 
     internal static int Generation(AssetRegistry Assets) { return Caches.GetOrCreateValue(Assets).Generation; }
     internal static SkeletalMeshAsset Mesh(AssetRegistry Assets, string Id) { return Caches.GetOrCreateValue(Assets).Meshes.GetOrAdd(Id, Key => SkeletalMeshContent.Load(Assets, Key)); }
+    internal static SkeletonAsset Skeleton(AssetRegistry Assets, string Id) { return Caches.GetOrCreateValue(Assets).Skeletons.GetOrAdd(Id, Key => SkeletonContent.Load(Assets, Key)); }
 
     internal static SkeletalAnimationAsset Resolve(AssetRegistry Assets, string Clip, string Mesh)
     {
@@ -35,6 +37,7 @@ internal static class AnimatorContent
         var Cache = Caches.GetOrCreateValue(Assets);
         Cache.Clips.Clear();
         Cache.Meshes.Clear();
+        Cache.Skeletons.Clear();
         Cache.Generation++;
     }
 

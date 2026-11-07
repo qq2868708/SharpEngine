@@ -56,7 +56,10 @@ internal sealed class InputAssetEditorInstance : IAssetEditorInstance
 
     public EditorLayoutDocument CreateDefaultLayout()
     {
-        var Bottom = IsContext ? new[] { "bindings", "source", "diagnostics" } :
+        var Bottom = IsContext ? new[]
+                {
+                    "bindings", "source", "diagnostics"
+                } :
             ["source", "diagnostics"];
         return AssetEditorInstanceUtilities.CreateDocumentLayout("details", "summary",
             Bottom);
@@ -304,9 +307,11 @@ internal sealed class InputAssetEditorInstance : IAssetEditorInstance
             .Append(AssetEditorInstanceUtilities.ReadOnlyField("Asset ID", Asset.Id));
         if (IsContext)
         {
-            Markup.Append(AssetEditorInstanceUtilities.Field("Route",
-                Root["route"]!.GetValue<string>(), "editor.input-field:route:",
-                IsReadOnly, "Editor, RuntimeUi, or Gameplay"))
+            Markup.Append(SharpEngine.UI.UiValueEditors.Choice("Route", "inputRoute", Root["route"]!.GetValue<string>(),
+                new[]
+                {
+                    "Editor", "RuntimeUi", "Gameplay"
+                }.Select(Value => (Value, Value)), "editor.input-field:route:", IsReadOnly))
                 .Append(AssetEditorInstanceUtilities.Field("Priority",
                     Root["priority"]!.GetValue<int>().ToString(CultureInfo.InvariantCulture),
                     "editor.input-field:priority:", IsReadOnly))
@@ -316,10 +321,11 @@ internal sealed class InputAssetEditorInstance : IAssetEditorInstance
         }
         else
         {
-            Markup.Append(AssetEditorInstanceUtilities.Field("Value Type",
-                Root["valueType"]!.GetValue<string>(),
-                "editor.input-field:valueType:", IsReadOnly,
-                "Button, Axis1D, or Axis2D"))
+            Markup.Append(SharpEngine.UI.UiValueEditors.Choice("Value Type", "inputValueType", Root["valueType"]!.GetValue<string>(),
+                new[]
+                {
+                    "Button", "Axis1D", "Axis2D"
+                }.Select(Value => (Value, Value)), "editor.input-field:valueType:", IsReadOnly))
                 .Append(ToggleButton("Continuous",
                     Root["continuous"]!.GetValue<bool>(),
                     "editor.input-toggle-continuous"));
@@ -342,43 +348,23 @@ internal sealed class InputAssetEditorInstance : IAssetEditorInstance
         {
             var Binding = Bindings[Index]!.AsObject();
             var Prefix = $"editor.input-binding:{Index}:";
-            if (IsReadOnly)
-            {
-                Markup.Append("<div class=\"ui-inspector-heading input-binding-heading\"><strong>Binding ")
-                    .Append(Index + 1).Append("</strong></div>")
-                    .Append(AssetEditorInstanceUtilities.ReadOnlyField("Action",
-                        Binding["action"]!.GetValue<string>()))
-                    .Append(AssetEditorInstanceUtilities.ReadOnlyField("Control",
-                        Binding["control"]!.GetValue<string>()))
-                    .Append(AssetEditorInstanceUtilities.ReadOnlyField("Scale",
-                        Binding["scaleX"]!.ToJsonString() + ", " +
-                        Binding["scaleY"]!.ToJsonString()))
-                    .Append(AssetEditorInstanceUtilities.ReadOnlyField("Modifiers",
-                        string.Join(", ", Binding["modifiers"]!.AsArray().Select(Node =>
-                            Node!.GetValue<string>()))))
-                    .Append(AssetEditorInstanceUtilities.ReadOnlyField("Exact Modifiers",
-                        Binding["exactModifiers"]!.GetValue<bool>().ToString()));
-                continue;
-            }
             Markup.Append("<div class=\"ui-inspector-heading input-binding-heading\"><strong>Binding ")
                 .Append(Index + 1).Append("</strong><button data-action=\"editor.input-binding-remove:")
-                .Append(Index).Append("\" title=\"Remove binding\">Remove</button></div>")
+                .Append(Index).Append("\" title=\"Remove binding\"").Append(IsReadOnly ? " disabled=\"disabled\"" : string.Empty).Append(">Remove</button></div>")
                 .Append(AssetEditorInstanceUtilities.Field("Action",
                     Binding["action"]!.GetValue<string>(), Prefix + "action:", IsReadOnly))
                 .Append(AssetEditorInstanceUtilities.Field("Control",
                     Binding["control"]!.GetValue<string>(), Prefix + "control:", IsReadOnly))
-                .Append(AssetEditorInstanceUtilities.Field("Scale X",
-                    Binding["scaleX"]!.GetValue<float>().ToString("0.###",
-                        CultureInfo.InvariantCulture), Prefix + "scaleX:", IsReadOnly))
-                .Append(AssetEditorInstanceUtilities.Field("Scale Y",
-                    Binding["scaleY"]!.GetValue<float>().ToString("0.###",
-                        CultureInfo.InvariantCulture), Prefix + "scaleY:", IsReadOnly))
+                .Append(SharpEngine.UI.UiValueEditors.Vector("Scale", new[]
+                {
+                    new SharpEngine.UI.UiValueInput("inputBinding-" + Index + "-scale-X", SharpEngine.UI.UiValueEditors.Format(Binding["scaleX"]!.GetValue<float>()), Prefix + "scaleX:", IsReadOnly),
+                    new SharpEngine.UI.UiValueInput("inputBinding-" + Index + "-scale-Y", SharpEngine.UI.UiValueEditors.Format(Binding["scaleY"]!.GetValue<float>()), Prefix + "scaleY:", IsReadOnly),
+                }, "XY"))
                 .Append(AssetEditorInstanceUtilities.Field("Modifiers",
                     string.Join(", ", Binding["modifiers"]!.AsArray().Select(Node =>
                         Node!.GetValue<string>())), Prefix + "modifiers:", IsReadOnly))
-                .Append(AssetEditorInstanceUtilities.Field("Exact Modifiers",
-                    Binding["exactModifiers"]!.GetValue<bool>().ToString(),
-                    Prefix + "exactModifiers:", IsReadOnly));
+                .Append(SharpEngine.UI.UiValueEditors.Boolean("Exact Modifiers", "inputBinding-" + Index + "-exact",
+                    Binding["exactModifiers"]!.GetValue<bool>(), Prefix + "exactModifiers:" + (!Binding["exactModifiers"]!.GetValue<bool>() ? "true" : "false"), IsReadOnly));
         }
         Markup.Append("</div>");
         return Markup.ToString();
@@ -397,7 +383,6 @@ internal sealed class InputAssetEditorInstance : IAssetEditorInstance
 
     private string ToggleButton(string Label, bool Value, string Action)
     {
-        var Disabled = IsReadOnly ? " disabled=\"disabled\"" : string.Empty;
-        return $"<div class=\"asset-field\"><label>{AssetEditorInstanceUtilities.Escape(Label)}</label><button class=\"settings-toggle {(Value ? "enabled" : string.Empty)}\" data-action=\"{Action}\"{Disabled}>{(Value ? "Enabled" : "Disabled")}</button></div>";
+        return SharpEngine.UI.UiValueEditors.Boolean(Label, "inputToggle-" + Action, Value, Action, IsReadOnly);
     }
 }

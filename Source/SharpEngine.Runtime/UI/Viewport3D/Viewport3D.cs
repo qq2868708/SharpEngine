@@ -27,6 +27,12 @@ public sealed class Viewport3D : IUiLayoutPart, IUiActionHandler
     {
         get;
     }
+    /// <summary>Opt in to host-local left pointer down/move/up/cancel semantic actions.</summary>
+    public bool PointerInput
+    {
+        get;
+        set;
+    }
     public OrbitCameraController Navigation
     {
         get;
@@ -69,6 +75,7 @@ public sealed class Viewport3D : IUiLayoutPart, IUiActionHandler
             ["ElementId"] = ElementId,
             ["Kind"] = Kind,
             ["Title"] = Title,
+            ["PointerInput"] = PointerInput ? "true" : "false",
         });
     }
 
@@ -113,6 +120,7 @@ public sealed class Viewport3D : IUiLayoutPart, IUiActionHandler
             ["schemaVersion"] = 1,
             ["stateRevision"] = ContentRevision + Navigation.StateRevision,
             ["elementId"] = ElementId,
+            ["pointerInput"] = PointerInput,
             ["contentIds"] = new JsonArray(Contents.Select(Content => (JsonNode?)JsonValue.Create(Content.ContentId)).ToArray()),
             ["pivot"] = Vector(Navigation.Pivot),
             ["distance"] = Navigation.Distance,

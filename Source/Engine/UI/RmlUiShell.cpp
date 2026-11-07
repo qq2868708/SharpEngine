@@ -3,6 +3,7 @@
 #include "RmlControlTooltip.h"
 #include "RmlViewport3DInput.h"
 #include "RmlRuntimeUi.h"
+#include "RmlValueEditor.h"
 #include "RmlUiSourceUrl.h"
 #include "RmlUiResourcePath.h"
 #include <RmlUi/Core.h>
@@ -379,6 +380,8 @@ struct RmlUiShell::Impl
         std::string ComponentSource;
         std::string PrefabSource;
         bool InspectorGesture{};
+        bool ValuePointerDown{};
+        bool ValueEndOnRelease{};
         RmlColorPicker ColorPicker;
         int MarkupDepth{};
         Rml::Element* HierarchyDropTarget{};
@@ -750,6 +753,7 @@ struct RmlUiShell::Impl
         if (!element->GetId().empty()) return prefix + "/id/" + element->GetId();
         auto action = Attribute(element, "data-action");
         if (action.empty()) action = Attribute(element, "action");
+        if (action.empty()) action = Attribute(element, "data-value-commit");
         if (!action.empty()) return prefix + "/action/" + action;
         return {};
     }
@@ -1047,6 +1051,10 @@ struct RmlUiShell::Impl
             capture = ElementIdentity(host, SplitterDrag.Element);
         else if ((DockDrag.Pending || DockDrag.Active) && DockDrag.SourceHost == &host)
             capture = StableAncestorId(host, DockDrag.SourceElement);
+        else if (host.ViewportInput.IsCapturing() && host.Document)
+        {
+            capture = StableAncestorId(host, host.Document->GetElementById(host.ViewportInput.CapturedElementId()));
+        }
         const bool presented = host.Context && host.Window &&
             (!host.OwnsWindow || IsWindowVisible(host.Window));
         std::ostringstream result;
@@ -2349,6 +2357,34 @@ struct RmlUiShell::Impl
             host.InspectorGesture = false;
             QueueAction(host, "editor.component-gesture-end");
         }
+        const auto EmitValueAction = [&](const Rml::String& Action)
+        {
+            if (Action == "ui.value-end-pointer")
+            {
+                host.ValueEndOnRelease = true;
+            }
+            QueueAction(host, Action);
+        };
+        if (RmlValueEditor::ProcessEvent(event, host.ValuePointerDown, ModifierState(), EmitValueAction))
+        {
+            return;
+        }
+        if (target)
+        {
+            const auto FocusAction = target->GetAttribute<Rml::String>("data-focus-action", "");
+            const auto EndEditAction = target->GetAttribute<Rml::String>("data-end-edit-action", "");
+            if (EventId == Rml::EventId::Focus && !FocusAction.empty())
+            {
+                QueueAction(host, FocusAction);
+            }
+            const auto Key = event.GetParameter<int>("key_identifier", 0);
+            const bool EndEdit = EventId == Rml::EventId::Blur ||
+                (EventId == Rml::EventId::Keydown && (Key == Rml::Input::KI_RETURN || Key == Rml::Input::KI_ESCAPE));
+            if (EndEdit && !EndEditAction.empty())
+            {
+                QueueAction(host, EndEditAction);
+            }
+        }
         if (target && target->HasAttribute("data-component-input"))
         {
             if (event.GetId() == Rml::EventId::Focus) QueueAction(host, "editor.component-focus");
@@ -2439,9 +2475,19 @@ struct RmlUiShell::Impl
             {
                 // Editor-authoring changes replace their own markup, so they must run
                 // after this event dispatch instead of inside it.
-                if (changeAction.find("editor.component-") == 0 ||
-                    changeAction.find("editor.ui-") == 0) QueueAction(host, changeAction + value);
-                else EmitAction(host, changeAction + value);
+                if (target->HasAttribute("data-value-choice") || changeAction.find("editor.component-") == 0 ||
+                    changeAction.find("editor.ui-") == 0 ||
+                    changeAction.find("editor.mesh-socket:") == 0 ||
+                    changeAction.find("editor.mesh-default-material:") == 0 ||
+                    changeAction.find("editor.skeleton:") == 0 ||
+                    changeAction.find("editor.skeleton-preview-mesh:") == 0)
+                {
+                    QueueAction(host, changeAction + value);
+                }
+                else
+                {
+                    EmitAction(host, changeAction + value);
+                }
                 return;
             }
         }
@@ -3079,6 +3125,10 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     if (!host || !host->Owner)
         return DefWindowProcW(window, message, wParam, lParam);
     auto& state = *host->Owner;
+    if (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK)
+    {
+        host->ValuePointerDown = true;
+    }
     struct WindowProcedureScope
     {
         Impl& State;
@@ -3167,6 +3217,10 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     if (message == WM_KILLFOCUS)
     {
         state.HidePopups(*host);
+        host->ViewportInput.Cancel([&](const std::string& Action)
+        {
+            state.QueueAction(*host, Action);
+        });
     }
     if (message == WM_KILLFOCUS && host->Id == "main")
     {
@@ -3306,7 +3360,10 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
         reinterpret_cast<HWND>(lParam) != window)
     {
         host->TimelineScrubbing = false;
-        host->ViewportInput.Cancel();
+        host->ViewportInput.Cancel([&](const std::string& Action)
+        {
+            state.QueueAction(*host, Action);
+        });
         if (state.GameplayCapture.IsActive() && state.GameplayCapture.Window() == window)
         {
             state.GameplayCaptureRequest = -1;
@@ -3415,6 +3472,15 @@ LRESULT CALLBACK RmlUiShell::WindowProcedure(HWND window, UINT message,
     if ((message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP) &&
         !(static_cast<uint32_t>(wParam) & (MK_LBUTTON | MK_RBUTTON | MK_MBUTTON)) &&
         !state.GameplayCapture.IsActive()) ReleaseCapture();
+    if (message == WM_LBUTTONUP || message == WM_CANCELMODE || message == WM_KILLFOCUS)
+    {
+        host->ValuePointerDown = false;
+        if (host->ValueEndOnRelease)
+        {
+            host->ValueEndOnRelease = false;
+            state.QueueAction(*host, "ui.value-release");
+        }
+    }
     if (!propagate) return 0;
     return callOriginal();
 }
@@ -4201,6 +4267,10 @@ std::string RmlUiShell::PointerInput(std::string_view hostId, uint32_t event,
     else if ((state.DockDrag.Active || state.DockDrag.Pending) &&
              state.DockDrag.SourceHost == host)
         capture = Impl::StableAncestorId(*host, state.DockDrag.SourceElement);
+    else if (host->ViewportInput.IsCapturing() && host->Document)
+    {
+        capture = Impl::StableAncestorId(*host, host->Document->GetElementById(host->ViewportInput.CapturedElementId()));
+    }
     std::ostringstream result;
     result << "{\"accepted\":true,\"beforeStateRevision\":" << beforeRevision
            << ",\"afterStateRevision\":" << state.StateRevision

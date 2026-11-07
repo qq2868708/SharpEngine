@@ -6,7 +6,7 @@ using SharpEngine.Editor.Layout;
 
 namespace SharpEngine.Editor;
 
-internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
+internal sealed partial class SkeletonAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview
 {
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
@@ -14,6 +14,8 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     private readonly WorldPreview Preview;
     private SkeletonAsset Skeleton = null!;
     private SkeletalMeshAsset? PreviewMesh;
+    private bool HasFramed;
+    private string? FramedMeshId;
 
     public SkeletonAssetEditorInstance(EditorAssetOpenContext Context)
     {
@@ -21,7 +23,8 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
         PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
             throw new InvalidOperationException("Component registry is unavailable"), "skeleton-preview:" + Context.Asset.Id);
         Preview = new WorldPreview(PreviewWorld.World, Context.Runtime.Assets, "skeletonPreviewViewport", "asset-skeleton-preview");
-        Preview.Content.Overlay = PreviewWorld.Decorate;
+        Preview.Viewport.PointerInput = true;
+        Preview.Content.Overlay = DecoratePreview;
 
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
             Validate);
@@ -46,6 +49,13 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     [
         new("undo", "Undo", "Edit", 100, "reset", true),
         new("redo", "Redo", "Edit", 110, "reset", true),
+        new("add-socket", "Add Socket", "Skeleton", 200, "add", true),
+        new("add-virtual-bone", "Add Virtual Bone", "Skeleton", 210, "add", true),
+        new("duplicate", "Duplicate Selected", "Skeleton", 220, "copy", false),
+        new("remove", "Remove Selected", "Skeleton", 230, "delete", false),
+        new("move", "Move", "Socket", 300, null, true, "Drag a Socket axis to move"),
+        new("rotate", "Rotate", "Socket", 310, null, true, "Drag a Socket ring to rotate"),
+        new("scale", "Scale", "Socket", 320, null, true, "Drag a Socket box to scale"),
     ];
 
     public EditorLayoutDocument CreateDefaultLayout() =>
@@ -58,24 +68,70 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
         {
             "undo" => !IsReadOnly && Document.CanUndo,
             "redo" => !IsReadOnly && Document.CanRedo,
+            "add-socket" or "add-virtual-bone" => !IsReadOnly,
+            "duplicate" or "remove" => !IsReadOnly && SelectedKind != "bone",
+            "move" or "rotate" or "scale" => !IsReadOnly && SelectedKind == "socket",
             _ => false,
         };
     }
 
     public void ExecuteCommand(string CommandId)
     {
+        CancelGizmoDrag();
+        if (CommandId is "move" or "rotate" or "scale")
+        {
+            GizmoTool = CommandId;
+            InteractionRevision++;
+            return;
+        }
+        if (CommandId is not ("undo" or "redo"))
+        {
+            HandleRigAction(CommandId);
+            return;
+        }
         var Changed = CommandId == "undo" ? Document.Undo() :
             CommandId == "redo" && Document.Redo();
         if (Changed)
         {
+            Diagnostic = string.Empty;
             RefreshAsset();
         }
     }
 
     public bool TryHandleAction(string Action)
     {
+        if (TryHandleGizmoAction(Action))
+        {
+            return true;
+        }
+        if (Action == "ui.viewport3d:skeletonPreviewViewport:focus")
+        {
+            CancelGizmoDrag();
+            FramePreview();
+            return true;
+        }
         if (Preview.Viewport.TryHandleAction(Action))
         {
+            CancelGizmoDrag();
+            return true;
+        }
+        const string TreePrefix = "editor.skeleton-tree-toggle:";
+        if (Action.StartsWith(TreePrefix, StringComparison.Ordinal))
+        {
+            var Key = Action[TreePrefix.Length..];
+            if (!CollapsedTreeNodes.Remove(Key))
+            {
+                CollapsedTreeNodes.Add(Key);
+            }
+            InteractionRevision++;
+            return true;
+        }
+        const string RigPrefix = "editor.skeleton:";
+        if (Action.StartsWith(RigPrefix, StringComparison.Ordinal))
+        {
+            CancelGizmoDrag();
+            InteractionRevision++;
+            HandleRigAction(Action[RigPrefix.Length..]);
             return true;
         }
         const string Prefix = "editor.skeleton-preview-mesh:";
@@ -85,18 +141,11 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
         }
 
         var Value = Action[Prefix.Length..].Trim();
-        var Changed = Document.Edit("preview-mesh", Root =>
+        CancelGizmoDrag();
+        EditRig("preview-mesh", Root =>
         {
             Root["previewMeshId"] = Value.Length == 0 ? null : Value;
-        }, out var Message);
-        if (Changed)
-        {
-            RefreshAsset();
-        }
-        else if (Message.Length != 0)
-        {
-            Context.SetStatus(Message);
-        }
+        });
         return true;
     }
 
@@ -104,18 +153,26 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     {
         return PaneId switch
         {
-            "preview" => Preview.Viewport.BuildMarkup(Skeleton.Name),
+            "preview" => Preview.Viewport.BuildMarkup(Skeleton.Name + " · Socket " + GizmoTool + " · Esc cancels drag"),
             "tree" => BuildTreeMarkup(),
             "details" => BuildDetailsMarkup(),
             "source" => AssetEditorInstanceUtilities.Source(Document.Source),
-            "diagnostics" => AssetEditorInstanceUtilities.Diagnostics([]),
+            "diagnostics" => AssetEditorInstanceUtilities.Diagnostics(Diagnostic.Length == 0 ? [] :
+                [new("error", "SKELETON_AUTHORING_INVALID", Diagnostic)]),
             _ => string.Empty,
         };
     }
 
     public void Save()
     {
+        CancelGizmoDrag();
+        EditRig("schema-upgrade", _ =>
+        {
+        });
         Document.Save();
+        InteractionRevision++;
+        SharpEngine.World.SceneRenderer.InvalidateAssets(Context.Runtime.Assets ??
+            throw new InvalidOperationException("Asset registry is unavailable"));
         RefreshAsset();
     }
 
@@ -128,7 +185,9 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     {
         return new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 3,
+            ["stateRevision"] = Document.Revision + InteractionRevision +
+                Preview.Viewport.Describe()["stateRevision"]!.GetValue<ulong>(),
             ["assetId"] = Asset.Id,
             ["editorRootId"] = Context.EditorRootId,
             ["dirty"] = IsDirty,
@@ -140,11 +199,19 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
             ["boneCount"] = Skeleton.Bones.Count,
             ["previewMeshId"] = Skeleton.PreviewMeshId,
             ["previewMeshAvailable"] = PreviewMesh is not null,
+            ["selectedKind"] = SelectedKind,
+            ["selectedId"] = SelectedId,
+            ["collapsedTreeKeys"] = new JsonArray(CollapsedTreeNodes.Order(StringComparer.Ordinal).Select(Key => (JsonNode)Key).ToArray()),
+            ["diagnostic"] = Diagnostic,
+            ["document"] = Skeleton.ToJson(),
+            ["rigPose"] = new SkeletonRigPose(Skeleton).ToJson(),
+            ["gizmo"] = DescribeGizmo(),
         };
     }
 
     public void Dispose()
     {
+        CancelGizmoDrag();
     }
 
     private void Validate(JsonObject Root)
@@ -160,17 +227,28 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
     private void RefreshAsset()
     {
         Skeleton = SkeletonAsset.Parse(Document.Snapshot.ToJsonString(), Context.Path);
+        EnsureSelection();
         PreviewMesh = ResolvePreviewMesh(Skeleton, false);
         if (PreviewMesh is null)
         {
             PreviewWorld.SetSkeleton(Skeleton);
-            Preview.Viewport.Frame(PreviewWorld.SkeletonPositions);
         }
         else
         {
-            PreviewWorld.SetMesh(PreviewMesh.AssetId, "engine.skeletal-mesh", PreviewMesh.DefaultMaterial, PreviewMesh);
-            Preview.Viewport.Frame(PreviewMesh.Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
+            PreviewWorld.SetMesh(PreviewMesh.AssetId, "engine.skeletal-mesh", PreviewMesh.DefaultMaterial, PreviewMesh, Skeleton);
         }
+        if (!HasFramed || FramedMeshId != PreviewMesh?.AssetId)
+        {
+            FramePreview();
+        }
+    }
+
+    private void FramePreview()
+    {
+        var MeshPositions = PreviewMesh?.Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)) ?? [];
+        Preview.Viewport.Frame(MeshPositions.Concat(PreviewWorld.SkeletonPositions));
+        HasFramed = true;
+        FramedMeshId = PreviewMesh?.AssetId;
     }
 
     private SkeletalMeshAsset? ResolvePreviewMesh(SkeletonAsset Value, bool ValidateOnly)
@@ -199,30 +277,30 @@ internal sealed class SkeletonAssetEditorInstance : IAssetEditorInstance
             AssetEditorInstanceUtilities.Field("Preview Mesh",
                 Skeleton.PreviewMeshId ?? string.Empty,
                 "editor.skeleton-preview-mesh:", IsReadOnly,
-                "Compatible SkeletalMesh asset URI") + "</div>";
+                "Compatible SkeletalMesh asset URI", "skeletonField-previewMesh") + BuildRigDetails() + "</div>";
     }
+
+    private readonly SharpEngine.UI.UiTreeView SkeletonTreeView = new([]);
+
+    private readonly HashSet<string> CollapsedTreeNodes = new(StringComparer.Ordinal);
 
     private string BuildTreeMarkup()
     {
-        var Markup = new StringBuilder("<div class=\"asset-tree\">");
-        foreach (var Bone in Skeleton.Bones)
+        var Entries = Skeleton.Bones.Select(Bone => (Id: Bone.BoneId, Parent: Bone.ParentBoneId, Bone.Name, Kind: "bone"))
+            .Concat(Skeleton.VirtualBones.Select(Bone => (Id: Bone.BoneId, Parent: (string?)Bone.SourceBoneId, Bone.Name, Kind: "virtual")))
+            .Concat(Skeleton.Sockets.Select(Socket => (Id: Socket.SocketId, Parent: (string?)Socket.ParentBoneId, Socket.Name, Kind: "socket"))).ToArray();
+        var Nodes = Entries.Select(Entry => new SharpEngine.UI.UiTreeNode(Entry.Id, Entry.Parent)).ToArray();
+        var ById = Entries.ToDictionary(Entry => Entry.Id, StringComparer.Ordinal);
+        var Rows = SharpEngine.UI.UiTreeProjection.Visible(Nodes, CollapsedTreeNodes).Select(Node =>
         {
-            var Depth = 0;
-            var ParentId = Bone.ParentBoneId;
-            while (ParentId is not null)
-            {
-                Depth++;
-                ParentId = Skeleton.Bones.First(Value =>
-                    Value.BoneId == ParentId).ParentBoneId;
-            }
-            Markup.Append("<div class=\"asset-tree-row\" style=\"padding-left:")
-                .Append(8 + Depth * 14).Append("px\"><strong>")
-                .Append(AssetEditorInstanceUtilities.Escape(Bone.Name))
-                .Append("</strong><span>")
-                .Append(AssetEditorInstanceUtilities.Escape(Bone.BoneId))
-                .Append("</span></div>");
-        }
-        Markup.Append("</div>");
-        return Markup.ToString();
+            var Entry = ById[Node.Key];
+            return new SharpEngine.UI.UiTreeRow(Node.Key, Entry.Name, Entry.Kind + " / " + Entry.Id,
+                EditorResourceUris.IconSource(Entry.Kind == "socket" ? "move" : "mesh"), Node.Depth,
+                SelectedId == Entry.Id, Node.HasChildren, Node.Expanded,
+                "editor.skeleton:select:" + Entry.Kind + ":" + Entry.Id,
+                "editor.skeleton-tree-toggle:" + Entry.Id, "skeletonNode-" + Entry.Id, "skeletonToggle-" + Entry.Id);
+        }).ToArray();
+        SkeletonTreeView.SetRows(Rows);
+        return "<div class=\"asset-tree\">" + SkeletonTreeView.BuildLayout(default) + "</div>";
     }
 }

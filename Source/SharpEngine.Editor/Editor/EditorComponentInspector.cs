@@ -18,6 +18,9 @@ public sealed partial class EditorRuntime : IComponentRuntime
     private string _componentMarkup = "";
     private string _componentSearch = "";
     private bool _addComponentOpen, _inspectorEditing;
+    private bool ValueEditing;
+    private bool ValueRefreshPending;
+    private bool ValuePointerCommit;
     private string? _inspectorGesture;
     private ulong _inspectorGestureRevision;
     private readonly HashSet<string> _collapsedFields = [];
@@ -189,7 +192,7 @@ public sealed partial class EditorRuntime : IComponentRuntime
             var finalIds = _world.Data.Entities.Select(e => e.EntityId).Concat(_world.Data.Entities.SelectMany(e => e.Components).Select(c => c.ComponentId)).ToHashSet();
             if (operation == "create-entity") _selection = new(EditorSelectionKind.Entity, _world.Entities.Last().Id);
             if (SelectedEntityId is { } selection && _world.Entities.All(e => e.Id != selection)) _selection = EditorSelection.Scene;
-            _inspectorEditing = _inspectorGesture is not null;
+            _inspectorEditing = _inspectorGesture is not null || ValueEditing || ValuePointerCommit;
             _inspectorGestureRevision = ComponentRevision;
             RefreshHierarchy(); RefreshWorldTitle();
             if (!_inspectorEditing) { RefreshInspector(); RefreshComponentInspector(force: true); }
@@ -263,14 +266,16 @@ public sealed partial class EditorRuntime : IComponentRuntime
                         request["expectedRevision"] = _runtimeWorld is null ? _inspectorGestureRevision : ComponentRevision;
                         request["transactionGroupId"] = _inspectorGesture;
                     }
-                    else if (_runtimeWorld is not null && payload.Length == 4)
+                    else if (payload.Length == 4)
                     {
+                        // A sibling input may still display the previous revision while its draft retains focus.
+                        // Rebase only when this exact field still equals the value captured by its control.
                         JsonNode? current = component.State;
                         foreach (var segment in segments) current = current is JsonArray currentArray ? currentArray[int.Parse(segment)] : current?[segment];
                         if (!JsonNode.DeepEquals(current, JsonNode.Parse(payload[3]))) throw new InvalidOperationException("REVISION_CONFLICT: this field changed while editing");
                         request["expectedRevision"] = ComponentRevision;
                     }
-                    _inspectorEditing = _inspectorGesture is not null;
+                    _inspectorEditing = _inspectorGesture is not null || ValueEditing || ValuePointerCommit;
                     if (EditComponent(request)["success"]?.GetValue<bool>() != true) _inspectorEditing = true;
                     return true;
                 }
@@ -313,9 +318,9 @@ public sealed partial class EditorRuntime : IComponentRuntime
         {
             Markup.Append("<div class=\"inspector-entity-state\"><span class=\"inspector-context\">")
                 .Append(_runtimeWorld is null ? "Authoring" : "Runtime — changes discarded on Stop")
-                .Append("</span><label class=\"inspector-active\"><span>Active</span><input type=\"checkbox\" title=\"Entity active\" ")
-                .Append(Entity.ActiveSelf ? "checked=\"checked\" " : "")
-                .Append("data-action=\"editor.component-active:").Append(!Entity.ActiveSelf ? "true" : "false").Append("\" /></label></div>");
+                .Append("</span><label class=\"inspector-active\"><span>Active</span>")
+                .Append(SharpEngine.UI.UiValueEditors.BooleanInput("entity-active", Entity.ActiveSelf,
+                    "editor.component-active:" + (!Entity.ActiveSelf ? "true" : "false"))).Append("</label></div>");
             foreach (var Component in Entity.Components)
             {
                 var Type = Components.Find(Component.TypeId);
@@ -340,13 +345,18 @@ public sealed partial class EditorRuntime : IComponentRuntime
                     .Append("<span class=\"component-name\">").Append(Escape(InspectorComponentTitle(Type.DisplayName))).Append("</span></button>");
                 if (Component.TypeId != "engine.transform")
                 {
-                    Markup.Append("<input type=\"checkbox\" title=\"Enable component\" ").Append(Component.Enabled ? "checked=\"checked\" " : "")
-                        .Append("data-action=\"editor.component-enabled:").Append(Id).Append(':').Append(!Component.Enabled ? "true" : "false").Append("\" />");
+                    Markup.Append(SharpEngine.UI.UiValueEditors.BooleanInput("component-enabled-" + Component.ComponentId,
+                        Component.Enabled, "editor.component-enabled:" + Component.ComponentId + ":" + (!Component.Enabled ? "true" : "false")));
                 }
                 Markup.Append("</div>");
                 if (!Collapsed)
                 {
-                    foreach (var Field in Type.Fields.Where(Field => !Field.Hidden))
+                    if (Component.TypeId == "engine.transform")
+                    {
+                        Markup.Append(SharpEngine.UI.UiValueEditors.Transform(string.Empty,
+                            ComponentVectorInputs(Component, "Position"), ComponentVectorInputs(Component, "Rotation"), ComponentVectorInputs(Component, "Scale")));
+                    }
+                    foreach (var Field in Type.Fields.Where(Field => !Field.Hidden && Component.TypeId != "engine.transform"))
                     {
                         if (Field.Header is not null)
                         {
@@ -434,98 +444,161 @@ public sealed partial class EditorRuntime : IComponentRuntime
         }
         return html.ToString();
     }
-    private void AppendComponentField(StringBuilder html, ComponentRecord component, ComponentField field, string path, JsonNode? value, Type type)
+    private void AppendComponentField(StringBuilder Markup, ComponentRecord Component, ComponentField Field, string Path, JsonNode? Value, Type ValueType)
     {
-        var name = path.Contains('/') ? path.Split('/').Last() : field.DisplayName ?? field.Name;
-        var schema = ComponentValue.Schema(type, Components!);
-        var vector = schema["x-sharpengine-control"] is not null;
-        var foldId = component.ComponentId + "-" + Uri.EscapeDataString(path);
-        if (value is null && !type.IsValueType && type != typeof(string) && !ComponentValue.IsReference(type) &&
-            !type.IsArray && !(type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)))
+        var Name = Path.Contains('/') ? Path.Split('/').Last() : Field.DisplayName ?? Field.Name;
+        var Schema = ComponentValue.Schema(ValueType, Components!);
+        var IsVector = Schema["x-sharpengine-control"] is not null;
+        var FoldId = Component.ComponentId + "-" + Uri.EscapeDataString(Path);
+        if (Value is null && !ValueType.IsValueType && ValueType != typeof(string) && !ComponentValue.IsReference(ValueType) &&
+            !ValueType.IsArray && !(ValueType.IsGenericType && ValueType.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            var initial = Components!.Data(type).Defaults(Components);
-            var action = "editor.component-field:" + component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|json|" + path + "|null") + ":" + initial.ToJsonString();
-            html.Append("<div class=\"component-field\"><label>").Append(Escape(name)).Append(" (null)</label><button data-action=\"").Append(Escape(action)).Append("\">Create</button></div>");
+            var Initial = Components!.Data(ValueType).Defaults(Components);
+            var Action = "editor.component-field:" + Component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|json|" + Path + "|null") + ":" + Initial.ToJsonString();
+            Markup.Append("<div class=\"component-field\"><label>").Append(Escape(Name)).Append(" (null)</label><button data-action=\"").Append(Escape(Action)).Append("\">Create</button></div>");
             return;
         }
-        if (value is JsonObject obj)
+        var Nested = Value as JsonObject;
+        if (Nested is not null)
         {
-            html.Append("<div class=\"component-nested\"><button data-action=\"editor.component-fold:").Append(foldId).Append("\">").Append(Escape(name)).Append("</button>");
-            if (!_collapsedFields.Contains(foldId)) foreach (var child in Components!.Data(type).Fields.Where(f => !f.Hidden)) AppendComponentField(html, component, child, path + "/" + child.Name, obj[child.Name], child.ValueType);
-            html.Append("</div>"); return;
-        }
-        if (value is JsonArray || value is null && (type.IsArray || type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)))
-        {
-            var array = value as JsonArray ?? new JsonArray();
-            html.Append("<div class=\"component-nested\"><label>").Append(Escape(name)).Append("</label>");
-            var element = vector ? typeof(float) : type.IsArray ? type.GetElementType()! : type.GetGenericArguments()[0];
-            if (vector)
+            Markup.Append("<div class=\"component-nested\"><button data-action=\"editor.component-fold:").Append(FoldId).Append("\">").Append(Escape(Name)).Append("</button>");
+            if (!_collapsedFields.Contains(FoldId))
             {
-                html.Append(type == typeof(Color) ? "<div class=\"component-vector component-color\">" : "<div class=\"component-vector\">");
-            }
-            for (int i = 0; i < array.Count; i++)
-            {
-                AppendComponentField(html, component, field with { DisplayName = vector ? (type == typeof(Color) ? "RGBA" : "XYZW")[i].ToString() : i.ToString(), Minimum = null, Maximum = null }, path + "/" + i, array[i], element);
-                if (!vector)
+                foreach (var Child in Components!.Data(ValueType).Fields.Where(CandidateField => !CandidateField.Hidden))
                 {
-                    var action = "editor.component-list:" + component.ComponentId + ":" + Uri.EscapeDataString(path + "|" + DefaultElement(element)) + ":";
-                    if (i > 0) html.Append("<button data-action=\"").Append(action).Append("up,").Append(i).Append("\">↑</button>");
-                    html.Append("<button data-action=\"").Append(action).Append(i).Append("\">Remove item</button>");
+                    AppendComponentField(Markup, Component, Child, Path + "/" + Child.Name, Nested[Child.Name], Child.ValueType);
                 }
             }
-            if (!vector) html.Append("<button data-action=\"editor.component-list:").Append(component.ComponentId).Append(':').Append(Uri.EscapeDataString(path + "|" + DefaultElement(element))).Append(":add\">+ Item</button>");
-            if (vector) html.Append("</div>");
-            if (type == typeof(Color))
-            {
-                html.Append("<div class=\"component-palette\">");
-                foreach (var color in new[] { new Color(1,1,1), new Color(0,0,0), new Color(1,0,0), new Color(0,1,0), new Color(0,0,1), new Color(1,1,0), new Color(0,1,1), new Color(1,0,1) })
-                {
-                    var colorJson = ComponentValue.Encode(color, typeof(Color), Components!)!.ToJsonString();
-                    var colorAction = "editor.component-field:" + component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|json|" + path + "|" + value!.ToJsonString()) + ":" + colorJson;
-                    html.Append("<button title=\"Choose color\" style=\"background-color:rgb(").Append((int)(color.R*255)).Append(',').Append((int)(color.G*255)).Append(',').Append((int)(color.B*255)).Append(");\" data-action=\"").Append(Escape(colorAction)).Append("\"> </button>");
-                }
-                html.Append("</div>");
-                AppendInspectorColorPicker(html, component.ComponentId, path, array);
-            }
-            html.Append("</div>"); return;
+            Markup.Append("</div>");
+            return;
         }
-        var isReference = schema["x-sharpengine-reference"] is not null;
-        var kind = isReference ? "reference" : type.IsEnum ? "enum" : type == typeof(string) ? "string" : "json";
-        var actionPrefix = "editor.component-field:" + component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|" + kind + "|" + path + "|" + (value?.ToJsonString() ?? "null")) + ":";
-        var controlId = "component-field-" + component.ComponentId + "-" + Uri.EscapeDataString(path);
-        html.Append("<div class=\"field component-field\" title=\"").Append(Escape(field.Tooltip ?? "")).Append("\"><label>").Append(Escape(field.DisplayName ?? name)).Append("</label>");
-        if (type.IsEnum || isReference)
+        if (Value is JsonArray || Value is null && (ValueType.IsArray || ValueType.IsGenericType && ValueType.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            var options = new List<(string Id, string Label)>();
-            if (type.IsEnum) options.AddRange(Enum.GetNames(type).Select(n => (n, n)));
+            var Values = Value as JsonArray ?? new JsonArray();
+            Markup.Append("<div class=\"component-nested\">");
+            if (!IsVector)
+            {
+                Markup.Append("<label>").Append(Escape(Name)).Append("</label>");
+            }
+            var ElementType = IsVector ? typeof(float) : ValueType.IsArray ? ValueType.GetElementType()! : ValueType.GetGenericArguments()[0];
+            if (IsVector)
+            {
+                var Inputs = Enumerable.Range(0, Values.Count).Select(Index => ComponentInput(Component, Path + "/" + Index,
+                    Values[Index], typeof(float))).ToArray();
+                Markup.Append(SharpEngine.UI.UiValueEditors.Vector(Name, Inputs, ValueType == typeof(Color) ? "RGBA" : "XYZW"));
+            }
+            for (int Index = 0; !IsVector && Index < Values.Count; Index++)
+            {
+                var ElementField = Field with
+                {
+                    DisplayName = Index.ToString(),
+                    Minimum = null,
+                    Maximum = null,
+                };
+                AppendComponentField(Markup, Component, ElementField, Path + "/" + Index, Values[Index], ElementType);
+                if (!IsVector)
+                {
+                    var Action = "editor.component-list:" + Component.ComponentId + ":" + Uri.EscapeDataString(Path + "|" + DefaultElement(ElementType)) + ":";
+                    if (Index > 0)
+                    {
+                        Markup.Append("<button data-action=\"").Append(Action).Append("up,").Append(Index).Append("\">↑</button>");
+                    }
+                    Markup.Append("<button data-action=\"").Append(Action).Append(Index).Append("\">Remove item</button>");
+                }
+            }
+            if (!IsVector)
+            {
+                Markup.Append("<button data-action=\"editor.component-list:").Append(Component.ComponentId).Append(':').Append(Uri.EscapeDataString(Path + "|" + DefaultElement(ElementType))).Append(":add\">+ Item</button>");
+            }
+
+            if (ValueType == typeof(Color))
+            {
+                Markup.Append("<div class=\"component-palette\">");
+                foreach (var ColorValue in new[]
+                {
+                    new Color(1,1,1), new Color(0,0,0), new Color(1,0,0), new Color(0,1,0),
+                    new Color(0,0,1), new Color(1,1,0), new Color(0,1,1), new Color(1,0,1),
+                })
+                {
+                    var ColorJson = ComponentValue.Encode(ColorValue, typeof(Color), Components!)!.ToJsonString();
+                    var ColorAction = "editor.component-field:" + Component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|json|" + Path + "|" + Value!.ToJsonString()) + ":" + ColorJson;
+                    Markup.Append("<button title=\"Choose color\" style=\"background-color:rgb(").Append((int)(ColorValue.R*255)).Append(',').Append((int)(ColorValue.G*255)).Append(',').Append((int)(ColorValue.B*255)).Append(");\" data-action=\"").Append(Escape(ColorAction)).Append("\"> </button>");
+                }
+                Markup.Append("</div>");
+                AppendInspectorColorPicker(Markup, Component.ComponentId, Path, Values);
+            }
+            Markup.Append("</div>");
+            return;
+        }
+        var IsReference = Schema["x-sharpengine-reference"] is not null;
+        var Kind = IsReference ? "reference" : ValueType.IsEnum ? "enum" : ValueType == typeof(string) ? "string" : "json";
+        var ActionPrefix = "editor.component-field:" + Component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|" + Kind + "|" + Path + "|" + (Value?.ToJsonString() ?? "null")) + ":";
+        var ControlId = "component-field-" + Component.ComponentId + "-" + Uri.EscapeDataString(Path);
+        if (ValueType.IsEnum || IsReference)
+        {
+            var Options = new List<(string Id, string Label)>();
+            if (ValueType.IsEnum)
+            {
+                Options.AddRange(Enum.GetNames(ValueType).Select(Name => (Name, Name)));
+            }
             else
             {
-                options.Add(("", "None"));
-                if (type == typeof(SharpEntity)) options.AddRange(_world!.Entities.Select(e => (e.Id, e.Name)));
-                else if (typeof(SharpComponent).IsAssignableFrom(type)) options.AddRange(_world!.Data.Entities.SelectMany(e => e.Components.Where(c => Components!.Find(c.TypeId) is { } d && type.IsAssignableFrom(d.RuntimeType)).Select(c => (c.ComponentId, e.Name + " / " + Components!.Find(c.TypeId)!.DisplayName + " / " + c.ComponentId[..Math.Min(8, c.ComponentId.Length)]))));
+                Options.Add((string.Empty, "None"));
+                if (ValueType == typeof(SharpEntity))
+                {
+                    Options.AddRange(_world!.Entities.Select(Entity => (Entity.Id, Entity.Name)));
+                }
+                else if (typeof(SharpComponent).IsAssignableFrom(ValueType))
+                {
+                    Options.AddRange(_world!.Data.Entities.SelectMany(Entity => Entity.Components.Where(Candidate =>
+                    {
+                        var Descriptor = Components!.Find(Candidate.TypeId);
+                        return Descriptor is not null && ValueType.IsAssignableFrom(Descriptor.RuntimeType);
+                    }).Select(Candidate => (Candidate.ComponentId, Entity.Name + " / " + Candidate.TypeId))));
+                }
                 else
                 {
-                    options.AddRange((_assets?.Assets ?? []).Where(Asset => Asset.Type.Equals(
-                        ComponentValue.AssetTypeName(type.GetGenericArguments()[0]), StringComparison.OrdinalIgnoreCase))
-                        .Select(Asset => (Asset.Id, Asset.Name)));
+                    Options.AddRange((_assets?.Assets ?? []).Where(Asset => Asset.Exists && EditorAssetReferenceTypes.Matches(
+                        Asset.Type, ValueType.GetGenericArguments()[0])).Select(Asset => (Asset.Id, Asset.Name)));
                 }
             }
-            html.Append("<select id=\"").Append(controlId).Append("\" data-change-action=\"").Append(actionPrefix).Append("\">");
-            foreach (var option in options) html.Append("<option value=\"").Append(Escape(option.Id)).Append("\" ").Append((value?.GetValue<string>() ?? "") == option.Id ? "selected=\"selected\"" : "").Append('>').Append(Escape(option.Label)).Append("</option>");
-            html.Append("</select>");
+            Markup.Append(SharpEngine.UI.UiValueEditors.Choice(Name, ControlId, Value?.GetValue<string>() ?? string.Empty, Options, ActionPrefix));
         }
-        else if (type == typeof(bool)) html.Append("<input id=\"").Append(controlId).Append("\" type=\"checkbox\" ").Append(value?.GetValue<bool>() == true ? "checked=\"checked\" " : "").Append("data-action=\"").Append(actionPrefix).Append(value?.GetValue<bool>() == true ? "false" : "true").Append("\" />");
+        else if (ValueType == typeof(bool))
+        {
+            var Checked = Value?.GetValue<bool>() == true;
+            Markup.Append(SharpEngine.UI.UiValueEditors.Boolean(Name, ControlId, Checked, ActionPrefix + (!Checked ? "true" : "false")));
+        }
         else
         {
-            var text = InspectorFieldText(value, type);
-            if (type == typeof(string) && field.Lines > 0)
-                html.Append("<textarea id=\"").Append(controlId).Append("\" rows=\"").Append(field.Lines).Append("\" data-component-input=\"true\" data-original-value=\"").Append(Escape(text)).Append("\" data-commit-action=\"").Append(actionPrefix).Append("\">").Append(Escape(text)).Append("</textarea>");
-            else html.Append("<input id=\"").Append(controlId).Append("\" type=\"text\" value=\"").Append(Escape(text)).Append("\" data-component-input=\"true\" data-original-value=\"").Append(Escape(text)).Append("\" data-commit-action=\"").Append(actionPrefix).Append("\" />");
-            if (field.Minimum is { } min && field.Maximum is { } max)
-                html.Append("<input id=\"").Append(controlId).Append("-slider\" type=\"range\" min=\"").Append(min.ToString(CultureInfo.InvariantCulture)).Append("\" max=\"").Append(max.ToString(CultureInfo.InvariantCulture)).Append("\" step=\"").Append(type == typeof(float) || type == typeof(double) ? "0.01" : "1").Append("\" value=\"").Append(Escape(text)).Append("\" data-component-slider=\"true\" data-change-action=\"").Append(actionPrefix).Append("\" />");
+            var Input = ComponentInput(Component, Path, Value, ValueType);
+            Markup.Append(ValueType == typeof(string) && Field.Lines > 0 ?
+                SharpEngine.UI.UiValueEditors.Multiline(Name, Input, Field.Lines, Field.Tooltip) :
+                SharpEngine.UI.UiValueEditors.Text(Name, Input, Field.Tooltip));
+            if (Field.Minimum is not null && Field.Maximum is not null)
+            {
+                Markup.Append("<input id=\"").Append(ControlId).Append("-slider\" type=\"range\" min=\"").Append(Field.Minimum.Value.ToString(CultureInfo.InvariantCulture))
+                    .Append("\" max=\"").Append(Field.Maximum.Value.ToString(CultureInfo.InvariantCulture)).Append("\" step=\"")
+                    .Append(ValueType == typeof(float) || ValueType == typeof(double) ? "0.01" : "1").Append("\" value=\"")
+                    .Append(Escape(InspectorFieldText(Value, ValueType))).Append("\" data-component-slider=\"true\" data-change-action=\"").Append(ActionPrefix).Append("\" />");
+            }
         }
-        html.Append("</div>");
     }
+
+    private SharpEngine.UI.UiValueInput[] ComponentVectorInputs(ComponentRecord Component, string Path)
+    {
+        var Values = Component.State[Path]!.AsArray();
+        return Enumerable.Range(0, Values.Count).Select(Index => ComponentInput(Component, Path + "/" + Index, Values[Index], typeof(float))).ToArray();
+    }
+
+    private SharpEngine.UI.UiValueInput ComponentInput(ComponentRecord Component, string Path, JsonNode? Value, Type Type)
+    {
+        var Kind = Type == typeof(string) ? "string" : "json";
+        var Prefix = "editor.component-field:" + Component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|" + Kind + "|" + Path + "|" + (Value?.ToJsonString() ?? "null")) + ":";
+        return new SharpEngine.UI.UiValueInput("component-field-" + Component.ComponentId + "-" + Uri.EscapeDataString(Path),
+            InspectorFieldText(Value, Type), Prefix, Kind: Type == typeof(string) ? "text" : "number");
+    }
+
     private string DefaultElement(Type type) => ComponentValue.Encode(type.IsValueType ? Activator.CreateInstance(type) : type == typeof(string) ? "" : null, type, Components!)?.ToJsonString() ?? "null";
     private static string InspectorFieldText(JsonNode? Value, Type ValueType)
     {

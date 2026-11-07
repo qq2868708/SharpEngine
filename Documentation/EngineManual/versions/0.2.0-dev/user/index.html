@@ -87,7 +87,7 @@
       <h2>世界与资源</h2>
       <p>场景支持实体、父子层级、变换、相机、导航、网格、材质和动画等内容。可以把一组实体保存为可重复使用的预制内容，并在其他场景中创建独立实例。</p>
       <p>World 是主编辑器当前文档。双击另一个 World 会先处理当前 World 的未保存修改，再替换主 Viewport、Hierarchy、Inspector 和 Play 上下文；World 不创建独立资产编辑器。Prefab 则始终打开自己的顶层资产编辑器，不替换主 World。</p>
-      <p>Mesh、StaticMesh 和 SkeletalMesh 编辑器提供真实 3D Preview、几何统计、Source 和 Diagnostics。项目 Mesh 只允许修改默认 Material；顶点、索引、骨骼和蒙皮权重保持只读。Skeleton 编辑器显示骨骼树与兼容 Preview Mesh，项目 Skeleton 只允许修改 <code>previewMeshId</code>。Material 编辑器提供预览球并编辑 shader、baseColor、metallic 和 roughness。引擎来源资产统一只读。</p>
+      <p>Mesh、StaticMesh 和 SkeletalMesh 编辑器提供真实 3D Preview、几何统计和默认隐藏的 Diagnostics，移除 Source 面板。StaticMesh 左侧 Sockets 以不可修改的 Mesh 为根，Socket 可作为 Mesh 或另一个 Socket 的子级；支持新增、复制、删除、命名、Parent、父空间局部 TRS 和 Move / Rotate / Scale Gizmo 编辑。父级变换逐级传给子孙，改父级保留网格空间变换，无法无损表示的 TRS 会拒绝，支持 Undo/Redo 和显式 Save，详见<a href="../../../../BasicAssetEditors.md">基础资产编辑器</a>。项目 Mesh 可修改默认 Material；顶点、索引、导入骨骼和蒙皮权重保持只读。Skeleton 编辑器可编辑默认 Preview Mesh、Socket 名称/父骨/局部 TRS，以及虚拟骨的源骨/目标骨，并支持复制、删除、Undo/Redo 和显式 Save。选择可写 Socket 后，用 Move / Rotate / Scale 拖动预览中的箭头、圆环或方框；松开一次提交，Esc、失焦或丢失捕获取消。每次拖拽只需一次撤销。辅助线与 Gizmo 支持骨架及兼容网格预览；挂载物预览尚未提供。详见<a href="../../../../SkeletonEditor.md">骨骼编辑器</a>。Material 编辑器提供预览球并编辑 shader、baseColor、metallic 和 roughness。引擎来源资产统一只读。</p>
       <p>主 Viewport 和独立 Game 共用 retained GPU scene。OpenGL 是默认后端，<code>renderBackends: Both</code> 构建也可以在启动时使用 <code>--render-backend vulkan</code>；静态网格会按资源复用 vertex buffer 并自动实例化，骨骼网格由 GPU skinning。网格、骨骼 section、Bounds 和拾取 BVH 缓存在 <code>Intermediate/RenderCache</code>，它们都是可删除、可重建的派生数据，不会覆盖源资产。</p>
       <p>场景环境照明由 <code>Sky Light</code> 组件提供，可以在 Inspector 中编辑 <code>Color</code> 和 <code>Intensity</code>。所有已启用且层级激活的 Sky Light 会线性累加；场景没有有效 Sky Light 时不会自动补光，未被其他光源照亮的表面保持黑色。Sky Light 只表示照明，不创建天空盒或可见天空背景。</p>
       <p>骨骼网格每个顶点最多保留 12 个蒙皮影响；单个骨骼 section 最多引用 256 根实际使用的骨骼，超出时引擎自动切分 section，资产本身没有 256 根骨骼上限。GPU 场景提交失败时会在日志和 Editor Console 中明确提示并回退到 CPU；无效资产仍报告错误，设备丢失不会被当作普通 fallback。CPU 继续负责拾取和 Gizmo，静态网格拾取使用派生 BVH。</p>
@@ -155,6 +155,12 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>统一可编辑和只读字段的区分：只读值保留类型布局，采用 disabled 灰态并禁用输入、焦点与修改；统计信息和只读资源也复用同一套控件。可写字段保持正常输入表现，树仍可选择和展开。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
+      <p>统一现有树与基础类型编辑：场景、UI、Prefab、Mesh/Skeleton 树复用同一节点控件；Vector/Rotator 使用 X/Y/Z 分量输入，Transform 组合位置、旋转、缩放三组。输入保留草稿，Enter 或失焦校验后提交一次，Esc 放弃草稿。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
+      <p>StaticMesh Socket 补齐真实父子层级：Mesh 为不可修改的根，Socket 可逐级嵌套；非叶子 Socket 禁止删除，须先移走或删除子级。树、Parent 选择、变换继承和 Gizmo 共用相同父引用，旧 Socket 自动读取为根的子级。</p>
+      <p>修复大 JSON 资源窗口的重复序列化开销：未修改文档复用源文本和 Source 预览，dirty 状态随编辑、撤销、重做和保存及时更新；保存冲突检查与文档格式保持一致。编辑器性能作为验收条件，使用相同配置和资源记录平均帧时间、P95 与实际交互响应，性能回归不能以功能通过代替验收。</p>
+      <p>移除网格编辑器 Source 面板，Preview 使用完整高度；StaticMesh 新增资产 Socket 编辑，支持局部 TRS、Gizmo、复制删除、Undo/Redo 与显式保存。</p>
+      <p>骨骼编辑器补充 Socket 与虚拟骨骼作者流程，使用独立稳定 ID、完整引用校验和文档历史。运行时随姿态求值公开模型空间挂接帧，保持导入骨和蒙皮索引不变。使用范围与当前限制见<a href="../../../../SkeletonEditor.md">骨骼编辑器</a>。</p>
       <p>UI 编辑器预览默认分辨率改为 1920×1080。Design 画布保持透明并用边框表示当前 desired 尺寸，提供 Fit、50%、75%、100%、125%、150% 和 200% 缩放档位及 Zoom 滑条；缩放与预览尺寸仍是编辑器实例的临时环境，不污染源资产。Runtime Preview 面板及其旧的文档挂载点已从 UI 资产编辑器移除。</p>
       <p>首次打开或在关闭后立即重新打开 UI 资产时，原生 host 会清除旧的延迟销毁标记并重新显示当前窗口，避免旧关闭请求误伤新编辑器。</p>
       <p>修复 UI 编辑器把正常标记误报为问题：<code>&lt;br&gt;</code>、<code>&lt;pre&gt;</code>、<code>&lt;hr&gt;</code> 及列表/表格等标准标签由 RmlUi 的 <code>*</code> 回退实例化并正常布局，不再产生 <code>UI_ELEMENT_TAG_UNKNOWN</code>；文本标签只在实际包含块级子元素时才报 <code>UI_ELEMENT_LEAF_HAS_CHILDREN</code>，包含 <code>br</code>、<code>img</code> 等内联内容不算。示例资产的诊断从 32 条降到 1 条，剩下的仍是真实的选择器求值限制。</p>

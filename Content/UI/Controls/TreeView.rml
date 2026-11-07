@@ -1,0 +1,16 @@
+<template>
+  <div class="se-tree-rows" style="min-width:${MinimumWidth}px;">
+    <ui-repeat items="Rows">
+      <div class="se-tree-row ${RowClass}">
+        <ui-repeat items="Guides"><span class="se-tree-guide" style="left:${Left}px;" /></ui-repeat>
+        <ui-if test="HasChildren">
+          <button class="se-tree-toggle" id="${ToggleId}" data-action="${ToggleAction}" ui-disabled="ToggleDisabled" style="left:${Indent}px;" title="${ToggleTitle}" aria-expanded="${ExpandedState}"><img src="${ToggleIcon}" /></button>
+        </ui-if>
+        <button class="se-tree-select ${SelectClass}" id="${ElementId}" data-action="${SelectAction}" ui-disabled="Disabled" title="${Tooltip}" aria-level="${Level}">
+          <img class="se-tree-icon" style="left:${IconLeft}px;" src="${Icon}" />
+          <span id="${ElementId}-caption" class="se-tree-copy" style="left:${TextLeft}px;"><span class="se-tree-name">${Name}</span><span class="se-tree-detail">${Detail}</span></span>
+        </button>
+      </div>
+    </ui-repeat>
+  </div>
+</template>

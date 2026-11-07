@@ -30,8 +30,15 @@ public sealed class EditorAssetOpenContext : SharpEngine.UI.IViewport3DHost
     public string EditorId { get; }
     public string EditorRootId { get; }
     public void ShowPane(string PaneId) => Runtime.ShowPane(PaneId);
-    public bool TryGetElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds) =>
-        Runtime.TryGetAssetEditorElementRect(EditorRootId, ElementId, out Bounds);
+    public bool TryGetElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds)
+    {
+        var Found = Runtime.TryGetAssetEditorElementRect(EditorRootId, ElementId, out Bounds);
+        if (Found)
+        {
+            return true;
+        }
+        return Runtime.AssetOpeners.TryGetFloatingElementRect(EditorRootId, ElementId, out Bounds);
+    }
     internal JsonObject? ReadElementLayout(string ElementId) => Runtime.ReadAssetEditorElementLayout(EditorRootId, ElementId);
     public void SubmitViewportFrame(string Kind, ViewportFrame Frame) =>
         Runtime.SubmitAssetEditorViewportFrame(EditorRootId, Kind, Frame);
@@ -106,6 +113,19 @@ public sealed class EditorAssetOpenerRegistry
     internal EditorAssetOpenerRegistry(EditorRuntime Runtime)
     {
         this.Runtime = Runtime;
+    }
+
+    internal bool TryGetFloatingElementRect(string RootId, string ElementId, out SharpEngine.UI.UiRect Bounds)
+    {
+        foreach (var Editor in Editors.Values)
+        {
+            if (Editor.RootId == RootId)
+            {
+                return Editor.TryGetFloatingElementRect(ElementId, out Bounds);
+            }
+        }
+        Bounds = default;
+        return false;
     }
 
     public IReadOnlyList<EditorAssetOpener> Openers => Entries.ToArray();

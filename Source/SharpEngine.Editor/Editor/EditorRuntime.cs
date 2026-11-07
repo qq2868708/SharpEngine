@@ -603,6 +603,11 @@ public sealed partial class EditorRuntime
     {
         SubsystemLifetime.Update(DeltaSeconds);
         AssetOpeners.Update(DeltaSeconds);
+        if (ValueRefreshPending && !ValueEditing && !ValuePointerCommit)
+        {
+            ValueRefreshPending = false;
+            RefreshComponentInspector(force: true);
+        }
         DrainLogs();
         PollDevelopmentSettings();
         ApplyEngineShortcuts();
@@ -912,6 +917,44 @@ public sealed partial class EditorRuntime
             return;
         }
         if (AssetOpeners.TryHandleHostAction(actionHostId, action)) return;
+        if (action == "ui.value-invalid")
+        {
+            SetStatus("Enter a finite number with the required numeric type");
+            return;
+        }
+        if (actionHostId != "main" && action.StartsWith("ui.value-", StringComparison.Ordinal))
+        {
+            // Asset hosts handled their own editor state above. Other dialogs and
+            // late events from closed hosts must not lock the main Inspector.
+            return;
+        }
+        if (action == "ui.value-focus")
+        {
+            ValueEditing = true;
+            _inspectorEditing = true;
+            return;
+        }
+        if (action == "ui.value-end")
+        {
+            ValueEditing = false;
+            ValueRefreshPending = true;
+            _inspectorEditing = false;
+            return;
+        }
+        if (action == "ui.value-end-pointer")
+        {
+            ValueEditing = false;
+            ValuePointerCommit = true;
+            ValueRefreshPending = true;
+            _inspectorEditing = true;
+            return;
+        }
+        if (action == "ui.value-release")
+        {
+            ValuePointerCommit = false;
+            _inspectorEditing = ValueEditing || _inspectorGesture is not null;
+            return;
+        }
         // Pane-owned commands dispatch by their published action before the global registry
         // is consulted, so a content browser never needs a global command entry.
         if (_contentManagers is not null && action.StartsWith("editor.content-command:",
@@ -1996,77 +2039,45 @@ public sealed partial class EditorRuntime
         _nativeApi.SetUiMarkup("hierarchyItems", BuildHierarchyMarkup());
     }
 
+    private readonly SharpEngine.UI.UiTreeView WorldTreeView = new([]);
+
     internal string BuildHierarchyMarkup()
     {
-        var markup = new StringBuilder();
-        var byParent = _world!.Entities.GroupBy(entity => entity.ParentId,
-            StringComparer.OrdinalIgnoreCase).ToDictionary(group => group.Key,
-            group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
-        var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        void Visit(string parentId)
+        var Entities = _world!.Entities.ToDictionary(Entity => Entity.Id, StringComparer.Ordinal);
+        var Nodes = _world.Entities.Select(Entity => new SharpEngine.UI.UiTreeNode(Entity.Id,
+            Entity.ParentId.Length == 0 ? null : Entity.ParentId)).ToArray();
+        HashSet<string>? Included = null;
+        if (_hierarchySearch.Length > 0)
         {
-            if (!byParent.TryGetValue(parentId, out var children)) return;
-            foreach (var entity in children)
-                if (reachable.Add(entity.Id)) Visit(entity.Id);
-        }
-        Visit(string.Empty);
-
-        HashSet<string>? visible = null;
-        if (_hierarchySearch.Length != 0)
-        {
-            visible = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var entity in _world.Entities.Where(entity =>
-                         entity.Id.Contains(_hierarchySearch, StringComparison.OrdinalIgnoreCase) ||
-                         entity.Name.Contains(_hierarchySearch, StringComparison.OrdinalIgnoreCase) ||
-                         entity.Kind.ToString().Contains(_hierarchySearch,
-                             StringComparison.OrdinalIgnoreCase)))
+            Included = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var Entity in _world.Entities.Where(Entity => (Entity.Name + " " + Entity.Id + " " + Entity.Kind)
+                .Contains(_hierarchySearch, StringComparison.OrdinalIgnoreCase)))
             {
-                for (var current = entity; visible.Add(current.Id) &&
-                    current.ParentId.Length != 0;)
-                    current = _world.Entities.First(parent => string.Equals(parent.Id,
-                        current.ParentId, StringComparison.OrdinalIgnoreCase));
+                for (var Current = Entity; Current is not null; Current = Current.ParentId.Length == 0 ? null : Entities.GetValueOrDefault(Current.ParentId))
+                {
+                    if (!Included.Add(Current.Id))
+                    {
+                        break;
+                    }
+                }
             }
         }
-        var rendered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var dragEnabled = _hierarchySearch.Length == 0 &&
-            PlayState == EditorPlayState.Stopped;
-        void Append(string parentId, int depth)
+        var DragEnabled = _hierarchySearch.Length == 0 && PlayState == EditorPlayState.Stopped;
+        var Rows = SharpEngine.UI.UiTreeProjection.Visible(Nodes, _collapsedHierarchy, Included).Select(Node =>
         {
-            if (!byParent.TryGetValue(parentId, out var children)) return;
-            foreach (var entity in children)
-            {
-                if (visible is not null && !visible.Contains(entity.Id)) continue;
-                if (!rendered.Add(entity.Id)) continue;
-                var selected = entity.Id == SelectedEntityId ? " selected" : string.Empty;
-                var hasChildren = byParent.ContainsKey(entity.Id);
-                var collapsed = hasChildren && _collapsedHierarchy.Contains(entity.Id) &&
-                    visible is null;
-                markup.Append("<div class=\"hierarchy-row\" style=\"padding-left:")
-                    .Append(Math.Min(depth, 32) * 18).Append("px;\">");
-                if (hasChildren)
-                    markup.Append("<button class=\"tree-toggle\" data-action=\"editor.hierarchy-toggle:")
-                        .Append(Escape(entity.Id)).Append("\">")
-                        .Append(collapsed ? ">" : "v").Append("</button>");
-                else markup.Append("<span class=\"tree-toggle-spacer\" />");
-                markup.Append("<button class=\"tree-item hierarchy-entity")
-                    .Append(dragEnabled ? " hierarchy-draggable" : string.Empty)
-                    .Append(selected).Append("\" id=\"entity-").Append(Escape(entity.Id))
-                    .Append("\" data-action=\"editor.select-entity:").Append(Escape(entity.Id))
-                    .Append("\" data-context-kind=\"object\" data-context-id=\"")
-                    .Append(Escape(entity.Id)).Append("\" data-hierarchy-entity=\"")
-                    .Append(Escape(entity.Id)).Append("\">")
-                    .Append(EditorResourceUris.ItemIcon(entity.Kind.ToString())).Append("<span class=\"tree-label\">")
-                    .Append(Escape(entity.Name)).Append("</span><span class=\"item-kind\">")
-                    .Append(entity.Kind).Append("</span></button></div>");
-                if (!collapsed) Append(entity.Id, depth + 1);
-            }
-        }
-        Append(string.Empty, 0);
-        if (reachable.Count != _world.Entities.Count)
-            markup.Append("<div class=\"hierarchy-diagnostic\">Hierarchy contains unreachable entities</div>");
-        if (markup.Length == 0)
-            markup.Append("<div class=\"empty-list\">No matching entities</div>");
-        return markup.ToString();
+            var Entity = Entities[Node.Key];
+            return new SharpEngine.UI.UiTreeRow(Node.Key, Entity.Name, Entity.Kind.ToString(),
+                EditorResourceUris.ItemIconSource(Entity.Kind.ToString()), Node.Depth, Entity.Id == SelectedEntityId,
+                Node.HasChildren, Node.Expanded, "editor.select-entity:" + Entity.Id, "editor.hierarchy-toggle:" + Entity.Id,
+                "entity-" + Entity.Id, "entityToggle-" + Entity.Id, Attributes: new Dictionary<string, string>
+                {
+                    ["data-context-kind"] = "object",
+                    ["data-context-id"] = Entity.Id,
+                    ["data-hierarchy-entity"] = Entity.Id,
+                }, SelectClass: "hierarchy-entity" + (DragEnabled ? " hierarchy-draggable" : string.Empty));
+        }).ToArray();
+        WorldTreeView.SetRows(Rows);
+        return Rows.Length == 0 ? "<div class=\"empty-list\">No matching entities</div>" : WorldTreeView.BuildLayout(default);
     }
 
     private void HandleHierarchyDrop(string payload)

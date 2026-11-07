@@ -280,17 +280,18 @@ internal sealed class BrowserUiApplication
         Result.Append("<div class='browser-heading'><span class='browser-title'>项目</span><span class='browser-subtitle'>选择、预览或创建项目</span><div class='grow'/>");
         Result.Append(Button("browser-new", "创建项目", "browser.show-create"));
         Result.Append(Button("browser-browse", "浏览项目…", "browser.pick-project"));
-        Result.Append("</div><div class='browser-path'><input id='browser-path-input' type='text' data-change-action='browser.input.manifest:' value='");
-        Result.Append(Text(ManifestInput));
-        Result.Append(IsBusy ? "' disabled='disabled'/>" : "'/>");
+        Result.Append("</div><div class='browser-path'>");
+        Result.Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("browser-path-input", ManifestInput, "browser.input.manifest:", IsBusy)));
         Result.Append(Button("browser-load-path", "预览项目", "browser.load-path"));
         Result.Append("</div><div class='browser-columns'><div class='browser-projects'><div class='section-label'>最近项目</div>");
-        for (var Index = 0; Index < Projects.Count; Index++)
+        var ProjectRows = Projects.Select((Project, Index) =>
         {
-            var Item = Browser.Preview(Projects[Index]);
-            var Selected = Item.ManifestPath == Preview?.ManifestPath ? " scene" : "";
-            Result.Append($"<button id='browser-project-{Index}' class='tree{Selected}' action='browser.select:{Index}' {(IsBusy ? "disabled='disabled'" : "")}>{Text(Item.Name)}<span class='browser-project-version'>{Text(Item.EngineVersion)}</span></button>");
-        }
+            var Item = Browser.Preview(Project);
+            return new SharpEngine.UI.UiTreeRow(Index.ToString(), Item.Name, Item.EngineVersion,
+                "sharpengine-resource://engine/Resources/Editor/Icons/folder.tga", 0, Item.ManifestPath == Preview?.ManifestPath,
+                false, false, "browser.select:" + Index, string.Empty, "browser-project-" + Index, string.Empty, !IsBusy);
+        }).ToArray();
+        Result.Append(new SharpEngine.UI.UiTreeView(ProjectRows).BuildLayout(default));
         if (Projects.Count == 0)
         {
             Result.Append("<div class='browser-empty'>暂无最近项目<br/>浏览已有项目或创建一个新项目。</div>");
@@ -317,9 +318,9 @@ internal sealed class BrowserUiApplication
     private void RenderCreate(StringBuilder Result)
     {
         Result.Append("<div class='browser-panel-title'>创建项目</div><div class='browser-field-label'>项目名称</div>");
-        Result.Append($"<input id='browser-name-input' type='text' data-change-action='browser.input.name:' value='{Text(ProjectName)}' {(IsBusy ? "disabled='disabled'" : "")}/>");
+        Result.Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("browser-name-input", ProjectName, "browser.input.name:", IsBusy)));
         Result.Append("<div class='browser-field-label'>保存目录</div>");
-        Result.Append($"<input id='browser-parent-input' type='text' data-change-action='browser.input.parent:' value='{Text(ParentDirectory)}' {(IsBusy ? "disabled='disabled'" : "")}/>");
+        Result.Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("browser-parent-input", ParentDirectory, "browser.input.parent:", IsBusy)));
         Result.Append("<div class='browser-actions'>");
         Result.Append(Button("browser-pick-parent", "选择目录…", "browser.pick-parent"));
         Result.Append(Button("browser-create", "创建项目", "browser.create"));

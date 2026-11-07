@@ -72,6 +72,30 @@ Choose checks from the actual change's blast radius. The following are entry poi
 
 Inspect each tool's current arguments before running it. Keep compilation, managed semantics, native rendering, interaction, Cook, and packaged delivery as separate evidence. Test changed interfaces together across managed/native consumers; a stale executable does not validate new managed behavior. Run the relevant standard build after isolated diagnosis before claiming that standard build passes.
 
+## Shared Controls Validation
+
+For StaticMesh Socket and shared Gizmo changes, run MeshAssetValidation,
+EditorValidation and the real-input McpUiValidation modes
+`--static-mesh-sockets-only` and `--skeleton-gizmo-only` on affected backends.
+Retain matching snapshot/PNG evidence and complete post-attachment tool,
+resource and template catalogs. See BasicAssetEditors.md and SkeletonEditor.md.
+Shared trees and value editors also require Viewport3DValidation and the
+affected Inspector/UI/Game real-input checks documented in CommonEditorControls.md.
+
+## Editor Performance Acceptance
+
+Cache derived presentation by committed document/interaction revisions. Unchanged
+reads must avoid full serialization and content-dependent dirty checks each frame.
+Validate cache invalidation through edit, Undo/Redo, Save and external conflicts
+with `Tools/EditorValidation --asset-performance-only`.
+The StaticMesh native validation measures warmed frame timing separately from
+functional RPC/capture work, with average <=18 ms and P95 <=25 ms for its workload.
+`--functional-only` explicitly excludes performance and cannot prove this gate.
+Use identical build, backend, VSync, resource and window conditions for comparison.
+`Tools/Assets/ValidateEditorPerformance.py` records raw samples, binary hashes,
+full catalogs and native viewport-wheel evidence in an owned isolated session.
+Do not claim a performance pass from semantic tests or unrelated source snapshots.
+
 ## Input, Motion And Native Resource Review
 
 For input/movement work read `Documentation/ControlAndMovement.md` and the actual host routing. RmlUi consumes first; unhandled semantic input reaches its intended route and host. Focus/capture loss clears held state. Do not add a parallel raw project input path. Verify one movement authority commits a target transform at the defined finalize boundary, including Root Motion consumption and conflict diagnostics.

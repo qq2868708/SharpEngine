@@ -249,7 +249,7 @@ public sealed partial class EditorRuntime
             <button id="mcp-confirm" class="settings-action primary" action="editor.mcp-confirm">Confirm &amp; Restart</button></div>
             <div class="settings-fields"><div class="settings-field"><div class="settings-field-copy">
             <label>Port</label><span>Confirm to save and restart MCP immediately.</span></div>
-            <div class="settings-control"><input id="mcp-port" type="text" value="{McpPortDraft}" data-change-action="editor.mcp-port:" /></div></div>
+            <div class="settings-control">{SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("mcp-port", McpPortDraft, "editor.mcp-port:", Kind: "integer"))}</div></div>
             <div class="settings-field"><div class="settings-field-copy"><label>Endpoint</label></div>
             <div id="mcp-endpoint" class="settings-control">{Escape(McpHttp?.Endpoint ?? "Offline")}</div></div>
             <div class="settings-field mcp-configuration-row"><div class="settings-field-copy"><label>Configuration file</label></div>

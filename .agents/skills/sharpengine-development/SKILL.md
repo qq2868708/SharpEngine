@@ -83,6 +83,14 @@ reporting the work.
 
 Report any validation boundary honestly. A source review, direct semantic command test, or mocked action does not prove that a runtime UI control is visible and clickable.
 
+Editor performance is an acceptance requirement. A reproducible performance
+regression is unacceptable even when functionality passes. Follow the
+[performance acceptance gate](references/development-workflow.md#editor-performance-acceptance)
+for changes that can affect editor frame time, interaction latency, startup,
+asset opening, allocations, I/O, or rendering. Keep unchanged-document work
+independent of asset size; cache derived presentation by committed revisions
+without weakening live-state freshness, Undo/Redo, savepoints, or tool discovery.
+
 When a confirmed change alters architecture, development entry points, compatibility policy, or validation procedure, update the applicable skill/reference in the same deliverable. Keep feature usage in the manual and future-development constraints in the skill; link authoritative contracts instead of maintaining duplicate inventories. Bind validation evidence to the reviewed source snapshot and report any remaining boundaries.
 
 ## Infrastructure Pyramid

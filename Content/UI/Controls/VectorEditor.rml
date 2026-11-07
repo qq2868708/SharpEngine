@@ -1,0 +1,3 @@
+<template>
+  <div class="se-vector ${Class}"><ui-slot name="Axes" /></div>
+</template>

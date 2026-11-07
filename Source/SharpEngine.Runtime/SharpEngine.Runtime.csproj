@@ -23,6 +23,7 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="../../Content/UI/Rml/Viewport3D.rml" LogicalName="SharpEngine.UI.Viewport3D.rml" />
+    <EmbeddedResource Include="../../Content/UI/Controls/*.rml" LogicalName="SharpEngine.UI.%(Filename)%(Extension)" />
   </ItemGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 </Project>

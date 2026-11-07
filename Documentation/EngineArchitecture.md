@@ -55,3 +55,7 @@ MaterialPreviewContent → 直接挂接同一个 Viewport3D
 `IUiLayoutPart` 是 UI 领域契约，不是万能功能容器。Viewport3D、TimelineView 提供自己的布局定义；UiLayoutTemplate 只承担 UI 值与子布局展开，不推进子功能时间或执行资产操作。共享定义不可被渲染修改；JsonObject 值、插槽实例、播放状态、相机和 Dock 都按使用实例隔离。
 
 代码可在 `UiLayoutInstance` 中向自己的布局容器添加控件或挂接 `IUiLayoutPart`，并绑定事件；它保存每次使用的瞬态数据，不回写共享定义。父级查询不穿透子功能的内部布局。节点删除使旧句柄和事件失效，挂接关系不转移子实例所有权。用法与验证见 [运行实例 UI 组合](RuntimeUiComposition.md)。
+
+## 通用树与基础类型编辑
+
+树投影/节点呈现与基础类型编辑属于 UI 基础层，不依赖 World、Socket 或资产编辑器。各功能只适配自己的数据、权限和事务。Transform 必须组合 Vector/Rotator/Vector，不复制三组输入实现；树节点复用同一 RML/RCSS 与独立使用状态。入口见 [通用控件](CommonEditorControls.md)。

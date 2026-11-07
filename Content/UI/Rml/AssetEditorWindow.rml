@@ -6,6 +6,7 @@
 <link type="text/rcss" href="Viewport3D.rcss" />
 <link type="text/rcss" href="Inspector.rcss" />
 <link type="text/rcss" href="Timeline.rcss" />
+<link type="text/rcss" href="../Controls/CommonControls.rcss" />
 </head>
 <body>
 <div id="assetEditor" class="asset-editor-root">

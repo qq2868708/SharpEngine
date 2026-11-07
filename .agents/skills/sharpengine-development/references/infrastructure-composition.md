@@ -74,3 +74,14 @@ closed sessions. Reuse domain commands instead of putting mutations in menu widg
 When combining pane-private and shared commands, retain each command's owning
 registry in its popup binding. Never copy private commands into the global table.
 Asset registry replacement must recreate the owned views and invalidate old menus.
+
+## Trees And Value Editors
+
+Use Runtime UI UiTreeView/UiTreeProjection for tree presentation/traversal and
+UiValueEditors for primitive controls. Transform composes Vector, Rotator, Vector.
+Keep fixed structure in Content/UI/Controls RML and shared appearance in
+CommonControls.rcss. Consumers own content, selection/expansion scope, validation
+and transactions; UI infrastructure must not depend on World or asset editors.
+Do not introduce private tree rows or comma-delimited TRS fields. Numeric/text
+inputs keep a draft and commit once on Enter/blur; Escape cancels the draft.
+See Documentation/CommonEditorControls.md for current adapters and native checks.

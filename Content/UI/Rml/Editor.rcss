@@ -1,4 +1,4 @@
-﻿div { display: block; }
+div { display: block; }
 .plugins-main { padding: 24px; overflow: auto; }
 .plugins-note { color: #91a0b4; margin: 8px 0px 16px; font-size: 12px; line-height: 20px; }
 .plugins-row { display: flex; align-items: center; padding: 12px 0px; border-bottom: 1px #303743; }
@@ -427,10 +427,22 @@ viewport { display: block; }
 .asset-preview-overlay { position: absolute; top: 10px; left: 12px; display: flex; flex-direction: column; padding: 7px 9px; color: #d8e2ee; background-color: #171d25dd; border: 1px #3a4655; font-size: 10px; pointer-events: none; }
 .asset-preview-overlay span + span { margin-top: 3px; color: #8292a6; }
 .asset-inspector { width: 100%; max-width: 100%; height: 100%; min-width: 0px; padding: 10px; overflow-x: hidden; overflow-y: auto; }
+.mesh-asset-inspector { position: absolute; z-index: 0; left: 0px; top: 0px; width: 100%; max-width: none; height: 100%; display: block; }
+.mesh-asset-inspector .asset-field { display: block; max-width: none; overflow: visible; }
+.mesh-asset-inspector .asset-field label, .mesh-asset-inspector .asset-field > span { display: block; }
+.mesh-asset-inspector input { position: relative; z-index: 1; }
+.mesh-asset-inspector select { position: relative; z-index: 1; height: 28px; padding: 0px; margin-bottom: 0px; color: #d6deeb; font-size: 12px; }
+.mesh-asset-inspector select selectvalue { display: block; height: 28px; margin-right: 24px; padding: 5px 8px; line-height: 16px; background-color: #191d24; border: 1px #383f4c; }
+.mesh-asset-inspector select selectarrow { width: 24px; height: 28px; padding: 4px; decorator: image("sharpengine-resource://engine/Resources/Editor/Icons/chevron-down.tga" contain); background-color: #303a48; border: 1px #3f4d60; }
+.mesh-asset-inspector select selectbox { width: 100%; max-height: 224px; margin-top: 3px; padding: 4px; background-color: #252e3b; border: 1px #607b9b; }
+.mesh-asset-inspector select option { display: block; min-height: 26px; padding: 5px 8px; line-height: 16px; white-space: nowrap; overflow: hidden; }
+.mesh-asset-inspector select option:checked { color: #ffffff; background-color: #314d6a; }
+.mesh-asset-inspector select option:hover { color: #ffffff; background-color: #3d5e80; }
+.mesh-asset-inspector p { display: block; }
 .asset-field { display: flex; flex-direction: column; width: 100%; max-width: 100%; min-width: 0px; margin-bottom: 10px; overflow: hidden; }
 .asset-field label { margin-bottom: 4px; color: #8fa2b8; font-size: 10px; }
 .asset-field > span { min-height: 25px; padding: 5px 7px; color: #d5deea; background-color: #191e25; border: 1px #313946; word-break: break-all; }
-.asset-field input { width: 100%; max-width: 100%; min-width: 0px; margin-bottom: 0px; }
+.asset-field input, .asset-field select { width: 100%; max-width: 100%; min-width: 0px; margin-bottom: 0px; }
 .asset-field textarea { min-height: 110px; }
 .asset-field-hint { min-height: 0px !important; margin-top: 3px; padding: 0px !important; color: #67788d !important; background-color: transparent !important; border-width: 0px !important; font-size: 9px; }
 .asset-source-view { width: 834px; height: 100%; padding: 6px; overflow: auto; background-color: #11161c; }
@@ -442,9 +454,6 @@ viewport { display: block; }
 .asset-source-remove { align-self: flex-end; min-width: 72px; height: 25px; margin-top: 4px; padding: 3px 8px; color: #a7b2c1; background-color: #252c35; }
 .asset-diagnostics { width: 100%; height: 100%; padding: 6px; overflow: auto; }
 .asset-tree { width: 100%; height: 100%; padding: 6px; overflow: auto; }
-.asset-tree-row { display: flex; align-items: center; min-height: 25px; border-bottom: 1px #252d38; }
-.asset-tree-row strong { min-width: 140px; color: #d7e0eb; font-size: 11px; }
-.asset-tree-row span { color: #77899f; font-family: Segoe UI; font-size: 9px; }
 .asset-reference-row { display: flex; flex-direction: column; margin-bottom: 7px; padding: 7px; background-color: #1c232c; border-left: 2px #4e8a70; }
 .asset-reference-row strong { color: #d9e2ed; }
 .asset-reference-row span { margin-top: 3px; color: #73859a; font-family: Segoe UI; font-size: 9px; }
@@ -515,19 +524,6 @@ viewport { display: block; }
 .ui-tree-panel scrollbarhorizontal, .ui-control-palette scrollbarhorizontal { height: 10px; background-color: #191d24; }
 .ui-tree-panel scrollbarhorizontal sliderbar, .ui-control-palette scrollbarhorizontal sliderbar { height: 6px; min-width: 24px; margin-top: 2px; background-color: #485e74; border-radius: 3px; }
 .ui-tree-panel sliderbar:hover, .ui-control-palette sliderbar:hover { background-color: #7298bb; }
-.ui-widget-row { position: relative; display: block; width: 100%; height: 40px; flex-shrink: 0; box-sizing: border-box; background-color: #202831; }
-.ui-widget-row:hover { background-color: #2c3a49; }
-.ui-widget-row.selected { background-color: #285348; }
-.ui-tree-guide { position: absolute; z-index: 2; top: 0px; bottom: 0px; width: 1px; background-color: #405062; pointer-events: none; }
-.ui-tree-toggle { position: absolute; z-index: 3; top: 8px; display: block; box-sizing: border-box; width: 20px; height: 24px; margin: 0px; padding: 4px 2px; background-color: transparent; border-width: 0px; }
-.ui-tree-toggle img { width: 16px; height: 16px; pointer-events: none; }
-.ui-tree-toggle:hover { background-color: #43576d; }
-.ui-tree-select { position: relative; z-index: 1; display: block; box-sizing: border-box; width: 100%; height: 40px; padding: 0px; margin: 0px; background-color: transparent; border-width: 0px; border-radius: 0px; text-align: left; }
-.ui-tree-icon { position: absolute; top: 11px; width: 18px; height: 18px; pointer-events: none; }
-.ui-tree-copy { position: absolute; top: 4px; right: 8px; display: block; min-width: 0px; pointer-events: none; }
-.ui-widget-row.reference .ui-tree-detail { color: #b4a4e0; }
-.ui-tree-name { display: block; width: 100%; color: #e3edf7; font-size: 12px; line-height: 17px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.ui-tree-detail { display: block; width: 100%; color: #8da5bd; font-size: 9px; line-height: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ui-design-control { position: relative; min-width: 18px; min-height: 18px; }
 .ui-control-native-preview { pointer-events: none; }
 

@@ -70,8 +70,12 @@ internal sealed class AssetEditorHost : IDisposable
     private readonly Dictionary<string, AssetEditorPaneDefinition> Panes;
     private readonly HashSet<string> LiveFloatingHosts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> PublishedMarkup = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DockPresentation> DockPresentations = new(StringComparer.Ordinal);
     private readonly List<IDisposable> ShortcutRegistrations = new();
     private bool Disposed;
+    private bool ValueEditing;
+    private bool ValueRefreshPending;
+    private bool ValuePointerCommit;
 
     public AssetEditorHost(EditorRuntime Runtime, EditorAssetOpener Opener,
         IAssetEditorInstance Instance, string RootId, Action<AssetEditorHost> Closed)
@@ -93,6 +97,20 @@ internal sealed class AssetEditorHost : IDisposable
     }
 
     public string RootId { get; }
+    internal bool TryGetFloatingElementRect(string ElementId, out SharpEngine.UI.UiRect Bounds)
+    {
+        foreach (var HostId in LiveFloatingHosts)
+        {
+            var Found = Runtime.TryGetAssetEditorElementRect(HostId, ElementId, out Bounds);
+            if (Found)
+            {
+                return true;
+            }
+        }
+        Bounds = default;
+        return false;
+    }
+
     public IAssetEditorInstance Instance { get; }
     public string AssetId => Instance.Asset.Id;
     public string OpenerId => Opener.Id;
@@ -195,7 +213,12 @@ internal sealed class AssetEditorHost : IDisposable
         }
 
         Instance.Update(DeltaSeconds);
-        Refresh(false);
+        var RefreshValues = ValueRefreshPending && !ValueEditing && !ValuePointerCommit;
+        if (RefreshValues)
+        {
+            ValueRefreshPending = false;
+        }
+        Refresh(RefreshValues);
     }
 
     public bool TryHandleAction(string HostId, string Action)
@@ -203,6 +226,34 @@ internal sealed class AssetEditorHost : IDisposable
         if (Disposed || !OwnsHost(HostId))
         {
             return false;
+        }
+        if (Action == "ui.value-focus")
+        {
+            ValueEditing = true;
+            return true;
+        }
+        if (Action == "ui.value-invalid")
+        {
+            Runtime.SetStatusFromExtension("Enter a finite number with the required numeric type");
+            return true;
+        }
+        if (Action == "ui.value-end")
+        {
+            ValueEditing = false;
+            ValueRefreshPending = true;
+            return true;
+        }
+        if (Action == "ui.value-end-pointer")
+        {
+            ValueEditing = false;
+            ValuePointerCommit = true;
+            ValueRefreshPending = true;
+            return true;
+        }
+        if (Action == "ui.value-release")
+        {
+            ValuePointerCommit = false;
+            return true;
         }
 
         if (HostId == RootId && Action == "window.close-requested")
@@ -276,6 +327,12 @@ internal sealed class AssetEditorHost : IDisposable
             ["main"] = EditorLayoutJson.ToJsonNode(Layout.Document.MainHost.Root),
             ["floating"] = Floating,
             ["state"] = Instance.Describe(),
+            ["valueEditor"] = new JsonObject
+            {
+                ["schemaVersion"] = 1,
+                ["editing"] = ValueEditing,
+                ["waitingForPointerRelease"] = ValuePointerCommit,
+            },
         };
     }
 
@@ -352,6 +409,10 @@ internal sealed class AssetEditorHost : IDisposable
 
     private void Refresh(bool Force)
     {
+        if ((ValueEditing || ValuePointerCommit) && !Force)
+        {
+            return;
+        }
         var Live = Instance as IAssetEditorLivePreview;
         var LiveRefresh = Live is not null && Live.ConsumeMarkupRefreshRequest();
         if (Live is not null)
@@ -391,6 +452,7 @@ internal sealed class AssetEditorHost : IDisposable
         {
             Runtime.DestroyAssetEditorFloatingWindow(HostId);
             PublishedMarkup.Remove(HostId + ":workspace");
+            DockPresentations.Remove(HostId);
         }
 
         LiveFloatingHosts.Clear();
@@ -430,9 +492,37 @@ internal sealed class AssetEditorHost : IDisposable
     private void PublishDockHost(string InternalId, DockNodeState Root, bool Force)
     {
         var NativeId = NativeHostId(InternalId);
-        var Markup = AssetEditorDockMarkup.Build(NativeId, Root, Panes,
-            Instance.BuildPaneMarkup, Instance.PrimaryPaneId);
-        Publish(NativeId, "workspace", Markup, Force);
+        var Found = DockPresentations.TryGetValue(NativeId, out var Presentation);
+        if (!Found)
+        {
+            Presentation = new DockPresentation();
+            DockPresentations.Add(NativeId, Presentation);
+        }
+        var Changed = Presentation!.LayoutRevision != Layout.Revision;
+        foreach (var PaneId in EditorLayoutValidator.EnumeratePanes(Root))
+        {
+            var Content = Instance.BuildPaneMarkup(PaneId);
+            var HasContent = Presentation.PaneMarkup.TryGetValue(PaneId, out var Previous);
+            if (!HasContent || Previous != Content)
+            {
+                Presentation.PaneMarkup[PaneId] = Content;
+                Changed = true;
+            }
+        }
+        if (Changed || Presentation.Markup is null)
+        {
+            Presentation.Markup = AssetEditorDockMarkup.Build(NativeId, Root, Panes,
+                PaneId => Presentation.PaneMarkup[PaneId], Instance.PrimaryPaneId);
+            Presentation.LayoutRevision = Layout.Revision;
+        }
+        Publish(NativeId, "workspace", Presentation.Markup, Force);
+    }
+
+    private sealed class DockPresentation
+    {
+        public long LayoutRevision = -1;
+        public readonly Dictionary<string, string> PaneMarkup = new(StringComparer.Ordinal);
+        public string? Markup;
     }
 
     private void Publish(string HostId, string ElementId, string Markup, bool Force)

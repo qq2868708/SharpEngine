@@ -27,6 +27,12 @@ static bool MatrixNear(System.Numerics.Matrix4x4 left, System.Numerics.Matrix4x4
 }
 try
 {
+    AssetDocumentPerformanceValidation.Run(temporary.FullName, Require);
+    if (args.Contains("--asset-performance-only", StringComparer.Ordinal))
+    {
+        Console.WriteLine($"PASS: {assertions} asset document correctness and performance assertions");
+        return;
+    }
     DevelopmentSettingsValidation.Run(temporary.FullName, Require);
     McpConfigurationValidation.Run(temporary.FullName, Require);
     AssetIndexValidation.Run(temporary.FullName, Require);
@@ -127,6 +133,7 @@ try
         """);
     Environment.SetEnvironmentVariable("SHARPENGINE_ROOT", root);
     Environment.SetEnvironmentVariable("SHARPENGINE_PROJECT_MANIFEST", manifest);
+    BasicAssetFixture.Prepare(temporary.FullName);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
     SharpEngine.EditorValidation.UiScreenValidation.Run(temporary.FullName,
@@ -189,7 +196,7 @@ try
         runtime.Menus.Items.Any(item => item.CommandId == "view.logs"),
         "View menu must expose independent Console and Logs commands");
     Require(runtime.World?.SourcePath == worldPath, "Editor must load the project-owned startup world");
-    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 11,
+    Require(runtime.Assets!.EngineAssets.Any() && runtime.Assets.ProjectAssets.Count() == 14,
         "Public, project, and Plugin Content assets must both be available to a project editor");
     var pluginAsset = runtime.Assets.Find("project://plugins/validation.plugin/sample");
     Require(pluginAsset?.OwnerId == "validation.plugin" &&
@@ -598,6 +605,9 @@ try
         $"editor.host-action:{DataAssetRoot}:editor.data-asset-field:damage:-1");
     Require(!AssetEditorDirty("project://data/reload-rifle"),
         "Generic DataAsset editor must enforce reflected range constraints atomically");
+
+    SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
+    StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
 
     var initialCameraPosition = runtime.World!.ActiveCamera!.Position;
     runtime.ViewportKey(0x57, true, true);

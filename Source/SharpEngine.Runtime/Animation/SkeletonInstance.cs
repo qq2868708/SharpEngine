@@ -11,10 +11,20 @@ public sealed class SkeletonInstance
     private readonly SkeletalMeshAsset Mesh;
     private readonly Matrix4x4[] Bind;
     private readonly int[] Parents;
+    private readonly SkeletonAsset? Definition;
 
-    public SkeletonInstance(SkeletalMeshAsset Mesh)
+    public SkeletonInstance(SkeletalMeshAsset Mesh, SkeletonAsset? Definition = null)
     {
         this.Mesh = Mesh;
+        this.Definition = Definition;
+        if (Definition is not null)
+        {
+            if (!Mesh.SkeletonId.Equals(Definition.AssetId, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("Mesh and canonical skeleton IDs do not match");
+            }
+            SkeletonBinding.Validate(Definition.Bones, Mesh.Bones, "Skeleton instance");
+        }
         Bind = new Matrix4x4[Mesh.Bones.Count];
         Parents = Mesh.Bones.Select(Bone => Bone.ParentBoneId is null ? -1 :
             Mesh.Bones.ToList().FindIndex(Parent => Parent.BoneId == Bone.ParentBoneId)).ToArray();
@@ -67,7 +77,8 @@ public sealed class SkeletonInstance
         }
         var LocalPose = new SkeletalPose(Pose?.Time ?? 0, Array.AsReadOnly(Mesh.Bones.Select((Bone, Index) => (Bone.BoneId, Local[Index])).ToArray()));
         return new(EntityId, ComponentId, Mesh.AssetId, Code, Message, LocalPose,
-            Model, Skin, () => SkinPositions(Mesh, Skin));
+            Model, Skin, () => SkinPositions(Mesh, Skin),
+            Definition is null ? null : new SkeletonRigPose(Definition, Pose));
     }
 
     private static IReadOnlyList<Vector3> SkinPositions(SkeletalMeshAsset Mesh,
@@ -127,21 +138,26 @@ public sealed class SkeletonFrameState : ComponentFrameState
     {
         get;
     }
+    public SkeletonRigPose? RigPose
+    {
+        get;
+    }
 
     internal SkeletonFrameState(string EntityId, string ComponentId, string? MeshId, string Code, string? Message,
         SkeletalPose? LocalPose = null, Matrix4x4[]? Model = null,
         Matrix4x4[]? Skin = null,
-        Func<IReadOnlyList<Vector3>>? PositionFactory = null)
+        Func<IReadOnlyList<Vector3>>? PositionFactory = null, SkeletonRigPose? RigPose = null)
     {
         this.MeshId = MeshId;
         this.Code = Code;
         this.Message = Message;
+        this.RigPose = RigPose;
         PositionData = new Lazy<IReadOnlyList<Vector3>>(
             PositionFactory ?? (() => Array.Empty<Vector3>()));
         SkinMatrices = Array.AsReadOnly(Skin?.ToArray() ?? Array.Empty<Matrix4x4>());
         State = new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 2,
             ["entityId"] = EntityId,
             ["componentId"] = ComponentId,
             ["meshId"] = MeshId,
@@ -150,6 +166,7 @@ public sealed class SkeletonFrameState : ComponentFrameState
             ["localPose"] = LocalPose?.ToJson(),
             ["modelMatrices"] = new JsonArray((Model ?? Array.Empty<Matrix4x4>()).Select(MatrixJson).ToArray()),
             ["skinMatrices"] = new JsonArray((Skin ?? Array.Empty<Matrix4x4>()).Select(MatrixJson).ToArray()),
+            ["rigPose"] = RigPose?.ToJson(),
         };
     }
 

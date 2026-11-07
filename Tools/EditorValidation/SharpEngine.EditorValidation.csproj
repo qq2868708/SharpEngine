@@ -7,6 +7,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../SharedValidation/BasicAssetFixture.cs" Link="BasicAssetFixture.cs" />
     <ProjectReference Include="..\..\Source\SharpEngine.Editor\SharpEngine.Editor.csproj" />
     <ProjectReference Include="..\..\Source\SharpEngine.Timeline.Editor\SharpEngine.Timeline.Editor.csproj" />
     <ProjectReference Include="..\..\Source\SharpEngine.Animation.Editor\SharpEngine.Animation.Editor.csproj" />

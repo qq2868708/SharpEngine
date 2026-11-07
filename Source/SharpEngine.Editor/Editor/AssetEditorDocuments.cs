@@ -17,6 +17,9 @@ internal sealed class JsonAssetAuthoringDocument
     private JsonObject Document;
     private string SavedState;
     private string SourceHash;
+    private string CurrentState;
+    private string? SerializedSource;
+    private bool Dirty;
 
     public JsonAssetAuthoringDocument(AssetDescriptor Asset, string Path,
         Action<JsonObject> Validate)
@@ -26,7 +29,8 @@ internal sealed class JsonAssetAuthoringDocument
         this.Validate = Validate;
         Document = Parse(File.ReadAllText(this.Path));
         Validate(Document);
-        SavedState = Canonical(Document);
+        CurrentState = Canonical(Document);
+        SavedState = CurrentState;
         SourceHash = HashSource();
     }
 
@@ -35,11 +39,24 @@ internal sealed class JsonAssetAuthoringDocument
     public ulong Revision { get; private set; } = 1;
     public ulong SavepointRevision { get; private set; } = 1;
     public bool IsReadOnly => Asset.ReadOnly;
-    public bool IsDirty => Canonical(Document) != SavedState;
+    public bool IsDirty
+    {
+        get
+        {
+            return Dirty;
+        }
+    }
     public bool CanUndo => UndoStates.Count != 0;
     public bool CanRedo => RedoStates.Count != 0;
     public JsonObject Snapshot => Document.DeepClone().AsObject();
-    public string Source => Serialize(Document);
+    public string Source
+    {
+        get
+        {
+            SerializedSource ??= Serialize(Document);
+            return SerializedSource;
+        }
+    }
 
     public bool Edit(string Kind, Action<JsonObject> Mutation, out string Message)
     {
@@ -65,14 +82,15 @@ internal sealed class JsonAssetAuthoringDocument
             return false;
         }
 
-        if (Canonical(Before) == Canonical(Candidate))
+        var CandidateState = Canonical(Candidate);
+        if (CurrentState == CandidateState)
         {
             return false;
         }
 
         UndoStates.Push(Before);
         RedoStates.Clear();
-        Document = Candidate;
+        ReplaceDocument(Candidate, CandidateState);
         Revision++;
         Message = Kind;
         return true;
@@ -86,7 +104,7 @@ internal sealed class JsonAssetAuthoringDocument
         }
 
         RedoStates.Push(Document.DeepClone().AsObject());
-        Document = UndoStates.Pop();
+        ReplaceDocument(UndoStates.Pop());
         Revision++;
         return true;
     }
@@ -99,7 +117,7 @@ internal sealed class JsonAssetAuthoringDocument
         }
 
         UndoStates.Push(Document.DeepClone().AsObject());
-        Document = RedoStates.Pop();
+        ReplaceDocument(RedoStates.Pop());
         Revision++;
         return true;
     }
@@ -117,14 +135,26 @@ internal sealed class JsonAssetAuthoringDocument
         }
 
         Validate(Document);
-        var Serialized = Serialize(Document);
+        var Serialized = Source;
         var Parsed = Parse(Serialized);
         Validate(Parsed);
         AtomicWrite(Serialized);
         Document = Parsed;
         SavedState = Canonical(Document);
+        CurrentState = SavedState;
+        SerializedSource = Serialized;
+        Dirty = false;
         SourceHash = HashSource();
         SavepointRevision = Revision;
+    }
+
+    private void ReplaceDocument(JsonObject Value, string? CanonicalState = null)
+    {
+        var State = CanonicalState ?? Canonical(Value);
+        Document = Value;
+        CurrentState = State;
+        Dirty = !string.Equals(State, SavedState, StringComparison.Ordinal);
+        SerializedSource = null;
     }
 
     private void AtomicWrite(string Text)

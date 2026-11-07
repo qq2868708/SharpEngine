@@ -54,6 +54,9 @@ internal static class GameUiValidation
                 """,
         }.ToJsonString());
 
+        File.Copy(Path.Combine(Root, "Content/UI/Controls/CommonControls.rcss"),
+            Path.Combine(Folder, "Content/UI/CommonControls.rcss"), true);
+
         // --- Composition fixture -------------------------------------------------
         // One reusable button definition (icon + decorative effects), referenced twice
         // by the screen template. Each reference is a separate instance with its own
@@ -92,7 +95,7 @@ internal static class GameUiValidation
                 </div>
                 </template>
                 """,
-            ["styleSheets"] = new JsonArray("Composed.rcss", "Button.rcss"),
+            ["styleSheets"] = new JsonArray("Composed.rcss", "Button.rcss", "CommonControls.rcss"),
         }.ToJsonString());
         File.WriteAllText(Path.Combine(Folder, "Content/UI/Composed.rcss"), """
             .screen { display: flex; flex-direction: column; padding: 20px; gap: 12px; background-color: #123456; }
@@ -256,9 +259,15 @@ internal static class GameUiValidation
                 public string Accent { get; }
                 public int Clicks { get; private set; }
 
+                public double EditedValue
+                {
+                    get;
+                    private set;
+                } = 1;
+
                 public string BuildLayout(UiLayoutContext Context)
                 {
-                    return Definition.Render(Context, new JsonObject
+                    var Markup = Definition.Render(Context, new JsonObject
                     {
                         ["Id"] = Id,
                         ["Label"] = Label,
@@ -266,10 +275,22 @@ internal static class GameUiValidation
                         ["Accent"] = Accent,
                         ["Count"] = Clicks,
                     });
+                    if (Id == "primary")
+                    {
+                        Markup += UiValueEditors.Number("Shared Value", new UiValueInput("common-game-number",
+                            EditedValue.ToString(System.Globalization.CultureInfo.InvariantCulture), "ui.game-number:")) +
+                            "<span id='common-game-value'>" + EditedValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "</span>";
+                    }
+                    return Markup;
                 }
 
                 public bool TryHandleAction(string Action)
                 {
+                    if (Id == "primary" && Action.StartsWith("ui.game-number:", System.StringComparison.Ordinal))
+                    {
+                        EditedValue = double.Parse(Action["ui.game-number:".Length..], System.Globalization.CultureInfo.InvariantCulture);
+                        return true;
+                    }
                     if (Action != "ui.button:" + Id + ":click")
                     {
                         return false;
@@ -590,6 +611,63 @@ internal static class GameUiValidation
             var PrimaryAgain = CountAfterClick("primary-hit");
             Check(PrimaryAgain == "2",
                 $"Repeated clicks accumulate per instance (got {PrimaryAgain})");
+
+            JsonObject ObserveGame()
+            {
+                var Current = Tool("ui.describe", new JsonObject())["result"]!["structuredContent"]!.AsObject();
+                Elements = Current["hosts"]!.AsArray().Single(Node => Node!["hostId"]!.GetValue<string>() == "game")!["elements"]!
+                    .AsArray().Select(Node => Node!.AsObject()).ToArray();
+                return Current;
+            }
+            void ValueKey(string Event, int Code = 0, string Text = "", int Modifiers = 0)
+            {
+                for (var Attempt = 0; Attempt < 10; Attempt++)
+                {
+                    var Current = ObserveGame();
+                    var Result = Tool("ui.key", new JsonObject
+                    {
+                        ["hostId"] = "game", ["event"] = Event, ["key"] = Code, ["text"] = Text,
+                        ["modifiers"] = Modifiers, ["expectedFrameId"] = Current["frameId"]!.DeepClone(),
+                    })["result"]!["structuredContent"]!;
+                    if (Result["accepted"]?.GetValue<bool>() == true)
+                    {
+                        return;
+                    }
+                    if (Result["diagnostics"]?[0]?["code"]?.GetValue<string>() != "UI_FRAME_STALE")
+                    {
+                        throw new InvalidOperationException(Result.ToJsonString());
+                    }
+                }
+                throw new InvalidOperationException("Game value input frame remained stale");
+            }
+            ObserveGame();
+            ClickHit("common-game-number");
+            ValueKey("down", 0x41, Modifiers: 1);
+            ValueKey("up", 0x41, Modifiers: 1);
+            ValueKey("text", Text: "12");
+            ObserveGame();
+            Check(TextOf("common-game-value") == "1", "A common Number input keeps its draft outside project state in Game without an Editor");
+            ValueKey("down", 0x0D);
+            ValueKey("up", 0x0D);
+            for (var Attempt = 0; Attempt < 20; Attempt++)
+            {
+                ObserveGame();
+                if (TextOf("common-game-value") == "12")
+                {
+                    break;
+                }
+                Thread.Sleep(50);
+            }
+            Check(TextOf("common-game-value") == "12", "The shared native adapter commits the Game input through its caller-supplied semantic action");
+            ClickHit("common-game-number");
+            ValueKey("down", 0x41, Modifiers: 1);
+            ValueKey("up", 0x41, Modifiers: 1);
+            ValueKey("text", Text: "-");
+            ValueKey("down", 0x1B);
+            ValueKey("up", 0x1B);
+            ObserveGame();
+            Check(TextOf("common-game-value") == "12" && Find("common-game-number")?["value"]?.GetValue<string>() == "12",
+                "Escape cancels the same primitive draft policy in Game while keeping committed state: committed=" + TextOf("common-game-value") + "; input=" + Find("common-game-number")?["value"]?.GetValue<string>());
 
             // Read a freshly observed frame: the earlier snapshot predates the clicks,
             // and its pinned frame may already have left the bounded cache.

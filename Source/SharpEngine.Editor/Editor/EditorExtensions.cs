@@ -843,6 +843,11 @@ internal static class EditorResourceUris
 {
     internal static string ItemIcon(string Type)
     {
+        return $"<img class=\"icon item-icon\" src=\"{ItemIconSource(Type)}\" />";
+    }
+
+    internal static string ItemIconSource(string Type)
+    {
         var Name = Type.ToLowerInvariant() switch
         {
             "folder" => "folder",
@@ -859,7 +864,7 @@ internal static class EditorResourceUris
             "empty" => "all",
             _ => "file",
         };
-        return $"<img class=\"icon item-icon\" src=\"{IconSource(Name)}\" />";
+        return IconSource(Name);
     }
 
     internal const string Scheme = "sharpengine-resource://";

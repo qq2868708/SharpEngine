@@ -118,6 +118,17 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        const string TreePrefix = "editor.prefab-tree-toggle:";
+        if (Action.StartsWith(TreePrefix, StringComparison.Ordinal))
+        {
+            var Key = Action[TreePrefix.Length..];
+            if (!CollapsedTreeNodes.Remove(Key))
+            {
+                CollapsedTreeNodes.Add(Key);
+            }
+            return true;
+        }
+
         if (Preview.Viewport.TryHandleAction(Action))
         {
             return true;
@@ -182,6 +193,7 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
             ["readOnly"] = IsReadOnly,
             ["documentRevision"] = Authoring.DocumentRevision,
             ["selectedEntityId"] = SelectedEntityId,
+            ["collapsedTreeKeys"] = new System.Text.Json.Nodes.JsonArray(CollapsedTreeNodes.Order(StringComparer.Ordinal).Select(Key => (JsonNode)Key).ToArray()),
             ["entityCount"] = Document.Entities.Count,
         };
     }
@@ -219,19 +231,21 @@ internal sealed class PrefabAssetEditorInstance : IAssetEditorInstance
         }
     }
 
+    private readonly SharpEngine.UI.UiTreeView PrefabTreeView = new([]);
+
+    private readonly HashSet<string> CollapsedTreeNodes = new(StringComparer.Ordinal);
+
     private string BuildHierarchyMarkup()
     {
-        var Markup = new StringBuilder("<div class=\"prefab-asset-hierarchy\">");
-        foreach (var Entity in Document.Entities)
-        {
-            Markup.Append("<button class=\"prefab-entity")
-                .Append(Entity.Id == SelectedEntityId ? " selected" : string.Empty)
-                .Append("\" data-action=\"editor.prefab-select:")
-                .Append(WebUtility.HtmlEncode(Entity.Id)).Append("\">")
-                .Append(WebUtility.HtmlEncode(Entity.Name)).Append("</button>");
-        }
-        Markup.Append("</div>");
-        return Markup.ToString();
+        var Entities = Document.Entities.ToDictionary(Entity => Entity.Id, StringComparer.Ordinal);
+        var Nodes = Document.Entities.Select(Entity => new SharpEngine.UI.UiTreeNode(Entity.Id,
+            string.IsNullOrEmpty(Entity.ParentId) ? null : Entity.ParentId)).ToArray();
+        var Rows = SharpEngine.UI.UiTreeProjection.Visible(Nodes, CollapsedTreeNodes).Select(Node => new SharpEngine.UI.UiTreeRow(
+            Node.Key, Entities[Node.Key].Name, "Entity", EditorResourceUris.IconSource("prefab"), Node.Depth,
+            Node.Key == SelectedEntityId, Node.HasChildren, Node.Expanded, "editor.prefab-select:" + Node.Key,
+            "editor.prefab-tree-toggle:" + Node.Key, "prefabNode-" + Node.Key, "prefabToggle-" + Node.Key)).ToArray();
+        PrefabTreeView.SetRows(Rows);
+        return "<div class=\"prefab-asset-hierarchy\">" + PrefabTreeView.BuildLayout(default) + "</div>";
     }
 
     private string BuildDetailsMarkup()

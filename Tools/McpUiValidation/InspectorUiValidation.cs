@@ -177,6 +177,17 @@ internal static class InspectorUiValidation
         var created = Data()["document"]!["entities"]!.AsArray().Last()!;
         var entityId = created["entityId"]!.GetValue<string>();
         var transform = created["components"]![0]!["componentId"]!.GetValue<string>();
+        var PositionX = "component-field-" + transform + "-Position%2F0";
+        var PositionY = "component-field-" + transform + "-Position%2F1";
+        Type(PositionX, "5", commit: false);
+        Click(PositionY);
+        require(Entity(entityId)["components"]![0]!["state"]!["Position"]![0]!.GetValue<float>() == 5,
+            "A sibling-axis click commits the original X draft through blur");
+        Type(PositionY, "6", commit: true);
+        require(Entity(entityId)["components"]![0]!["state"]!["Position"]![0]!.GetValue<float>() == 5 &&
+            Entity(entityId)["components"]![0]!["state"]!["Position"]![1]!.GetValue<float>() == 6 &&
+            Entity(entityId)["components"]![0]!["state"]!["Position"]![2]!.GetValue<float>() == 0,
+            "A second component input preserves the committed sibling and untouched Z after its revision advances");
         Click("editor.component-collapse:" + transform);
         Click("add-component");
         Click("editor.component-add:engine.camera");

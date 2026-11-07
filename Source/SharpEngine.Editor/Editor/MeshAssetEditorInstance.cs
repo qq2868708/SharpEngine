@@ -7,7 +7,7 @@ using SharpEngine.Editor.Layout;
 
 namespace SharpEngine.Editor;
 
-internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
+internal sealed partial class MeshAssetEditorInstance : IAssetEditorInstance, IAssetEditorLivePreview
 {
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
@@ -15,6 +15,11 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
     private readonly WorldPreview Preview;
     private StaticMeshAsset? StaticMesh;
     private SkeletalMeshAsset? SkeletalMesh;
+    private readonly SharpEngine.UI.UiTreeView BoneTreeView = new([]);
+
+    private bool HasFramed;
+    private float DetailsContentWidth;
+    private readonly Dictionary<string, (ulong DocumentRevision, ulong InteractionRevision, float Width, string Diagnostic, string Markup)> PaneMarkupCache = new(StringComparer.Ordinal);
 
     public MeshAssetEditorInstance(EditorAssetOpenContext Context)
     {
@@ -22,6 +27,8 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         PreviewWorld = new AssetPreviewWorld(Context.Runtime.Components ??
             throw new InvalidOperationException("Component registry is unavailable"), "mesh-preview:" + Context.Asset.Id);
         Preview = new WorldPreview(PreviewWorld.World, Context.Runtime.Assets, "meshPreviewViewport", "asset-mesh-preview");
+        Preview.Viewport.PointerInput = IsStatic;
+        Preview.Content.Overlay = DecoratePreview;
 
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
             Validate);
@@ -30,9 +37,12 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         {
             new("preview", "Preview", false),
             new("details", "Details"),
-            new("source", "Source"),
             new("diagnostics", "Diagnostics"),
         };
+        if (IsStatic)
+        {
+            PaneValues.Add(new AssetEditorPaneDefinition("sockets", "Sockets"));
+        }
         if (IsSkeletal)
         {
             PaneValues.Add(new AssetEditorPaneDefinition("skeleton", "Skeleton"));
@@ -40,27 +50,122 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         Panes = PaneValues;
     }
 
-    public AssetDescriptor Asset => Context.Asset;
-    public string EditorId => IsSkeletal ? "skeletal-mesh-editor" : "mesh-editor";
-    public string Title => Asset.Name;
-    public string PrimaryPaneId => "preview";
-    public bool IsDirty => Document.IsDirty;
-    public bool IsReadOnly => Document.IsReadOnly;
-    public IReadOnlyList<AssetEditorPaneDefinition> Panes { get; }
-    public IReadOnlyList<AssetEditorCommandDefinition> Commands { get; } =
-    [
-        new("undo", "Undo", "Edit", 100, "reset", true),
-        new("redo", "Redo", "Edit", 110, "reset", true),
-    ];
-    private bool IsSkeletal => Asset.Type.Equals("SkeletalMesh",
-        StringComparison.OrdinalIgnoreCase);
+    public AssetDescriptor Asset
+    {
+        get
+        {
+            return Context.Asset;
+        }
+    }
+    public string EditorId
+    {
+        get
+        {
+            return IsSkeletal ? "skeletal-mesh-editor" : "mesh-editor";
+        }
+    }
+    public string Title
+    {
+        get
+        {
+            return Asset.Name;
+        }
+    }
+    public string PrimaryPaneId
+    {
+        get
+        {
+            return "preview";
+        }
+    }
+    public bool IsDirty
+    {
+        get
+        {
+            return Document.IsDirty;
+        }
+    }
+    public bool IsReadOnly
+    {
+        get
+        {
+            return Document.IsReadOnly;
+        }
+    }
+    public IReadOnlyList<AssetEditorPaneDefinition> Panes
+    {
+        get;
+    }
+    public IReadOnlyList<AssetEditorCommandDefinition> Commands
+    {
+        get
+        {
+            return IsStatic ?
+            [
+                new("undo", "Undo", "Edit", 100, "reset", true),
+                new("redo", "Redo", "Edit", 110, "reset", true),
+                new("add-socket", "Add Socket", "Socket", 200, "add", true),
+                new("duplicate", "Duplicate Selected", "Socket", 210, null, true),
+                new("remove", "Remove Selected", "Socket", 220, "trash", true),
+                new("move", "Move", "Socket", 300, null, true),
+                new("rotate", "Rotate", "Socket", 310, null, true),
+                new("scale", "Scale", "Socket", 320, null, true),
+            ] :
+            [
+                new("undo", "Undo", "Edit", 100, "reset", true),
+                new("redo", "Redo", "Edit", 110, "reset", true),
+            ];
+        }
+    }
+    private bool IsSkeletal
+    {
+        get
+        {
+            return Asset.Type.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+    private bool IsStatic
+    {
+        get
+        {
+            return Asset.Type.Equals("StaticMesh", StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     public EditorLayoutDocument CreateDefaultLayout()
     {
-        var Bottom = IsSkeletal ? new[] { "source", "skeleton", "diagnostics" } :
-            ["source", "diagnostics"];
-        return AssetEditorInstanceUtilities.CreatePreviewLayout("preview", "details",
-            Bottom);
+        var Center = AssetEditorInstanceUtilities.Tabs("asset.preview", "asset.preview.tabs", "preview");
+        if (IsStatic || IsSkeletal)
+        {
+            Center = new DockNodeState
+            {
+                NodeId = "asset.center",
+                Kind = DockNodeKind.Split,
+                Orientation = DockSplitOrientation.Horizontal,
+                Ratio = 0.18f,
+                First = AssetEditorInstanceUtilities.Tabs("asset.tree", "asset.tree.tabs", IsStatic ? "sockets" : "skeleton"),
+                Second = Center,
+            };
+        }
+        return new EditorLayoutDocument
+        {
+            MainHost = new DockHostState
+            {
+                HostId = "main",
+                Root = new DockNodeState
+                {
+                    NodeId = "asset.root",
+                    Kind = DockNodeKind.Split,
+                    Orientation = DockSplitOrientation.Horizontal,
+                    Ratio = 0.76f,
+                    First = Center,
+                    Second = AssetEditorInstanceUtilities.Tabs("asset.details", "asset.details.tabs", "details"),
+                },
+            },
+            HiddenPaneIds = ["diagnostics"],
+            ActiveContentManagerId = string.Empty,
+            ContentManagers = [],
+        };
     }
 
     public bool CanExecuteCommand(string CommandId)
@@ -69,24 +174,93 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         {
             "undo" => !IsReadOnly && Document.CanUndo,
             "redo" => !IsReadOnly && Document.CanRedo,
+            "add-socket" => IsStatic && !IsReadOnly,
+            "remove" => IsStatic && !IsReadOnly && SelectedSocketId is not null && !StaticMesh!.SocketHierarchy.HasChildren(SelectedSocketId),
+            "duplicate" or "move" or "rotate" or "scale" => IsStatic && !IsReadOnly && SelectedSocketId is not null,
             _ => false,
         };
     }
 
     public void ExecuteCommand(string CommandId)
     {
+        CancelGizmoDrag();
+        EndTextInput();
+        if (!CanExecuteCommand(CommandId))
+        {
+            return;
+        }
+        if (CommandId is "move" or "rotate" or "scale")
+        {
+            GizmoTool = CommandId;
+            InteractionRevision++;
+            return;
+        }
+        if (CommandId is "add-socket" or "duplicate" or "remove")
+        {
+            HandleSocketAction(CommandId);
+            return;
+        }
         var Changed = CommandId == "undo" ? Document.Undo() :
             CommandId == "redo" && Document.Redo();
         if (Changed)
         {
+            Diagnostic = string.Empty;
             RefreshAsset();
         }
     }
 
     public bool TryHandleAction(string Action)
     {
+        const string BeginInputPrefix = "editor.mesh-input:begin:";
+        const string EndInputPrefix = "editor.mesh-input:end:";
+        if (Action.StartsWith(BeginInputPrefix, StringComparison.Ordinal))
+        {
+            CancelGizmoDrag();
+            ActiveInputId = Action[BeginInputPrefix.Length..];
+            InteractionRevision++;
+            return true;
+        }
+        if (Action.StartsWith(EndInputPrefix, StringComparison.Ordinal))
+        {
+            if (ActiveInputId == Action[EndInputPrefix.Length..])
+            {
+                EndTextInput();
+            }
+            return true;
+        }
+        if (IsStatic && TryHandleGizmoAction(Action))
+        {
+            return true;
+        }
+        if (IsStatic && Action == "ui.viewport3d:meshPreviewViewport:focus")
+        {
+            CancelGizmoDrag();
+            EndTextInput();
+            FrameMeshPreview();
+            return true;
+        }
         if (Preview.Viewport.TryHandleAction(Action))
         {
+            CancelGizmoDrag();
+            EndTextInput();
+            return true;
+        }
+        const string TreePrefix = "editor.mesh-tree-toggle:";
+        if (Action.StartsWith(TreePrefix, StringComparison.Ordinal))
+        {
+            var Key = Action[TreePrefix.Length..];
+            if (!CollapsedSocketNodes.Remove(Key))
+            {
+                CollapsedSocketNodes.Add(Key);
+            }
+            InteractionRevision++;
+            return true;
+        }
+        const string SocketPrefix = "editor.mesh-socket:";
+        if (IsStatic && Action.StartsWith(SocketPrefix, StringComparison.Ordinal))
+        {
+            CancelGizmoDrag();
+            HandleSocketAction(Action[SocketPrefix.Length..]);
             return true;
         }
         const string MaterialPrefix = "editor.mesh-default-material:";
@@ -96,6 +270,7 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         }
 
         var Value = Action[MaterialPrefix.Length..].Trim();
+        CancelGizmoDrag();
         var Changed = Document.Edit("default-material", Root =>
         {
             Root["defaultMaterial"] = Value.Length == 0 ? null : Value;
@@ -113,19 +288,39 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 
     public string BuildPaneMarkup(string PaneId)
     {
-        return PaneId switch
+        if (PaneId == "preview")
         {
-            "preview" => BuildPreviewMarkup(),
+            return BuildPreviewMarkup();
+        }
+        var Width = PaneId == "details" ? DetailsContentWidth : 0;
+        var Cached = PaneMarkupCache.GetValueOrDefault(PaneId);
+        if (Cached.Markup is not null && Cached.DocumentRevision == Document.Revision &&
+            Cached.InteractionRevision == InteractionRevision && Cached.Width == Width && Cached.Diagnostic == Diagnostic)
+        {
+            return Cached.Markup;
+        }
+        var Markup = PaneId switch
+        {
             "details" => BuildDetailsMarkup(),
-            "source" => AssetEditorInstanceUtilities.Source(Document.Source),
+            "sockets" => BuildSocketsMarkup(),
             "skeleton" => BuildSkeletonMarkup(),
-            "diagnostics" => AssetEditorInstanceUtilities.Diagnostics([]),
+            "diagnostics" => AssetEditorInstanceUtilities.Diagnostics(SocketDiagnostics()),
             _ => string.Empty,
         };
+        PaneMarkupCache[PaneId] = (Document.Revision, InteractionRevision, Width, Diagnostic, Markup);
+        return Markup;
     }
 
     public void Save()
     {
+        CancelGizmoDrag();
+        EndTextInput();
+        if (IsStatic)
+        {
+            EditSockets("schema-upgrade", _ =>
+            {
+            });
+        }
         Document.Save();
         SharpEngine.World.SceneRenderer.InvalidateAssets(Context.Runtime.Assets ??
             throw new InvalidOperationException("Asset registry is unavailable"));
@@ -134,6 +329,11 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 
     public void Update(float DeltaSeconds)
     {
+        var HasDetails = Context.TryGetElementRect("meshDetails", out var Bounds);
+        if (HasDetails && Bounds.Width > 0)
+        {
+            DetailsContentWidth = MathF.Max(1, MathF.Floor(Bounds.Width));
+        }
         Preview.Viewport.Render(Context);
     }
 
@@ -141,7 +341,8 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
     {
         return new JsonObject
         {
-            ["schemaVersion"] = 1,
+            ["schemaVersion"] = 3,
+            ["stateRevision"] = Document.Revision + InteractionRevision + Preview.Viewport.Describe()["stateRevision"]!.GetValue<ulong>(),
             ["assetId"] = Asset.Id,
             ["editorRootId"] = Context.EditorRootId,
             ["assetType"] = Asset.Type,
@@ -156,6 +357,15 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             ["triangleCount"] = (IsSkeletal ? SkeletalMesh!.Indices.Count :
                 StaticMesh!.Indices.Count) / 3,
             ["boneCount"] = SkeletalMesh?.Bones.Count ?? 0,
+            ["socketCount"] = IsStatic ? StaticMesh!.Sockets.Count : 0,
+            ["selectedSocketId"] = SelectedSocketId,
+            ["activeInputId"] = ActiveInputId,
+            ["hierarchy"] = IsStatic ? DescribeSocketTree() : null,
+            ["socketPose"] = IsStatic ? StaticMesh!.SocketHierarchy.ToJson() : null,
+            ["document"] = IsStatic ? StaticMesh!.ToJson() : null,
+            ["diagnostic"] = Diagnostic,
+            ["diagnostics"] = DescribeSocketDiagnostics(),
+            ["gizmo"] = IsStatic ? DescribeGizmo() : null,
             ["defaultMaterial"] = IsSkeletal ? SkeletalMesh!.DefaultMaterial :
                 StaticMesh!.DefaultMaterial,
         };
@@ -163,6 +373,8 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
 
     public void Dispose()
     {
+        CancelGizmoDrag();
+        EndTextInput();
     }
 
     private void Validate(JsonObject Root)
@@ -215,12 +427,24 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         {
             StaticMesh = StaticMeshAsset.Parse(Source, Context.Path, Asset.Id);
             SkeletalMesh = null;
+            EnsureSocketSelection();
         }
         PreviewWorld.SetMesh(Asset.Id, IsSkeletal ? "engine.skeletal-mesh" :
             Asset.Type == "StaticMesh" ? "engine.static-mesh" : "engine.mesh-renderer",
             IsSkeletal ? SkeletalMesh!.DefaultMaterial : StaticMesh!.DefaultMaterial, SkeletalMesh);
+        if (!HasFramed)
+        {
+            FrameMeshPreview();
+            HasFramed = true;
+        }
+    }
+
+    private void FrameMeshPreview()
+    {
         var Positions = IsSkeletal ? SkeletalMesh!.Positions : StaticMesh!.Positions;
-        Preview.Viewport.Frame(Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z)));
+        var Points = Positions.Select(Position => new Vector3(Position.X, Position.Y, Position.Z));
+        var SocketPoints = IsStatic ? StaticMesh!.SocketHierarchy.ModelMatrices.Values.Select(Matrix => Matrix.Translation) : [];
+        Preview.Viewport.Frame(Points.Concat(SocketPoints));
     }
 
     private string BuildPreviewMarkup()
@@ -236,12 +460,16 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             StaticMesh!.Indices.Count;
         var Material = IsSkeletal ? SkeletalMesh!.DefaultMaterial :
             StaticMesh!.DefaultMaterial;
-        var Markup = new StringBuilder("<div class=\"asset-inspector\">")
-            .Append(AssetEditorInstanceUtilities.ReadOnlyField("Asset ID", Asset.Id))
+        var Markup = new StringBuilder("<div id=\"meshDetails\" class=\"asset-inspector mesh-asset-inspector\">");
+        if (IsStatic && SelectedSocketId is not null)
+        {
+            Markup.Append(BuildSocketDetails());
+        }
+        Markup.Append(AssetEditorInstanceUtilities.ReadOnlyField("Asset ID", Asset.Id, "meshAssetId"))
             .Append(AssetEditorInstanceUtilities.ReadOnlyField("Vertices",
-                VertexCount.ToString()))
+                VertexCount.ToString(), "meshVertexCount"))
             .Append(AssetEditorInstanceUtilities.ReadOnlyField("Triangles",
-                (IndexCount / 3).ToString()));
+                (IndexCount / 3).ToString(), "meshTriangleCount"));
         if (IsSkeletal)
         {
             Markup.Append(AssetEditorInstanceUtilities.ReadOnlyField("Skeleton",
@@ -260,9 +488,25 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
         }
         Markup.Append(AssetEditorInstanceUtilities.Field("Default Material",
             Material ?? string.Empty, "editor.mesh-default-material:", IsReadOnly,
-            "Stable Material asset URI"))
-            .Append("</div>");
-        return Markup.ToString();
+            "Stable Material asset URI", "meshDefaultMaterial",
+            "editor.mesh-input:begin:meshDefaultMaterial", "editor.mesh-input:end:meshDefaultMaterial"));
+        if (IsStatic && SelectedSocketId is null)
+        {
+            Markup.Append(BuildSocketDetails());
+        }
+        Markup.Append("</div>");
+        // Native Dock sizing resolves after the new pane markup is first measured.
+        // Feed its measured content width back into fields so intrinsic text cannot
+        // leave them formatted against the provisional zero-width allocation.
+        var Source = Markup.ToString();
+        if (DetailsContentWidth <= 0)
+        {
+            return Source;
+        }
+        var Width = DetailsContentWidth.ToString("G9", System.Globalization.CultureInfo.InvariantCulture) + "px";
+        return Source.Replace("class=\"asset-field\"", "class=\"asset-field\" style=\"width:" + Width + ";\"", StringComparison.Ordinal)
+            .Replace("class=\"se-value-field", "style=\"width:" + Width + ";\" class=\"se-value-field", StringComparison.Ordinal)
+            .Replace("<p>", "<p style=\"width:" + Width + ";\">", StringComparison.Ordinal);
     }
 
     private string BuildSkeletonMarkup()
@@ -272,25 +516,13 @@ internal sealed class MeshAssetEditorInstance : IAssetEditorInstance
             return "<div class=\"ui-editor-empty\">No skeleton</div>";
         }
 
-        var Markup = new StringBuilder("<div class=\"asset-tree\">");
-        foreach (var Bone in SkeletalMesh.Bones)
-        {
-            var Depth = 0;
-            var ParentId = Bone.ParentBoneId;
-            while (ParentId is not null)
-            {
-                Depth++;
-                ParentId = SkeletalMesh.Bones.First(Value =>
-                    Value.BoneId == ParentId).ParentBoneId;
-            }
-            Markup.Append("<div class=\"asset-tree-row\" style=\"padding-left:")
-                .Append(8 + Depth * 14).Append("px\"><strong>")
-                .Append(AssetEditorInstanceUtilities.Escape(Bone.Name))
-                .Append("</strong><span>")
-                .Append(AssetEditorInstanceUtilities.Escape(Bone.BoneId))
-                .Append("</span></div>");
-        }
-        Markup.Append("</div>");
-        return Markup.ToString();
+        var Nodes = SkeletalMesh.Bones.Select(Bone => new SharpEngine.UI.UiTreeNode(Bone.BoneId, Bone.ParentBoneId)).ToArray();
+        var ById = SkeletalMesh.Bones.ToDictionary(Bone => Bone.BoneId, StringComparer.Ordinal);
+        var Rows = SharpEngine.UI.UiTreeProjection.Visible(Nodes, CollapsedSocketNodes).Select(Node => new SharpEngine.UI.UiTreeRow(
+            Node.Key, ById[Node.Key].Name, Node.Key, EditorResourceUris.IconSource("mesh"), Node.Depth, false,
+            Node.HasChildren, Node.Expanded, string.Empty, "editor.mesh-tree-toggle:" + Node.Key,
+            "meshBone-" + Node.Key, "meshBoneToggle-" + Node.Key)).ToArray();
+        BoneTreeView.SetRows(Rows);
+        return "<div class=\"asset-tree\">" + BoneTreeView.BuildLayout(default) + "</div>";
     }
 }

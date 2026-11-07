@@ -244,41 +244,34 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
             if (Property.PropertyType == typeof(bool))
             {
                 var Checked = Value?.GetValue<bool>() == true;
-                var Disabled = IsReadOnly ? " disabled=\"disabled\"" : string.Empty;
-                Markup.Append("<div class=\"asset-field\"><label>")
-                    .Append(AssetEditorInstanceUtilities.Escape(Property.Name))
-                    .Append("</label><button class=\"settings-toggle ")
-                    .Append(Checked ? "enabled" : string.Empty)
-                    .Append("\" data-action=\"editor.data-asset-toggle:")
-                    .Append(AssetEditorInstanceUtilities.EscapeAttribute(Property.JsonName))
-                    .Append("\"").Append(Disabled).Append('>')
-                    .Append(Checked ? "Enabled" : "Disabled").Append("</button></div>");
+                Markup.Append(SharpEngine.UI.UiValueEditors.Boolean(Property.Name, "dataAsset-" + Property.JsonName, Checked,
+                    "editor.data-asset-toggle:" + Property.JsonName, IsReadOnly));
                 continue;
             }
 
+            if (Property.PropertyType.IsEnum)
+            {
+                Markup.Append(SharpEngine.UI.UiValueEditors.Choice(Property.Name, "dataAsset-" + Property.JsonName,
+                    Value?.GetValue<string>() ?? string.Empty, Enum.GetNames(Property.PropertyType).Select(Name => (Name, Name)),
+                    "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly));
+                continue;
+            }
+            if (IsAssetReference(Property.PropertyType))
+            {
+                var ReferenceType = Property.PropertyType.GetGenericArguments()[0];
+                var Options = new List<(string Id, string Label)>
+                {
+                    (string.Empty, "None"),
+                };
+                Options.AddRange(Context.Runtime.Assets!.Assets.Where(Asset => Asset.Exists && EditorAssetReferenceTypes.Matches(Asset.Type, ReferenceType))
+                    .Select(Asset => (Asset.Id, Asset.Name)));
+                Markup.Append(SharpEngine.UI.UiValueEditors.Choice(Property.Name, "dataAsset-" + Property.JsonName,
+                    Value?.GetValue<string>() ?? string.Empty, Options, "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly));
+                continue;
+            }
             var Text = FormatValue(Property.PropertyType, Value);
-            var Hint = BuildHint(Property);
-            if (Property.PropertyType.IsArray ||
-                Property.PropertyType != typeof(string) && !Property.PropertyType.IsEnum &&
-                !IsNumber(Property.PropertyType) && !IsAssetReference(Property.PropertyType))
-            {
-                var Disabled = IsReadOnly ? " disabled=\"disabled\"" : string.Empty;
-                Markup.Append("<div class=\"asset-field asset-field-large\"><label>")
-                    .Append(AssetEditorInstanceUtilities.Escape(Property.Name))
-                    .Append("</label><input data-change-action=\"editor.data-asset-field:")
-                    .Append(AssetEditorInstanceUtilities.EscapeAttribute(Property.JsonName))
-                    .Append(":\" value=\"")
-                    .Append(AssetEditorInstanceUtilities.EscapeAttribute(Text))
-                    .Append("\"").Append(Disabled).Append(" />")
-                    .Append("<span class=\"asset-field-hint\">")
-                    .Append(AssetEditorInstanceUtilities.Escape(Hint))
-                    .Append("</span></div>");
-            }
-            else
-            {
-                Markup.Append(AssetEditorInstanceUtilities.Field(Property.Name, Text,
-                    $"editor.data-asset-field:{Property.JsonName}:", IsReadOnly, Hint));
-            }
+            Markup.Append(AssetEditorInstanceUtilities.Field(Property.Name, Text,
+                "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly, BuildHint(Property), "dataAsset-" + Property.JsonName));
         }
         Markup.Append("</div>");
         return Markup.ToString();

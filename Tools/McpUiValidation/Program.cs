@@ -23,6 +23,10 @@ void Require(bool condition, string message)
 
 var sessionId = Guid.NewGuid().ToString("N");
 var settingsProject = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
+if (args.Contains("--inspector-only", StringComparer.Ordinal) && string.IsNullOrWhiteSpace(settingsProject))
+{
+    settingsProject = UiEditorUiValidation.CreateProject(root);
+}
 if ((args.Contains("--content-only", StringComparer.Ordinal) || args.Contains("--context-menus-only", StringComparer.Ordinal)) &&
     string.IsNullOrWhiteSpace(settingsProject))
 {
@@ -40,6 +44,12 @@ if (args.Contains("--ui-editor-only", StringComparer.Ordinal))
 {
     settingsProject = UiEditorUiValidation.CreateProject(root);
 }
+if (args.Contains("--basic-asset-editors-only", StringComparer.Ordinal) ||
+    args.Contains("--skeleton-gizmo-only", StringComparer.Ordinal) ||
+    args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal))
+{
+    settingsProject = BasicAssetEditorsUiValidation.CreateProject(root);
+}
 if (args.Contains("--player-only", StringComparer.Ordinal))
 {
     if (string.IsNullOrWhiteSpace(settingsProject))
@@ -55,7 +65,8 @@ if (args.Contains("--player-only", StringComparer.Ordinal))
     }
 }
 var editorArguments = new List<string> { "--mcp-isolated", "--mcp-session-id", sessionId };
-if (args.Contains("--player-only", StringComparer.Ordinal))
+if (args.Contains("--player-only", StringComparer.Ordinal) ||
+    args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal))
 {
     editorArguments.Add("--mcp-visible");
 }
@@ -178,6 +189,18 @@ try
             "notifications/resources/list_changed",
         "Attachment must notify clients that the resource list changed");
 
+    var CatalogDirectory = Path.Combine(root, "Saved", "Validation", "McpUiCatalogs", sessionId);
+    Directory.CreateDirectory(CatalogDirectory);
+    var CatalogOptions = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+    };
+    File.WriteAllText(Path.Combine(CatalogDirectory, "bootstrap-tools.json"), bootstrap.ToJsonString(CatalogOptions));
+    File.WriteAllText(Path.Combine(CatalogDirectory, "attached-session.json"), attach.ToJsonString(CatalogOptions));
+    File.WriteAllText(Path.Combine(CatalogDirectory, "tools.json"), Call(170001, "tools/list").ToJsonString(CatalogOptions));
+    File.WriteAllText(Path.Combine(CatalogDirectory, "resources.json"), Call(170002, "resources/list").ToJsonString(CatalogOptions));
+    File.WriteAllText(Path.Combine(CatalogDirectory, "resource-templates.json"), Call(170003, "resources/templates/list").ToJsonString(CatalogOptions));
+
     if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
     {
         DynamicUiValidation.Run(root, Require, Tool, Call);
@@ -242,6 +265,17 @@ try
     {
         AssetEditorSuiteValidation.Run(root, Require, Tool, Call);
         Console.WriteLine($"PASS: {assertions} asset editor rendered UI assertions");
+        return;
+    }
+    if (args.Contains("--basic-asset-editors-only", StringComparer.Ordinal) ||
+        args.Contains("--skeleton-gizmo-only", StringComparer.Ordinal) ||
+        args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal))
+    {
+        var SkeletonOnly = args.Contains("--skeleton-gizmo-only", StringComparer.Ordinal);
+        var StaticMeshOnly = args.Contains("--static-mesh-sockets-only", StringComparer.Ordinal);
+        var FunctionalOnly = args.Contains("--functional-only", StringComparer.Ordinal);
+        BasicAssetEditorsUiValidation.Run(root, Require, Tool, Call, DecodePng, SkeletonOnly, StaticMeshOnly, !FunctionalOnly);
+        Console.WriteLine($"PASS: {assertions} {(StaticMeshOnly ? "StaticMesh Socket" : "Skeleton Gizmo")} rendered assertions{(FunctionalOnly ? "; performance excluded" : string.Empty)}");
         return;
     }
     var tools = Call(5, "tools/list")["result"]?["tools"]?.AsArray() ?? [];

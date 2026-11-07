@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using SharpEngine.Editor.Layout;
 
@@ -6,6 +7,11 @@ namespace SharpEngine.Editor;
 
 internal static class AssetEditorInstanceUtilities
 {
+    private sealed record SourcePreviewMarkup(string Markup);
+
+    private static readonly ConditionalWeakTable<string, SourcePreviewMarkup>
+        SourcePreviews = new();
+
     public static EditorLayoutDocument CreatePreviewLayout(string PreviewPaneId,
         string DetailsPaneId, params string[] BottomPaneIds)
     {
@@ -75,27 +81,25 @@ internal static class AssetEditorInstanceUtilities
     }
 
     public static string Field(string Label, string Value, string Action,
-        bool ReadOnly, string? Hint = null)
+        bool ReadOnly, string? Hint = null, string? Id = null,
+        string? FocusAction = null, string? EndEditAction = null)
     {
-        var Disabled = ReadOnly ? " disabled=\"disabled\"" : string.Empty;
-        var Markup = new StringBuilder("<div class=\"asset-field\"><label>")
-            .Append(Escape(Label)).Append("</label><input value=\"")
-            .Append(EscapeAttribute(Value)).Append("\" data-change-action=\"")
-            .Append(EscapeAttribute(Action)).Append("\"").Append(Disabled)
-            .Append(" />");
-        if (!string.IsNullOrWhiteSpace(Hint))
-        {
-            Markup.Append("<span class=\"asset-field-hint\">")
-                .Append(Escape(Hint)).Append("</span>");
-        }
-        Markup.Append("</div>");
-        return Markup.ToString();
+        return SharpEngine.UI.UiValueEditors.Text(Label, new SharpEngine.UI.UiValueInput(
+            Id ?? string.Empty, Value, Action, ReadOnly), Hint, "asset-field");
     }
 
-    public static string ReadOnlyField(string Label, string Value) =>
-        $"<div class=\"asset-field\"><label>{Escape(Label)}</label><span>{Escape(Value)}</span></div>";
+    public static string ReadOnlyField(string Label, string Value, string? Id = null)
+    {
+        return SharpEngine.UI.UiValueEditors.Text(Label,
+            new SharpEngine.UI.UiValueInput(Id ?? string.Empty, Value, string.Empty, true), Class: "asset-field");
+    }
 
     public static string Source(string Value)
+    {
+        return SourcePreviews.GetValue(Value, BuildSourcePreview).Markup;
+    }
+
+    private static SourcePreviewMarkup BuildSourcePreview(string Value)
     {
         var Markup = new StringBuilder("<div class=\"asset-source-view readonly\">");
         var Lines = Value.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
@@ -116,7 +120,7 @@ internal static class AssetEditorInstanceUtilities
                 .Append(" additional lines are omitted from the UI preview</div>");
         }
         Markup.Append("</div>");
-        return Markup.ToString();
+        return new SourcePreviewMarkup(Markup.ToString());
     }
 
     public static string Diagnostics(IReadOnlyList<AssetDocumentDiagnostic> Values)

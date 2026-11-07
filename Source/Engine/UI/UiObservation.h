@@ -105,7 +105,7 @@ namespace UiObservation
                                  position.y + size.y > top && position.x < right && position.y < bottom;
             const bool enabled = !element->HasAttribute("disabled");
             const bool interactive =
-                element->GetTagName() == "button" || element->GetTagName() == "input" || element->GetTagName() == "select";
+                element->GetTagName() == "button" || element->GetTagName() == "input" || element->GetTagName() == "select" || element->GetTagName() == "textarea";
             const bool hit =
                 visible && enabled && interactive && HasAncestor(context.GetElementAtPoint(position + size * 0.5f), element);
             std::string text;
@@ -125,7 +125,9 @@ namespace UiObservation
                    << ",\"focused\":" << (context.GetFocusElement() == element ? "true" : "false")
                    << ",\"hovered\":" << (HasAncestor(context.GetHoverElement(), element) ? "true" : "false")
                    << ",\"zOrder\":" << element->GetZIndex() << ",\"hitTarget\":" << (hit ? "true" : "false")
-                   << ",\"text\":" << Quote(text) << '}';
+                   << ",\"text\":" << Quote(text)
+                   << ",\"value\":" << ((element->GetTagName() == "input" || element->GetTagName() == "textarea" || element->GetTagName() == "select") ?
+                       Quote(element->GetAttribute<Rml::String>("value", "")) : "null") << '}';
         }
         for (int index = 0; index < element->GetNumChildren(); ++index)
         {

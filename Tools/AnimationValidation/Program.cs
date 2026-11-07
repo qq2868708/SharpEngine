@@ -35,6 +35,7 @@ var Assets = AssetRegistry.Load(Root);
 var Registry = ComponentRegistry.CreateBuiltin();
 Registry.RegisterAssembly(typeof(AnimationPhaseProbe).Assembly, "animation-validation", "1");
 Registry.ValidateRegistrations();
+SkeletonRigValidation.Run(Root, Registry, Check);
 var Descriptor = Registry.Find("engine.animator")!;
 WorldViewportFrame PreviewFrame(SceneData Scene)
 {

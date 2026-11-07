@@ -123,7 +123,7 @@ public sealed partial class EditorRuntime
         _nativeApi.SetHostMarkup(ContentCreationHost, "dockWindowTitle", "Add Content");
         var Markup = "<div class=\"content-create-form\"><h2>" + Escape(Definition.Label) + "</h2>" +
             "<p>Project / Content" + Escape(Folder.Length == 0 ? "" : "/" + Folder) + "</p>" +
-            "<label>Name</label><input id=\"content-create-name\" data-change-action=\"editor.content-create-name:\" />" +
+            SharpEngine.UI.UiValueEditors.Text("Name", new SharpEngine.UI.UiValueInput("content-create-name", string.Empty, "editor.content-create-name:")) +
             "<p>" + Escape(Definition.Extension) + "</p><div class=\"content-create-buttons\">" +
             "<button id=\"content-create-confirm\" data-action=\"editor.content-create-confirm\">Create</button>" +
             "<button id=\"content-create-cancel\" data-action=\"editor.content-create-cancel\">Cancel</button></div>" +

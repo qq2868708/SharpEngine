@@ -86,3 +86,10 @@ self-contained formal JSON asset by default. Add `--include-source-provenance`
 when a private authoring check needs source hash validation;
 `--include-source-contract` remains a compatibility spelling. Do not commit the
 authoring source or register it as a delivery asset.
+
+## StaticMesh Socket 作者数据
+
+StaticMesh 源资产 schema v3 显式保存父局部 `sockets` 和可空 `parentSocketId`，支持读取 v1 为空集合、v2 为 Mesh 根的平级子节点。
+Mesh 根固定为恒等变换；`StaticMeshSocketHierarchy` 负责验证父引用并以 `local * parent` 生成网格空间矩阵。
+`StaticMeshSocket` 与几何独立，保存后由 `AssetContent.LoadStaticMesh` 重建；不引入运行时对象挂接行为。
+字段、编辑与验证入口见 [基础资产编辑器](BasicAssetEditors.md#staticmesh-socket)。

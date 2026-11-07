@@ -285,31 +285,21 @@ public sealed partial class EditorRuntime
                 $"{descriptor.Attribute.Id}:{path}:";
             if (type == typeof(bool) && Nullable.GetUnderlyingType(field.Property.PropertyType) is null)
             {
-                var enabled = value is true;
-                markup.Append("<button id=\"setting-").Append(EscapeAttribute(path))
-                    .Append("\" class=\"settings-toggle")
-                    .Append(enabled ? " enabled" : string.Empty).Append("\" action=\"")
-                    .Append(action).Append(enabled ? "false" : "true").Append("\">")
-                    .Append(enabled ? "On" : "Off").Append("</button>");
+                var Enabled = value is true;
+                markup.Append(SharpEngine.UI.UiValueEditors.BooleanInput("setting-" + path, Enabled, action + (Enabled ? "false" : "true")));
             }
             else if (type.IsEnum && Nullable.GetUnderlyingType(field.Property.PropertyType) is null)
             {
-                var names = Enum.GetNames(type);
-                var current = value?.ToString() ?? names[0];
-                var index = Array.IndexOf(names, current);
-                var next = names[(index + 1 + names.Length) % names.Length];
-                markup.Append("<button id=\"setting-").Append(EscapeAttribute(path))
-                    .Append("\" class=\"settings-enum\" action=\"")
-                    .Append(action).Append(EscapeSettings(next)).Append("\">")
-                    .Append(EscapeSettings(current)).Append("</button>");
+                var Names = Enum.GetNames(type);
+                var Current = value?.ToString() ?? Names[0];
+                markup.Append(SharpEngine.UI.UiValueEditors.ChoiceInput("setting-" + path, Current,
+                    Names.Select(Name => (Name, Name)), action));
             }
             else
             {
-                markup.Append("<input id=\"setting-").Append(EscapeAttribute(path))
-                    .Append("\" value=\"")
-                    .Append(EscapeAttribute(_developmentSettings!.EditorValue(
-                        field.Property.PropertyType, value)))
-                    .Append("\" data-change-action=\"").Append(action).Append("\" />");
+                markup.Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("setting-" + path,
+                    _developmentSettings!.EditorValue(field.Property.PropertyType, value), action)));
+
             }
             markup.Append("</div></div>");
         }

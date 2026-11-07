@@ -414,7 +414,8 @@ internal sealed class SkeletalAnimationEditorExtension : IEditorExtension
                 return;
             }
             PreviewMesh = Mesh;
-            PreviewWorld.SetMesh(Mesh.AssetId, "engine.skeletal-mesh", Mesh.DefaultMaterial, Mesh);
+            PreviewWorld.SetMesh(Mesh.AssetId, "engine.skeletal-mesh", Mesh.DefaultMaterial, Mesh,
+                SkeletonContent.Load(Assets, Mesh.SkeletonId));
             Viewport.Frame(Mesh.Positions.Select(Position => new System.Numerics.Vector3(Position.X, Position.Y, Position.Z)));
             UpdatePreviewPose();
             PreviewMeshOverridden = !AssetId.Equals(DefaultPreviewMeshId, StringComparison.OrdinalIgnoreCase);

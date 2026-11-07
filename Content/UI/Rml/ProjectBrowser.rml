@@ -3,6 +3,7 @@
   <title>SharpEngine Project Browser</title>
   <link type="text/rcss" href="Editor.rcss" />
   <link type="text/rcss" href="ProjectBrowser.rcss" />
+<link type="text/rcss" href="../Controls/CommonControls.rcss" />
 </head>
 <body>
 <div id="editor">

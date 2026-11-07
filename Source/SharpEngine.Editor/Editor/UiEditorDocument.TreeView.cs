@@ -6,6 +6,7 @@ namespace SharpEngine.Editor;
 
 internal sealed partial class UiEditorDocument
 {
+    internal readonly SharpEngine.UI.UiTreeView TreeView = new([]);
     private readonly HashSet<string> CollapsedTreeKeys = new(StringComparer.Ordinal);
     internal string TreeSearch
     {
@@ -83,28 +84,13 @@ internal sealed partial class UiEditorDocument
 
     internal IReadOnlyList<XElement> VisibleTreeElements()
     {
-        var Included = TreeIncludedKeys();
-        var Result = new List<XElement>();
-        void Visit(XElement Element)
-        {
-            if (!Included.Contains(KeyOf(Element)))
-            {
-                return;
-            }
-            Result.Add(Element);
-            if (TreeExpanded(Element))
-            {
-                foreach (var Child in Element.Elements())
-                {
-                    Visit(Child);
-                }
-            }
-        }
-        foreach (var Element in Body()?.Elements() ?? [])
-        {
-            Visit(Element);
-        }
-        return Result;
+        var Elements = EnumerateBody().ToArray();
+        var ByKey = Elements.ToDictionary(KeyOf, StringComparer.Ordinal);
+        var Nodes = Elements.Select(Element => new SharpEngine.UI.UiTreeNode(KeyOf(Element),
+            Element.Parent == Body() ? null : KeyOf(Element.Parent!))).ToArray();
+        var Included = TreeSearch.Length == 0 ? null : TreeIncludedKeys();
+        return SharpEngine.UI.UiTreeProjection.Visible(Nodes, CollapsedTreeKeys, Included)
+            .Select(Node => ByKey[Node.Key]).ToArray();
     }
 
     private HashSet<string> TreeIncludedKeys()

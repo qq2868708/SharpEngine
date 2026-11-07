@@ -241,12 +241,15 @@ internal sealed class MaterialAssetEditorInstance : IAssetEditorInstance
             .Append(AssetEditorInstanceUtilities.ReadOnlyField("Asset ID", Asset.Id))
             .Append(AssetEditorInstanceUtilities.Field("Shader", Material.Shader,
                 "editor.material-field:shader:", IsReadOnly));
+        Markup.Append(SharpEngine.UI.UiValueEditors.Vector("Base Color", new[]
+        {
+            new SharpEngine.UI.UiValueInput("material-color-r", SharpEngine.UI.UiValueEditors.Format(Material.BaseColor.R), "editor.material-field:color-r:", IsReadOnly),
+            new SharpEngine.UI.UiValueInput("material-color-g", SharpEngine.UI.UiValueEditors.Format(Material.BaseColor.G), "editor.material-field:color-g:", IsReadOnly),
+            new SharpEngine.UI.UiValueInput("material-color-b", SharpEngine.UI.UiValueEditors.Format(Material.BaseColor.B), "editor.material-field:color-b:", IsReadOnly),
+            new SharpEngine.UI.UiValueInput("material-color-a", SharpEngine.UI.UiValueEditors.Format(Material.BaseColor.A), "editor.material-field:color-a:", IsReadOnly),
+        }, "RGBA"));
         var Components = new[]
         {
-            ("Base Color R", "color-r", Material.BaseColor.R),
-            ("Base Color G", "color-g", Material.BaseColor.G),
-            ("Base Color B", "color-b", Material.BaseColor.B),
-            ("Base Color A", "color-a", Material.BaseColor.A),
             ("Metallic", "metallic", Material.Metallic),
             ("Roughness", "roughness", Material.Roughness),
         };

@@ -18,7 +18,17 @@ public sealed partial class SkeletalMeshComponent : SharpComponent
     private readonly Dictionary<string, (SharpComponent Source, SkeletalPose? Pose)> Inputs = new(StringComparer.Ordinal);
     private SkeletonInstance? Skeleton;
     private SkeletalMeshAsset? BoundMesh;
+    private SkeletonAsset? BoundSkeleton;
     private SkeletonFrameState? Prepared;
+
+    /// <summary>Latest prepared model-space attachment frames; refreshed at the render preparation boundary.</summary>
+    public SkeletonRigPose? RigPose
+    {
+        get
+        {
+            return Prepared?.RigPose;
+        }
+    }
 
     internal void SetPose(SharpComponent Source, SkeletalPose? Pose)
     {
@@ -43,10 +53,12 @@ public sealed partial class SkeletalMeshComponent : SharpComponent
         try
         {
             var Geometry = AnimatorContent.Mesh(Assets, Mesh.Id);
-            if (BoundMesh != Geometry)
+            var Definition = AnimatorContent.Skeleton(Assets, Geometry.SkeletonId);
+            if (BoundMesh != Geometry || BoundSkeleton != Definition)
             {
                 BoundMesh = Geometry;
-                Skeleton = new(Geometry);
+                BoundSkeleton = Definition;
+                Skeleton = new(Geometry, Definition);
             }
             var Active = Inputs.Values.Where(Input => Input.Source.IsAlive && Input.Source.Enabled && Input.Source.Entity.ActiveInHierarchy).ToArray();
             var Code = Active.Length > 1 ? "SKELETON_POSE_CONFLICT" : "SKELETON_READY";
@@ -80,6 +92,7 @@ public sealed partial class SkeletalMeshComponent : SharpComponent
         Inputs.Clear();
         Skeleton = null;
         BoundMesh = null;
+        BoundSkeleton = null;
         Prepared = null;
     }
 

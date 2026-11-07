@@ -12,8 +12,12 @@ public:
     bool IsCapturing() const { return !ElementId.empty(); }
     const std::string& CapturedElementId() const { return ElementId; }
 
-    void Cancel()
+    void Cancel(const std::function<void(const std::string&)>& QueueAction)
     {
+        if (IsCapturing() && Button == 0)
+        {
+            QueueAction("ui.viewport3d:" + ElementId + ":pointer-cancel");
+        }
         ElementId.clear();
         Button = -1;
     }
@@ -29,16 +33,34 @@ public:
         const auto EventId = Event.GetId();
         const int MouseX = Event.GetParameter<int>("mouse_x", 0);
         const int MouseY = Event.GetParameter<int>("mouse_y", 0);
+        if (EventId == Rml::EventId::Keydown && IsCapturing() &&
+            Event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE)
+        {
+            Cancel(QueueAction);
+            if (GetCapture() == Window)
+            {
+                ReleaseCapture();
+            }
+            Event.StopPropagation();
+            return true;
+        }
         if (EventId == Rml::EventId::Mousedown && Viewport)
         {
             const int Pressed = Event.GetParameter<int>("button", -1);
-            if (Pressed == 1 || Pressed == 2)
+            if (Pressed == 1 || Pressed == 2 ||
+                (Pressed == 0 && Viewport->GetAttribute<Rml::String>("data-viewport3d-pointer", "") == "true"))
             {
+                Cancel(QueueAction);
                 ElementId = Viewport->GetAttribute<Rml::String>("data-viewport3d", "");
                 Button = Pressed;
                 PointerX = MouseX;
                 PointerY = MouseY;
                 SetCapture(Window);
+                Viewport->Focus();
+                if (Button == 0)
+                {
+                    QueuePointer("down", QueueAction);
+                }
                 Event.StopPropagation();
                 return true;
             }
@@ -51,16 +73,32 @@ public:
             PointerY = MouseY;
             if (DeltaX != 0 || DeltaY != 0)
             {
-                QueueAction("ui.viewport3d:" + ElementId +
-                    (Button == 1 ? ":orbit:" : ":pan:") +
-                    std::to_string(DeltaX) + ":" + std::to_string(DeltaY));
+                if (Button == 0)
+                {
+                    QueuePointer("move", QueueAction);
+                }
+                else
+                {
+                    QueueAction("ui.viewport3d:" + ElementId +
+                        (Button == 1 ? ":orbit:" : ":pan:") +
+                        std::to_string(DeltaX) + ":" + std::to_string(DeltaY));
+                }
             }
             Event.StopPropagation();
             return true;
         }
         if (EventId == Rml::EventId::Mouseup && Event.GetParameter<int>("button", -1) == Button)
         {
-            Cancel();
+            if (Button == 0)
+            {
+                PointerX = MouseX;
+                PointerY = MouseY;
+                QueuePointer("up", QueueAction);
+            }
+            ElementId.clear();
+            Button = -1;
+            Event.StopPropagation();
+            return true;
         }
         if (EventId == Rml::EventId::Mousescroll && Viewport)
         {
@@ -74,6 +112,13 @@ public:
     }
 
 private:
+    void QueuePointer(const std::string& Phase,
+        const std::function<void(const std::string&)>& QueueAction) const
+    {
+        QueueAction("ui.viewport3d:" + ElementId + ":pointer-" + Phase + ":" +
+            std::to_string(PointerX) + ":" + std::to_string(PointerY));
+    }
+
     std::string ElementId;
     int Button{-1};
     int PointerX{};

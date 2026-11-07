@@ -58,7 +58,8 @@ public static class SceneRenderPreparation
                         Pose = SkeletalMeshComponent.SampleLegacy(Assets, MeshId, Mesh.State["Animation"]?.GetValue<string>(),
                             Mesh.State["AnimationTime"]!.GetValue<float>(), Mesh.State["LoopAnimation"]!.GetValue<bool>());
                     }
-                    var Skeleton = new SkeletonInstance(AnimatorContent.Mesh(Assets, MeshId));
+                    var Geometry = AnimatorContent.Mesh(Assets, MeshId);
+                    var Skeleton = new SkeletonInstance(Geometry, AnimatorContent.Skeleton(Assets, Geometry.SkeletonId));
                     States[Mesh.ComponentId] = Skeleton.Prepare(Entity.Id, Mesh.ComponentId, Pose, Code,
                         Sources.Length > 1 ? "Multiple pose sources target this skeleton; explicit blending is required." : null);
                 }

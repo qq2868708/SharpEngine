@@ -7,13 +7,14 @@ using SharpEngine.Playables;
 namespace SharpEngine.Animation;
 
 /// <summary>Standalone, renderer-neutral skeleton asset.</summary>
-public sealed class SkeletonAsset
+public sealed partial class SkeletonAsset
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public SkeletonAsset(string assetId, string name, IReadOnlyList<SkeletonBone> bones,
         string? sourcePath = null, string? sourceSha256 = null,
-        string? previewMeshId = null)
+        string? previewMeshId = null, IReadOnlyList<SkeletonSocket>? Sockets = null,
+        IReadOnlyList<SkeletonVirtualBone>? VirtualBones = null)
     {
         AssetId = RequireText(assetId, nameof(assetId));
         Name = RequireText(name, nameof(name));
@@ -24,6 +25,10 @@ public sealed class SkeletonAsset
             previewMeshId.Trim();
         ValidateBones(Bones);
         SourceAssetContract.ValidateMetadata(SourcePath, SourceSha256, AssetId);
+        this.Sockets = Array.AsReadOnly(Sockets?.ToArray() ?? []);
+        this.VirtualBones = Array.AsReadOnly(VirtualBones?.ToArray() ?? []);
+        ValidateRig();
+        _ = new SkeletonRigPose(this);
     }
 
     public string AssetId { get; }
@@ -56,6 +61,8 @@ public sealed class SkeletonAsset
         ["name"] = Name,
         ["previewMeshId"] = PreviewMeshId,
         ["bones"] = new JsonArray(Bones.Select(ToJson).ToArray()),
+        ["sockets"] = new JsonArray(Sockets.Select(SocketJson).ToArray()),
+        ["virtualBones"] = new JsonArray(VirtualBones.Select(VirtualBoneJson).ToArray()),
         };
         if (SourcePath is not null) root["sourcePath"] = SourcePath;
         if (SourceSha256 is not null) root["sourceSha256"] = SourceSha256;
@@ -78,24 +85,35 @@ public sealed class SkeletonAsset
                     ["schemaVersion", "kind", "assetId", "name", "bones"],
                     ["sourcePath", "sourceSha256"]);
             }
-            else if (Version == CurrentSchemaVersion)
+            else if (Version == 2)
             {
                 ExactWithOptional(root,
                     ["schemaVersion", "kind", "assetId", "name", "previewMeshId", "bones"],
+                    ["sourcePath", "sourceSha256"]);
+            }
+            else if (Version == CurrentSchemaVersion)
+            {
+                ExactWithOptional(root,
+                    ["schemaVersion", "kind", "assetId", "name", "previewMeshId", "bones", "sockets", "virtualBones"],
                     ["sourcePath", "sourceSha256"]);
             }
             else
             {
                 throw new InvalidDataException("Unsupported skeleton schema");
             }
-            if (root["kind"]!.GetValue<string>() != "skeleton")
+            if (root["kind"]?.GetValue<string>() != "skeleton")
             {
                 throw new InvalidDataException("Unsupported skeleton kind");
             }
-            var bones = root["bones"]!.AsArray().Select(ParseBone).ToArray();
+            var Bones = (root["bones"] as JsonArray ??
+                throw new InvalidDataException("Skeleton bones must be an array")).Select(ParseBone).ToArray();
             return new SkeletonAsset(RequiredString(root, "assetId"),
-                RequiredString(root, "name"), bones, OptionalString(root, "sourcePath"),
-                OptionalString(root, "sourceSha256"), OptionalString(root, "previewMeshId"));
+                RequiredString(root, "name"), Bones, OptionalString(root, "sourcePath"),
+                OptionalString(root, "sourceSha256"), OptionalString(root, "previewMeshId"),
+                Version < 3 ? [] : (root["sockets"] as JsonArray ??
+                    throw new InvalidDataException("Skeleton sockets must be an array")).Select(ParseSocket).ToArray(),
+                Version < 3 ? [] : (root["virtualBones"] as JsonArray ??
+                    throw new InvalidDataException("Skeleton virtualBones must be an array")).Select(ParseVirtualBone).ToArray());
         }
         catch (InvalidDataException) { throw; }
         catch (Exception exception) when (exception is JsonException or

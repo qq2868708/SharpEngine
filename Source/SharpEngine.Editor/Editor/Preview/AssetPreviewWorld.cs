@@ -18,6 +18,7 @@ public sealed class AssetPreviewWorld
     private string? MeshComponentId;
     private SkeletonAsset? DisplaySkeleton;
     private readonly Dictionary<string, Vector3> BonePositions = new(StringComparer.Ordinal);
+    private SkeletonRigPose? RigPose;
 
     public AssetPreviewWorld(ComponentRegistry Registry, string Id)
     {
@@ -50,7 +51,7 @@ public sealed class AssetPreviewWorld
     }
 
     public void SetMesh(string? AssetId, string ComponentType, string? MaterialId = null,
-        SkeletalMeshAsset? SkeletalMesh = null)
+        SkeletalMeshAsset? SkeletalMesh = null, SkeletonAsset? Definition = null)
     {
         var Data = World.Data.Clone();
         Data.Entities.RemoveAll(Entity => Entity.EntityId == "preview-model");
@@ -58,6 +59,7 @@ public sealed class AssetPreviewWorld
         MeshComponentId = null;
         Skeleton = null;
         DisplaySkeleton = null;
+        RigPose = null;
         BonePositions.Clear();
         if (AssetId is not null)
         {
@@ -69,11 +71,17 @@ public sealed class AssetPreviewWorld
                 ["Material"] = MaterialId,
             });
             MeshComponentId = Added.Single(Component => Component.TypeId == ComponentType).ComponentId;
-            Skeleton = SkeletalMesh is null ? null : new SkeletonInstance(SkeletalMesh);
+            Skeleton = SkeletalMesh is null ? null : new SkeletonInstance(SkeletalMesh, Definition);
         }
         Data.Validate(Registry);
         World.Replace(Data);
         SetPose(null);
+        if (Definition is not null)
+        {
+            DisplaySkeleton = Definition;
+            RigPose = new SkeletonRigPose(Definition);
+            UpdateBonePositions();
+        }
     }
 
     public void SetPose(SkeletalPose? Pose)
@@ -83,6 +91,8 @@ public sealed class AssetPreviewWorld
             return;
         }
         var Frame = Skeleton.Prepare("preview-model", MeshComponentId, Pose, "SKELETON_READY");
+        RigPose = Frame.RigPose;
+        UpdateBonePositions();
         World.RenderStates = new Dictionary<string, ComponentFrameState>(StringComparer.Ordinal)
         {
             [MeshComponentId] = Frame,
@@ -105,7 +115,7 @@ public sealed class AssetPreviewWorld
     {
         get
         {
-            return BonePositions.Values.ToArray();
+            return BonePositions.Values.Concat(RigPose?.SocketModelMatrices.Values.Select(Matrix => Matrix.Translation) ?? []).ToArray();
         }
     }
 
@@ -113,25 +123,28 @@ public sealed class AssetPreviewWorld
     {
         SetMesh(null, "engine.skeletal-mesh");
         DisplaySkeleton = Value;
-        var Bones = Value.Bones.ToDictionary(Bone => Bone.BoneId, StringComparer.Ordinal);
-        var Transforms = new Dictionary<string, Matrix4x4>(StringComparer.Ordinal);
-        Matrix4x4 Resolve(SkeletonBone Bone)
+        RigPose = new SkeletonRigPose(Value);
+        UpdateBonePositions();
+    }
+
+    /// <summary>Change only the derived rig overlay during an authoring gesture, retaining the preview mesh.</summary>
+    public void SetRigPreview(SkeletonAsset Value)
+    {
+        DisplaySkeleton = Value;
+        RigPose = new SkeletonRigPose(Value);
+        UpdateBonePositions();
+    }
+
+    private void UpdateBonePositions()
+    {
+        BonePositions.Clear();
+        if (RigPose is null)
         {
-            if (Transforms.TryGetValue(Bone.BoneId, out var Existing))
-            {
-                return Existing;
-            }
-            var Local = TransformMath.Trs(Bone.BindTransform.Position,
-                Bone.BindTransform.Rotation, Bone.BindTransform.Scale);
-            var Parent = Bone.ParentBoneId is null ? Matrix4x4.Identity : Resolve(Bones[Bone.ParentBoneId]);
-            var Result = Local * Parent;
-            Transforms.Add(Bone.BoneId, Result);
-            BonePositions.Add(Bone.BoneId, Result.Translation);
-            return Result;
+            return;
         }
-        foreach (var Bone in Value.Bones)
+        foreach (var Bone in RigPose.BoneModelMatrices)
         {
-            Resolve(Bone);
+            BonePositions.Add(Bone.Key, Bone.Value.Translation);
         }
     }
 
@@ -149,6 +162,34 @@ public sealed class AssetPreviewWorld
             {
                 SceneRenderer.AddLine(Lines, BonePositions[Bone.ParentBoneId], BonePositions[Bone.BoneId],
                     Matrix, Frame.Bounds, new Vector4(0.91f, 0.72f, 0.35f, 1));
+            }
+        }
+        foreach (var Bone in DisplaySkeleton.VirtualBones)
+        {
+            SceneRenderer.AddLine(Lines, BonePositions[Bone.SourceBoneId], BonePositions[Bone.BoneId],
+                Matrix, Frame.Bounds, new Vector4(0.2f, 0.8f, 1, 1));
+        }
+        if (RigPose is not null)
+        {
+            foreach (var Socket in DisplaySkeleton.Sockets)
+            {
+                var Transform = RigPose.SocketModelMatrices[Socket.SocketId];
+                var Origin = Transform.Translation;
+                SceneRenderer.AddLine(Lines, BonePositions[Socket.ParentBoneId], Origin,
+                    Matrix, Frame.Bounds, new Vector4(0.8f, 0.4f, 1, 1));
+                var Axes = new[]
+                {
+                    Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ,
+                };
+                var Colors = new[]
+                {
+                    new Vector4(1, 0.2f, 0.2f, 1), new Vector4(0.2f, 1, 0.2f, 1), new Vector4(0.2f, 0.5f, 1, 1),
+                };
+                for (var Index = 0; Index < Axes.Length; Index++)
+                {
+                    var End = Origin + VectorMath.NormalizeOrZero(Vector3.TransformNormal(Axes[Index], Transform)) * 0.15f;
+                    SceneRenderer.AddLine(Lines, Origin, End, Matrix, Frame.Bounds, Colors[Index]);
+                }
             }
         }
         return Frame with

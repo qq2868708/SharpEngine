@@ -11,14 +11,15 @@ namespace SharpEngine.Assets;
 /// and an optional source-file provenance contract. FBX export is defined by
 /// semantic equivalence; source bytes are used only to validate provenance.
 /// </summary>
-public sealed class StaticMeshAsset
+public sealed partial class StaticMeshAsset
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 3;
 
     public StaticMeshAsset(string assetId, string name, string primitive,
         string coordinateSystem, IReadOnlyList<AssetVector3> positions,
         IReadOnlyList<int> indices, string? defaultMaterial = null,
-        string? sourcePath = null, string? sourceSha256 = null)
+        string? sourcePath = null, string? sourceSha256 = null,
+        IReadOnlyList<StaticMeshSocket>? Sockets = null)
     {
         AssetId = RequireText(assetId, nameof(assetId));
         Name = RequireText(name, nameof(name));
@@ -29,7 +30,9 @@ public sealed class StaticMeshAsset
         DefaultMaterial = string.IsNullOrWhiteSpace(defaultMaterial) ? null : defaultMaterial.Trim();
         SourcePath = string.IsNullOrWhiteSpace(sourcePath) ? null : sourcePath.Trim();
         SourceSha256 = string.IsNullOrWhiteSpace(sourceSha256) ? null : sourceSha256.Trim();
+        this.Sockets = Array.AsReadOnly(Sockets?.ToArray() ?? []);
         Validate();
+        SocketHierarchy = new StaticMeshSocketHierarchy(this.Sockets);
     }
 
     public string AssetId { get; }
@@ -61,7 +64,7 @@ public sealed class StaticMeshAsset
 
     public JsonObject ToJson()
     {
-        var result = new JsonObject
+        var Result = new JsonObject
         {
             ["schemaVersion"] = CurrentSchemaVersion,
             ["kind"] = "static-mesh",
@@ -70,14 +73,21 @@ public sealed class StaticMeshAsset
             ["primitive"] = Primitive,
             ["coordinateSystem"] = CoordinateSystem,
             ["defaultMaterial"] = DefaultMaterial,
-            ["positions"] = new JsonArray(Positions.Select(position =>
-                new JsonArray(position.X, position.Y, position.Z)).ToArray()),
-            ["indices"] = new JsonArray(Indices.Select(index =>
-                JsonValue.Create(index)).ToArray()),
+            ["positions"] = new JsonArray(Positions.Select(Position =>
+                new JsonArray(Position.X, Position.Y, Position.Z)).ToArray()),
+            ["indices"] = new JsonArray(Indices.Select(Index =>
+                JsonValue.Create(Index)).ToArray()),
+            ["sockets"] = new JsonArray(Sockets.Select(SocketJson).ToArray()),
         };
-        if (SourcePath is not null) result["sourcePath"] = SourcePath;
-        if (SourceSha256 is not null) result["sourceSha256"] = SourceSha256;
-        return result;
+        if (SourcePath is not null)
+        {
+            Result["sourcePath"] = SourcePath;
+        }
+        if (SourceSha256 is not null)
+        {
+            Result["sourceSha256"] = SourceSha256;
+        }
+        return Result;
     }
 
     /// <summary>
@@ -90,55 +100,73 @@ public sealed class StaticMeshAsset
     {
         try
         {
-            using var document = JsonDocument.Parse(json);
-            EnsureNoDuplicateProperties(document.RootElement);
-            var root = JsonNode.Parse(json) as JsonObject ??
+            using var Document = JsonDocument.Parse(json);
+            EnsureNoDuplicateProperties(Document.RootElement);
+            var Root = JsonNode.Parse(json) as JsonObject ??
                 throw new InvalidDataException("Static mesh root must be an object");
-            var canonical = root.ContainsKey("kind") || root.ContainsKey("assetId");
-            if (canonical)
+            var Canonical = Root.ContainsKey("kind") || Root.ContainsKey("assetId");
+            if (Canonical)
             {
-                ExactWithOptional(root, ["schemaVersion", "kind", "assetId", "name", "primitive",
-                    "coordinateSystem", "positions", "indices"],
-                    ["defaultMaterial", "sourcePath", "sourceSha256"]);
-                if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion ||
-                    root["kind"]!.GetValue<string>() != "static-mesh")
+                var Version = Root["schemaVersion"]?.GetValue<int>();
+                var Required = new List<string>
+                {
+                    "schemaVersion", "kind", "assetId", "name", "primitive",
+                    "coordinateSystem", "positions", "indices",
+                };
+                if (Version is 2 or CurrentSchemaVersion)
+                {
+                    Required.Add("sockets");
+                }
+                ExactWithOptional(Root, Required, ["defaultMaterial", "sourcePath", "sourceSha256"]);
+                if (Version is not (1 or 2 or CurrentSchemaVersion) ||
+                    Root["kind"]!.GetValue<string>() != "static-mesh")
+                {
                     throw new InvalidDataException("Unsupported static mesh schema");
-                return Create(root["assetId"]!.GetValue<string>(), root, source);
+                }
+                return Create(Root["assetId"]!.GetValue<string>(), Root);
             }
 
-            Exact(root, "schemaVersion", "name", "primitive", "coordinateSystem",
+            Exact(Root, "schemaVersion", "name", "primitive", "coordinateSystem",
                 "defaultMaterial", "positions", "indices");
-            if (root["schemaVersion"]!.GetValue<int>() != CurrentSchemaVersion)
+            if (Root["schemaVersion"]!.GetValue<int>() != 1)
+            {
                 throw new InvalidDataException("Unsupported mesh schema");
-            var id = string.IsNullOrWhiteSpace(fallbackAssetId)
+            }
+            var Id = string.IsNullOrWhiteSpace(fallbackAssetId)
                 ? "memory://" + Path.GetFileNameWithoutExtension(source)
                 : fallbackAssetId;
-            return Create(id!, root, source);
+            return Create(Id!, Root);
         }
-        catch (InvalidDataException) { throw; }
-        catch (Exception exception) when (exception is JsonException or
+        catch (InvalidDataException)
+        {
+            throw;
+        }
+        catch (Exception Error) when (Error is JsonException or
             InvalidOperationException or FormatException or ArgumentException or
             OverflowException)
         {
-            throw new InvalidDataException($"Invalid static mesh '{source}': {exception.Message}", exception);
+            throw new InvalidDataException($"Invalid static mesh '{source}': {Error.Message}", Error);
         }
     }
 
-    private static StaticMeshAsset Create(string assetId, JsonObject root, string source)
+    private static StaticMeshAsset Create(string AssetId, JsonObject Root)
     {
-        var positionsNode = root["positions"]?.AsArray() ??
+        var PositionsNode = Root["positions"]?.AsArray() ??
             throw new InvalidDataException("positions must be an array");
-        var positions = positionsNode.Select((node, index) => ParseVector3(node,
-            $"positions[{index}]")).ToArray();
-        var indicesNode = root["indices"]?.AsArray() ??
+        var Positions = PositionsNode.Select((Node, Index) => ParseVector3(Node,
+            $"positions[{Index}]")).ToArray();
+        var IndicesNode = Root["indices"]?.AsArray() ??
             throw new InvalidDataException("indices must be an array");
-        var indices = indicesNode.Select((node, index) => ParseInt(node,
-            $"indices[{index}]")).ToArray();
-        return new StaticMeshAsset(assetId,
-            RequiredString(root, "name"), RequiredString(root, "primitive"),
-            RequiredString(root, "coordinateSystem"), positions, indices,
-            OptionalString(root, "defaultMaterial"), OptionalString(root, "sourcePath"),
-            OptionalString(root, "sourceSha256"));
+        var Indices = IndicesNode.Select((Node, Index) => ParseInt(Node,
+            $"indices[{Index}]")).ToArray();
+        return new StaticMeshAsset(AssetId,
+            RequiredString(Root, "name"), RequiredString(Root, "primitive"),
+            RequiredString(Root, "coordinateSystem"), Positions, Indices,
+            OptionalString(Root, "defaultMaterial"), OptionalString(Root, "sourcePath"),
+            OptionalString(Root, "sourceSha256"),
+            Root["schemaVersion"]!.GetValue<int>() == 1 ? [] :
+                (Root["sockets"] as JsonArray ?? throw new InvalidDataException("STATIC_MESH_SOCKET_SCHEMA: sockets must be an array"))
+                .Select(Node => ParseSocket(Node, Root["schemaVersion"]!.GetValue<int>())).ToArray());
     }
 
     private void Validate()
