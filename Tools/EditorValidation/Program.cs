@@ -27,6 +27,18 @@ static bool MatrixNear(System.Numerics.Matrix4x4 left, System.Numerics.Matrix4x4
 }
 try
 {
+    AssetDocumentPerformanceValidation.Run(temporary.FullName, Require);
+    if (args.Contains("--asset-performance-only", StringComparer.Ordinal))
+    {
+        Console.WriteLine($"PASS: {assertions} asset document correctness and performance assertions");
+        return;
+    }
+    CurrentDocumentBrowseValidation.Run(root, temporary.FullName, Require);
+    if (args.Contains("--document-browse-only", StringComparer.Ordinal))
+    {
+        Console.WriteLine($"PASS: {assertions} asset performance and current-document browse assertions");
+        return;
+    }
     DevelopmentSettingsValidation.Run(temporary.FullName, Require);
     McpConfigurationValidation.Run(temporary.FullName, Require);
     AssetIndexValidation.Run(temporary.FullName, Require);

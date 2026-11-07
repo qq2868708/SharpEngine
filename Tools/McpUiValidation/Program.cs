@@ -171,12 +171,33 @@ try
     });
     Require(attach["result"]?["structuredContent"]?["attached"]?.GetValue<bool>() == true,
         "Explicit session attachment must succeed");
-    Require(JsonNode.Parse(bridge.StandardOutput.ReadLine()!)?["method"]?.GetValue<string>() ==
+    var ToolsChanged = bridge.StandardOutput.ReadLine()!;
+    Require(JsonNode.Parse(ToolsChanged)?["method"]?.GetValue<string>() ==
             "notifications/tools/list_changed",
         "Attachment must notify clients that the tool list changed");
-    Require(JsonNode.Parse(bridge.StandardOutput.ReadLine()!)?["method"]?.GetValue<string>() ==
+    var ResourcesChanged = bridge.StandardOutput.ReadLine()!;
+    Require(JsonNode.Parse(ResourcesChanged)?["method"]?.GetValue<string>() ==
             "notifications/resources/list_changed",
         "Attachment must notify clients that the resource list changed");
+
+    var DiscoveryDirectory = Path.Combine(root, "Saved", "Validation", "Mcp", "Discovery", sessionId);
+    Directory.CreateDirectory(DiscoveryDirectory);
+    var DiscoveryOptions = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+    };
+    void SaveDiscovery(string Name, JsonObject Value)
+    {
+        File.WriteAllText(Path.Combine(DiscoveryDirectory, Name), Value.ToJsonString(DiscoveryOptions));
+    }
+    SaveDiscovery("bootstrap-tools.json", bootstrap);
+    SaveDiscovery("sessions.json", sessions);
+    SaveDiscovery("attached-session.json", attach);
+    SaveDiscovery("attached-tools.json", Call(899001, "tools/list"));
+    SaveDiscovery("resources.json", Call(899002, "resources/list"));
+    SaveDiscovery("resource-templates.json", Call(899003, "resources/templates/list"));
+    File.WriteAllText(Path.Combine(DiscoveryDirectory, "notifications.ndjson"),
+        ToolsChanged + Environment.NewLine + ResourcesChanged + Environment.NewLine);
 
     if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
     {

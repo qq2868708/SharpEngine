@@ -51,6 +51,11 @@ For interactive MCP use, list sessions and obtain the user's explicit choice of 
 
 After attachment and `tools/list_changed` / `resources/list_changed`, rediscover the live catalog and schemas. Preserve the selected session identity, actual tool/resource names, registration state, and pending revisions across context handoffs. Do not reconstruct missing schemas from memory or mistake the unbound bootstrap tool list for the attached catalog.
 
+Native `McpUiValidation` modes retain full bootstrap and attached tool schemas,
+resource/template catalogs, session descriptors, and attachment notifications
+under `Saved/Validation/Mcp/Discovery/<sessionId>`, including focused modes.
+Keep these complete discovery records alongside interaction evidence.
+
 Repository validation tools may create their own explicitly targeted isolated sessions as part of authorized tests; that does not authorize attaching to or closing a user's session. They own and clean up only their test processes and fixtures. Read `Documentation/EditorMcpUiObservability.md` for input/frame protocols.
 
 Project code may build in the background, but apply a generation only while Stopped and after pending input/transactions are committed. Playing/Paused retain the active generation. A failed preflight or swap preserves the previous valid generation and open-document state; verify IDs, revisions, dirty state, selection, settings, and Undo/Redo where affected. Plugin configuration changes that require restart must not be presented as a successful code reload. Inspect `EditorModuleReload.cs` and `EditorRuntimePlugins.cs` for the current boundaries.
@@ -71,6 +76,61 @@ Choose checks from the actual change's blast radius. The following are entry poi
 | Build layout or manuals | LayoutValidation / SharpEngineLayout Check, or scripts/Validate-EngineManual.ps1; state what each structural check proves |
 
 Inspect each tool's current arguments before running it. Keep compilation, managed semantics, native rendering, interaction, Cook, and packaged delivery as separate evidence. Test changed interfaces together across managed/native consumers; a stale executable does not validate new managed behavior. Run the relevant standard build after isolated diagnosis before claiming that standard build passes.
+
+## Editor Performance Acceptance
+
+Editor performance is part of acceptance, not optional follow-up work. Do not
+accept a reproducible increase in frame time, interaction latency, asset-open
+time, allocation pressure, or background CPU/I/O relative to the equivalent
+baseline. Feature correctness alone does not pass this gate. Investigate noisy
+results with repeated matched runs; measurement noise is not permission to
+ignore a sustained regression or lower the budget until it passes.
+
+For affected editor paths, retain a baseline and candidate measurement using
+the same representative project/assets, build configuration, backend, VSync,
+validation flags, debugger state, window sizes/count, and operation. Cover idle
+main-window use, affected resource windows, and the actual edit/navigation or
+playback gesture; include large assets when work could scale with document size.
+Record warm-up, sample duration/count, average and P95 frame time, operation
+latency, and relevant allocation/CPU/I/O evidence. VSync-limited FPS alone can
+hide lost CPU headroom; use uncapped timing or a focused allocation/CPU check
+where necessary. Distinguish profiling overhead from the unprofiled acceptance
+run. Set workload-specific budgets before the candidate run and preserve the
+raw results, source snapshot, and tested binary identity.
+
+Use `render.describe` for frame/scene timing and GPU/fallback/cache counters,
+plus a targeted profile when attribution is unclear. Do not treat the main
+scene's timing as total resource-editor UI time, or a single idle sample as
+proof of responsive gestures. An unchanged large JSON resource must not trigger
+full-document serialization, source formatting, or content-dependent dirty
+checks every frame. Cache only derived data; invalidate at successful edits,
+Undo/Redo, savepoint changes, reload, and other actual owners' revision boundaries.
+Preserve immediate committed observations, complete tool/resource catalogs,
+capture/focus behavior, and all authoring semantics.
+
+A failed budget or baseline regression blocks completion. Fix it and rerun the
+affected measurement; report any unmeasured boundary instead of declaring the
+performance requirement satisfied. Tests own their isolated sessions and must
+not replace or terminate the user's selected Editor. For the resource-document
+regression, `Tools/EditorValidation --asset-performance-only` covers large
+unchanged reads and savepoint/cache correctness; rendered frame and interaction
+measurements remain separate requirements.
+
+`Tools/Assets/ValidateEditorPerformance.py --record-baseline --output <directory>`
+records an owned native Debug/OpenGL/VSync-on baseline. Run the candidate with
+`--baseline <baseline-directory/report.json> --output <new-directory>` after
+building the same configuration; `--root` selects a separately built checkout.
+The script retains complete catalogs, raw timings, binary hashes, and real native
+viewport-wheel snapshots/PNGs. Its workload budget is average <=18 ms and P95
+<=25 ms; its 5% comparison tolerance only identifies measurement noise and does
+not authorize sustained regressions. Apply other budgets to other measured
+workloads rather than treating these numbers as a universal engine guarantee.
+
+Use its `--render-vsync off` option for a matched run without display-sync waits.
+`cpuMsPerFrame` divides editor-process CPU time by native submitted frames and
+includes worker/GC CPU time. Retain its raw CPU seconds and frame deltas; compare
+it separately from wall-clock frame timing, which includes waits. This metric
+also participates in the baseline regression check when present in both reports.
 
 ## Input, Motion And Native Resource Review
 

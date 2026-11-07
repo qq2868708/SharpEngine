@@ -155,6 +155,8 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>优化当前关卡定位和 OpenGL 多窗口绘制，降低编辑器每帧 CPU 开销。性能验证补充每帧进程 CPU 时间与关闭 VSync 的对照模式，用于检查显示同步掩盖的开销。</p>
+      <p>修复大 JSON 资源窗口的重复序列化开销：未修改文档复用源文本和 Source 预览，dirty 状态随编辑、撤销、重做和保存及时更新；保存冲突检查与文档格式保持一致。编辑器性能作为验收条件，使用相同配置和资源记录平均帧时间、P95 与实际交互响应，性能回归不能以功能通过代替验收。</p>
       <p>UI 编辑器预览默认分辨率改为 1920×1080。Design 画布保持透明并用边框表示当前 desired 尺寸，提供 Fit、50%、75%、100%、125%、150% 和 200% 缩放档位及 Zoom 滑条；缩放与预览尺寸仍是编辑器实例的临时环境，不污染源资产。Runtime Preview 面板及其旧的文档挂载点已从 UI 资产编辑器移除。</p>
       <p>首次打开或在关闭后立即重新打开 UI 资产时，原生 host 会清除旧的延迟销毁标记并重新显示当前窗口，避免旧关闭请求误伤新编辑器。</p>
       <p>修复 UI 编辑器把正常标记误报为问题：<code>&lt;br&gt;</code>、<code>&lt;pre&gt;</code>、<code>&lt;hr&gt;</code> 及列表/表格等标准标签由 RmlUi 的 <code>*</code> 回退实例化并正常布局，不再产生 <code>UI_ELEMENT_TAG_UNKNOWN</code>；文本标签只在实际包含块级子元素时才报 <code>UI_ELEMENT_LEAF_HAS_CHILDREN</code>，包含 <code>br</code>、<code>img</code> 等内联内容不算。示例资产的诊断从 32 条降到 1 条，剩下的仍是真实的选择器求值限制。</p>

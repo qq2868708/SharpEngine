@@ -368,7 +368,15 @@ void RenderBackend_OpenGL::RequestScreenshot(const wchar_t* path)
 Rml::RenderInterface* RenderBackend_OpenGL::GetUiRenderer() { return State ? State->Renderer.get() : nullptr; }
 bool RenderBackend_OpenGL::MakeCurrent()
 {
-    return State && State->Dc && State->Context && wglMakeCurrent(State->Dc, State->Context) != FALSE;
+    if (!State || !State->Dc || !State->Context)
+    {
+        return false;
+    }
+    if (wglGetCurrentContext() == State->Context && wglGetCurrentDC() == State->Dc)
+    {
+        return true;
+    }
+    return wglMakeCurrent(State->Dc, State->Context) != FALSE;
 }
 uint32_t RenderBackend_OpenGL::GetUiDrawCalls() const { return State && State->Renderer ? State->Renderer->DrawCalls : 0; }
 bool RenderBackend_OpenGL::WasPresented() const { return State && State->Presented; }

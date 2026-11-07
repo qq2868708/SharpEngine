@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using SharpEngine.Editor.Layout;
 
@@ -6,6 +7,11 @@ namespace SharpEngine.Editor;
 
 internal static class AssetEditorInstanceUtilities
 {
+    private sealed record SourcePreviewMarkup(string Markup);
+
+    private static readonly ConditionalWeakTable<string, SourcePreviewMarkup>
+        SourcePreviews = new();
+
     public static EditorLayoutDocument CreatePreviewLayout(string PreviewPaneId,
         string DetailsPaneId, params string[] BottomPaneIds)
     {
@@ -97,6 +103,11 @@ internal static class AssetEditorInstanceUtilities
 
     public static string Source(string Value)
     {
+        return SourcePreviews.GetValue(Value, BuildSourcePreview).Markup;
+    }
+
+    private static SourcePreviewMarkup BuildSourcePreview(string Value)
+    {
         var Markup = new StringBuilder("<div class=\"asset-source-view readonly\">");
         var Lines = Value.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         const int MaximumRenderedLines = 120;
@@ -116,7 +127,7 @@ internal static class AssetEditorInstanceUtilities
                 .Append(" additional lines are omitted from the UI preview</div>");
         }
         Markup.Append("</div>");
-        return Markup.ToString();
+        return new SourcePreviewMarkup(Markup.ToString());
     }
 
     public static string Diagnostics(IReadOnlyList<AssetDocumentDiagnostic> Values)

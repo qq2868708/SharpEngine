@@ -230,12 +230,24 @@ public sealed partial class EditorRuntime
 
     private AssetDescriptor? CurrentWorldAsset()
     {
-        if (_world is null || _assets is null) return null;
-        var sourcePath = Path.GetFullPath(_world.SourcePath);
-        return _assets.Assets.FirstOrDefault(asset =>
+        if (_world is null || _assets is null)
         {
-            var resolved = _assets.ResolvePath(asset);
-            return resolved is not null && string.Equals(Path.GetFullPath(resolved), sourcePath,
+            return null;
+        }
+        var SourcePath = Path.GetFullPath(_world.SourcePath);
+        var SourceName = Path.GetFileName(SourcePath);
+        return _assets.Assets.FirstOrDefault(Asset =>
+        {
+            // Compare names without I/O, including Win32 trailing-dot/space aliases.
+            // Full resolution still validates paths and selects the correct owner.
+            var FileName = Path.GetFileName(Asset.RelativePath.AsSpan()).TrimEnd(" .".AsSpan());
+            if (FileName.IsEmpty ||
+                !FileName.Equals(SourceName.AsSpan().TrimEnd(" .".AsSpan()), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            var Resolved = _assets.ResolvePath(Asset);
+            return Resolved is not null && string.Equals(Path.GetFullPath(Resolved), SourcePath,
                 StringComparison.OrdinalIgnoreCase);
         });
     }
