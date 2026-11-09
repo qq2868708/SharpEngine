@@ -9,7 +9,8 @@
 class RenderBackend_Offscreen final : public RenderBackend
 {
 public:
-    ~RenderBackend_Offscreen() override { Shutdown(); }
+    RenderBackend_Offscreen();
+    ~RenderBackend_Offscreen() override;
     bool Initialize(const RenderInitDesc* desc) override;
     void Shutdown() override;
 
@@ -20,6 +21,9 @@ public:
     void Resize(uint32_t width, uint32_t height) override;
     void RequestScreenshot(const wchar_t* path) override;
     RenderBackendStats GetStats() const override { return Stats; }
+    Rml::RenderInterface* GetUiRenderer() override;
+    uint32_t GetUiDrawCalls() const override;
+    bool ReadPixels(std::vector<unsigned char>& Pixels, uint32_t& Width, uint32_t& Height) override;
 
 private:
     void Clear();
@@ -36,4 +40,6 @@ private:
     std::vector<float> Depth;
     RenderBackendStats Stats;
     bool Initialized = false;
+    class UiRenderer;
+    std::unique_ptr<UiRenderer> Ui;
 };

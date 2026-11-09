@@ -9,6 +9,10 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include "RenderOffscreenUi.h"
+
+RenderBackend_Offscreen::RenderBackend_Offscreen() = default;
+RenderBackend_Offscreen::~RenderBackend_Offscreen() { Shutdown(); }
 
 namespace
 {
@@ -103,12 +107,14 @@ bool RenderBackend_Offscreen::Initialize(const RenderInitDesc* desc)
     Resize(desc->Width, desc->Height);
     Initialized = true;
     Clear();
+    Ui = std::make_unique<UiRenderer>(*this);
     EngineLog::Info("RenderCore", "RenderOffscreen initialized without a native graphics device");
     return true;
 }
 
 void RenderBackend_Offscreen::Shutdown()
 {
+    Ui.reset();
     Pixels.clear();
     Depth.clear();
     Width = 0;
@@ -122,6 +128,7 @@ void RenderBackend_Offscreen::BeginFrame()
     if (!Initialized) return;
     ++Stats.FramesBegun;
     Clear();
+    Ui->BeginFrame();
 }
 
 void RenderBackend_Offscreen::SubmitFrame(const RenderFrame* frame)
@@ -143,6 +150,34 @@ void RenderBackend_Offscreen::SubmitFrame(const RenderFrame* frame)
 
 void RenderBackend_Offscreen::EndFrame()
 {
+}
+
+Rml::RenderInterface* RenderBackend_Offscreen::GetUiRenderer() { return Ui.get(); }
+uint32_t RenderBackend_Offscreen::GetUiDrawCalls() const { return Ui ? Ui->DrawCalls : 0; }
+
+bool RenderBackend_Offscreen::ReadPixels(std::vector<unsigned char>& Output, uint32_t& OutputWidth,
+    uint32_t& OutputHeight)
+{
+    if (!Initialized || Pixels.empty())
+    {
+        return false;
+    }
+    Output.resize(Pixels.size());
+    OutputWidth = Width;
+    OutputHeight = Height;
+    for (uint32_t Y = 0; Y < Height; ++Y)
+    {
+        for (uint32_t X = 0; X < Width; ++X)
+        {
+            const size_t Source = (size_t(Y) * Width + X) * 4;
+            const size_t Target = (size_t(Height - Y - 1) * Width + X) * 4;
+            Output[Target] = Pixels[Source + 2];
+            Output[Target + 1] = Pixels[Source + 1];
+            Output[Target + 2] = Pixels[Source];
+            Output[Target + 3] = Pixels[Source + 3];
+        }
+    }
+    return true;
 }
 
 void RenderBackend_Offscreen::Resize(uint32_t width, uint32_t height)

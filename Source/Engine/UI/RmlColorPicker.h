@@ -8,7 +8,7 @@
 #include <string>
 
 // Draft values live on observable DOM attributes; no component state changes
-// until Apply emits the inspector's existing revision-checked field command.
+// until Apply emits the owning domain's caller-supplied commit command.
 class RmlColorPicker
 {
     std::string DragPicker;
@@ -111,6 +111,23 @@ class RmlColorPicker
     }
 
 public:
+    void Reset()
+    {
+        DragPicker.clear();
+        DragChannel.clear();
+        ScrollPicker.clear();
+    }
+
+    void Close(Rml::Element* Picker)
+    {
+        Picker->SetAttribute("data-color-open", false);
+        Picker->SetAttribute("data-color-a", Picker->GetAttribute<float>("data-color-original-a", 1));
+        Picker->SetAttribute("data-color-value", Picker->GetAttribute<Rml::String>("data-color-start", ""));
+        Part(Picker, "-panel")->SetProperty("display", "none");
+        Part(Picker, "-open")->SetAttribute("aria-expanded", false);
+        Reset();
+    }
+
     void AfterLayout(Rml::ElementDocument* Document)
     {
         if (!ScrollPicker.empty())
@@ -124,7 +141,8 @@ public:
         }
     }
 
-    bool ProcessEvent(Rml::Event& Event, Rml::ElementDocument* Document, std::string& Command)
+    bool ProcessEvent(Rml::Event& Event, Rml::ElementDocument* Document, std::string& Command,
+        std::string& Completion)
     {
         auto* Target = Event.GetTargetElement();
         auto* Picker = Ancestor(Target, "data-color-picker");
@@ -146,9 +164,14 @@ public:
         {
             return false;
         }
+        if (Picker->GetAttribute<bool>("data-color-readonly", false))
+        {
+            return true;
+        }
         if (Id == Rml::EventId::Keydown && Event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE)
         {
-            Command = "editor.component-cancel";
+            Close(Picker);
+            Completion = "ui.value-end";
             Event.StopPropagation();
             return true;
         }
@@ -176,24 +199,32 @@ public:
             {
                 if (Picker->GetAttribute<bool>("data-color-open", false))
                 {
-                    Command = "editor.component-cancel";
+                    Close(Picker);
+                    Completion = "ui.value-end";
                 }
                 else
                 {
+                    Picker->SetAttribute("data-color-original-a", Picker->GetAttribute<float>("data-color-a", 1));
+                    Picker->SetAttribute("data-color-start", Picker->GetAttribute<Rml::String>("data-color-value", ""));
                     Initialize(Picker);
+                    Part(Picker, "-alpha")->SetAttribute("value", Picker->GetAttribute<float>("data-color-a", 1));
+                    Part(Picker, "-open")->SetAttribute("aria-expanded", true);
                     Picker->SetAttribute("data-color-open", true);
                     Part(Picker, "-panel")->SetProperty("display", "block");
                     ScrollPicker = Picker->GetId();
-                    Command = "editor.component-focus";
+                    Command = "ui.value-focus";
                 }
             }
             else if (Action == "apply")
             {
                 Command = Picker->GetAttribute<Rml::String>("data-color-prefix", "") + Picker->GetAttribute<Rml::String>("data-color-value", "");
+                Close(Picker);
+                Completion = "ui.value-end";
             }
             else
             {
-                Command = "editor.component-cancel";
+                Close(Picker);
+                Completion = "ui.value-end";
             }
             return true;
         }

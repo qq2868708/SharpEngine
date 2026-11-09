@@ -30,16 +30,45 @@
 .se-value-input selectbox { width: 100%; max-height: 224px; padding: 4px; background-color: #252e3b; border: 1px #607b9b; }
 .se-value-input option { display: block; min-height: 26px; padding: 5px 6px; }
 .se-value-input option:checked, .se-value-input option:hover { background-color: #314d6a; }
+select.se-value-input { box-sizing: border-box; height: 28px; padding: 0px; text-align: left; }
+select.se-value-input selectvalue { box-sizing: border-box; height: 26px; margin: 0px 24px 0px 0px; padding: 5px 6px; line-height: 16px; background-color: transparent; border-width: 0px; white-space: nowrap; text-overflow: ellipsis; }
+select.se-value-input selectarrow { box-sizing: border-box; width: 24px; height: 26px; padding: 5px; border-width: 0px; border-left: 1px #3f4d60; }
+select.se-value-input selectbox { box-sizing: border-box; margin-top: 3px; }
 .se-value-boolean { display: inline-block; width: 16px; min-width: 16px; height: 16px; padding: 0px; margin: 0px; background-color: #1b222c; border: 1px #57667b; border-radius: 3px; }
 .se-value-boolean:checked { decorator: image("sharpengine-resource://engine/Resources/Editor/Icons/check.tga" contain); background-color: #3978b5; border-color: #6da6de; }
 .se-value-multiline { height: auto; min-height: 80px; }
+.se-value-range { display: block; width: 100%; min-width: 0px; height: 18px; margin-top: 4px; }
+.se-value-range slidertrack { background-color: #171e27; height: 4px; margin-top: 7px; }
+.se-value-range sliderbar { background-color: #69a4df; width: 12px; height: 16px; }
+.se-value-range:disabled { opacity: 0.4; cursor: default; focus: none; }
+.se-color { flex-wrap: wrap; }
 .se-value-input:disabled, .se-value-input:disabled:hover, .se-value-input:disabled:focus { color: #7c8795; background-color: #20252c; border-color: #303740; cursor: default; focus: none; }
 .se-value-field-disabled > label { color: #697583; }
 .se-value-field-disabled .se-vector-axis > label, .se-vector-axis-disabled > label { color: #697583; }
 .se-value-input:disabled selectvalue { color: #7c8795; background-color: #20252c; border-color: #303740; }
 .se-value-input:disabled selectarrow { opacity: 0.4; background-color: #20252c; border-color: #303740; }
+select.se-value-input:disabled selectvalue { background-color: transparent; border-width: 0px; }
 .se-value-boolean:disabled, .se-value-boolean:disabled:hover, .se-value-boolean:disabled:focus { opacity: 0.4; background-color: #20252c; border-color: #303740; cursor: default; focus: none; }
 .se-value-field > .se-value-hint { min-height: 0px; margin-top: 3px; padding: 0px; background-color: transparent; border-width: 0px; }
 .se-value-field-disabled > .se-value-hint { color: #697583; }
 
 .se-tree-row.reference .se-tree-detail { color: #b4a4e0; }
+.color-picker { display: block; width: 100%; min-width: 0px; margin-top: 8px; }
+.color-picker-toggle { box-sizing: border-box; display: flex; align-items: center; width: 100%; height: 28px; padding: 4px 7px; background-color: #303b4a; border: 1px #4b5e75; color: #c4d7ee; font-size: 11px; }
+.color-picker-toggle:hover { background-color: #3b4b60; }
+.color-picker-chip { display: block; width: 28px; height: 16px; margin-right: 8px; border: 1px #8291a6; }
+.color-picker-toggle .icon { width: 14px; height: 14px; margin-left: auto; }
+.color-picker-panel { box-sizing: border-box; display: none; width: 100%; padding: 10px; margin-top: 5px; background-color: #1a2029; border: 1px #485a71; border-radius: 4px; }
+.color-picker-panel > label { display: block; font-size: 10px; line-height: 15px; color: #8e9fb6; margin-top: 7px; }
+.color-picker-sv { display: block; position: relative; width: 100%; height: 130px; background-color: #ff0000; decorator: image("sharpengine-resource://engine/Resources/Editor/ColorPicker/sv.tga"); cursor: cross; }
+.color-picker-marker { position: absolute; width: 8px; height: 8px; margin-left: -5px; margin-top: -5px; border: 2px white; border-radius: 5px; background-color: #00000000; pointer-events: none; }
+.color-picker-hue { display: block; position: relative; width: 100%; height: 15px; decorator: image("sharpengine-resource://engine/Resources/Editor/ColorPicker/hue.tga"); cursor: pointer; }
+.color-picker-track-marker { position: absolute; width: 3px; height: 17px; top: -1px; margin-left: -2px; border: 1px white; background-color: #1a2029; pointer-events: none; }
+.color-picker-preview { box-sizing: border-box; display: block; height: 27px; margin-top: 7px; padding: 5px; font-size: 10px; color: #d5deeb; background-color: #293443; border-left-width: 22px; }
+.color-picker-buttons { display: flex; gap: 7px; margin-top: 8px; }
+.color-picker-buttons button { box-sizing: border-box; flex: 1; height: 26px; padding: 4px; background-color: #2f3947; border: 1px #4a5a70; color: #bccbdf; font-size: 11px; }
+.color-picker-buttons button:hover { border-color: #8cb5e6; }
+.color-picker-buttons .color-picker-apply { background-color: #315c87; border-color: #5a8dbf; color: #edf6ff; }
+.color-picker-toggle:disabled { color: #7c8795; background-color: #20252c; border-color: #303740; cursor: default; focus: none; }
+.color-picker-toggle:disabled .color-picker-chip { opacity: 0.4; }
+.color-picker-toggle:disabled .icon { opacity: 0.4; }

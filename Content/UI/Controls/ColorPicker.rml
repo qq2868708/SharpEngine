@@ -1,0 +1,12 @@
+<template>
+  <div class="color-picker" id="${Id}" data-color-picker="true" data-color-readonly="${ReadOnly}" data-color-prefix="${Action}" data-color-value="${Value}" data-color-r="${R}" data-color-g="${G}" data-color-b="${B}" data-color-a="${A}">
+    <ui-slot name="Toggle" />
+    <div class="color-picker-panel" id="${Id}-panel">
+      <div class="color-picker-sv" id="${Id}-sv" data-color-control="sv" title="Saturation and brightness"><div class="color-picker-marker" id="${Id}-marker" /></div>
+      <label>Hue</label><div class="color-picker-hue" id="${Id}-hue" data-color-control="hue" title="Hue"><div class="color-picker-track-marker" id="${Id}-hue-marker" /></div>
+      <label>Opacity</label><input id="${Id}-alpha" class="se-value-range" type="range" min="0" max="1" step="0.001" value="${A}" data-color-control="alpha" />
+      <span class="color-picker-preview" id="${Id}-preview" />
+      <div class="color-picker-buttons"><button id="${Id}-cancel" data-color-command="cancel">Cancel</button><button id="${Id}-apply" data-color-command="apply" class="color-picker-apply">Apply</button></div>
+    </div>
+  </div>
+</template>

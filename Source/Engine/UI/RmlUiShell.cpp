@@ -2352,11 +2352,16 @@ struct RmlUiShell::Impl
             return;
         }
         std::string ColorCommand;
-        if (host.ColorPicker.ProcessEvent(event, host.Document, ColorCommand))
+        std::string ColorCompletion;
+        if (host.ColorPicker.ProcessEvent(event, host.Document, ColorCommand, ColorCompletion))
         {
             if (!ColorCommand.empty())
             {
                 QueueAction(host, ColorCommand);
+            }
+            if (!ColorCompletion.empty())
+            {
+                QueueAction(host, ColorCompletion);
             }
             return;
         }

@@ -75,8 +75,10 @@ the native `RenderCore` startup log. Editor retains its semantic UI snapshots
 and pinned rendered-frame resources with either API.
 
 Game's existing `--render-offscreen` and `--null-rhi` validation modes remain
-available. They cannot be combined with an explicit graphics backend. They do
-not create windows or provide visible runtime UI.
+available. They cannot be combined with an explicit graphics backend. Both run
+without a native window; Offscreen keeps the Game RmlUi context and composites
+runtime UI into the CPU framebuffer and screenshot, while NullRHI intentionally
+omits the UI renderer and framebuffer for pure lifecycle/logic smoke tests.
 
 After building both targets, validate all four combinations with a project
 whose Game modules and startup World are built:

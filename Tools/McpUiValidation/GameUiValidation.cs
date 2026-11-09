@@ -92,6 +92,10 @@ internal static class GameUiValidation
                 <span id="caption" class="caption">${Title}</span>
                 <ui-slot name="Primary" />
                 <ui-slot name="Secondary" />
+                <div id="clip-test" style="position:absolute;left:1050px;top:580px;width:100px;height:80px;overflow:hidden;clip:always;">
+                <div id="clip-child" style="display:block;width:180px;height:50px;transform:translate(40px,15px);background-color:#ee2277;"> </div></div>
+                <div id="alpha-test" style="position:absolute;left:800px;top:600px;width:100px;height:60px;background-color:#000000;">
+                <div id="alpha-child" style="display:block;width:100px;height:60px;background-color:#ff000080;"> </div></div>
                 </div>
                 </template>
                 """,
@@ -265,6 +269,24 @@ internal static class GameUiValidation
                     private set;
                 } = 1;
 
+                public double RangeValue
+                {
+                    get;
+                    private set;
+                } = 0.25;
+
+                public string ReferenceValue
+                {
+                    get;
+                    private set;
+                } = "project://materials/green";
+
+                private double[] ColorValue = new[]
+                {
+                    0.2, 0.6, 0.9, 1.0,
+                };
+                private int ColorCommits;
+
                 public string BuildLayout(UiLayoutContext Context)
                 {
                     var Markup = Definition.Render(Context, new JsonObject
@@ -281,11 +303,67 @@ internal static class GameUiValidation
                             EditedValue.ToString(System.Globalization.CultureInfo.InvariantCulture), "ui.game-number:")) +
                             "<span id='common-game-value'>" + EditedValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "</span>";
                     }
+                    if (Id == "secondary")
+                    {
+                        var ColorAxes = new[]
+                        {
+                            new UiValueInput("shared-color-R", "0.2", "fixture.color:R:", true, "number"),
+                            new UiValueInput("shared-color-G", "0.6", "fixture.color:G:", true, "number"),
+                            new UiValueInput("shared-color-B", "0.9", "fixture.color:B:", true, "number"),
+                            new UiValueInput("shared-color-A", "1", "fixture.color:A:", true, "number"),
+                        };
+                        var Options = new[]
+                        {
+                            (string.Empty, "None"), ("project://materials/green", "Green Material"),
+                            ("project://materials/blue", "Blue Material"),
+                        };
+                        var EditableAxes = ColorValue.Select((Value, Index) => new UiValueInput(
+                            "editable-color-" + "RGBA"[Index],
+                            Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            "fixture.color-axis:" + Index + ":", false, "number")).ToArray();
+                        Markup += "<div style='display:flex;gap:20px;margin-top:12px;'>" +
+                            "<div style='display:block;width:48%;'>" +
+                            UiValueEditors.Color("Color (editable)", EditableAxes, "fixture.color:") +
+                            "<span id='color-commits'>" + ColorCommits + "</span>" +
+                            UiValueEditors.Range("Range (editable)", new UiValueInput("shared-range",
+                                RangeValue.ToString(System.Globalization.CultureInfo.InvariantCulture), "fixture.range:", false, "number"), 0, 1, 0.01) +
+                            UiValueEditors.Reference("Reference (editable)", "shared-reference", ReferenceValue,
+                                Options, "fixture.reference:") +
+                            "</div><div style='width:48%;'>" +
+                            UiValueEditors.Color("Color RGBA (disabled)", ColorAxes) +
+                            UiValueEditors.Range("Range (disabled)", new UiValueInput("readonly-range", "0.75", "fixture.range:", true, "number"), 0, 1, 0.01) +
+                            UiValueEditors.Reference("Reference (disabled)", "readonly-reference", "project://materials/green",
+                                Options, "fixture.reference:", true) + "</div></div>";
+                    }
                     return Markup;
                 }
 
                 public bool TryHandleAction(string Action)
                 {
+                    if (Id == "secondary" && Action.StartsWith("fixture.color:", System.StringComparison.Ordinal))
+                    {
+                        var Values = JsonNode.Parse(Action["fixture.color:".Length..])!.AsArray();
+                        ColorValue = Values.Select(Value => Value!.GetValue<double>()).ToArray();
+                        ColorCommits++;
+                        return true;
+                    }
+                    if (Id == "secondary" && Action.StartsWith("fixture.color-axis:", System.StringComparison.Ordinal))
+                    {
+                        var Parts = Action["fixture.color-axis:".Length..].Split(':');
+                        ColorValue[int.Parse(Parts[0])] = double.Parse(Parts[1], System.Globalization.CultureInfo.InvariantCulture);
+                        ColorCommits++;
+                        return true;
+                    }
+                    if (Id == "secondary" && Action.StartsWith("fixture.range:", System.StringComparison.Ordinal))
+                    {
+                        RangeValue = double.Parse(Action["fixture.range:".Length..], System.Globalization.CultureInfo.InvariantCulture);
+                        return true;
+                    }
+                    if (Id == "secondary" && Action.StartsWith("fixture.reference:", System.StringComparison.Ordinal))
+                    {
+                        ReferenceValue = Action["fixture.reference:".Length..];
+                        return true;
+                    }
                     if (Id == "primary" && Action.StartsWith("ui.game-number:", System.StringComparison.Ordinal))
                     {
                         EditedValue = double.Parse(Action["ui.game-number:".Length..], System.Globalization.CultureInfo.InvariantCulture);
@@ -363,7 +441,8 @@ internal static class GameUiValidation
         return Manifest;
     }
 
-    internal static void Run(string Root, string Configuration, Action<bool, string> Check, string? RenderBackend = null)
+    internal static void Run(string Root, string Configuration, Action<bool, string> Check,
+        string? RenderBackend, Func<byte[], DecodedPng> DecodeFrame)
     {
         var Manifest = Environment.GetEnvironmentVariable("SHARPENGINE_VALIDATION_PROJECT");
         if (string.IsNullOrWhiteSpace(Manifest))
@@ -395,7 +474,13 @@ internal static class GameUiValidation
         if (RenderBackend is not null)
         {
             Start.ArgumentList.Add(RenderBackend);
+            if (RenderBackend == "--render-offscreen")
+            {
+                Start.ArgumentList.Add("--frames");
+                Start.ArgumentList.Add("1000000");
+            }
         }
+        Start.ArgumentList.Add("--hidden");
         using var Game = Process.Start(Start) ??
             throw new IOException("Could not start the Game executable");
         var GameOutput = Game.StandardOutput.ReadToEndAsync();
@@ -462,7 +547,7 @@ internal static class GameUiValidation
                     Call(Catalog + "/list", new JsonObject()).ToJsonString());
             }
             var Render = Tool("render.describe", new JsonObject())["result"]!["structuredContent"]!;
-            var ExpectedBackend = RenderBackend?.Split('=').Last() ?? "opengl";
+            var ExpectedBackend = RenderBackend == "--render-offscreen" ? "offscreen" : RenderBackend?.Split('=').Last() ?? "opengl";
             Check(Render["backend"]!.GetValue<string>() == ExpectedBackend,
                 "Game UI validation uses the requested native graphics backend");
             File.WriteAllText(Path.Combine(CatalogDirectory, "render.json"), Render.ToJsonString());
@@ -609,6 +694,7 @@ internal static class GameUiValidation
             }
             void ClickHit(string Id)
             {
+                ObserveGame();
                 var Target = Find(Id) ?? throw new InvalidOperationException(
                     $"Missing composed control '{Id}'");
                 var Bounds = Target["bounds"]!.AsObject();
@@ -689,6 +775,120 @@ internal static class GameUiValidation
             Check(TextOf("common-game-value") == "12" && Find("common-game-number")?["value"]?.GetValue<string>() == "12",
                 "Escape cancels the same primitive draft policy in Game while keeping committed state: committed=" + TextOf("common-game-value") + "; input=" + Find("common-game-number")?["value"]?.GetValue<string>());
 
+            foreach (var Id in new[]
+            {
+                "shared-color-R", "shared-color-G", "shared-color-B", "shared-color-A", "readonly-range", "readonly-reference",
+            })
+            {
+                var Control = Find(Id);
+                Check(Control?["visible"]?.GetValue<bool>() == true && Control["enabled"]?.GetValue<bool>() == false,
+                    "The rendered common control keeps its disabled state: " + Id);
+            }
+            ClickHit("shared-range");
+            ValueKey("down", 0x41, Modifiers: 1);
+            ValueKey("up", 0x41, Modifiers: 1);
+            ValueKey("text", Text: "0.6");
+            ValueKey("down", 0x0D);
+            ValueKey("up", 0x0D);
+            ObserveGame();
+            Check(Find("shared-range")?["value"]?.GetValue<string>() == "0.6" &&
+                Find("shared-range-range")?["value"]?.GetValue<string>() == "0.6",
+                "Range text commits into the shared slider through project state");
+
+            ClickHit("shared-range-range");
+            ObserveGame();
+            var RangeNumber = double.Parse(Find("shared-range")!["value"]!.GetValue<string>(),
+                System.Globalization.CultureInfo.InvariantCulture);
+            Check(RangeNumber > 0.4 && RangeNumber < 0.6,
+                "Real pointer input on the range track changes the authoritative value");
+
+            JsonObject CaptureReference(string Name)
+            {
+                var Current = ObserveGame();
+                var Frame = Call("resources/read", new JsonObject
+                {
+                    ["uri"] = $"sharpengine://ui/frames/{Current["frameId"]!.GetValue<ulong>()}/game.png",
+                });
+                File.WriteAllBytes(Path.Combine(Output, Name + ".png"),
+                    Convert.FromBase64String(Frame["result"]!["contents"]![0]!["blob"]!.GetValue<string>()));
+                File.WriteAllText(Path.Combine(Output, Name + ".json"), Current.ToJsonString());
+                return Current;
+            }
+            ObserveGame();
+            Check(Find("shared-reference")?["hitTarget"]?.GetValue<bool>() == true,
+                "The Reference value area is visible and hit-testable");
+            ClickHit("shared-reference");
+            CaptureReference("reference-open");
+            ValueKey("down", 0x28);
+            ValueKey("up", 0x28);
+            ValueKey("down", 0x0D);
+            ValueKey("up", 0x0D);
+            ObserveGame();
+            Check(Find("shared-reference")?["value"]?.GetValue<string>() == "project://materials/blue",
+                "Opening the Reference and choosing its next option updates the selected asset");
+            ClickHit("readonly-reference");
+            ObserveGame();
+            Check(Find("readonly-reference")?["value"]?.GetValue<string>() == "project://materials/green" &&
+                Find("readonly-reference")?["enabled"]?.GetValue<bool>() == false,
+                "Clicking a disabled Reference preserves its value and disabled state");
+            CaptureReference("reference-selected");
+
+            const string PickerId = "editable-color-R-picker";
+            ClickHit(PickerId + "-open");
+            CaptureReference("color-picker-initial");
+            Check(Find(PickerId + "-sv")?["visible"]?.GetValue<bool>() == true &&
+                Find(PickerId + "-hue")?["visible"]?.GetValue<bool>() == true,
+                "The common Color control opens its saturation/value palette and hue strip");
+            ClickHit(PickerId + "-hue");
+            ClickHit(PickerId + "-sv");
+            ClickHit(PickerId + "-alpha");
+            var ColorDraft = CaptureReference("color-picker-open");
+            Check(TextOf("color-commits") == "0" && Find("editable-color-R")?["value"]?.GetValue<string>() == "0.2",
+                "Palette preview leaves committed RGBA channels and transaction count unchanged");
+            var ColorFrame = Call("resources/read", new JsonObject
+            {
+                ["uri"] = $"sharpengine://ui/frames/{ColorDraft["frameId"]!.GetValue<ulong>()}/game.png",
+            });
+            var PalettePixels = DecodeFrame(Convert.FromBase64String(ColorFrame["result"]!["contents"]![0]!["blob"]!.GetValue<string>()));
+            var PaletteBounds = Find(PickerId + "-sv")!["bounds"]!;
+            var PaletteLeft = (int)PaletteBounds["x"]!.GetValue<double>();
+            var PaletteTop = (int)PaletteBounds["y"]!.GetValue<double>();
+            var PaletteWidth = (int)PaletteBounds["width"]!.GetValue<double>();
+            var PaletteHeight = (int)PaletteBounds["height"]!.GetValue<double>();
+            var Light = PalettePixels.Pixel(PaletteLeft + 8, PaletteTop + 8);
+            var Dark = PalettePixels.Pixel(PaletteLeft + 8, PaletteTop + PaletteHeight - 8);
+            var Saturated = PalettePixels.Pixel(PaletteLeft + PaletteWidth - 8, PaletteTop + 8);
+            Check(Light.R + Light.G + Light.B > Dark.R + Dark.G + Dark.B + 300 && Saturated != Light,
+                "The actual captured palette contains both saturation and brightness gradients");
+            ClickHit(PickerId + "-cancel");
+            ObserveGame();
+            Check(TextOf("color-commits") == "0" && Find(PickerId + "-sv")?["visible"]?.GetValue<bool>() == false,
+                "Cancel closes the common palette without a color commit");
+            ClickHit(PickerId + "-open");
+            ClickHit(PickerId + "-hue");
+            ClickHit(PickerId + "-sv");
+            ClickHit(PickerId + "-apply");
+            ObserveGame();
+            Check(TextOf("color-commits") == "1" && Find("editable-color-R")?["value"]?.GetValue<string>() != "0.2",
+                "Apply commits the entire RGBA color exactly once through its owner action");
+            CaptureReference("color-picker-applied");
+            ClickHit(PickerId + "-open");
+            ClickHit(PickerId + "-open");
+            ObserveGame();
+            Check(TextOf("color-commits") == "1" && Find(PickerId + "-sv")?["visible"]?.GetValue<bool>() == false,
+                "Toggling an open palette closed preserves its committed color");
+            ClickHit(PickerId + "-open");
+            ClickHit(PickerId + "-sv");
+            ValueKey("down", 0x1B);
+            ValueKey("up", 0x1B);
+            ObserveGame();
+            Check(TextOf("color-commits") == "1" && Find(PickerId + "-sv")?["visible"]?.GetValue<bool>() == false,
+                "Escape cancels the color preview without committing its draft");
+            ClickHit("shared-color-R-picker-open");
+            ObserveGame();
+            Check(Find("shared-color-R-picker-sv")?["visible"]?.GetValue<bool>() == false && TextOf("color-commits") == "1",
+                "The disabled Color preview does not open an interactive palette");
+
             // Read a freshly observed frame: the earlier snapshot predates the clicks,
             // and its pinned frame may already have left the bounded cache.
             JsonObject? Final = null;
@@ -713,6 +913,51 @@ internal static class GameUiValidation
                             "The Game publishes a rendered frame for the presented screen");
                         File.WriteAllBytes(Path.Combine(Output, "game-ui.png"),
                             Convert.FromBase64String(Probe));
+                        var Image = DecodeFrame(Convert.FromBase64String(Probe));
+                        foreach (var Id in new[]
+                        {
+                            "shared-reference", "readonly-reference",
+                        })
+                        {
+                            var Bounds = Find(Id)!["bounds"]!;
+                            var Left = (int)Math.Floor(Bounds["x"]!.GetValue<double>());
+                            var Top = (int)Math.Floor(Bounds["y"]!.GetValue<double>());
+                            var Width = Bounds["width"]!.GetValue<double>();
+                            var Height = Bounds["height"]!.GetValue<double>();
+                            var MidX = Left + (int)(Width / 2);
+                            var MidY = Top + (int)(Height / 2);
+                            var Background = Image.Pixel(Left - 2, MidY);
+                            Check(Math.Abs(Height - 28) < 0.1 &&
+                                Image.Pixel((int)Math.Ceiling(Left + Width) + 2, MidY) == Background &&
+                                Image.Pixel(MidX, (int)Math.Ceiling(Top + Height) + 2) == Background,
+                                "Reference pixels stay within its 28px control bounds: " + Id);
+                        }
+                        var Clipped = Image.Pixel(1100, 610);
+                        var Outside = Image.Pixel(1170, 610);
+                        Check(Clipped.R > 200 && Clipped.G < 60 && Clipped.B > 80 &&
+                            !(Outside.R > 200 && Outside.G < 60 && Outside.B > 80),
+                            $"Transformed UI obeys window-space clipping: inside={Clipped}, outside={Outside}");
+                        var AlphaBounds = Find("alpha-test")!["bounds"]!;
+                        var Alpha = Image.Pixel((int)AlphaBounds["x"]!.GetValue<double>() + 40,
+                            (int)AlphaBounds["y"]!.GetValue<double>() + 30);
+                        Check(Alpha.R is >= 120 and <= 135 && Alpha.G < 5 && Alpha.B < 5,
+                            $"UI premultiplied alpha has no doubled triangle seam: {Alpha}");
+                        var RangeControl = Find("shared-range")!["bounds"]!;
+                        var RangeX = (int)RangeControl["x"]!.GetValue<double>();
+                        var RangeY = (int)RangeControl["y"]!.GetValue<double>();
+                        var ForegroundPixels = 0;
+                        for (var Y = RangeY + 6; Y < RangeY + 24; Y++)
+                        {
+                            for (var X = RangeX + 3; X < RangeX + 65; X++)
+                            {
+                                var Pixel = Image.Pixel(X, Y);
+                                if (Pixel.R > 100 && Pixel.G > 100 && Pixel.B > 100)
+                                {
+                                    ForegroundPixels++;
+                                }
+                            }
+                        }
+                        Check(ForegroundPixels > 10, "The matching frame contains readable glyph pixels in the actual Range input");
                         // Also keep the post-click snapshot, which is what proves the
                         // instance state after the interactions.
                         File.WriteAllText(Path.Combine(Output, "game-ui-after-click.json"),

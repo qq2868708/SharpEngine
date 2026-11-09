@@ -16,7 +16,8 @@ class GameUiShell
 public:
     GameUiShell();
     ~GameUiShell();
-    bool Initialize(HWND window, const std::filesystem::path& root, Rml::RenderInterface* renderer);
+    bool Initialize(HWND window, const std::filesystem::path& root, Rml::RenderInterface* renderer,
+        uint32_t width, uint32_t height);
     void Shutdown();
     // Replaces the visible runtime screen with RML text. sourcePath is the
     // authoritative asset file, so relative stylesheet links resolve next to it.
@@ -30,6 +31,7 @@ public:
     bool IsFocused() const;
     uint32_t InputModifiers(uint32_t nativeModifiers) const;
     void SetPresentHandler(std::function<bool()> handler);
+    void SetInputHandler(std::function<void(UINT, WPARAM, LPARAM)> handler);
     // Receives semantic actions (the nearest ancestor `action`/`data-action` of a
     // click). Actions are queued and flushed before the next context update, so the
     // managed side may replace the document without unloading it mid-dispatch.

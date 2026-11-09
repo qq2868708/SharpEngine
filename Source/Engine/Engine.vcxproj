@@ -154,6 +154,7 @@
     <ClInclude Include="RenderCore\Private\OpenGL\GpuSceneRenderer_OpenGL.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend_Offscreen.h" />
+    <ClInclude Include="RenderCore\Private\RenderOffscreenUi.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend_NullRHI.h" />
     <ClInclude Include="RenderCore\Private\RenderBackend_Stats.h" />
     <ClInclude Include="RenderCore\Private\Vulkan\RenderBackend_Vulkan.h" />

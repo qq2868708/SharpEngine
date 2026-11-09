@@ -485,7 +485,12 @@ public sealed partial class EditorRuntime : IComponentRuntime
             {
                 var Inputs = Enumerable.Range(0, Values.Count).Select(Index => ComponentInput(Component, Path + "/" + Index,
                     Values[Index], typeof(float))).ToArray();
-                Markup.Append(SharpEngine.UI.UiValueEditors.Vector(Name, Inputs, ValueType == typeof(Color) ? "RGBA" : "XYZW"));
+                var PickerAction = "editor.component-field:" + Component.ComponentId + ":" + Uri.EscapeDataString(
+                    ComponentRevision + "|json|" + Path + "|" + Value!.ToJsonString()) + ":";
+                Markup.Append(ValueType == typeof(Color)
+                    ? SharpEngine.UI.UiValueEditors.Color(Name, Inputs, PickerAction,
+                        "color-picker-" + Component.ComponentId + "-" + Uri.EscapeDataString(Path))
+                    : SharpEngine.UI.UiValueEditors.Vector(Name, Inputs, "XYZW"));
             }
             for (int Index = 0; !IsVector && Index < Values.Count; Index++)
             {
@@ -525,7 +530,6 @@ public sealed partial class EditorRuntime : IComponentRuntime
                     Markup.Append("<button title=\"Choose color\" style=\"background-color:rgb(").Append((int)(ColorValue.R*255)).Append(',').Append((int)(ColorValue.G*255)).Append(',').Append((int)(ColorValue.B*255)).Append(");\" data-action=\"").Append(Escape(ColorAction)).Append("\"> </button>");
                 }
                 Markup.Append("</div>");
-                AppendInspectorColorPicker(Markup, Component.ComponentId, Path, Values);
             }
             Markup.Append("</div>");
             return;
@@ -562,7 +566,11 @@ public sealed partial class EditorRuntime : IComponentRuntime
                         Asset.Type, ValueType.GetGenericArguments()[0])).Select(Asset => (Asset.Id, Asset.Name)));
                 }
             }
-            Markup.Append(SharpEngine.UI.UiValueEditors.Choice(Name, ControlId, Value?.GetValue<string>() ?? string.Empty, Options, ActionPrefix));
+            Markup.Append(IsReference
+                ? SharpEngine.UI.UiValueEditors.Reference(Name, ControlId,
+                    Value?.GetValue<string>() ?? string.Empty, Options, ActionPrefix)
+                : SharpEngine.UI.UiValueEditors.Choice(Name, ControlId,
+                    Value?.GetValue<string>() ?? string.Empty, Options, ActionPrefix));
         }
         else if (ValueType == typeof(bool))
         {
@@ -577,10 +585,12 @@ public sealed partial class EditorRuntime : IComponentRuntime
                 SharpEngine.UI.UiValueEditors.Text(Name, Input, Field.Tooltip));
             if (Field.Minimum is not null && Field.Maximum is not null)
             {
-                Markup.Append("<input id=\"").Append(ControlId).Append("-slider\" type=\"range\" min=\"").Append(Field.Minimum.Value.ToString(CultureInfo.InvariantCulture))
-                    .Append("\" max=\"").Append(Field.Maximum.Value.ToString(CultureInfo.InvariantCulture)).Append("\" step=\"")
-                    .Append(ValueType == typeof(float) || ValueType == typeof(double) ? "0.01" : "1").Append("\" value=\"")
-                    .Append(Escape(InspectorFieldText(Value, ValueType))).Append("\" data-component-slider=\"true\" data-change-action=\"").Append(ActionPrefix).Append("\" />");
+                var RangeInput = new SharpEngine.UI.UiValueInput(ControlId,
+                    InspectorFieldText(Value, ValueType), ActionPrefix,
+                    Kind: ValueType == typeof(float) || ValueType == typeof(double) ? "number" : "integer");
+                Markup.Append(SharpEngine.UI.UiValueEditors.RangeInput(RangeInput,
+                    Field.Minimum.Value, Field.Maximum.Value,
+                    ValueType == typeof(float) || ValueType == typeof(double) ? 0.01 : 1));
             }
         }
     }

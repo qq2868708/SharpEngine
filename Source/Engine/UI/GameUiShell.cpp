@@ -1,4 +1,5 @@
 #include "RmlValueEditor.h"
+#include "RmlColorPicker.h"
 #include "GameUiShell.h"
 #include "RmlUiSourceUrl.h"
 #include "RmlUiResourcePath.h"
@@ -68,12 +69,27 @@ namespace
     class GameUiEvents final : public Rml::EventListener
     {
     public:
+        RmlColorPicker ColorPicker;
         explicit GameUiEvents(Rml::ElementDocument** document,
                               std::vector<std::string>* pending)
             : Document(document), Pending(pending) {}
 
         void ProcessEvent(Rml::Event& event) override
         {
+            std::string ColorCommand;
+            std::string ColorCompletion;
+            if (ColorPicker.ProcessEvent(event, *Document, ColorCommand, ColorCompletion))
+            {
+                if (!ColorCommand.empty())
+                {
+                    Pending->push_back(ColorCommand);
+                }
+                if (!ColorCompletion.empty())
+                {
+                    Pending->push_back(ColorCompletion);
+                }
+                return;
+            }
             if (event.GetId() == Rml::EventId::Mousedown)
             {
                 PointerDown = true;
@@ -199,6 +215,7 @@ struct GameUiShell::Impl
     std::string Semantic;
     std::deque<Frame> PinnedFrames;
     std::function<bool()> Present;
+    std::function<void(UINT, WPARAM, LPARAM)> Input;
     uint32_t Buttons = 0;
     int InjectedModifiers = -1;
 
@@ -291,9 +308,10 @@ struct GameUiShell::Impl
 GameUiShell::GameUiShell() = default;
 GameUiShell::~GameUiShell() { Shutdown(); }
 
-bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml::RenderInterface* renderer)
+bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml::RenderInterface* renderer,
+    uint32_t width, uint32_t height)
 {
-    if (State || !window || !renderer)
+    if (State || !renderer || !width || !height)
     {
         return false;
     }
@@ -313,9 +331,7 @@ bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml
     Rml::LoadFontFace("C:/Windows/Fonts/segoeui.ttf");
     Rml::LoadFontFace("C:/Windows/Fonts/segoeuib.ttf");
     Rml::LoadFontFace("C:/Windows/Fonts/msyh.ttc", true);
-    RECT client{};
-    GetClientRect(window, &client);
-    state.Context = Rml::CreateContext("game", Rml::Vector2i(client.right, client.bottom), renderer, &state.Ime);
+    state.Context = Rml::CreateContext("game", Rml::Vector2i(width, height), renderer, &state.Ime);
     if (!state.Context)
     {
         return false;
@@ -336,6 +352,8 @@ bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml
         state.Document->AddEventListener(Rml::EventId::Blur, &state.Events, true);
         state.Document->AddEventListener(Rml::EventId::Change, &state.Events);
         state.Document->AddEventListener(Rml::EventId::Keydown, &state.Events, true);
+        state.Document->AddEventListener(Rml::EventId::Keyup, &state.Events, true);
+        state.Document->AddEventListener(Rml::EventId::Mousemove, &state.Events);
         state.Document->AddEventListener(Rml::EventId::Mousedown, &state.Events, true);
         state.Document->AddEventListener(Rml::EventId::Mouseup, &state.Events);
         state.Document->Show();
@@ -346,7 +364,7 @@ bool GameUiShell::Initialize(HWND window, const std::filesystem::path& root, Rml
         EngineLog::Info("RmlUi",
             "Game UI started without a document; game code selects the screen");
     }
-    Update(client.right, client.bottom);
+    Update(width, height);
     return true;
 }
 
@@ -357,6 +375,7 @@ bool GameUiShell::SetDocument(std::string_view rml, std::string_view sourcePath)
         return false;
     }
     auto& state = *State;
+    state.Events.ColorPicker.Reset();
     if (state.Document)
     {
         state.Context->UnloadDocument(state.Document);
@@ -377,6 +396,8 @@ bool GameUiShell::SetDocument(std::string_view rml, std::string_view sourcePath)
     state.Document->AddEventListener(Rml::EventId::Blur, &state.Events, true);
     state.Document->AddEventListener(Rml::EventId::Change, &state.Events);
     state.Document->AddEventListener(Rml::EventId::Keydown, &state.Events, true);
+    state.Document->AddEventListener(Rml::EventId::Keyup, &state.Events, true);
+    state.Document->AddEventListener(Rml::EventId::Mousemove, &state.Events);
     state.Document->AddEventListener(Rml::EventId::Mousedown, &state.Events, true);
     state.Document->AddEventListener(Rml::EventId::Mouseup, &state.Events);
     state.Document->Show();
@@ -395,6 +416,7 @@ bool GameUiShell::ClearDocument()
         return false;
     }
     auto& state = *State;
+    state.Events.ColorPicker.Reset();
     if (!state.Document)
     {
         return true;
@@ -448,6 +470,10 @@ void GameUiShell::Update(uint32_t width, uint32_t height)
         }
     }
     State->Context->Update();
+    if (State->Document)
+    {
+        State->Events.ColorPicker.AfterLayout(State->Document);
+    }
 }
 void GameUiShell::Render()
 {
@@ -504,6 +530,7 @@ uint32_t GameUiShell::InputModifiers(uint32_t nativeModifiers) const
 }
 
 void GameUiShell::SetPresentHandler(std::function<bool()> handler) { State->Present = std::move(handler); }
+void GameUiShell::SetInputHandler(std::function<void(UINT, WPARAM, LPARAM)> handler) { State->Input = std::move(handler); }
 
 void GameUiShell::SetActionHandler(std::function<void(const char*, const char*)> handler)
 {
@@ -585,11 +612,11 @@ std::string GameUiShell::PointerInput(std::string_view hostId, uint32_t event, i
     const auto before = state.StateRevision;
     const auto focusBefore = UiObservation::Identity(state.Context->GetFocusElement());
     state.InjectedModifiers = static_cast<int>(modifiers);
-    SendMessageW(state.Window, WM_MOUSEMOVE, state.Buttons, MAKELPARAM(x, y));
+    state.Input(WM_MOUSEMOVE, state.Buttons, MAKELPARAM(x, y));
     if (event == 1)
     {
         state.Buttons |= bit;
-        SendMessageW(state.Window,
+        state.Input(
                      button == 1   ? WM_LBUTTONDOWN
                      : button == 2 ? WM_RBUTTONDOWN
                                    : WM_MBUTTONDOWN,
@@ -598,7 +625,7 @@ std::string GameUiShell::PointerInput(std::string_view hostId, uint32_t event, i
     else if (event == 2)
     {
         state.Buttons &= ~bit;
-        SendMessageW(state.Window,
+        state.Input(
                      button == 1   ? WM_LBUTTONUP
                      : button == 2 ? WM_RBUTTONUP
                                    : WM_MBUTTONUP,
@@ -615,7 +642,10 @@ std::string GameUiShell::PointerInput(std::string_view hostId, uint32_t event, i
             }
         }
         state.Buttons = 0;
-        ReleaseCapture();
+        if (state.Window)
+        {
+            ReleaseCapture();
+        }
     }
     else if (event == 4)
     {
@@ -652,7 +682,7 @@ std::string GameUiShell::KeyInput(std::string_view hostId, uint32_t event, uint3
     state.InjectedModifiers = static_cast<int>(modifiers);
     if (event < 2)
     {
-        SendMessageW(state.Window, event == 0 ? WM_KEYDOWN : WM_KEYUP, key, 0);
+        state.Input(event == 0 ? WM_KEYDOWN : WM_KEYUP, key, 0);
     }
     else
     {

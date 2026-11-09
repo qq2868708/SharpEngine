@@ -17,6 +17,7 @@ public static class UiValueEditors
     private static readonly UiLayoutTemplate VectorLayout = Load("VectorEditor");
     private static readonly UiLayoutTemplate AxisLayout = Load("ValueAxis");
     private static readonly UiLayoutTemplate TransformLayout = Load("TransformEditor");
+    private static readonly UiLayoutTemplate ColorLayout = Load("ColorPicker");
 
     private static UiLayoutTemplate Load(string Name) { return UiLayoutTemplate.LoadEmbedded(typeof(UiValueEditors).Assembly, "SharpEngine.UI." + Name + ".rml"); }
 
@@ -89,6 +90,44 @@ public static class UiValueEditors
         return Text(Label, Input, Hint, Class);
     }
 
+    public static string Range(string Label, UiValueInput Value, double Minimum,
+        double Maximum, double Step, string? Hint = null, string Class = "")
+    {
+        var Number = Value with
+        {
+            Kind = Value.Kind == "integer" ? "integer" : "number",
+        };
+        return FieldCore(Label, Input(Number) + RangeInput(Number, Minimum, Maximum, Step),
+            Hint, Class, Value.ReadOnly);
+    }
+
+    public static string RangeInput(UiValueInput Value, double Minimum,
+        double Maximum, double Step)
+    {
+        if (!double.IsFinite(Minimum) || !double.IsFinite(Maximum) || !double.IsFinite(Step) ||
+            Minimum >= Maximum || Step <= 0)
+        {
+            throw new ArgumentException("UI_RANGE_INVALID: finite increasing bounds and positive step are required");
+        }
+        var Range = new XElement("input", new XAttribute("type", "range"),
+            new XAttribute("class", "se-value-range"), new XAttribute("min", Minimum.ToString("R", CultureInfo.InvariantCulture)),
+            new XAttribute("max", Maximum.ToString("R", CultureInfo.InvariantCulture)), new XAttribute("step", Step.ToString("R", CultureInfo.InvariantCulture)),
+            new XAttribute("value", Value.Value), new XAttribute("data-value-range", "true"),
+            new XAttribute("data-value-commit", Value.CommitAction));
+        if (Value.Id.Length != 0)
+        {
+            Range.SetAttributeValue("id", Value.Id + "-range");
+        }
+        if (Value.ReadOnly)
+        {
+            Range.SetAttributeValue("disabled", "disabled");
+            Range.SetAttributeValue("aria-disabled", "true");
+            Range.SetAttributeValue("tabindex", "-1");
+            Range.Attribute("data-value-commit")?.Remove();
+        }
+        return Range.ToString(SaveOptions.DisableFormatting);
+    }
+
     public static string Vector(string Label, IReadOnlyList<UiValueInput> Values, string Axes = "XYZW", string Class = "")
     {
         if (Values.Count < 2 || Values.Count > 4 || Axes.Length < Values.Count)
@@ -122,6 +161,64 @@ public static class UiValueEditors
 
     public static string Rotator(string Label, IReadOnlyList<UiValueInput> Values) { return Vector(Label, Values, "XYZ", "se-rotator"); }
 
+    public static string Color(string Label, IReadOnlyList<UiValueInput> Values,
+        string CommitAction = "", string? PickerId = null)
+    {
+        if (Values.Count != 4)
+        {
+            throw new ArgumentException("UI_COLOR_DIMENSION: four RGBA inputs are required");
+        }
+        return Vector(Label, Values, "RGBA", "se-color") + ColorPicker(
+            PickerId ?? Values[0].Id + "-picker", Values, CommitAction);
+    }
+
+    public static string ColorPicker(string Id, IReadOnlyList<UiValueInput> Values, string CommitAction)
+    {
+        if (Values.Count != 4 || string.IsNullOrEmpty(Id))
+        {
+            throw new ArgumentException("UI_COLOR_INPUT: a stable ID and four RGBA values are required");
+        }
+        var Channels = Values.Select(Value => double.Parse(Value.Value, CultureInfo.InvariantCulture)).ToArray();
+        if (Channels.Any(Channel => !double.IsFinite(Channel)))
+        {
+            throw new ArgumentException("UI_COLOR_INVALID: RGBA values must be finite");
+        }
+        var ReadOnly = Values.Any(Value => Value.ReadOnly) || string.IsNullOrEmpty(CommitAction);
+        var Toggle = new XElement("button", new XAttribute("id", Id + "-open"),
+            new XAttribute("class", "color-picker-toggle"), new XAttribute("title", "Open color picker"),
+            new XAttribute("aria-expanded", "false"));
+        var Preview = "rgb(" + string.Join(",", Channels.Take(3).Select(Channel =>
+            Math.Round(Math.Clamp(Channel, 0, 1) * 255).ToString(CultureInfo.InvariantCulture))) + ")";
+        Toggle.Add(new XElement("span", new XAttribute("id", Id + "-chip"),
+            new XAttribute("class", "color-picker-chip"), new XAttribute("style", "background-color:" + Preview + ";")),
+            new XElement("span", "Color picker"), new XElement("img", new XAttribute("class", "icon"),
+                new XAttribute("src", "sharpengine-resource://engine/Resources/Editor/Icons/chevron-down.tga")));
+        if (ReadOnly)
+        {
+            Toggle.SetAttributeValue("disabled", "disabled");
+            Toggle.SetAttributeValue("aria-disabled", "true");
+            Toggle.SetAttributeValue("tabindex", "-1");
+        }
+        else
+        {
+            Toggle.SetAttributeValue("data-color-command", "open");
+        }
+        return ColorLayout.Render(default, new JsonObject
+        {
+            ["Id"] = Id,
+            ["ReadOnly"] = ReadOnly,
+            ["Action"] = ReadOnly ? string.Empty : CommitAction,
+            ["Value"] = new JsonArray(Channels.Select(Channel => (JsonNode?)JsonValue.Create(Channel)).ToArray()).ToJsonString(),
+            ["R"] = Channels[0].ToString("R", CultureInfo.InvariantCulture),
+            ["G"] = Channels[1].ToString("R", CultureInfo.InvariantCulture),
+            ["B"] = Channels[2].ToString("R", CultureInfo.InvariantCulture),
+            ["A"] = Channels[3].ToString("R", CultureInfo.InvariantCulture),
+        }, new Dictionary<string, IUiLayoutPart>
+        {
+            ["Toggle"] = new MarkupPart(Toggle.ToString(SaveOptions.DisableFormatting)),
+        });
+    }
+
     public static string Transform(string Label, IReadOnlyList<UiValueInput> Position,
         IReadOnlyList<UiValueInput> Rotation, IReadOnlyList<UiValueInput> Scale)
     {
@@ -141,6 +238,13 @@ public static class UiValueEditors
         IEnumerable<(string Id, string Label)> Options, string Action, bool ReadOnly = false)
     {
         return FieldCore(Label, ChoiceInput(Id, Value, Options, Action, ReadOnly), Disabled: ReadOnly);
+    }
+
+    public static string Reference(string Label, string Id, string Value,
+        IEnumerable<(string Id, string Label)> Options, string Action, bool ReadOnly = false)
+    {
+        return FieldCore(Label, ReferenceInput(Id, Value, Options, Action, ReadOnly),
+            Disabled: ReadOnly);
     }
 
     public static string ChoiceInput(string Id, string Value,
@@ -165,6 +269,14 @@ public static class UiValueEditors
             Select.Add(Node);
         }
         return Select.ToString(SaveOptions.DisableFormatting);
+    }
+
+    public static string ReferenceInput(string Id, string Value,
+        IEnumerable<(string Id, string Label)> Options, string Action, bool ReadOnly = false)
+    {
+        var Markup = XElement.Parse(ChoiceInput(Id, Value, Options, Action, ReadOnly));
+        Markup.SetAttributeValue("class", "se-value-input se-value-reference");
+        return Markup.ToString(SaveOptions.DisableFormatting);
     }
 
     public static string Boolean(string Label, string Id, bool Value, string Action, bool ReadOnly = false)

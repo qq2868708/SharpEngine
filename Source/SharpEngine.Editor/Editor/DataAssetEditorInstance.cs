@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -88,6 +89,46 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        const string ColorPrefix = "editor.data-asset-color:";
+        if (Action.StartsWith(ColorPrefix, StringComparison.Ordinal))
+        {
+            var Payload = Action[ColorPrefix.Length..];
+            var Separator = Payload.IndexOf(':');
+            if (Separator > 0)
+            {
+                var Name = Payload[..Separator];
+                var Changed = Document.Edit("data-asset-color", Root =>
+                {
+                    var Values = JsonNode.Parse(Payload[(Separator + 1)..]) as JsonArray;
+                    if (Values is null || Values.Count != 4 ||
+                        Values.Any(Value => Value is null || !float.IsFinite(Value.GetValue<float>())))
+                    {
+                        throw new InvalidDataException("Color requires four finite RGBA components");
+                    }
+                    var Type = Descriptor.Properties.Single(Property => Property.JsonName == Name).PropertyType;
+                    if (Type != typeof(Color))
+                    {
+                        throw new InvalidDataException("The selected property is not a Color");
+                    }
+                    if (Root[Name] is JsonObject Object)
+                    {
+                        for (var Index = 0; Index < 4; Index++)
+                        {
+                            Object["rgba"[Index].ToString()] = Values[Index]!.DeepClone();
+                        }
+                    }
+                    else
+                    {
+                        Root[Name] = Values.DeepClone();
+                    }
+                }, out var Message);
+                if (!Changed && Message.Length != 0)
+                {
+                    Context.SetStatus(Message);
+                }
+            }
+            return true;
+        }
         const string FieldPrefix = "editor.data-asset-field:";
         if (Action.StartsWith(FieldPrefix, StringComparison.Ordinal))
         {
@@ -96,6 +137,21 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
             if (Separator > 0)
             {
                 SetField(Payload[..Separator], Payload[(Separator + 1)..]);
+            }
+            return true;
+        }
+
+        const string AxisPrefix = "editor.data-asset-axis:";
+        if (Action.StartsWith(AxisPrefix, StringComparison.Ordinal))
+        {
+            var Payload = Action[AxisPrefix.Length..];
+            var NameSeparator = Payload.IndexOf(':');
+            var AxisSeparator = NameSeparator < 0 ? -1 : Payload.IndexOf(':', NameSeparator + 1);
+            if (NameSeparator > 0 && AxisSeparator > NameSeparator)
+            {
+                SetAxis(Payload[..NameSeparator],
+                    int.Parse(Payload[(NameSeparator + 1)..AxisSeparator], CultureInfo.InvariantCulture),
+                    Payload[(AxisSeparator + 1)..]);
             }
             return true;
         }
@@ -186,6 +242,47 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
         }
     }
 
+    private void SetAxis(string JsonName, int Axis, string Value)
+    {
+        var Property = Descriptor.Properties.FirstOrDefault(Property =>
+            Property.JsonName == JsonName && VectorSize(Property.PropertyType) > 0);
+        if (Property is null)
+        {
+            Context.SetStatus($"Data asset property is not a vector: {JsonName}");
+            return;
+        }
+
+        var Changed = Document.Edit("data-asset-axis", Root =>
+        {
+            var Current = Root[JsonName];
+            var Count = VectorSize(Property.PropertyType);
+            var Values = ReadAxes(Property.PropertyType, Current);
+            if (Axis < 0 || Axis >= Count || Values is null)
+            {
+                throw new InvalidDataException($"Invalid vector axis {Axis} for {JsonName}");
+            }
+            var Number = float.Parse(Value, NumberStyles.Float,
+                CultureInfo.InvariantCulture);
+            if (!float.IsFinite(Number))
+            {
+                throw new InvalidDataException("Vector value must be finite");
+            }
+            if (Current is JsonArray Array)
+            {
+                Array[Axis] = Number;
+            }
+            else
+            {
+                var Axes = Property.PropertyType == typeof(Color) ? "rgba" : "xyzw";
+                Current!.AsObject()[Axes[Axis].ToString()] = Number;
+            }
+        }, out var Message);
+        if (!Changed && Message.Length != 0)
+        {
+            Context.SetStatus(Message);
+        }
+    }
+
     private void Toggle(string JsonName)
     {
         var Property = Descriptor.Properties.FirstOrDefault(Property =>
@@ -265,13 +362,59 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
                 };
                 Options.AddRange(Context.Runtime.Assets!.Assets.Where(Asset => Asset.Exists && EditorAssetReferenceTypes.Matches(Asset.Type, ReferenceType))
                     .Select(Asset => (Asset.Id, Asset.Name)));
-                Markup.Append(SharpEngine.UI.UiValueEditors.Choice(Property.Name, "dataAsset-" + Property.JsonName,
+                Markup.Append(SharpEngine.UI.UiValueEditors.Reference(Property.Name, "dataAsset-" + Property.JsonName,
                     Value?.GetValue<string>() ?? string.Empty, Options, "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly));
                 continue;
             }
+
+            var VectorCount = VectorSize(Property.PropertyType);
+            var Values = ReadAxes(Property.PropertyType, Value);
+            if (VectorCount > 0 && Values is not null)
+            {
+                var Inputs = Enumerable.Range(0, VectorCount).Select(Index =>
+                    new SharpEngine.UI.UiValueInput(
+                        "dataAsset-" + Property.JsonName + "-" + Index.ToString(CultureInfo.InvariantCulture),
+                        SharpEngine.UI.UiValueEditors.Format(Values[Index]),
+                        "editor.data-asset-axis:" + Property.JsonName + ":" + Index.ToString(CultureInfo.InvariantCulture) + ":",
+                        IsReadOnly, "number")).ToArray();
+                Markup.Append(Property.PropertyType == typeof(Color)
+                    ? SharpEngine.UI.UiValueEditors.Color(Property.Name, Inputs,
+                        "editor.data-asset-color:" + Property.JsonName + ":")
+                    : SharpEngine.UI.UiValueEditors.Vector(Property.Name, Inputs,
+                        Property.PropertyType == typeof(Vector2) ? "XY" : "XYZW"));
+                continue;
+            }
+
             var Text = FormatValue(Property.PropertyType, Value);
-            Markup.Append(AssetEditorInstanceUtilities.Field(Property.Name, Text,
-                "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly, BuildHint(Property), "dataAsset-" + Property.JsonName));
+            if (VectorCount > 0)
+            {
+                Markup.Append(SharpEngine.UI.UiValueEditors.Multiline(Property.Name,
+                    new SharpEngine.UI.UiValueInput("dataAsset-" + Property.JsonName, Text,
+                        string.Empty, true), 2, "The current serialized value does not expose numeric components"));
+                continue;
+            }
+            var ValueInput = new SharpEngine.UI.UiValueInput("dataAsset-" + Property.JsonName,
+                Text, "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly,
+                IsNumber(Property.PropertyType) ?
+                    (IsInteger(Property.PropertyType) ? "integer" : "number") : "text");
+            if (IsNumber(Property.PropertyType) && Property.Constraints is { } Constraints &&
+                !double.IsNaN(Constraints.Minimum) && !double.IsNaN(Constraints.Maximum))
+            {
+                Markup.Append(SharpEngine.UI.UiValueEditors.Range(Property.Name, ValueInput,
+                    Constraints.Minimum, Constraints.Maximum,
+                    IsInteger(Property.PropertyType) ? 1 : 0.01, BuildHint(Property), "asset-field"));
+            }
+            else if (IsNumber(Property.PropertyType))
+            {
+                Markup.Append(SharpEngine.UI.UiValueEditors.Number(Property.Name, ValueInput,
+                    BuildHint(Property), "asset-field"));
+            }
+            else
+            {
+                Markup.Append(AssetEditorInstanceUtilities.Field(Property.Name, Text,
+                    "editor.data-asset-field:" + Property.JsonName + ":", IsReadOnly,
+                    BuildHint(Property), "dataAsset-" + Property.JsonName));
+            }
         }
         Markup.Append("</div>");
         return Markup.ToString();
@@ -341,6 +484,34 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
         Type == typeof(short) || Type == typeof(int) || Type == typeof(long) ||
         Type == typeof(ushort) || Type == typeof(uint) || Type == typeof(ulong) ||
         Type == typeof(float) || Type == typeof(double) || Type == typeof(decimal);
+
+    private static bool IsInteger(Type Type) => Type == typeof(byte) ||
+        Type == typeof(short) || Type == typeof(int) || Type == typeof(long) ||
+        Type == typeof(ushort) || Type == typeof(uint) || Type == typeof(ulong);
+
+    private static int VectorSize(Type Type) => Type == typeof(Vector2) ? 2 :
+        Type == typeof(Vector3) ? 3 : Type == typeof(Vector4) ||
+        Type == typeof(Quaternion) || Type == typeof(Color) ? 4 : 0;
+
+    private static double[]? ReadAxes(Type Type, JsonNode? Value)
+    {
+        var Count = VectorSize(Type);
+        if (Count == 0)
+        {
+            return null;
+        }
+        if (Value is JsonArray Array && Array.Count == Count)
+        {
+            return Array.Select(Node => Node!.Deserialize<double>()).ToArray();
+        }
+        var Axes = Type == typeof(Color) ? "rgba" : "xyzw";
+        var Object = Value as JsonObject;
+        if (Object is not null && Enumerable.Range(0, Count).All(Index => Object[Axes[Index].ToString()] is JsonValue))
+        {
+            return Enumerable.Range(0, Count).Select(Index => Object[Axes[Index].ToString()]!.Deserialize<double>()).ToArray();
+        }
+        return null;
+    }
 
     private static bool IsAssetReference(Type Type) => Type.IsGenericType &&
         Type.GetGenericTypeDefinition() == typeof(AssetRef<>);

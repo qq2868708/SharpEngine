@@ -111,7 +111,7 @@ try
         """);
     var dataAssetPath = Path.Combine(dataDirectory.FullName, "ReloadRifle.sdataasset");
     File.WriteAllText(dataAssetPath, """
-        {"schemaVersion":1,"kind":"Validation.Reload.Rifle","assetId":"project://data/reload-rifle","name":"Reload Rifle","damage":35,"magazineSize":30}
+        {"schemaVersion":1,"kind":"Validation.Reload.Rifle","assetId":"project://data/reload-rifle","name":"Reload Rifle","damage":35,"magazineSize":30,"tint":{"r":0.2,"g":0.6,"b":0.9,"a":1}}
         """);
     File.WriteAllText(Path.Combine(assets.FullName, "assets.json"), """
         {"schemaVersion":2,"assets":[
@@ -592,6 +592,41 @@ try
 
     var DataAssetOpen = runtime.OpenAsset("project://data/reload-rifle");
     var DataAssetRoot = AssetEditorRoot("project://data/reload-rifle");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-axis:tint:1:0.8");
+    JsonObject DataState()
+    {
+        return JsonNode.Parse(runtime.DescribeEditorJson())!["assetTools"]!["editors"]!.AsArray()
+            .Single(Item => Item!["assetId"]!.GetValue<string>() == "project://data/reload-rifle")!["state"]!["document"]!.AsObject();
+    }
+    Require(Math.Abs(DataState()["tint"]!["g"]!.GetValue<double>() - 0.8) < 1e-6 &&
+        DataState()["tint"]!["r"]!.GetValue<double>() == 0.2 &&
+        DataState()["tint"]!["b"]!.GetValue<double>() == 0.9,
+        "DataAsset Color axis edits preserve object storage and untouched channels");
+    runtime.InvokeUiAction($"editor.host-action:{DataAssetRoot}:editor.asset-command:undo");
+    Require(DataState()["tint"]!["g"]!.GetValue<double>() == 0.6 && !AssetEditorDirty("project://data/reload-rifle"),
+        "One Undo restores the DataAsset color and its saved state");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-axis:tint:1:NaN");
+    Require(DataState()["tint"]!["g"]!.GetValue<double>() == 0.6 && !AssetEditorDirty("project://data/reload-rifle"),
+        "Non-finite DataAsset axis input is rejected atomically");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-color:tint:[0.7,0.1,0.3,0.5]");
+    Require(DataState()["tint"] is JsonObject && DataState()["tint"]!["r"]!.GetValue<double>() == 0.7 &&
+        DataState()["tint"]!["g"]!.GetValue<double>() == 0.1 &&
+        DataState()["tint"]!["b"]!.GetValue<double>() == 0.3 &&
+        DataState()["tint"]!["a"]!.GetValue<double>() == 0.5,
+        "Applying a DataAsset palette preserves object storage while committing all four channels");
+    runtime.InvokeUiAction($"editor.host-action:{DataAssetRoot}:editor.asset-command:undo");
+    Require(DataState()["tint"]!["r"]!.GetValue<double>() == 0.2 &&
+        DataState()["tint"]!["a"]!.GetValue<double>() == 1 && !AssetEditorDirty("project://data/reload-rifle"),
+        "One Undo restores every palette channel and the DataAsset savepoint");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-color:tint:[0.7,null,0.3,0.5]");
+    runtime.InvokeUiAction(
+        $"editor.host-action:{DataAssetRoot}:editor.data-asset-color:tint:invalid-json");
+    Require(DataState()["tint"]!["r"]!.GetValue<double>() == 0.2 && !AssetEditorDirty("project://data/reload-rifle"),
+        "Invalid palette payloads are rejected without a partial DataAsset mutation");
     runtime.InvokeUiAction(
         $"editor.host-action:{DataAssetRoot}:editor.data-asset-field:damage:42");
     runtime.InvokeUiAction(

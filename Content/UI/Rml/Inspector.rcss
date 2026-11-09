@@ -39,22 +39,6 @@
 .component-palette { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 0px 2px; }
 .component-palette button { width: 18px; height: 18px; padding: 0px; margin: 0px; border: 1px #6b7686; border-radius: 3px; }
 .component-palette button:hover { border: 2px #d9e9fc; }
-.color-picker { display: block; margin-top: 8px; }
-.color-picker-toggle { display: flex; align-items: center; width: 100%; height: 28px; padding: 4px 7px; background-color: #303b4a; border: 1px #4b5e75; color: #c4d7ee; font-size: 11px; }
-.color-picker-toggle:hover { background-color: #3b4b60; }
-.color-picker-chip { display: block; width: 28px; height: 16px; margin-right: 8px; border: 1px #8291a6; }
-.color-picker-toggle .icon { width: 14px; height: 14px; margin-left: auto; }
-.color-picker-panel { display: none; padding: 10px; margin-top: 5px; background-color: #1a2029; border: 1px #485a71; border-radius: 4px; }
-.color-picker-panel > label { display: block; font-size: 10px; line-height: 15px; color: #8e9fb6; margin-top: 7px; }
-.color-picker-sv { display: block; position: relative; width: 100%; height: 130px; background-color: #ff0000; decorator: image("sharpengine-resource://engine/Resources/Editor/ColorPicker/sv.tga"); cursor: cross; }
-.color-picker-marker { position: absolute; width: 8px; height: 8px; margin-left: -5px; margin-top: -5px; border: 2px white; border-radius: 5px; background-color: #00000000; pointer-events: none; }
-.color-picker-hue { display: block; position: relative; width: 100%; height: 15px; decorator: image("sharpengine-resource://engine/Resources/Editor/ColorPicker/hue.tga"); cursor: pointer; }
-.color-picker-track-marker { position: absolute; width: 3px; height: 17px; top: -1px; margin-left: -2px; border: 1px white; background-color: #1a2029; pointer-events: none; }
-.color-picker-preview { display: block; height: 27px; margin-top: 7px; padding: 5px; font-size: 10px; color: #d5deeb; background-color: #293443; border-left-width: 22px; }
-.color-picker-buttons { display: flex; gap: 7px; margin-top: 8px; }
-.color-picker-buttons button { flex: 1; height: 26px; padding: 4px; background-color: #2f3947; border: 1px #4a5a70; color: #bccbdf; font-size: 11px; }
-.color-picker-buttons button:hover { border-color: #8cb5e6; }
-.color-picker-buttons .color-picker-apply { background-color: #315c87; border-color: #5a8dbf; color: #edf6ff; }
 #componentInspector input[type=checkbox] { display: inline-block; width: 16px; min-width: 16px; height: 16px; padding: 0px; margin: 0px; flex-grow: 0; flex-shrink: 0; background-color: #1b222c; border: 1px #57667b; border-radius: 3px; cursor: pointer; }
 #componentInspector input[type=checkbox]:hover { border-color: #8bb9ec; }
 #componentInspector input[type=checkbox]:checked { decorator: image("sharpengine-resource://engine/Resources/Editor/Icons/check.tga" contain); background-color: #3978b5; border: 1px #6da6de; }

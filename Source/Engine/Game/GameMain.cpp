@@ -247,13 +247,16 @@ namespace
             {
                 kind = 3;
                 code = message == WM_LBUTTONDOWN ? 0 : message == WM_RBUTTONDOWN ? 1 : 2;
-                SetCapture(window);
+                if (window)
+                {
+                    SetCapture(window);
+                }
             }
             if (message == WM_LBUTTONUP || message == WM_RBUTTONUP || message == WM_MBUTTONUP)
             {
                 kind = 4;
                 code = message == WM_LBUTTONUP ? 0 : message == WM_RBUTTONUP ? 1 : 2;
-                if (!GameplayCapture.IsActive())
+                if (window && !GameplayCapture.IsActive())
                 {
                     ReleaseCapture();
                 }
@@ -340,7 +343,7 @@ namespace
         {
             return 0;
         }
-        return DefWindowProcW(window, message, wp, lp);
+        return window ? DefWindowProcW(window, message, wp, lp) : 0;
     }
 } // namespace
 
@@ -504,14 +507,18 @@ int wmain(int argc, wchar_t** argv)
         return 3;
     }
     GameUiShell ui;
-    if (!headless && !ui.Initialize(Window, selection.EngineRoot, GetActiveRenderBackend()->GetUiRenderer()))
+    if (!nullRhi && !ui.Initialize(Window, selection.EngineRoot, GetActiveRenderBackend()->GetUiRenderer(),
+        RenderWidth, RenderHeight))
     {
         ui.Shutdown();
         RC_Shutdown();
-        DestroyWindow(Window);
+        if (Window)
+        {
+            DestroyWindow(Window);
+        }
         return 3;
     }
-    Ui = headless ? nullptr : &ui;
+    Ui = nullRhi ? nullptr : &ui;
     ManagedHost managed;
     ManagedHostApi api{};
     api.GetViewportRect = Viewport;
@@ -530,6 +537,10 @@ int wmain(int argc, wchar_t** argv)
     if (Ui)
     {
         Ui->SetPresentHandler(RenderGameFrame);
+        Ui->SetInputHandler([](UINT Message, WPARAM WParam, LPARAM LParam)
+        {
+            Procedure(Window, Message, WParam, LParam);
+        });
         // Managed UI actions reuse the existing managed action entry point. The shell
         // defers them out of event dispatch, so a recomposed document is never loaded
         // while RmlUi is dispatching the click that requested it.
@@ -560,7 +571,7 @@ int wmain(int argc, wchar_t** argv)
     if (Window && !hidden)
     {
         ShowWindow(Window, SW_SHOW);
-        CaptureRequested = true;
+        CaptureRequested = !renderOffscreen;
     }
     auto last = std::chrono::steady_clock::now();
     uint32_t frames = 0;

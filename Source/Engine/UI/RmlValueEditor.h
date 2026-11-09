@@ -14,6 +14,15 @@ public:
         const std::function<void(const Rml::String&)>& Emit)
     {
         auto* Target = Event.GetTargetElement();
+        auto* Range = Target;
+        while (Range && !Range->HasAttribute("data-value-range"))
+        {
+            Range = Range->GetParentNode();
+        }
+        if (Range)
+        {
+            return ProcessRange(Event, Range, Emit);
+        }
         if (!Target || !Target->HasAttribute("data-value-editor"))
         {
             return false;
@@ -68,5 +77,47 @@ public:
             return true;
         }
         return EventId == Rml::EventId::Change;
+    }
+
+private:
+    static bool ProcessRange(Rml::Event& Event, Rml::Element* Target,
+        const std::function<void(const Rml::String&)>& Emit)
+    {
+        if (Target->HasAttribute("disabled"))
+        {
+            return true;
+        }
+        const auto Id = Event.GetId();
+        const auto Value = Target->GetAttribute<Rml::String>("value", "");
+        if (Id == Rml::EventId::Focus || Id == Rml::EventId::Mousedown)
+        {
+            Target->SetAttribute("data-range-start", Value);
+            if (Id == Rml::EventId::Mousedown)
+            {
+                Target->SetAttribute("data-range-dragging", true);
+            }
+            Emit("ui.value-focus");
+        }
+        const bool Cancel = Id == Rml::EventId::Keydown &&
+            Event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE;
+        const bool Commit = Id == Rml::EventId::Blur || Id == Rml::EventId::Keyup ||
+            (Id == Rml::EventId::Mouseup && Event.GetParameter<int>("button", -1) == 0);
+        if (Cancel || Commit)
+        {
+            const auto Start = Target->GetAttribute<Rml::String>("data-range-start", Value);
+            if (Cancel)
+            {
+                Target->SetAttribute("value", Start);
+                Event.StopPropagation();
+            }
+            else if (Value != Start)
+            {
+                Emit(Target->GetAttribute<Rml::String>("data-value-commit", "") + Value);
+                Target->SetAttribute("data-range-start", Value);
+            }
+            Target->RemoveAttribute("data-range-dragging");
+            Emit("ui.value-end");
+        }
+        return Id == Rml::EventId::Change || Cancel || Commit;
     }
 };

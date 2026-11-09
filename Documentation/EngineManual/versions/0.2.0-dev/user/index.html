@@ -156,11 +156,14 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>修正 Reference 与通用下拉框的重叠边框和箭头溢出：值区和箭头共用一个 28px 外框，禁用态保留相同尺寸；下拉选择和只读保护保持原有行为。</p>
       <p>修复独立 Game 在 Vulkan 下的 UI 快照与输入反馈读回：仅在需要固定帧证据时请求读回并呈现，交互结果与 PNG 使用同一帧。Game 界面验证现在实际转发并核对所选后端。</p>
       <p>StaticMesh/Skeleton 预览仅在选中可写 Socket 时显示操作 Gizmo；移除所有 Socket 的常驻 RGB 局部轴，父子与骨骼连线继续显示。选择 Mesh 根、骨骼或虚拟骨时隐藏操作手柄。</p>
       <p>音频源预览使用实例持有的临时播放副本处理长路径，关闭或重载时释放设备并清理副本，源文件保持只读。</p>
       <p>统一可编辑和只读字段的区分：只读值保留类型布局，采用 disabled 灰态并禁用输入、焦点与修改；统计信息和只读资源也复用同一套控件。可写字段保持正常输入表现，树仍可选择和展开。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>统一现有树与基础类型编辑：场景、UI、Prefab、Mesh/Skeleton 树复用同一节点控件；Vector/Rotator 使用 X/Y/Z 分量输入，Transform 组合位置、旋转、缩放三组。输入保留草稿，Enter 或失焦校验后提交一次，Esc 放弃草稿。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
+      <p>补齐第一批基础值控件复用：Color 使用 RGBA 分量布局与公共色盘，点击色块按钮展开饱和度/明度、色相和透明度；预览不改数据，Apply 一次确认，Cancel / Esc 放弃，只读按钮禁用。Inspector、DataAsset 和 Game 复用同一色盘。带范围约束的数值同时显示文本输入和 Slider，AssetRef、Entity 与 Component 引用使用统一的 Reference 选择控件。DataAsset 编辑器复用这些控件显示数值、Vector、Color 和引用；没有独立 Transform 类型时不会按字段名猜测组合结构。</p>
+      <p>Game 的 <code>--render-offscreen</code> 现在保留运行时 RmlUi：CPU 离屏帧同时包含场景和 Game UI，可用于同帧截图与真实 UI 输入验证；<code>--null-rhi</code> 继续只用于无帧缓冲的逻辑冒烟。</p>
       <p>StaticMesh Socket 补齐真实父子层级：Mesh 为不可修改的根，Socket 可逐级嵌套；非叶子 Socket 禁止删除，须先移走或删除子级。树、Parent 选择、变换继承和 Gizmo 共用相同父引用，旧 Socket 自动读取为根的子级。</p>
       <p>修复大 JSON 资源窗口的重复序列化开销：未修改文档复用源文本和 Source 预览，dirty 状态随编辑、撤销、重做和保存及时更新；保存冲突检查与文档格式保持一致。编辑器性能作为验收条件，使用相同配置和资源记录平均帧时间、P95 与实际交互响应，性能回归不能以功能通过代替验收。</p>
       <p>移除网格编辑器 Source 面板，Preview 使用完整高度；StaticMesh 新增资产 Socket 编辑，支持局部 TRS、Gizmo、复制删除、Undo/Redo 与显式保存。</p>

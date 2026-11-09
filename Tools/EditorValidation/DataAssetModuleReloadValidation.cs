@@ -66,10 +66,16 @@ public abstract class ReloadWeaponData : DataAsset
 [DataAssetType("Validation.Reload.Rifle", SchemaVersion = 1)]
 public class ReloadRifleData : ReloadWeaponData
 {
-    [DataProperty(Minimum = 1, Required = true)]
+    [DataProperty(Minimum = 1, Maximum = 100, Required = true)]
     public int MagazineSize
     {
         get;
         set;
     }
+
+    public SharpEngine.Components.Color Tint
+    {
+        get;
+        set;
+    } = new(0.2f, 0.6f, 0.9f, 1);
 }

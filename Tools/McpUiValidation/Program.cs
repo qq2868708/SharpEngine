@@ -74,6 +74,14 @@ if (args.Contains("--player-only", StringComparer.Ordinal) ||
 }
 if (!string.IsNullOrWhiteSpace(settingsProject)) editorArguments.AddRange(["--project", settingsProject]);
 var RenderBackend = args.FirstOrDefault(Argument => Argument.StartsWith("--render-backend=", StringComparison.Ordinal));
+if (args.Contains("--render-offscreen", StringComparer.Ordinal))
+{
+    if (RenderBackend is not null)
+    {
+        throw new ArgumentException("Offscreen cannot be combined with an explicit graphics backend");
+    }
+    RenderBackend = "--render-offscreen";
+}
 if (RenderBackend is not null)
 {
     editorArguments.Add(RenderBackend);
@@ -96,7 +104,7 @@ var McpValidationPath = args.Contains("--mcp-only", StringComparer.Ordinal)
 // runs before the editor launch below.
 if (args.Contains("--game-ui-only", StringComparer.Ordinal))
 {
-    GameUiValidation.Run(root, configuration, Require, RenderBackend);
+    GameUiValidation.Run(root, configuration, Require, RenderBackend, DecodePng);
     Console.WriteLine($"PASS: {assertions} Game UI runtime screen assertions");
     return;
 }

@@ -22,11 +22,15 @@ Content Manager 的文件夹/资源浏览是目录列表，不把它伪装成递
 
 ## 基础类型
 
-`UiValueEditors.Input/Text/Multiline/Number/Boolean/Choice/Vector/Rotator/Transform` 提供共同外观与语义绑定。`ValueField.rml` 组合字段标签和编辑器，`ValueAxis.rml` 组合轴标签和标量输入，`VectorEditor.rml` 组合两个至四个分量。Rotator 复用三轴编辑器，以度表示 X pitch / Y yaw / Z roll。Transform 通过 `TransformEditor.rml` 组合 Position(Vector)、Rotation(Rotator)、Scale(Vector)，共九个输入框。RGBA 使用相同四分量布局，颜色选择器继续负责其专用连续预览与确认。
+`UiValueEditors.Input/Text/Multiline/Number/Range/Boolean/Choice/Reference/Vector/Rotator/Color/Transform` 提供共同外观与语义绑定。`ValueField.rml` 组合字段标签和编辑器，`ValueAxis.rml` 组合轴标签和标量输入，`VectorEditor.rml` 组合两个至四个分量。Rotator 复用三轴编辑器，以度表示 X pitch / Y yaw / Z roll。Transform 通过 `TransformEditor.rml` 组合 Position(Vector)、Rotation(Rotator)、Scale(Vector)，共九个输入框。Color 组合 RGBA 四分量布局与 `ColorPicker.rml` 共享色盘；Range 在文本输入下方复用带约束的 Slider；Reference 为资产、Entity 和 Component 选择提供语义样式，选项解析仍由领域编辑器负责。
+
+Color 的色块按钮展开饱和度/明度面板、Hue 色相条和 Opacity 滑条。拖动只更新可观察 DOM 中的临时预览，Apply 将整个 RGBA 数组交给调用方一次提交；Cancel、Esc 或再次点击展开按钮丢弃草稿。主场景 Inspector、DataAsset 与 Game 使用相同的原生 `RmlColorPicker`，UI 基础层不持有领域事务。`Color` 的 `CommitAction` 必须提供整色提交前缀；`PickerId` 可指定稳定身份，默认取第一个分量 ID 加 `-picker`。只读分量或未提供整色动作时禁用色盘按钮。色盘以 0–1 范围选色，数值输入仍保留所属领域允许的范围，打开或取消色盘不会截断已提交数值。
 
 类型呈现是 UI 契约，不修改源资产的 JSON 字段、坐标系或四元数存储，不把所有 Quaternion 自动解释成 Rotator。主场景 Transform 和 Socket 旋转使用各自既有的领域转换；修改一个分量保留其他分量。
 
-统一入口包括主场景组件 Inspector（含嵌套值和列表元素）、StaticMesh/Skeleton Socket、共享资产字段（Material、Input、DataAsset、StyleSheet、动画状态机）、编辑器设置、源码/资源创建表单、UI 属性/样式/布局/参考尺寸，以及动画状态机预览参数。媒体源预览的只读信息也复用相同字段。枚举和引用使用 Choice，布尔使用 Boolean；搜索仍即时响应，原始源文本、复杂 JSON 及 UI 布局长度（如 px、%、auto）保留其文本语义，不猜测成 Vector。
+Choice 与 Reference 共用单一 28px 下拉外框，原生值区和箭头在内部对齐，不重复绘制文本框边框。展开列表的宽度包含自身留白和边框；只读态保留同样尺寸并禁用选择。
+
+统一入口包括主场景组件 Inspector（含嵌套值和列表元素）、StaticMesh/Skeleton Socket、共享资产字段（Material、Input、DataAsset、StyleSheet、动画状态机）、编辑器设置、源码/资源创建表单、UI 属性/样式/布局/参考尺寸，以及动画状态机预览参数。媒体源预览的只读信息也复用相同字段。枚举使用 Choice，AssetRef/Entity/Component 使用 Reference，布尔使用 Boolean；DataAsset 的 Vector/Quaternion/Color 和带 Minimum/Maximum 的标量复用对应公共控件。没有明确运行时类型的对象不会按字段名猜测成 Transform；原始源文本、复杂 JSON 及 UI 布局长度（如 px、%、auto）保留其文本语义。
 
 ## 提交、撤销与焦点
 
@@ -41,9 +45,9 @@ Content Manager 的文件夹/资源浏览是目录列表，不把它伪装成递
 
 ## 验证入口
 
-`Tools/Viewport3DValidation` 只引用 Runtime，覆盖独立树/输入组合、转义、实例隔离与非法父引用。`Tools/EditorValidation` 验证适配后的领域语义与缓存。`Tools/McpUiValidation` 的 `--static-mesh-sockets-only`、`--skeleton-gizmo-only`、`--inspector-only` 和 `--ui-editor-only` 验证真实输入、焦点、草稿/提交/撤销及匹配 PNG；完整的 tools/resources/templates 目录仍保留于 `Saved/Validation/McpUiCatalogs`。界面和性能检查是不同证据，不能用语义测试代替原生可见/可点击验收。
+`Tools/Viewport3DValidation` 只引用 Runtime，覆盖独立树/输入组合、转义、实例隔离与非法父引用。`Tools/EditorValidation` 验证适配后的领域语义与缓存，并检查 Range/Color/Reference 的共享标记。`Tools/McpUiValidation` 的 `--static-mesh-sockets-only`、`--skeleton-gizmo-only`、`--inspector-only` 和 `--ui-editor-only` 验证真实输入、焦点、草稿/提交/撤销及匹配 PNG；完整的 tools/resources/templates 目录仍保留于 `Saved/Validation/McpUiCatalogs`。界面和性能检查是不同证据，不能用语义测试代替原生可见/可点击验收。
 
-Game 原生宿主同样使用 `RmlValueEditor` 并将调用方提供的 commit action 交给 `IUiActionHandler`；基础控件不引用 Editor 或 World。`--game-ui-only` 包含实际 Game 数值草稿、Enter 提交与 Esc 取消验证。
+Game 原生宿主同样使用 `RmlValueEditor` 与 `RmlColorPicker` 并将调用方提供的 commit action 交给 `IUiActionHandler`；基础控件不引用 Editor 或 World。`--game-ui-only --render-offscreen` 包含实际 Game 数值草稿、Enter 提交、色盘展开/选色/Apply、Cancel、Esc 与禁用状态验证，并保留同帧 JSON/PNG。
 
 Game 的 UI 观察对 input/select/textarea 同样发布 `value`，可读取原生草稿；真实提交值仍由所属项目状态提供，不混同两种状态。
 

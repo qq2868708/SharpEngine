@@ -6,6 +6,25 @@ internal static class UiControlsValidation
 {
     internal static void Run(string Root, Action<bool, string> Check, string EngineRoot)
     {
+        var ValueAction = "editor.validation-value:";
+        var SharedRange = SharpEngine.UI.UiValueEditors.Range("Range",
+            new SharpEngine.UI.UiValueInput("range", "0.5", ValueAction, false, "number"), 0, 1, 0.01);
+        var SharedColor = SharpEngine.UI.UiValueEditors.Color("Color", new[]
+        {
+            new SharpEngine.UI.UiValueInput("red", "1", ValueAction, false, "number"),
+            new SharpEngine.UI.UiValueInput("green", "0.5", ValueAction, false, "number"),
+            new SharpEngine.UI.UiValueInput("blue", "0", ValueAction, false, "number"),
+            new SharpEngine.UI.UiValueInput("alpha", "1", ValueAction, false, "number"),
+        });
+        var SharedReference = SharpEngine.UI.UiValueEditors.Reference("Asset", "asset",
+            "project://asset", [("project://asset", "Asset")], ValueAction);
+        Check(SharedRange.Contains("type=\"range\"", StringComparison.Ordinal) &&
+            SharedRange.Contains("min=\"0\"", StringComparison.Ordinal) &&
+            SharedColor.Contains(">R<", StringComparison.Ordinal) &&
+            SharedColor.Contains(">A<", StringComparison.Ordinal) &&
+            SharedReference.Contains("se-value-reference", StringComparison.Ordinal),
+            "Range, Color and Reference use the shared value-control markup");
+
         var Folder = Directory.CreateDirectory(Path.Combine(Root, "UiControls", "Content", "UI"));
         var PathValue = Path.Combine(Folder.FullName, "Controls.sui");
         File.WriteAllText(PathValue, UiDocumentAsset.Create("Controls", """
