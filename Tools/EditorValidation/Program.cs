@@ -323,6 +323,7 @@ try
     Require(DevelopmentSettings.Get<ValidationProjectSettings>().Profile.Title == "Configured",
         "Nested Project Settings edits must update static runtime reads atomically");
     ShortcutValidation.Run(runtime, Require);
+    CollectionEditorsValidation.RunSettings(runtime, Require);
     if (args.Contains("--settings-only", StringComparer.Ordinal))
     {
         runtime.Shutdown();
@@ -642,6 +643,7 @@ try
         "Generic DataAsset editor must enforce reflected range constraints atomically");
 
     BasicAssetEditorsValidation.Run(runtime, temporary.FullName, Require);
+    CollectionEditorsValidation.Run(runtime, temporary.FullName, Require);
     SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
     StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
     SocketGizmoVisibilityValidation.Run(runtime, temporary.FullName, Require);

@@ -228,6 +228,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>新增 Runtime UI <code>UiCollectionEditor.Render</code> / <code>UiCollectionItem</code>，通过共享 RML 和调用方动作组合元素内容，公共层不拥有数据或事务。Inspector、DataAsset、Settings 的集合适配器校验集合指纹后执行原有语义事务；DataAsset 的 <code>List&lt;T&gt;</code> schema 发布 array/items，并递归校验集合 AssetRef。存储版本不变，null 与空数组不合并；详见<a href="../../../../CommonEditorControls.md">公共控件契约</a>。</p>
       <p>通用 <code>select.se-value-input</code> 采用 border-box 和单一外框，内部 <code>selectvalue</code>/<code>selectarrow</code> 使用匹配的内容高度，修正 Reference 显示越界。控件 API、选择动作、只读权限和存储 Schema 不变。</p>
       <p><code>UiValueInput.ReadOnly</code> 和 Choice/Boolean 的只读参数统一生成 disabled / aria-disabled / tabindex=-1，移除修改动作；字段和单独轴的灰态来自同一 RCSS。<code>ReadOnlyField</code> 复用通用值控件，原生适配器拒绝 disabled 目标。公共值编辑器既有签名、存储 schema 与原生 ABI 不变。</p>
       <p>新增 Runtime UI 公共接口 <code>UiTreeView</code>、<code>UiTreeRow</code>、<code>UiTreeProjection</code>、<code>UiValueInput</code>、<code>UiValueEditors</code> 和 <code>UiCommonControls.StyleSheetUri</code>，通过共享 RML/RCSS 与 <code>IUiLayoutPart</code> 组合；Editor/Game 共用 <code>RmlValueEditor</code>，<code>data-value-editor</code>/<code>data-value-commit</code> 提供草稿提交时机，领域事务和存储契约不变。适配范围、事件与验证见<a href="../../../../CommonEditorControls.md">通用控件契约</a>。</p>

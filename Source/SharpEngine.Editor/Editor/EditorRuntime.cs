@@ -609,6 +609,7 @@ public sealed partial class EditorRuntime
             RefreshComponentInspector(force: true);
         }
         DrainLogs();
+        FlushSettingsCollectionRefreshes();
         PollDevelopmentSettings();
         ApplyEngineShortcuts();
         PollMcpConfiguration();
@@ -917,6 +918,10 @@ public sealed partial class EditorRuntime
             return;
         }
         if (AssetOpeners.TryHandleHostAction(actionHostId, action)) return;
+        if (HandleSettingsValueAction(actionHostId, action))
+        {
+            return;
+        }
         if (action == "ui.value-invalid")
         {
             SetStatus("Enter a finite number with the required numeric type");

@@ -10,10 +10,13 @@ using SharpEngine.Editor.Layout;
 
 namespace SharpEngine.Editor;
 
-internal sealed class DataAssetEditorInstance : IAssetEditorInstance
+internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
 {
     private readonly EditorAssetOpenContext Context;
     private readonly JsonAssetAuthoringDocument Document;
+    private string? PropertiesMarkup;
+    private ulong PropertiesRevision;
+    private WeakReference<DataAssetTypeDescriptor>? PropertiesDescriptor;
 
     public DataAssetEditorInstance(EditorAssetOpenContext Context)
     {
@@ -89,6 +92,10 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        if (TryHandleCollectionAction(Action))
+        {
+            return true;
+        }
         const string ColorPrefix = "editor.data-asset-color:";
         if (Action.StartsWith(ColorPrefix, StringComparison.Ordinal))
         {
@@ -333,11 +340,26 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
 
     private string BuildPropertiesMarkup()
     {
+        var CurrentDescriptor = Descriptor;
+        DataAssetTypeDescriptor? CachedDescriptor = null;
+        PropertiesDescriptor?.TryGetTarget(out CachedDescriptor);
+        if (PropertiesMarkup is not null && PropertiesRevision == Document.Revision &&
+            ReferenceEquals(CachedDescriptor, CurrentDescriptor))
+        {
+            return PropertiesMarkup;
+        }
         var Root = Document.Snapshot;
         var Markup = new StringBuilder("<div class=\"asset-inspector data-asset-properties\">");
+        CollectionFingerprints.Clear();
         foreach (var Property in Descriptor.Properties)
         {
             var Value = Root[Property.JsonName];
+            if (CollectionEditing.ElementType(Property.PropertyType) is not null)
+            {
+                Markup.Append(BuildCollection(Property.Name, Property.PropertyType, Value,
+                    new[] { Property.JsonName }, Root));
+                continue;
+            }
             if (Property.PropertyType == typeof(bool))
             {
                 var Checked = Value?.GetValue<bool>() == true;
@@ -417,7 +439,10 @@ internal sealed class DataAssetEditorInstance : IAssetEditorInstance
             }
         }
         Markup.Append("</div>");
-        return Markup.ToString();
+        PropertiesMarkup = Markup.ToString();
+        PropertiesRevision = Document.Revision;
+        PropertiesDescriptor = new WeakReference<DataAssetTypeDescriptor>(CurrentDescriptor);
+        return PropertiesMarkup;
     }
 
     private string BuildSummaryMarkup()

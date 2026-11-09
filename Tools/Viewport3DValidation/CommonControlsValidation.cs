@@ -5,6 +5,30 @@ internal static class CommonControlsValidation
 {
     internal static void Run(Action<bool, string> Check)
     {
+        var CollectionRows = new[]
+        {
+            new UiCollectionItem("collection-first", UiValueEditors.Number("Value",
+                new UiValueInput("first-value", "3", "value:")), "remove:0", "up:0", "down:0"),
+            new UiCollectionItem("collection-second", UiValueEditors.Text("Value",
+                new UiValueInput("second-value", "<safe>", "value:")), "remove:1", "up:1", "down:1"),
+        };
+        var Collection = XElement.Parse(UiCollectionEditor.Render("collection", "Items <A>", CollectionRows, "fold", "add"));
+        Check(Collection.Descendants("input").Count() == 2 && Collection.Value.Contains("Items <A>", StringComparison.Ordinal),
+            "Collection composes existing primitive editors and escapes presentation labels without World or Editor");
+        Check(Collection.Descendants("button").Single(Element => Element.Attribute("id")?.Value == "collection-first-up")
+            .Attribute("disabled") is not null && Collection.Descendants("button").Single(Element =>
+                Element.Attribute("id")?.Value == "collection-second-down").Attribute("disabled") is not null,
+            "Collection boundaries disable moves outside the ordered values");
+        var DisabledCollection = XElement.Parse(UiCollectionEditor.Render("disabled", "Items", CollectionRows,
+            "readonly-fold", "add", ReadOnly: true));
+        Check(DisabledCollection.Descendants("button").Where(Element => Element.Attribute("id")?.Value != "disabled-toggle")
+            .All(Element => Element.Attribute("disabled") is not null && Element.Attribute("data-action")?.Value == string.Empty),
+            "Read-only collection mutation buttons are disabled while folding remains available");
+        Check(DisabledCollection.Descendants("input").All(Element => Element.Attribute("disabled") is not null &&
+            Element.Attribute("data-value-commit") is null), "A read-only collection enforces disabled children even when its consumer supplies editable values");
+        var CollapsedCollection = XElement.Parse(UiCollectionEditor.Render("collapsed", "Items", CollectionRows, "fold", "add", Expanded: false));
+        Check(!CollapsedCollection.Descendants("input").Any() &&
+            Collection.Descendants("input").Count() == 2, "Two collection uses retain independent expansion and child instances");
         var Nodes = new UiTreeNode[]
         {
             new("child", "root"), new("root", null), new("leaf", "child"),

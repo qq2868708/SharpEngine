@@ -567,6 +567,39 @@ public static class DataAssetSerializer
             {
                 ValidateReference(Registry, Property, AssetReference);
             }
+            if (Registry is not null)
+            {
+                ValidateCollectionReferences(Registry, Property, Value);
+            }
+        }
+    }
+
+    private static void ValidateCollectionReferences(AssetRegistry Registry,
+        DataAssetPropertyDescriptor Property, object? Value)
+    {
+        var Type = Property.PropertyType;
+        var ElementType = Type.IsArray ? Type.GetElementType() :
+            Type.IsGenericType && Type.GetGenericTypeDefinition() == typeof(List<>) ? Type.GetGenericArguments()[0] : null;
+        var Items = Value as System.Collections.IEnumerable;
+        if (ElementType is null || Items is null)
+        {
+            return;
+        }
+        var Index = 0;
+        foreach (var Item in Items)
+        {
+            var Element = Property with
+            {
+                JsonName = Property.JsonName + "/" + Index.ToString(CultureInfo.InvariantCulture),
+                PropertyType = ElementType,
+            };
+            var Reference = Item as IAssetReference;
+            if (Reference is not null && !string.IsNullOrWhiteSpace(Reference.Id))
+            {
+                ValidateReference(Registry, Element, Reference);
+            }
+            ValidateCollectionReferences(Registry, Element, Item);
+            Index++;
         }
     }
 
@@ -665,12 +698,12 @@ internal static class DataAssetSchema
                 ["x-sharpengine-asset-type"] = AssetType,
             };
         }
-        if (Type.IsArray)
+        if (Type.IsArray || Type.IsGenericType && Type.GetGenericTypeDefinition() == typeof(List<>))
         {
             return new JsonObject
             {
                 ["type"] = "array",
-                ["items"] = SchemaFor(Type.GetElementType()!),
+                ["items"] = SchemaFor(Type.IsArray ? Type.GetElementType()! : Type.GetGenericArguments()[0]),
             };
         }
 

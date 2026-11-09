@@ -286,9 +286,58 @@ internal static class GameUiValidation
                     0.2, 0.6, 0.9, 1.0,
                 };
                 private int ColorCommits;
+                private bool ShowCollections;
+                private bool CollectionExpanded = true;
+                private bool DisabledCollectionExpanded = true;
+                private bool EmptyExpanded = true;
+                private readonly System.Collections.Generic.List<double> EmptyValues = new();
+                private readonly System.Collections.Generic.List<double> CollectionValues = new()
+                {
+                    3, 8,
+                };
+                private readonly System.Collections.Generic.Stack<double[]> CollectionUndo = new();
+                private readonly System.Collections.Generic.Stack<double[]> CollectionRedo = new();
+
+                private string BuildCollections()
+                {
+                    var Rows = CollectionValues.Select((Value, Index) => new UiCollectionItem(
+                        "collection-item-" + Index,
+                        UiValueEditors.Number("Value", new UiValueInput("collection-value-" + Index,
+                            Value.ToString(System.Globalization.CultureInfo.InvariantCulture), "fixture.collection:value," + Index + ":", false, "number")),
+                        "fixture.collection:remove," + Index, "fixture.collection:up," + Index, "fixture.collection:down," + Index)).ToArray();
+                    var DisabledRows = new[]
+                    {
+                        new UiCollectionItem("disabled-item-0", UiValueEditors.Vector("Vector", new[]
+                        {
+                            new UiValueInput("disabled-list-x", "1", "forbidden", true),
+                            new UiValueInput("disabled-list-y", "2", "forbidden", true),
+                            new UiValueInput("disabled-list-z", "3", "forbidden", true),
+                        }), "forbidden", "forbidden", "forbidden"),
+                        new UiCollectionItem("disabled-item-1", UiValueEditors.Text("Text",
+                            new UiValueInput("disabled-list-text", "Read-only value", "forbidden", true)), "forbidden", "forbidden", "forbidden"),
+                    };
+                    var EmptyRows = EmptyValues.Select((Value, Index) => new UiCollectionItem("empty-item-" + Index,
+                        UiValueEditors.Number("Value", new UiValueInput("empty-value-" + Index, "0", "fixture.collection:empty-value," + Index + ":")),
+                        "fixture.collection:empty-remove," + Index)).ToArray();
+                    return "<div id='collection-fixture' style='position:absolute;left:20px;top:20px;width:1240px;height:680px;z-index:20;box-sizing:border-box;padding:14px;background-color:#16212d;'>" +
+                        "<span style='display:block;font-size:24px;color:#e6eef8;margin-bottom:14px;'>Shared collection editors</span>" +
+                        "<div style='display:flex;gap:24px;'><div style='display:block;width:48%;'>" +
+                        UiCollectionEditor.Render("editable-list", "Numbers (editable)", Rows, "fixture.collection:fold", "fixture.collection:add", CollectionExpanded) +
+                        "<div style='display:flex;gap:8px;'><button id='collection-undo' class='se-collection-command' style='width:90px;' action='fixture.collection:undo'>Undo</button><button id='collection-redo' class='se-collection-command' style='width:90px;' action='fixture.collection:redo'>Redo</button></div>" +
+                        "<span id='collection-state' style='display:block;'>" + string.Join(",", CollectionValues.Select(Value => Value.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "</span>" +
+                        UiCollectionEditor.Render("empty-list", "Initially empty list", EmptyRows, "fixture.collection:empty-fold", "fixture.collection:empty-add", EmptyExpanded) +
+                        UiCollectionEditor.Render("null-list", "Null list (disabled)", System.Array.Empty<UiCollectionItem>(), "fixture.collection:null-fold", string.Empty, ReadOnly: true, IsNull: true) +
+                        "</div><div style='display:block;width:48%;'>" +
+                        UiCollectionEditor.Render("disabled-list", "Values (disabled)", DisabledRows, "fixture.collection:disabled-fold", "forbidden", DisabledCollectionExpanded, true) +
+                        "</div></div></div>";
+                }
 
                 public string BuildLayout(UiLayoutContext Context)
                 {
+                    if (Id == "secondary" && ShowCollections)
+                    {
+                        return BuildCollections();
+                    }
                     var Markup = Definition.Render(Context, new JsonObject
                     {
                         ["Id"] = Id,
@@ -333,13 +382,85 @@ internal static class GameUiValidation
                             UiValueEditors.Color("Color RGBA (disabled)", ColorAxes) +
                             UiValueEditors.Range("Range (disabled)", new UiValueInput("readonly-range", "0.75", "fixture.range:", true, "number"), 0, 1, 0.01) +
                             UiValueEditors.Reference("Reference (disabled)", "readonly-reference", "project://materials/green",
-                                Options, "fixture.reference:", true) + "</div></div>";
+                                Options, "fixture.reference:", true) + "</div></div>" +
+                            "<button id='collection-show' action='fixture.collection:show'>Collection editors</button>";
                     }
                     return Markup;
                 }
 
                 public bool TryHandleAction(string Action)
                 {
+                    if (Id == "secondary" && Action.StartsWith("fixture.collection:", System.StringComparison.Ordinal))
+                    {
+                        var Parts = Action["fixture.collection:".Length..].Split(':', 2);
+                        var Operation = Parts[0].Split(',');
+                        if (Operation[0] == "show")
+                        {
+                            ShowCollections = true;
+                        }
+                        else if (Operation[0] == "fold")
+                        {
+                            CollectionExpanded = !CollectionExpanded;
+                        }
+                        else if (Operation[0] == "disabled-fold")
+                        {
+                            DisabledCollectionExpanded = !DisabledCollectionExpanded;
+                        }
+                        else if (Operation[0] == "empty-fold")
+                        {
+                            EmptyExpanded = !EmptyExpanded;
+                        }
+                        else if (Operation[0] == "empty-add")
+                        {
+                            EmptyValues.Add(0);
+                        }
+                        else if (Operation[0] == "empty-remove")
+                        {
+                            EmptyValues.RemoveAt(int.Parse(Operation[1]));
+                        }
+                        else if (Operation[0] == "empty-value")
+                        {
+                            EmptyValues[int.Parse(Operation[1])] = double.Parse(Parts[1], System.Globalization.CultureInfo.InvariantCulture);
+                        }
+                        else if (Operation[0] == "undo" && CollectionUndo.Count > 0)
+                        {
+                            CollectionRedo.Push(CollectionValues.ToArray());
+                            CollectionValues.Clear();
+                            CollectionValues.AddRange(CollectionUndo.Pop());
+                        }
+                        else if (Operation[0] == "redo" && CollectionRedo.Count > 0)
+                        {
+                            CollectionUndo.Push(CollectionValues.ToArray());
+                            CollectionValues.Clear();
+                            CollectionValues.AddRange(CollectionRedo.Pop());
+                        }
+                        else if (Operation[0] is "add" or "remove" or "up" or "down" or "value")
+                        {
+                            CollectionUndo.Push(CollectionValues.ToArray());
+                            CollectionRedo.Clear();
+                            var Index = Operation.Length > 1 ? int.Parse(Operation[1]) : -1;
+                            if (Operation[0] == "add")
+                            {
+                                CollectionValues.Add(0);
+                            }
+                            else if (Operation[0] == "remove")
+                            {
+                                CollectionValues.RemoveAt(Index);
+                            }
+                            else if (Operation[0] == "value")
+                            {
+                                CollectionValues[Index] = double.Parse(Parts[1], System.Globalization.CultureInfo.InvariantCulture);
+                            }
+                            else
+                            {
+                                var Target = Index + (Operation[0] == "up" ? -1 : 1);
+                                var Value = CollectionValues[Index];
+                                CollectionValues.RemoveAt(Index);
+                                CollectionValues.Insert(Target, Value);
+                            }
+                        }
+                        return true;
+                    }
                     if (Id == "secondary" && Action.StartsWith("fixture.color:", System.StringComparison.Ordinal))
                     {
                         var Values = JsonNode.Parse(Action["fixture.color:".Length..])!.AsArray();
@@ -974,6 +1095,77 @@ internal static class GameUiValidation
             }
             Check(Final is not null,
                 "The Game publishes a rendered frame for the presented screen");
+            ClickHit("collection-show");
+            CaptureReference("collection-expanded");
+            Check(TextOf("editable-list-count") == "2" && Find("collection-value-0")?["visible"]?.GetValue<bool>() == true &&
+                Find("collection-item-0-up")?["enabled"]?.GetValue<bool>() == false &&
+                Find("collection-item-1-down")?["enabled"]?.GetValue<bool>() == false,
+                "The common collection shows its count, primitive values and disabled boundary moves");
+            ClickHit("collection-value-0");
+            ValueKey("down", 0x41, Modifiers: 1);
+            ValueKey("up", 0x41, Modifiers: 1);
+            ValueKey("text", Text: "12");
+            ObserveGame();
+            Check(TextOf("collection-state") == "3,8", "Collection element drafts do not change project state");
+            ValueKey("down", 0x0D);
+            ValueKey("up", 0x0D);
+            ObserveGame();
+            Check(TextOf("collection-state") == "12,8", "Enter commits one collection element and preserves its sibling");
+            ClickHit("collection-value-0");
+            ValueKey("down", 0x41, Modifiers: 1);
+            ValueKey("up", 0x41, Modifiers: 1);
+            ValueKey("text", Text: "-");
+            ValueKey("down", 0x1B);
+            ValueKey("up", 0x1B);
+            ObserveGame();
+            Check(TextOf("collection-state") == "12,8" && Find("collection-value-0")?["value"]?.GetValue<string>() == "12",
+                "Escape discards the collection element draft through the shared value adapter");
+            ClickHit("collection-item-0-down");
+            ObserveGame();
+            Check(TextOf("collection-state") == "8,12", "Real pointer Down reorders the collection");
+            ClickHit("collection-item-1-up");
+            ObserveGame();
+            Check(TextOf("collection-state") == "12,8", "Real pointer Up restores the order");
+            ClickHit("editable-list-add");
+            ObserveGame();
+            Check(TextOf("editable-list-count") == "3" && TextOf("collection-state") == "12,8,0",
+                "Real pointer Add appends one default item");
+            ClickHit("collection-item-2-remove");
+            ObserveGame();
+            Check(TextOf("collection-state") == "12,8", "Remove deletes the selected item");
+            ClickHit("collection-undo");
+            ObserveGame();
+            Check(TextOf("collection-state") == "12,8,0", "The owner can undo one collection operation");
+            ClickHit("collection-redo");
+            ObserveGame();
+            Check(TextOf("collection-state") == "12,8", "The owner can redo one collection operation");
+            foreach (var Id in new[] { "disabled-list-add", "disabled-item-0-remove", "disabled-list-x", "disabled-list-text" })
+            {
+                Check(Find(Id)?["enabled"]?.GetValue<bool>() == false, "The collection retains disabled value and command styling: " + Id);
+            }
+            ClickHit("disabled-list-add");
+            ObserveGame();
+            Check(TextOf("disabled-list-count") == "2", "Clicking a disabled collection command changes no values");
+            ClickHit("editable-list-toggle");
+            ObserveGame();
+            Check(Find("collection-value-0") is null && Find("disabled-list-x")?["visible"]?.GetValue<bool>() == true &&
+                TextOf("collection-state") == "12,8", "Folding hides child controls and leaves the other collection independent");
+            CaptureReference("collection-collapsed");
+            ClickHit("editable-list-toggle");
+            ClickHit("disabled-list-toggle");
+            ObserveGame();
+            Check(Find("disabled-list-x") is null && Find("collection-value-0")?["visible"]?.GetValue<bool>() == true,
+                "Read-only collection folding remains available");
+            ClickHit("disabled-list-toggle");
+            CaptureReference("collection-edited");
+            ClickHit("empty-list-add");
+            ObserveGame();
+            Check(TextOf("empty-list-count") == "1" && Find("empty-value-0")?["visible"]?.GetValue<bool>() == true,
+                "An initially empty collection creates its first value through real Add input");
+            ClickHit("empty-item-0-remove");
+            ObserveGame();
+            Check(TextOf("empty-list-count") == "0" && Find("empty-value-0") is null,
+                "Removing the last element returns the collection to its empty state");
             Console.WriteLine("PASS: Game UI presents the composed project screen");
         }
         finally

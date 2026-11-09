@@ -98,16 +98,26 @@ public sealed partial class EditorRuntime
             _nativeApi.DestroyDockWindow(hostId);
         _openSettingsHosts.Clear();
         _activeSettingsPages.Clear();
+        SettingsValueEditing.Clear();
+        SettingsValuePointerCommit.Clear();
+        SettingsCollectionRefreshPending.Clear();
         _developmentSettings?.Dispose();
         _developmentSettings = null;
     }
 
     private bool HandleDevelopmentSettingsAction(string hostId, string action)
     {
+        if (HandleSettingsCollectionAction(action))
+        {
+            return true;
+        }
         if (action == "window.closed" && TryScopeFromHost(hostId, out var closedScope))
         {
             _nativeApi.DestroyDockWindow(hostId);
             _openSettingsHosts.Remove(hostId);
+            SettingsValueEditing.Remove(closedScope);
+            SettingsValuePointerCommit.Remove(closedScope);
+            SettingsCollectionRefreshPending.Remove(closedScope);
             SetStatus($"{ScopeTitle(closedScope)} closed");
             return true;
         }
@@ -265,6 +275,13 @@ public sealed partial class EditorRuntime
                 field.Property.PropertyType;
             var label = string.IsNullOrWhiteSpace(field.Attribute.DisplayName)
                 ? field.Property.Name : field.Attribute.DisplayName!;
+            if (CollectionEditing.ElementType(type) is not null)
+            {
+                var Value = System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(type, value));
+                markup.Append(BuildSettingsCollection(descriptor, path, label, type, Value,
+                    Value, Array.Empty<string>()));
+                continue;
+            }
             if (IsSettingsObject(type) && value is not null)
             {
                 markup.Append("<div class=\"settings-group\" style=\"margin-left:")

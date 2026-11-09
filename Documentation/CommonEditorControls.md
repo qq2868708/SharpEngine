@@ -32,6 +32,16 @@ Choice 与 Reference 共用单一 28px 下拉外框，原生值区和箭头在�
 
 统一入口包括主场景组件 Inspector（含嵌套值和列表元素）、StaticMesh/Skeleton Socket、共享资产字段（Material、Input、DataAsset、StyleSheet、动画状态机）、编辑器设置、源码/资源创建表单、UI 属性/样式/布局/参考尺寸，以及动画状态机预览参数。媒体源预览的只读信息也复用相同字段。枚举使用 Choice，AssetRef/Entity/Component 使用 Reference，布尔使用 Boolean；DataAsset 的 Vector/Quaternion/Color 和带 Minimum/Maximum 的标量复用对应公共控件。没有明确运行时类型的对象不会按字段名猜测成 Transform；原始源文本、复杂 JSON 及 UI 布局长度（如 px、%、auto）保留其文本语义。
 
+## 数组与列表
+
+`UiCollectionEditor` 组合 `CollectionEditor.rml`、`CollectionItem.rml` 与已有基础值编辑器。公共层显示字段名、数量、折叠、索引、Add、Remove、Up、Down；第一项 Up 和最后一项 Down 禁用。空集合显示 `0`，null 集合显示 `null`，展开查看不修改数据。只读集合保留相同结构和折叠，禁用内部输入和修改按钮并移除动作绑定。公共层只消费 `UiCollectionItem` 的内容与调用方动作，不持有 World、资产数据或撤销栈。
+
+主 Inspector 的一维数组／`List<T>`、DataAsset 属性和 Engine／Project Settings 的有序集合使用同一布局。元素复用 Text、Number、Boolean、Choice、Reference、Vector、Color；支持已有契约允许的嵌套集合。Inspector 继续使用已注册的数据描述符展开对象；Settings 使用带 Setting 标注的对象字段；DataAsset 复杂对象仍保留 JSON 值编辑，不推断额外对象 schema。字典保留其键值语义，不转换成有序列表。
+
+新增值沿用所属领域的默认值规则；null 集合通过 Add 创建并加入第一项，Undo 可恢复 null，与空数组区分。移除或上下移动只影响目标元素，每次操作是所属文档的一次事务，保存仍须显式执行。元素输入继续采用草稿、Enter／失焦提交、Esc 取消。集合动作携带渲染时的集合指纹，集合发生变化后拒绝旧索引事件，避免旧输入修改排序后的另一个元素；没有在资产中新增元素 ID 或改变存储格式。DataAsset 的集合引用逐项校验存在性与类型，`List<T>` schema 与数组一样发布 items。
+
+DataAsset 按文档 revision 和类型描述符缓存 Properties 布局；折叠单独失效缓存，未修改的重复读取不克隆文档或重建所有元素。共享基础布局不持有消费者状态，两个集合的折叠、输入和权限互不影响。
+
 ## 提交、撤销与焦点
 
 - 输入框中的中间文本仅是原生临时草稿；输入负号、小数点不会发作者变更。

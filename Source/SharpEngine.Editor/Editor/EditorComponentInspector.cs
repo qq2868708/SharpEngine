@@ -281,20 +281,49 @@ public sealed partial class EditorRuntime : IComponentRuntime
                 }
                 case "list":
                 {
-                    var detail = Uri.UnescapeDataString(parts[2]).Split('|', 2);
-                    var c = _world!.Data.Entities.SelectMany(e => e.Components).Single(c => c.ComponentId == parts[1]);
-                    var state = (JsonObject)c.State.DeepClone();
-                    var path = detail[0].Split('/');
-                    JsonNode cursor = state;
-                    foreach (var segment in path.SkipLast(1)) cursor = cursor is JsonArray parent ? parent[int.Parse(segment)]! : cursor[segment]!;
-                    var current = cursor is JsonArray parentArray ? parentArray[int.Parse(path[^1])] : cursor[path[^1]];
-                    var list = current as JsonArray ?? new JsonArray();
-                    if (parts[3] == "add") list.Add(JsonNode.Parse(detail[1]));
-                    else if (parts[3].StartsWith("up,")) { var i = int.Parse(parts[3][3..]); var item = list[i]; list.RemoveAt(i); list.Insert(i - 1, item); }
-                    else list.RemoveAt(int.Parse(parts[3], CultureInfo.InvariantCulture));
-                    if (current is null)
-                    { if (cursor is JsonArray targetArray) targetArray[int.Parse(path[^1])] = list; else cursor[path[^1]] = list; }
-                    var request = ComponentRequest("patch"); request["componentId"] = parts[1]; request["state"] = state; _ = EditComponent(request); return true;
+                    var Detail = Uri.UnescapeDataString(parts[2]).Split('|', 3);
+                    var Owner = _world!.Data.Entities.Single(Entity => Entity.Components.Any(Component => Component.ComponentId == parts[1]));
+                    var Component = Owner.Components.Single(Component => Component.ComponentId == parts[1]);
+                    var State = (JsonObject)Component.State.DeepClone();
+                    var Path = Detail[0].Split('/');
+                    JsonNode Cursor = State;
+                    foreach (var Segment in Path.SkipLast(1))
+                    {
+                        Cursor = Cursor is JsonArray Parent ? Parent[int.Parse(Segment, CultureInfo.InvariantCulture)]! : Cursor[Segment]!;
+                    }
+                    var Current = Cursor is JsonArray ParentArray ? ParentArray[int.Parse(Path[^1], CultureInfo.InvariantCulture)] : Cursor[Path[^1]];
+                    if (Detail.Length != 3 || CollectionEditing.Fingerprint(Current) != Detail[2])
+                    {
+                        throw new InvalidOperationException("REVISION_CONFLICT: collection changed while editing");
+                    }
+                    var List = CollectionEditing.Apply(Current, parts[3], () => JsonNode.Parse(Detail[1]));
+                    if (Current is null)
+                    {
+                        var TargetArray = Cursor as JsonArray;
+                        if (TargetArray is not null)
+                        {
+                            TargetArray[int.Parse(Path[^1], CultureInfo.InvariantCulture)] = List;
+                        }
+                        else
+                        {
+                            Cursor[Path[^1]] = List;
+                        }
+                    }
+                    var Request = ComponentRequest("patch");
+                    Request["componentId"] = parts[1];
+                    Request["entityId"] = Owner.EntityId;
+                    Request["state"] = State;
+                    _ = EditComponent(Request);
+                    return true;
+                }
+                case "collection-value":
+                {
+                    var Guard = Uri.UnescapeDataString(parts[2]).Split('|', 2);
+                    if (CollectionEditing.Fingerprint(ComponentCollectionValue(parts[1], Guard[0])) != Guard[1])
+                    {
+                        throw new InvalidOperationException("REVISION_CONFLICT: collection changed while editing");
+                    }
+                    return HandleComponentAction(parts[3]);
                 }
             }
             var command = ComponentRequest(parts[0]);
@@ -474,13 +503,15 @@ public sealed partial class EditorRuntime : IComponentRuntime
         }
         if (Value is JsonArray || Value is null && (ValueType.IsArray || ValueType.IsGenericType && ValueType.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            var Values = Value as JsonArray ?? new JsonArray();
-            Markup.Append("<div class=\"component-nested\">");
             if (!IsVector)
             {
-                Markup.Append("<label>").Append(Escape(Name)).Append("</label>");
+                var CollectionType = CollectionEditing.ElementType(ValueType) ??
+                    throw new InvalidOperationException("Unsupported collection type");
+                AppendComponentCollection(Markup, Component, Field, Path, Value, CollectionType, Name);
+                return;
             }
-            var ElementType = IsVector ? typeof(float) : ValueType.IsArray ? ValueType.GetElementType()! : ValueType.GetGenericArguments()[0];
+            var Values = Value as JsonArray ?? new JsonArray();
+            Markup.Append("<div class=\"component-nested\">");
             if (IsVector)
             {
                 var Inputs = Enumerable.Range(0, Values.Count).Select(Index => ComponentInput(Component, Path + "/" + Index,
@@ -491,29 +522,6 @@ public sealed partial class EditorRuntime : IComponentRuntime
                     ? SharpEngine.UI.UiValueEditors.Color(Name, Inputs, PickerAction,
                         "color-picker-" + Component.ComponentId + "-" + Uri.EscapeDataString(Path))
                     : SharpEngine.UI.UiValueEditors.Vector(Name, Inputs, "XYZW"));
-            }
-            for (int Index = 0; !IsVector && Index < Values.Count; Index++)
-            {
-                var ElementField = Field with
-                {
-                    DisplayName = Index.ToString(),
-                    Minimum = null,
-                    Maximum = null,
-                };
-                AppendComponentField(Markup, Component, ElementField, Path + "/" + Index, Values[Index], ElementType);
-                if (!IsVector)
-                {
-                    var Action = "editor.component-list:" + Component.ComponentId + ":" + Uri.EscapeDataString(Path + "|" + DefaultElement(ElementType)) + ":";
-                    if (Index > 0)
-                    {
-                        Markup.Append("<button data-action=\"").Append(Action).Append("up,").Append(Index).Append("\">↑</button>");
-                    }
-                    Markup.Append("<button data-action=\"").Append(Action).Append(Index).Append("\">Remove item</button>");
-                }
-            }
-            if (!IsVector)
-            {
-                Markup.Append("<button data-action=\"editor.component-list:").Append(Component.ComponentId).Append(':').Append(Uri.EscapeDataString(Path + "|" + DefaultElement(ElementType))).Append(":add\">+ Item</button>");
             }
 
             if (ValueType == typeof(Color))
