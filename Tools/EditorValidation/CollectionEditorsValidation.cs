@@ -55,6 +55,113 @@ internal static class CollectionEditorsValidation
         Runtime.InvokeUiAction(Action(TagsId + "-item-0-remove"));
         Check(SharpEngine.Settings.DevelopmentSettings.Get<ValidationProjectSettings>().Tags.Count == 0,
             "Removing the final settings item leaves a valid empty collection");
+        ValidateSettingsMaps(Runtime, Check);
+    }
+
+    private static void ValidateSettingsMaps(EditorRuntime Runtime,
+        Action<bool, string> Check)
+    {
+        XElement Markup()
+        {
+            return XElement.Parse("<div>" +
+                Runtime.BuildSettingsMarkup(SharpEngine.Settings.SettingsScope.Project) +
+                "</div>");
+        }
+        var Map = FindSettingsMap(Markup(), "Weights");
+        Check(MapKeys(Map).Length == 0 &&
+            Map.Descendants().Any(Element => Element.Value == "Empty map"),
+            "Settings Map rendering distinguishes an empty dictionary");
+        Runtime.InvokeUiAction(ButtonAction(Map, "add"));
+        Map = FindSettingsMap(Markup(), "Weights");
+        Runtime.InvokeUiAction(ButtonAction(Map, "add"));
+        Check(SharpEngine.Settings.DevelopmentSettings.Get<ValidationProjectSettings>()
+                .Weights.Count == 2,
+            "Settings Map Add uses TrySet and creates a typed default entry");
+        Map = FindSettingsMap(Markup(), "Weights");
+        var Revision = SettingsRevision(Runtime);
+        var InitialOrder = MapKeys(Map);
+        var ViewMove = RowButtonAction(Map, InitialOrder[1], "up");
+        Runtime.InvokeUiAction(ViewMove);
+        Map = FindSettingsMap(Markup(), "Weights");
+        Check(MapKeys(Map).SequenceEqual(new[] { "New Key 2", "New Key" }) &&
+            SettingsRevision(Runtime) == Revision &&
+            SharpEngine.Settings.DevelopmentSettings.Get<ValidationProjectSettings>()
+                .Weights.Keys.OrderBy(Key => Key, StringComparer.Ordinal)
+                .SequenceEqual(new[] { "New Key", "New Key 2" }),
+            "Settings Map view order does not alter settings values or document revision");
+        Runtime.InvokeUiAction("editor.settings-undo:project:validation.gameplay");
+        Check(SharpEngine.Settings.DevelopmentSettings.Get<ValidationProjectSettings>()
+                .Weights.Keys.SequenceEqual(new[] { "New Key" }),
+            "Settings Map view movement does not add an Undo entry");
+
+        Map = FindSettingsMap(Markup(), "Vectors");
+        var VectorRow = FindSettingsRow(Map, "origin");
+        var Axis = VectorRow.Descendants("input").Single(Input =>
+            Input.Attribute("id")?.Value.EndsWith("-0", StringComparison.Ordinal) == true);
+        Runtime.InvokeUiAction(Axis.Attribute("data-value-commit")!.Value + "17");
+        var Vector = SharpEngine.Settings.DevelopmentSettings.Get<ValidationProjectSettings>()
+            .Vectors["origin"];
+        Check(Vector == new System.Numerics.Vector3(17, 2, 3),
+            "Settings Map vector editing changes one component and preserves the others");
+
+        Map = FindSettingsMap(Markup(), "Colors");
+        var Picker = Map.Descendants().Single(Element =>
+            Element.Attribute("data-color-picker") is not null);
+        Runtime.InvokeUiAction(Picker.Attribute("data-color-prefix")!.Value +
+            "[0.8,0.7,0.6,0.5]");
+        Check(SharpEngine.Settings.DevelopmentSettings.Get<ValidationProjectSettings>()
+                .Colors["accent"] ==
+            new SharpEngine.Components.Color(0.8f, 0.7f, 0.6f, 0.5f),
+            "Settings Map color values reuse the shared color picker transaction");
+    }
+
+    private static XElement FindSettingsMap(XElement Markup, string Label)
+    {
+        return Markup.DescendantsAndSelf().Single(Element =>
+            Element.Attribute("class")?.Value.Split(' ').Contains("se-map") == true &&
+            Element.Elements().Any(Header =>
+                Header.Attribute("class")?.Value == "se-map-header" &&
+                Header.Elements("button").Any(Button =>
+                    Button.Elements("span").FirstOrDefault()?.Value == Label)));
+    }
+
+    private static string[] MapKeys(XElement Map)
+    {
+        return Map.Descendants().Where(Element =>
+                Element.Attribute("class")?.Value == "se-map-entry")
+            .Select(Row => Row.Descendants("input").Single(Input =>
+                Input.Attribute("id")?.Value.EndsWith("-key", StringComparison.Ordinal) == true)
+                .Attribute("value")?.Value ?? string.Empty).ToArray();
+    }
+
+    private static XElement FindSettingsRow(XElement Map, string Key)
+    {
+        var KeyInput = Map.Descendants("input").Single(Input =>
+            Input.Attribute("id")?.Value.EndsWith("-key", StringComparison.Ordinal) == true &&
+            Input.Attribute("value")?.Value == Key);
+        return KeyInput.Ancestors().First(Element =>
+            Element.Attribute("class")?.Value == "se-map-entry");
+    }
+
+    private static string ButtonAction(XElement Map, string Operation)
+    {
+        return Map.Descendants("button").Single(Button =>
+            Button.Attribute("id")?.Value.EndsWith("-" + Operation,
+                StringComparison.Ordinal) == true).Attribute("data-action")!.Value;
+    }
+
+    private static string RowButtonAction(XElement Map, string Key, string Operation)
+    {
+        return FindSettingsRow(Map, Key).Descendants("button").Single(Button =>
+            Button.Attribute("id")?.Value.EndsWith("-" + Operation,
+                StringComparison.Ordinal) == true).Attribute("data-action")!.Value;
+    }
+
+    private static long SettingsRevision(EditorRuntime Runtime)
+    {
+        var Page = JsonNode.Parse(Runtime.DescribeSettingsJson())!["pages"]!.AsArray()
+            .Single(Node => Node!["id"]!.GetValue<string>() == "validation.gameplay")!;
+        return Page["revision"]!.GetValue<long>();
     }
 
     internal static void Run(EditorRuntime Runtime, string Folder, Action<bool, string> Check)

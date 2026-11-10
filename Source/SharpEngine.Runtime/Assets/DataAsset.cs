@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -335,8 +336,13 @@ public static class DataAssetSerializer
         foreach (var Property in Descriptor.Properties)
         {
             var Value = Property.Property.GetValue(Asset);
-            Root[Property.JsonName] = JsonSerializer.SerializeToNode(
+            var SerializedValue = JsonSerializer.SerializeToNode(
                 Value, Property.PropertyType, Options);
+            if (DataAssetSchema.TryMapValue(Property.PropertyType, out _))
+            {
+                SerializedValue = DataAssetSchema.SortMapKeys(SerializedValue);
+            }
+            Root[Property.JsonName] = SerializedValue;
         }
 
         return Root.ToJsonString(new JsonSerializerOptions(Options)
@@ -569,17 +575,41 @@ public static class DataAssetSerializer
             }
             if (Registry is not null)
             {
-                ValidateCollectionReferences(Registry, Property, Value);
+                ValidateNestedReferences(Registry, Property, Value);
             }
         }
     }
 
-    private static void ValidateCollectionReferences(AssetRegistry Registry,
+    private static void ValidateNestedReferences(AssetRegistry Registry,
         DataAssetPropertyDescriptor Property, object? Value)
     {
         var Type = Property.PropertyType;
+        if (DataAssetSchema.TryMapValue(Type, out var MapValueType))
+        {
+            var Map = Value as System.Collections.IDictionary;
+            if (Map is null)
+            {
+                return;
+            }
+            foreach (var Key in Map.Keys.Cast<string>().OrderBy(Key => Key, StringComparer.Ordinal))
+            {
+                var Entry = Property with
+                {
+                    JsonName = Property.JsonName + "/" + Uri.EscapeDataString(Key),
+                    PropertyType = MapValueType!,
+                };
+                var Reference = Map[Key] as IAssetReference;
+                if (Reference is not null && !string.IsNullOrWhiteSpace(Reference.Id))
+                {
+                    ValidateReference(Registry, Entry, Reference);
+                }
+                ValidateNestedReferences(Registry, Entry, Map[Key]);
+            }
+            return;
+        }
         var ElementType = Type.IsArray ? Type.GetElementType() :
-            Type.IsGenericType && Type.GetGenericTypeDefinition() == typeof(List<>) ? Type.GetGenericArguments()[0] : null;
+            Type.IsGenericType && Type.GetGenericTypeDefinition() == typeof(List<>)
+                ? Type.GetGenericArguments()[0] : null;
         var Items = Value as System.Collections.IEnumerable;
         if (ElementType is null || Items is null)
         {
@@ -598,7 +628,7 @@ public static class DataAssetSerializer
             {
                 ValidateReference(Registry, Element, Reference);
             }
-            ValidateCollectionReferences(Registry, Element, Item);
+            ValidateNestedReferences(Registry, Element, Item);
             Index++;
         }
     }
@@ -648,6 +678,7 @@ public static class DataAssetSerializer
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = false,
         };
+        Result.Converters.Add(new DataAssetNumericsVectorConverterFactory());
         Result.Converters.Add(new AssetRefJsonConverterFactory());
         Result.Converters.Add(new JsonStringEnumConverter());
         return Result;
@@ -687,6 +718,17 @@ internal static class DataAssetSchema
         {
             return new JsonObject { ["type"] = "number" };
         }
+        var VectorSize = VectorDimension(Type);
+        if (VectorSize > 0)
+        {
+            return new JsonObject
+            {
+                ["type"] = "array",
+                ["items"] = new JsonObject { ["type"] = "number" },
+                ["minItems"] = VectorSize,
+                ["maxItems"] = VectorSize,
+            };
+        }
         if (Type.IsGenericType && Type.GetGenericTypeDefinition() == typeof(AssetRef<>))
         {
             var AssetType = Type.GetGenericArguments()[0].Name.Replace(
@@ -707,7 +749,68 @@ internal static class DataAssetSchema
             };
         }
 
+        if (TryMapValue(Type, out var MapValue))
+        {
+            return new JsonObject
+            {
+                ["type"] = "object",
+                ["additionalProperties"] = SchemaFor(MapValue!),
+            };
+        }
+
         return new JsonObject { ["type"] = "object" };
+    }
+
+    internal static bool TryMapValue(Type Type, out Type? ValueType)
+    {
+        ValueType = null;
+        if (!typeof(System.Collections.IDictionary).IsAssignableFrom(Type) || !Type.IsGenericType)
+        {
+            return false;
+        }
+        var Arguments = Type.GetGenericArguments();
+        if (Arguments.Length != 2 || Arguments[0] != typeof(string))
+        {
+            return false;
+        }
+        ValueType = Arguments[1];
+        return true;
+    }
+
+    internal static JsonNode? SortMapKeys(JsonNode? Value)
+    {
+        if (Value is JsonObject Object)
+        {
+            var Result = new JsonObject();
+            foreach (var Property in Object.OrderBy(Property => Property.Key,
+                         StringComparer.Ordinal))
+            {
+                Result[Property.Key] = SortMapKeys(Property.Value);
+            }
+            return Result;
+        }
+        if (Value is JsonArray Array)
+        {
+            return new JsonArray(Array.Select(SortMapKeys).ToArray());
+        }
+        return Value?.DeepClone();
+    }
+
+    internal static int VectorDimension(Type Type)
+    {
+        if (Type == typeof(Vector2))
+        {
+            return 2;
+        }
+        if (Type == typeof(Vector3))
+        {
+            return 3;
+        }
+        if (Type == typeof(Vector4) || Type == typeof(Quaternion))
+        {
+            return 4;
+        }
+        return 0;
     }
 
     private static DataAssetTypeDescriptor CreateDescriptor(Type RuntimeType)
@@ -747,6 +850,104 @@ internal static class DataAssetSchema
         }
 
         return new DataAssetTypeDescriptor(RuntimeType, Attribute, Properties);
+    }
+}
+
+internal sealed class DataAssetNumericsVectorConverterFactory : JsonConverterFactory
+{
+    public override bool CanConvert(Type Type)
+    {
+        return DataAssetSchema.VectorDimension(Type) > 0;
+    }
+
+    public override JsonConverter CreateConverter(Type Type, JsonSerializerOptions Options)
+    {
+        return (JsonConverter)Activator.CreateInstance(
+            typeof(DataAssetNumericsVectorConverter<>).MakeGenericType(Type))!;
+    }
+}
+
+internal sealed class DataAssetNumericsVectorConverter<TVector> : JsonConverter<TVector>
+{
+    public override TVector Read(ref Utf8JsonReader Reader, Type Type,
+        JsonSerializerOptions Options)
+    {
+        var Dimension = DataAssetSchema.VectorDimension(typeof(TVector));
+        var Axes = ReadAxes(ref Reader, Dimension);
+        object Value = typeof(TVector) == typeof(Vector2)
+            ? new Vector2(Axes[0], Axes[1])
+            : typeof(TVector) == typeof(Vector3)
+                ? new Vector3(Axes[0], Axes[1], Axes[2])
+                : typeof(TVector) == typeof(Vector4)
+                    ? new Vector4(Axes[0], Axes[1], Axes[2], Axes[3])
+                    : new Quaternion(Axes[0], Axes[1], Axes[2], Axes[3]);
+        return (TVector)Value;
+    }
+
+    public override void Write(Utf8JsonWriter Writer, TVector Value,
+        JsonSerializerOptions Options)
+    {
+        var Axes = Value switch
+        {
+            Vector2 Vector => new[] { Vector.X, Vector.Y },
+            Vector3 Vector => new[] { Vector.X, Vector.Y, Vector.Z },
+            Vector4 Vector => new[] { Vector.X, Vector.Y, Vector.Z, Vector.W },
+            Quaternion Rotation => new[] { Rotation.X, Rotation.Y, Rotation.Z, Rotation.W },
+            _ => throw new JsonException("Unsupported System.Numerics vector type"),
+        };
+        Writer.WriteStartArray();
+        foreach (var Axis in Axes)
+        {
+            Writer.WriteNumberValue(Axis);
+        }
+        Writer.WriteEndArray();
+    }
+
+    private static float[] ReadAxes(ref Utf8JsonReader Reader, int Dimension)
+    {
+        using var Document = JsonDocument.ParseValue(ref Reader);
+        var Root = Document.RootElement;
+        float[] Axes;
+        if (Root.ValueKind == JsonValueKind.Array)
+        {
+            Axes = Root.EnumerateArray().Select(Value => Value.GetSingle()).ToArray();
+            if (Axes.Length != Dimension)
+            {
+                throw new JsonException($"Expected {Dimension} vector components");
+            }
+        }
+        else if (Root.ValueKind == JsonValueKind.Object)
+        {
+            var Properties = Root.EnumerateObject().ToArray();
+            if (Properties.Length == 0)
+            {
+                return new float[Dimension];
+            }
+            var Names = typeof(TVector) == typeof(Quaternion)
+                ? new[] { "x", "y", "z", "w" }
+                : Dimension == 2 ? new[] { "x", "y" } :
+                    Dimension == 3 ? new[] { "x", "y", "z" } :
+                    new[] { "x", "y", "z", "w" };
+            Axes = new float[Dimension];
+            for (var Index = 0; Index < Dimension; Index++)
+            {
+                if (!Root.TryGetProperty(Names[Index], out var Value) &&
+                    !Root.TryGetProperty(Names[Index].ToUpperInvariant(), out Value))
+                {
+                    throw new JsonException($"Missing vector component '{Names[Index]}'");
+                }
+                Axes[Index] = Value.GetSingle();
+            }
+        }
+        else
+        {
+            throw new JsonException("Expected a vector array or object");
+        }
+        if (Axes.Any(Axis => !float.IsFinite(Axis)))
+        {
+            throw new JsonException("Vector components must be finite");
+        }
+        return Axes;
     }
 }
 

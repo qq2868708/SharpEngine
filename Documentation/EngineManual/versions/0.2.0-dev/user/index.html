@@ -152,11 +152,11 @@
     <section class="section-card" id="data-assets">
       <h2>数据资产</h2>
       <p>项目可以用 C# 数据类型定义独立的配置资产，将同一种配置类型保存为多个 <code>.sdataasset</code> 文本资源，并通过稳定资产 ID 加载。字段约束和直接资源引用会在加载时校验。抽象基类可以复用字段，具体派生类各自声明资产类型；<code>sealed</code> 不是必需的。</p>
-      <p>DataAsset 使用一套通用反射编辑器，不要求每个派生类型实现专用 UI。编辑器从 <code>DataAssetTypeDescriptor.Properties</code> 和 JSON Schema 生成字符串、数值、布尔、枚举、资产引用及 JSON 复合字段控件，并执行 Required、Minimum、Maximum 和引用类型校验。所有修改拥有独立 revision、Undo/Redo、dirty 和原子 Save。Editor 项目代码重载会重新发现具体类型，并更新表单、<code>assets.describe</code> 与 <code>sharpengine://assets</code> 的 Schema。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a>。</p>
+      <p>DataAsset 使用一套通用反射编辑器，不要求每个派生类型实现专用 UI。编辑器从 <code>DataAssetTypeDescriptor.Properties</code> 和 JSON Schema 生成字符串、数值、布尔、枚举、资产引用、Map 和 JSON 复合字段控件，并执行 Required、Minimum、Maximum 和引用类型校验。Map 可增删、改名和编辑值；嵌套 Map 显示为子项，矢量值使用分量编辑。所有数据修改拥有独立 revision、Undo/Redo、dirty 和原子 Save；Map 的上/下移动只调整该编辑器的临时显示顺序，不改变资产或撤销记录。Editor 项目代码重载会重新发现具体类型，并更新表单、<code>assets.describe</code> 与 <code>sharpengine://assets</code> 的 Schema。使用方法和验证边界见 <a href="../../../../DataAssets.md">数据资产专题</a> 与 <a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
-      <p>数组与 List 现在使用公共集合编辑器显示数量、折叠、增删和上下移动，元素复用已有基础类型控件；主 Inspector、DataAsset 和 Engine / Project Settings 共用布局。空集合与 null 分开展示，只读集合允许折叠查看并禁用修改。操作支持所属文档的 Undo/Redo 和显式保存，旧索引事件不会写入已经变化的集合。字典和 DataAsset 复杂对象保留原有键值／JSON 语义。</p>
+      <p>数组/List 与字典 Map 现使用共享集合控件：Map 的键和值、Add/Remove/Rename 与每行上/下移动统一呈现；Settings 和 DataAsset 使用同一 Map 布局。运行时字典仍无序，初始显示按 key 排序；手动上/下移仅改变当前编辑器临时可视顺序，不修改数据、revision、dirty、Undo 或保存内容。Map 数据动作沿用所属文档事务，null 与空 Map 分开显示，旧 Map 指纹动作会被拒绝。只读状态禁用键和值输入以及数据修改，但仍允许折叠和调整临时显示顺序。</p>
       <p>修正 Reference 与通用下拉框的重叠边框和箭头溢出：值区和箭头共用一个 28px 外框，禁用态保留相同尺寸；下拉选择和只读保护保持原有行为。</p>
       <p>修复独立 Game 在 Vulkan 下的 UI 快照与输入反馈读回：仅在需要固定帧证据时请求读回并呈现，交互结果与 PNG 使用同一帧。Game 界面验证现在实际转发并核对所选后端。</p>
       <p>StaticMesh/Skeleton 预览仅在选中可写 Socket 时显示操作 Gizmo；移除所有 Socket 的常驻 RGB 局部轴，父子与骨骼连线继续显示。选择 Mesh 根、骨骼或虚拟骨时隐藏操作手柄。</p>

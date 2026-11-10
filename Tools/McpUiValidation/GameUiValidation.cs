@@ -297,6 +297,17 @@ internal static class GameUiValidation
                 };
                 private readonly System.Collections.Generic.Stack<double[]> CollectionUndo = new();
                 private readonly System.Collections.Generic.Stack<double[]> CollectionRedo = new();
+                private readonly System.Collections.Generic.Dictionary<string, System.Numerics.Vector3> MapValues = new()
+                {
+                    ["zeta"] = new System.Numerics.Vector3(9, 8, 7),
+                    ["alpha"] = new System.Numerics.Vector3(1, 2, 3),
+                };
+                private readonly System.Collections.Generic.List<string> MapOrder = new()
+                {
+                    "alpha", "zeta",
+                };
+                private bool MapExpanded = true;
+                private bool ShowMaps;
 
                 private string BuildCollections()
                 {
@@ -321,6 +332,7 @@ internal static class GameUiValidation
                         "fixture.collection:empty-remove," + Index)).ToArray();
                     return "<div id='collection-fixture' style='position:absolute;left:20px;top:20px;width:1240px;height:680px;z-index:20;box-sizing:border-box;padding:14px;background-color:#16212d;'>" +
                         "<span style='display:block;font-size:24px;color:#e6eef8;margin-bottom:14px;'>Shared collection editors</span>" +
+                        "<button id='map-show' action='fixture.map:show'>Map editor</button>" +
                         "<div style='display:flex;gap:24px;'><div style='display:block;width:48%;'>" +
                         UiCollectionEditor.Render("editable-list", "Numbers (editable)", Rows, "fixture.collection:fold", "fixture.collection:add", CollectionExpanded) +
                         "<div style='display:flex;gap:8px;'><button id='collection-undo' class='se-collection-command' style='width:90px;' action='fixture.collection:undo'>Undo</button><button id='collection-redo' class='se-collection-command' style='width:90px;' action='fixture.collection:redo'>Redo</button></div>" +
@@ -332,8 +344,120 @@ internal static class GameUiValidation
                         "</div></div></div>";
                 }
 
+                private string BuildMapEditor()
+                {
+                    var Rows = new System.Collections.Generic.List<UiMapEntry>();
+                    for (var Index = 0; Index < MapOrder.Count; Index++)
+                    {
+                        var Key = MapOrder[Index];
+                        var EncodedKey = Uri.EscapeDataString(Key);
+                        var Value = MapValues[Key];
+                        var RenameAction = "fixture.map:rename:" + EncodedKey + ":";
+                        var KeyMarkup = "<div class=\"se-map-key\">" + UiValueEditors.Input(
+                            new UiValueInput("map-key-" + Key, Key, RenameAction)) + "</div>";
+                        var Axes = new[]
+                        {
+                            new UiValueInput("map-value-" + Key + "-X",
+                                UiValueEditors.Format(Value.X), "fixture.map:axis:" + EncodedKey + ":0:", false, "number"),
+                            new UiValueInput("map-value-" + Key + "-Y",
+                                UiValueEditors.Format(Value.Y), "fixture.map:axis:" + EncodedKey + ":1:", false, "number"),
+                            new UiValueInput("map-value-" + Key + "-Z",
+                                UiValueEditors.Format(Value.Z), "fixture.map:axis:" + EncodedKey + ":2:", false, "number"),
+                        };
+                        Rows.Add(new UiMapEntry("map-entry-" + Key, KeyMarkup,
+                            UiValueEditors.Vector("Offset", Axes, "XYZ"),
+                            "fixture.map:remove:" + EncodedKey,
+                            Index == 0 ? string.Empty : "fixture.map:view-up:" + EncodedKey,
+                            Index + 1 == MapOrder.Count ? string.Empty :
+                                "fixture.map:view-down:" + EncodedKey));
+                    }
+                    var DataState = string.Join("|", MapValues.OrderBy(Pair => Pair.Key,
+                        StringComparer.Ordinal).Select(Pair => Pair.Key + ":" +
+                        UiValueEditors.Format(Pair.Value.X) + "," +
+                        UiValueEditors.Format(Pair.Value.Y) + "," +
+                        UiValueEditors.Format(Pair.Value.Z)));
+                    return "<div id='map-fixture' style='position:absolute;left:20px;top:20px;width:900px;height:680px;z-index:20;box-sizing:border-box;padding:16px;background-color:#16212d;'>" +
+                        "<span style='display:block;font-size:24px;color:#e6eef8;margin-bottom:14px;'>Shared Map editor</span>" +
+                        UiMapEditor.Render("interactive-map", "Offsets (unordered data)", Rows,
+                            "fixture.map:fold", "fixture.map:add", MapExpanded) +
+                        "<div style='display:block;margin-top:14px;color:#e6eef8;'>Editor display order: <span id='map-order'>" +
+                        string.Join(",", MapOrder) + "</span></div>" +
+                        "<div style='display:block;margin-top:6px;color:#95a6ba;'>Data (stable key order): <span id='map-data-state'>" +
+                        DataState + "</span></div></div>";
+                }
+
+                private void HandleMapAction(string Action)
+                {
+                    var Parts = Action["fixture.map:".Length..].Split(':', 4);
+                    var Operation = Parts[0];
+                    if (Operation == "show")
+                    {
+                        ShowMaps = true;
+                        ShowCollections = false;
+                        return;
+                    }
+                    if (Operation == "fold")
+                    {
+                        MapExpanded = !MapExpanded;
+                        return;
+                    }
+                    if (Operation == "add")
+                    {
+                        var Key = "New Key";
+                        for (var Index = 2; MapValues.ContainsKey(Key); Index++)
+                        {
+                            Key = "New Key " + Index;
+                        }
+                        MapValues.Add(Key, System.Numerics.Vector3.Zero);
+                        MapOrder.Add(Key);
+                        return;
+                    }
+                    var EntryKey = Uri.UnescapeDataString(Parts[1]);
+                    if (Operation is "view-up" or "view-down")
+                    {
+                        var Index = MapOrder.IndexOf(EntryKey);
+                        var Target = Index + (Operation == "view-up" ? -1 : 1);
+                        (MapOrder[Index], MapOrder[Target]) = (MapOrder[Target], MapOrder[Index]);
+                        return;
+                    }
+                    if (Operation == "remove")
+                    {
+                        MapValues.Remove(EntryKey);
+                        MapOrder.Remove(EntryKey);
+                        return;
+                    }
+                    if (Operation == "rename")
+                    {
+                        var NewKey = Parts[2];
+                        if (!MapValues.ContainsKey(NewKey))
+                        {
+                            var Index = MapOrder.IndexOf(EntryKey);
+                            MapValues[NewKey] = MapValues[EntryKey];
+                            MapValues.Remove(EntryKey);
+                            MapOrder[Index] = NewKey;
+                        }
+                        return;
+                    }
+                    if (Operation == "axis")
+                    {
+                        var Axis = int.Parse(Parts[2], System.Globalization.CultureInfo.InvariantCulture);
+                        var Number = float.Parse(Parts[3], System.Globalization.CultureInfo.InvariantCulture);
+                        var Value = MapValues[EntryKey];
+                        MapValues[EntryKey] = Axis switch
+                        {
+                            0 => new System.Numerics.Vector3(Number, Value.Y, Value.Z),
+                            1 => new System.Numerics.Vector3(Value.X, Number, Value.Z),
+                            _ => new System.Numerics.Vector3(Value.X, Value.Y, Number),
+                        };
+                    }
+                }
+
                 public string BuildLayout(UiLayoutContext Context)
                 {
+                    if (Id == "secondary" && ShowMaps)
+                    {
+                        return BuildMapEditor();
+                    }
                     if (Id == "secondary" && ShowCollections)
                     {
                         return BuildCollections();
@@ -383,13 +507,19 @@ internal static class GameUiValidation
                             UiValueEditors.Range("Range (disabled)", new UiValueInput("readonly-range", "0.75", "fixture.range:", true, "number"), 0, 1, 0.01) +
                             UiValueEditors.Reference("Reference (disabled)", "readonly-reference", "project://materials/green",
                                 Options, "fixture.reference:", true) + "</div></div>" +
-                            "<button id='collection-show' action='fixture.collection:show'>Collection editors</button>";
+                            "<button id='collection-show' action='fixture.collection:show'>Collection editors</button>" +
+                            "<button id='map-show' action='fixture.map:show'>Map editor</button>";
                     }
                     return Markup;
                 }
 
                 public bool TryHandleAction(string Action)
                 {
+                    if (Id == "secondary" && Action.StartsWith("fixture.map:", System.StringComparison.Ordinal))
+                    {
+                        HandleMapAction(Action);
+                        return true;
+                    }
                     if (Id == "secondary" && Action.StartsWith("fixture.collection:", System.StringComparison.Ordinal))
                     {
                         var Parts = Action["fixture.collection:".Length..].Split(':', 2);
@@ -1166,6 +1296,30 @@ internal static class GameUiValidation
             ObserveGame();
             Check(TextOf("empty-list-count") == "0" && Find("empty-value-0") is null,
                 "Removing the last element returns the collection to its empty state");
+
+            ClickHit("map-show");
+            CaptureReference("map-initial");
+            var InitialMapData = TextOf("map-data-state");
+            Check(TextOf("map-order") == "alpha,zeta" &&
+                TextOf("interactive-map-count") == "2",
+                "Offscreen Game renders the shared Map editor and its initial ordinal order");
+            ClickHit("map-entry-zeta-up");
+            ObserveGame();
+            CaptureReference("map-reordered");
+            Check(TextOf("map-order") == "zeta,alpha" &&
+                TextOf("map-data-state") == InitialMapData,
+                "Real pointer input changes only the Map editor view order");
+            ClickHit("map-value-alpha-X");
+            ValueKey("down", 0x41, Modifiers: 1);
+            ValueKey("up", 0x41, Modifiers: 1);
+            ValueKey("text", Text: "21");
+            ValueKey("down", 0x0D);
+            ValueKey("up", 0x0D);
+            ObserveGame();
+            CaptureReference("map-edited");
+            Check(TextOf("map-data-state") == "alpha:21,2,3|zeta:9,8,7" &&
+                TextOf("map-order") == "zeta,alpha",
+                "Real focused input commits one Map vector axis without changing visual order");
             Console.WriteLine("PASS: Game UI presents the composed project screen");
         }
         finally

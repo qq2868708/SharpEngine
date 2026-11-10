@@ -29,6 +29,48 @@ internal static class CommonControlsValidation
         var CollapsedCollection = XElement.Parse(UiCollectionEditor.Render("collapsed", "Items", CollectionRows, "fold", "add", Expanded: false));
         Check(!CollapsedCollection.Descendants("input").Any() &&
             Collection.Descendants("input").Count() == 2, "Two collection uses retain independent expansion and child instances");
+        var MapRows = new[]
+        {
+            new UiMapEntry("map-first", UiValueEditors.Input(new UiValueInput(
+                "map-first-key", "alpha", "rename:")),
+                UiValueEditors.Vector("Offset", new[]
+                {
+                    new UiValueInput("map-x", "1", "axis-x:"),
+                    new UiValueInput("map-y", "2", "axis-y:"),
+                    new UiValueInput("map-z", "3", "axis-z:"),
+                }), "remove:", "", "move-down:"),
+            new UiMapEntry("map-second", UiValueEditors.Input(new UiValueInput(
+                "map-second-key", "zeta", "rename:")),
+                UiValueEditors.Text("Value", new UiValueInput("map-text", "text", "value:")),
+                "remove:", "move-up:", ""),
+        };
+        var Map = XElement.Parse(UiMapEditor.Render("map", "Offsets", MapRows,
+            "fold-map", "add-map"));
+        Check(Map.Descendants("input").Count() == 6 &&
+            Map.Descendants("button").Single(Button =>
+                Button.Attribute("id")?.Value == "map-first-up")
+                .Attribute("disabled") is not null &&
+            Map.Descendants("button").Single(Button =>
+                Button.Attribute("id")?.Value == "map-second-down")
+                .Attribute("disabled") is not null,
+            "Map rows reuse basic value controls and disable only visual-order boundaries");
+        var ReadOnlyChild = UiMapEditor.Render("child-map", "Child Map", MapRows,
+            "child-fold", "", ReadOnly: true);
+        var NestedReadOnly = XElement.Parse(UiMapEditor.Render("parent-map", "Parent Map",
+            new[]
+            {
+                new UiMapEntry("parent-row", "<span>Parent</span>", ReadOnlyChild,
+                    "", "", ""),
+            }, "parent-fold", "", ReadOnly: true));
+        Check(NestedReadOnly.Descendants("input").All(Input =>
+                Input.Attribute("disabled") is not null) &&
+            NestedReadOnly.Descendants("button").Single(Button =>
+                Button.Attribute("id")?.Value == "map-second-up")
+                .Attribute("data-action")?.Value == "move-up:" &&
+            NestedReadOnly.Descendants("button").Single(Button =>
+                Button.Attribute("id")?.Value == "map-second-remove")
+                .Attribute("data-action")?.Value == string.Empty,
+            "Read-only nested Maps disable data edits while preserving transient child ordering");
         var Nodes = new UiTreeNode[]
         {
             new("child", "root"), new("root", null), new("leaf", "child"),

@@ -25,10 +25,25 @@ internal static class DevelopmentSettingsValidation
             require(registry.Describe()["pages"]!.AsArray().All(node =>
                 node!["schema"]!["$schema"]!.GetValue<string>().EndsWith("2020-12/schema")),
                 "Every settings page must expose a JSON Schema");
+            var SettingsSchema = registry.Describe()["pages"]!.AsArray().Single(Node =>
+                Node!["id"]!.GetValue<string>() == page.Attribute.Id)!["schema"]!;
+            require(SettingsSchema["properties"]!["weights"]!["anyOf"]![0]!["additionalProperties"]!["type"]!.GetValue<string>() == "number" &&
+                SettingsSchema["properties"]!["vectors"]!["anyOf"]![0]!["additionalProperties"]!["minItems"]!.GetValue<int>() == 3,
+                "Settings Map schemas publish typed numeric and vector values");
             require(registry.TrySet(SettingsScope.Project, page.Attribute.Id, "weights",
                     """{"z":2,"a":1}""", out _) &&
                 DevelopmentSettings.Get<ValidationProjectSettings>().Weights["z"] == 2,
                 "String-key dictionaries must round-trip without JSON node ownership errors");
+            require(registry.TrySet(SettingsScope.Project, page.Attribute.Id, "vectors",
+                    """{"origin":[4,5,6]}""", out _) &&
+                DevelopmentSettings.Get<ValidationProjectSettings>().Vectors["origin"] ==
+                    new System.Numerics.Vector3(4, 5, 6),
+                "Vector values inside Settings Maps must retain all typed components");
+            require(registry.TrySet(SettingsScope.Project, page.Attribute.Id, "colors",
+                    """{"accent":[0.2,0.4,0.6,1]}""", out _) &&
+                DevelopmentSettings.Get<ValidationProjectSettings>().Colors["accent"] ==
+                    new SharpEngine.Components.Color(0.2f, 0.4f, 0.6f, 1),
+                "Color values inside Settings Maps must round-trip as RGBA components");
             var revision = page.Revision;
             require(!registry.TrySet(SettingsScope.Project, page.Attribute.Id, "moveSpeed", "-1", out _) &&
                     page.Revision == revision,

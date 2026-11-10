@@ -88,3 +88,15 @@ select.se-value-input:disabled selectvalue { background-color: transparent; bord
 .se-collection-value { display: block; min-width: 0px; }
 .se-collection-disabled .se-collection-toggle, .se-collection-disabled .se-collection-count, .se-collection-disabled .se-collection-index { color: #697583; }
 .se-collection-disabled .se-value-field > label, .se-collection-disabled .se-vector-axis > label { color: #697583; }
+.se-map { display: block; width: 100%; min-width: 0px; margin-bottom: 8px; background-color: #1c242e; border: 1px #384658; box-sizing: border-box; }
+.se-map-header { display: flex; align-items: center; padding: 4px; gap: 4px; }
+.se-map-entries { display: block; padding: 0px 7px 7px; }
+.se-map-entry { display: block; min-width: 0px; margin-top: 5px; padding: 5px; border: 1px #344153; }
+.se-map-entry-header { display: flex; align-items: center; min-width: 0px; gap: 4px; }
+.se-map-key { display: block; flex: 1; min-width: 0px; }
+.se-map-key .se-value-field { margin: 0px; }
+.se-map-key .se-value-field > label { display: none; }
+.se-map-key .se-value-input { width: 100%; }
+.se-map-entry-value { display: block; min-width: 0px; margin-top: 5px; }
+.se-map-disabled .se-collection-toggle, .se-map-disabled .se-collection-count { color: #697583; }
+.se-map-disabled .se-value-field > label, .se-map-disabled .se-vector-axis > label { color: #697583; }

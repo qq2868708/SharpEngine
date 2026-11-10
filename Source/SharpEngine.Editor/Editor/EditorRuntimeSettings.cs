@@ -101,6 +101,8 @@ public sealed partial class EditorRuntime
         SettingsValueEditing.Clear();
         SettingsValuePointerCommit.Clear();
         SettingsCollectionRefreshPending.Clear();
+        SettingsMapOrders.Clear();
+        SettingsMapExpanded.Clear();
         _developmentSettings?.Dispose();
         _developmentSettings = null;
     }
@@ -275,6 +277,14 @@ public sealed partial class EditorRuntime
                 field.Property.PropertyType;
             var label = string.IsNullOrWhiteSpace(field.Attribute.DisplayName)
                 ? field.Property.Name : field.Attribute.DisplayName!;
+            if (MapEditing.ValueType(type) is not null)
+            {
+                var Value = System.Text.Json.Nodes.JsonNode.Parse(
+                    _developmentSettings!.EditorValue(type, value));
+                markup.Append(BuildSettingsMap(descriptor, path, label, type,
+                    Value, Value, Array.Empty<string>()));
+                continue;
+            }
             if (CollectionEditing.ElementType(type) is not null)
             {
                 var Value = System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(type, value));

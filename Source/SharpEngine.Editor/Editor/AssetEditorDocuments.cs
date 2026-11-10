@@ -14,6 +14,7 @@ internal sealed class JsonAssetAuthoringDocument
     private readonly Stack<JsonObject> UndoStates = [];
     private readonly Stack<JsonObject> RedoStates = [];
     private readonly Action<JsonObject> Validate;
+    private readonly Func<JsonObject, JsonObject>? Normalize;
     private JsonObject Document;
     private string SavedState;
     private string SourceHash;
@@ -22,11 +23,12 @@ internal sealed class JsonAssetAuthoringDocument
     private bool Dirty;
 
     public JsonAssetAuthoringDocument(AssetDescriptor Asset, string Path,
-        Action<JsonObject> Validate)
+        Action<JsonObject> Validate, Func<JsonObject, JsonObject>? Normalize = null)
     {
         this.Asset = Asset;
         this.Path = System.IO.Path.GetFullPath(Path);
         this.Validate = Validate;
+        this.Normalize = Normalize;
         Document = Parse(File.ReadAllText(this.Path));
         Validate(Document);
         CurrentState = Canonical(Document);
@@ -188,17 +190,23 @@ internal sealed class JsonAssetAuthoringDocument
             throw new InvalidDataException("Asset root must be a JSON object");
     }
 
-    private static string Serialize(JsonObject Value) =>
-        Value.ToJsonString(new JsonSerializerOptions
+    private string Serialize(JsonObject Value)
+    {
+        var SourceValue = Normalize?.Invoke(Value.DeepClone().AsObject()) ?? Value;
+        return SourceValue.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = true,
         }) + Environment.NewLine;
+    }
 
-    private static string Canonical(JsonObject Value) =>
-        Value.ToJsonString(new JsonSerializerOptions
+    private string Canonical(JsonObject Value)
+    {
+        var CanonicalValue = Normalize?.Invoke(Value.DeepClone().AsObject()) ?? Value;
+        return CanonicalValue.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = false,
         });
+    }
 
     private static void EnsureNoDuplicateProperties(JsonElement Element)
     {

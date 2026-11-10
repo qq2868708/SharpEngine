@@ -28,7 +28,7 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
                 $"Data asset type is not registered: {Context.Asset.Type}");
         }
         Document = new JsonAssetAuthoringDocument(Context.Asset, Context.Path,
-            Validate);
+            Validate, Root => MapEditing.CanonicalizeDataAssetMaps(Root, Descriptor.Properties));
     }
 
     public AssetDescriptor Asset => Context.Asset;
@@ -92,6 +92,10 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        if (TryHandleMapAction(Action))
+        {
+            return true;
+        }
         if (TryHandleCollectionAction(Action))
         {
             return true;
@@ -360,6 +364,12 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
                     new[] { Property.JsonName }, Root));
                 continue;
             }
+            if (MapEditing.ValueType(Property.PropertyType) is not null)
+            {
+                Markup.Append(BuildMap(Property.Name, Property.PropertyType, Value,
+                    new[] { Property.JsonName }, Root));
+                continue;
+            }
             if (Property.PropertyType == typeof(bool))
             {
                 var Checked = Value?.GetValue<bool>() == true;
@@ -470,7 +480,7 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
         }
         return Value.ToJsonString(new JsonSerializerOptions
         {
-            WriteIndented = Type.IsArray || Value is JsonObject,
+            WriteIndented = Type.IsArray || Value is JsonObject || DataAssetSchema.TryMapValue(Type, out _),
         });
     }
 

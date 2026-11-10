@@ -1,0 +1,6 @@
+<template>
+  <div id="${Id}" class="se-map-entry">
+    <div class="se-map-entry-header"><ui-slot name="Key" /><button id="${Id}-up" class="se-collection-command" data-action="${UpAction}" ui-disabled="UpDisabled" title="Move entry up in editor view">↑</button><button id="${Id}-down" class="se-collection-command" data-action="${DownAction}" ui-disabled="DownDisabled" title="Move entry down in editor view">↓</button><button id="${Id}-remove" class="se-collection-command" data-action="${RemoveAction}" ui-disabled="RemoveDisabled" title="Remove entry">×</button></div>
+    <div class="se-map-entry-value"><ui-slot name="Value" /></div>
+  </div>
+</template>

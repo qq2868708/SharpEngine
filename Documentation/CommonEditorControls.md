@@ -36,7 +36,15 @@ Choice 与 Reference 共用单一 28px 下拉外框，原生值区和箭头在�
 
 `UiCollectionEditor` 组合 `CollectionEditor.rml`、`CollectionItem.rml` 与已有基础值编辑器。公共层显示字段名、数量、折叠、索引、Add、Remove、Up、Down；第一项 Up 和最后一项 Down 禁用。空集合显示 `0`，null 集合显示 `null`，展开查看不修改数据。只读集合保留相同结构和折叠，禁用内部输入和修改按钮并移除动作绑定。公共层只消费 `UiCollectionItem` 的内容与调用方动作，不持有 World、资产数据或撤销栈。
 
-主 Inspector 的一维数组／`List<T>`、DataAsset 属性和 Engine／Project Settings 的有序集合使用同一布局。元素复用 Text、Number、Boolean、Choice、Reference、Vector、Color；支持已有契约允许的嵌套集合。Inspector 继续使用已注册的数据描述符展开对象；Settings 使用带 Setting 标注的对象字段；DataAsset 复杂对象仍保留 JSON 值编辑，不推断额外对象 schema。字典保留其键值语义，不转换成有序列表。
+主 Inspector 的一维数组／`List<T>`、DataAsset 属性和 Engine／Project Settings 的有序集合使用同一布局。元素复用 Text、Number、Boolean、Choice、Reference、Vector、Color；支持已有契约允许的嵌套集合。Inspector 继续使用已注册的数据描述符展开对象；Settings 使用带 Setting 标注的对象字段；DataAsset 复杂对象仍保留 JSON 值编辑，不推断额外对象 schema。
+
+## Map 与字典
+
+`UiMapEditor.Render` / `UiMapEntry` 使用 `MapEditor.rml`、`MapEntry.rml` 和 `CommonControls.rcss` 呈现键、值、Add、Remove、折叠与可视顺序。控件只接收调用方提供的键/值布局和动作，不拥有 Map 数据、验证器、文档或 Undo 栈。运行时与持久数据仍是普通无序字典；首次显示按 key 的 Ordinal 顺序排列。上移/下移只修改当前编辑器实例的临时列表，不修改字典、不增加 revision/dirty，也不进入 Undo/Redo 或资产/Settings 序列化。只读 Map 禁用键和值输入以及 Add/Remove/Rename，但折叠与可视排序仍可用。
+
+DataAsset 与 Settings 适配器分别通过原有文档事务和 `DevelopmentSettingsRegistry.TrySet` 处理真实键值变更。Add、Remove、Rename、值编辑每次是一次所属文档修改，Undo 可恢复；Map 指纹按键规范化，过期动作不会写到不同的键或值。字典字段的 JSON Schema 使用 object / `additionalProperties`；保存按 key 的 Ordinal 顺序序列化，和当前编辑器视图顺序无关。Map key 是 JSON object key，不是路径片段，因此 `/`、反斜杠等字符不需要转义成另一种业务 key。
+
+null Map 显示为 `null`，空 Map 显示为 `0`；Add 将 null 初始化为 Map，并创建一个所属类型默认值。嵌套字典显示为子 Map，各自拥有独立的临时顺序和折叠状态。值复用 Boolean、Choice、Reference、Vector、Color 与文本编辑器；DataAsset 的 Vector2/3/4 与 Quaternion 按数组分量保存，Color 保持 RGBA 结构。Settings 不支持由 `[Setting]` 描述的类型以禁用 JSON 形式显示，不伪装成可编辑输入。DataAsset Map 内的数组/集合值遵守现有只读 JSON 复合值边界。
 
 新增值沿用所属领域的默认值规则；null 集合通过 Add 创建并加入第一项，Undo 可恢复 null，与空数组区分。移除或上下移动只影响目标元素，每次操作是所属文档的一次事务，保存仍须显式执行。元素输入继续采用草稿、Enter／失焦提交、Esc 取消。集合动作携带渲染时的集合指纹，集合发生变化后拒绝旧索引事件，避免旧输入修改排序后的另一个元素；没有在资产中新增元素 ID 或改变存储格式。DataAsset 的集合引用逐项校验存在性与类型，`List<T>` schema 与数组一样发布 items。
 

@@ -644,6 +644,7 @@ try
 
     BasicAssetEditorsValidation.Run(runtime, temporary.FullName, Require);
     CollectionEditorsValidation.Run(runtime, temporary.FullName, Require);
+    MapEditorsValidation.Run(runtime, temporary.FullName, Require);
     SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
     StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
     SocketGizmoVisibilityValidation.Run(runtime, temporary.FullName, Require);
@@ -846,6 +847,18 @@ public sealed class ValidationProjectSettings : DevelopmentSettings
 
     [Setting("weights")]
     public Dictionary<string, float> Weights { get; init; } = new();
+
+    [Setting("vectors")]
+    public Dictionary<string, System.Numerics.Vector3> Vectors { get; init; } = new()
+    {
+        ["origin"] = new System.Numerics.Vector3(1, 2, 3),
+    };
+
+    [Setting("colors")]
+    public Dictionary<string, SharpEngine.Components.Color> Colors { get; init; } = new()
+    {
+        ["accent"] = new SharpEngine.Components.Color(0.1f, 0.2f, 0.3f, 1),
+    };
 
     [Setting("profiles")]
     public List<ValidationSettingsProfile> Profiles { get; init; } = [];

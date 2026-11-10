@@ -1,8 +1,10 @@
 using System.Collections;
 using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using SharpEngine.Components;
 
 namespace SharpEngine.Settings;
 
@@ -368,7 +370,7 @@ internal sealed class DevelopmentSettingsRegistry : IDevelopmentSettingsProvider
                 ["diagnostic"] = descriptor.Diagnostic,
                 ["path"] = descriptor.Path,
                 ["fields"] = fields,
-                ["schema"] = SettingsValueCodec.Schema(descriptor.Type, root: true),
+                ["schema"] = SettingsValueCodec.Schema(descriptor.Type, Root: true),
                 ["values"] = SettingsValueCodec.WriteObject(descriptor.Current,
                     descriptor.Fields),
             });
@@ -510,7 +512,10 @@ internal sealed class DevelopmentSettingsRegistry : IDevelopmentSettingsProvider
         private static void ValidateType(Type type, HashSet<Type> stack, string path)
         {
             type = Nullable.GetUnderlyingType(type) ?? type;
-            if (IsScalar(type) || type.IsEnum) return;
+            if (IsScalar(type) || type.IsEnum || IsNumericVector(type))
+            {
+                return;
+            }
             if (type == typeof(object) || type.IsInterface || type.IsAbstract ||
                 type.IsPointer || type.IsByRef || type.ContainsGenericParameters ||
                 typeof(Delegate).IsAssignableFrom(type))
@@ -703,34 +708,62 @@ internal sealed class DevelopmentSettingsRegistry : IDevelopmentSettingsProvider
             }
         }
 
-        private static void ValidateValue(Type type, object? value, string path)
+        private static void ValidateValue(Type Type, object? Value, string Path)
         {
-            if (value is null) return;
-            type = Nullable.GetUnderlyingType(type) ?? type;
-            if (value is float single && !float.IsFinite(single) ||
-                value is double number && !double.IsFinite(number))
-                throw new InvalidDataException($"Setting '{path}' must be finite");
-            if (type.IsEnum && !Enum.IsDefined(type, value))
-                throw new InvalidDataException($"Setting '{path}' has an undefined enum value");
-            if (IsScalar(type) || type.IsEnum) return;
-            Type? element = null;
-            if (type.IsArray || TryCollectionElement(type, out element))
+            if (Value is null)
             {
-                element ??= type.GetElementType()!;
-                var index = 0;
-                foreach (var item in (IEnumerable)value) ValidateValue(element, item, $"{path}/{index++}");
+                return;
             }
-            else if (TryDictionaryValue(type, out var dictionaryValue))
+            Type = Nullable.GetUnderlyingType(Type) ?? Type;
+            if (Value is float Single && !float.IsFinite(Single) ||
+                Value is double Number && !double.IsFinite(Number))
             {
-                foreach (DictionaryEntry entry in (IDictionary)value)
-                    ValidateValue(dictionaryValue!, entry.Value, $"{path}/{entry.Key}");
+                throw new InvalidDataException($"Setting '{Path}' must be finite");
             }
-            else
+            if (IsNumericVector(Type))
             {
-                if (value.GetType() != type)
-                    throw new InvalidDataException($"Setting '{path}' cannot contain undeclared polymorphic types");
-                ValidateValues(value, GetFields(type), path);
+                var Components = GetNumericComponents(Type, Value);
+                if (Components.Any(Component => !float.IsFinite(Component)))
+                {
+                    throw new InvalidDataException(
+                        $"Setting '{Path}' must contain finite components");
+                }
+                return;
             }
+            if (Type.IsEnum && !Enum.IsDefined(Type, Value))
+            {
+                throw new InvalidDataException($"Setting '{Path}' has an undefined enum value");
+            }
+            if (IsScalar(Type) || Type.IsEnum)
+            {
+                return;
+            }
+            Type? Element = null;
+            if (Type.IsArray || TryCollectionElement(Type, out Element))
+            {
+                Element ??= Type.GetElementType()!;
+                var Index = 0;
+                foreach (var Item in (IEnumerable)Value)
+                {
+                    ValidateValue(Element, Item, $"{Path}/{Index}");
+                    Index++;
+                }
+                return;
+            }
+            if (TryDictionaryValue(Type, out var DictionaryValue))
+            {
+                foreach (DictionaryEntry Entry in (IDictionary)Value)
+                {
+                    ValidateValue(DictionaryValue!, Entry.Value, $"{Path}/{Entry.Key}");
+                }
+                return;
+            }
+            if (Value.GetType() != Type)
+            {
+                throw new InvalidDataException(
+                    $"Setting '{Path}' cannot contain undeclared polymorphic types");
+            }
+            ValidateValues(Value, GetFields(Type), Path);
         }
 
         public static JsonObject DescribeField(DevelopmentSettingField field)
@@ -755,88 +788,124 @@ internal sealed class DevelopmentSettingsRegistry : IDevelopmentSettingsProvider
             return result;
         }
 
-        private static JsonNode? WriteValue(Type declaredType, object? value)
+        private static JsonNode? WriteValue(Type DeclaredType, object? Value)
         {
-            if (value is null) return null;
-            var type = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-            if (type.IsEnum) return JsonValue.Create(value.ToString());
-            if (IsScalar(type)) return JsonSerializer.SerializeToNode(value, type, JsonOptions);
-            Type? elementType = null;
-            if (type.IsArray || TryCollectionElement(type, out elementType))
+            if (Value is null)
             {
-                elementType ??= type.GetElementType()!;
-                var array = new JsonArray();
-                foreach (var item in (IEnumerable)value)
-                    array.Add(WriteValue(elementType, item));
-                return array;
+                return null;
             }
-            if (TryDictionaryValue(type, out var valueType))
+            var Type = Nullable.GetUnderlyingType(DeclaredType) ?? DeclaredType;
+            if (Type.IsEnum)
             {
-                var result = new JsonObject();
-                var dictionary = (IDictionary)value;
-                foreach (var key in dictionary.Keys.Cast<string>().OrderBy(key => key, StringComparer.Ordinal))
-                    result[key] = WriteValue(valueType!, dictionary[key]);
-                return result;
+                return JsonValue.Create(Value.ToString());
             }
-            return WriteObject(value);
+            if (IsNumericVector(Type))
+            {
+                return new JsonArray(GetNumericComponents(Type, Value)
+                    .Select(Component => (JsonNode?)JsonValue.Create(Component)).ToArray());
+            }
+            if (IsScalar(Type))
+            {
+                return JsonSerializer.SerializeToNode(Value, Type, JsonOptions);
+            }
+            Type? ElementType = null;
+            if (Type.IsArray || TryCollectionElement(Type, out ElementType))
+            {
+                ElementType ??= Type.GetElementType()!;
+                var Array = new JsonArray();
+                foreach (var Item in (IEnumerable)Value)
+                {
+                    Array.Add(WriteValue(ElementType, Item));
+                }
+                return Array;
+            }
+            if (TryDictionaryValue(Type, out var ValueType))
+            {
+                var Result = new JsonObject();
+                var Dictionary = (IDictionary)Value;
+                foreach (var Key in Dictionary.Keys.Cast<string>()
+                             .OrderBy(Key => Key, StringComparer.Ordinal))
+                {
+                    Result[Key] = WriteValue(ValueType!, Dictionary[Key]);
+                }
+                return Result;
+            }
+            return WriteObject(Value);
         }
 
-        private static object? ReadValue(Type declaredType, JsonNode? node,
-            object? fallback)
+        private static object? ReadValue(Type DeclaredType, JsonNode? Node,
+            object? Fallback)
         {
-            var nullable = Nullable.GetUnderlyingType(declaredType);
-            if (node is null)
+            var NullableType = Nullable.GetUnderlyingType(DeclaredType);
+            if (Node is null)
             {
-                if (!declaredType.IsValueType || nullable is not null) return null;
+                if (!DeclaredType.IsValueType || NullableType is not null)
+                {
+                    return null;
+                }
                 throw new InvalidDataException(
-                    $"Non-nullable setting type '{declaredType.Name}' cannot read null");
+                    $"Non-nullable setting type '{DeclaredType.Name}' cannot read null");
             }
-            var type = nullable ?? declaredType;
-            if (type.IsEnum)
+            var Type = NullableType ?? DeclaredType;
+            if (Type.IsEnum)
             {
-                var name = node.GetValue<string>();
-                if (!Enum.TryParse(type, name, ignoreCase: false, out var value) ||
-                    !Enum.IsDefined(type, value!))
+                var Name = Node.GetValue<string>();
+                if (!Enum.TryParse(Type, Name, ignoreCase: false, out var EnumValue) ||
+                    !Enum.IsDefined(Type, EnumValue!))
+                {
                     throw new InvalidDataException(
-                        $"Unknown {type.Name} setting value '{name}'");
-                return value;
+                        $"Unknown {Type.Name} setting value '{Name}'");
+                }
+                return EnumValue;
             }
-            if (IsScalar(type))
-                return node.Deserialize(type, JsonOptions) ??
+            if (IsNumericVector(Type))
+            {
+                return ReadNumericVector(Type, Node);
+            }
+            if (IsScalar(Type))
+            {
+                return Node.Deserialize(Type, JsonOptions) ??
                     throw new InvalidDataException(
-                        $"Could not deserialize setting value as '{type.Name}'");
-            if (type.IsArray)
-            {
-                var source = node as JsonArray ??
-                    throw new InvalidDataException($"Setting value for '{type.Name}' must be an array");
-                var elementType = type.GetElementType()!;
-                var result = Array.CreateInstance(elementType, source.Count);
-                for (var index = 0; index < source.Count; index++)
-                    result.SetValue(ReadValue(elementType, source[index], null), index);
-                return result;
+                        $"Could not deserialize setting value as '{Type.Name}'");
             }
-            if (TryCollectionElement(type, out var collectionElement))
+            if (Type.IsArray)
             {
-                var source = node as JsonArray ??
-                    throw new InvalidDataException($"Setting value for '{type.Name}' must be an array");
-                var result = (IList)Activator.CreateInstance(type)!;
-                foreach (var item in source)
-                    result.Add(ReadValue(collectionElement!, item, null));
-                return result;
+                var Source = Node as JsonArray ??
+                    throw new InvalidDataException($"Setting value for '{Type.Name}' must be an array");
+                var ElementType = Type.GetElementType()!;
+                var Result = Array.CreateInstance(ElementType, Source.Count);
+                for (var Index = 0; Index < Source.Count; Index++)
+                {
+                    Result.SetValue(ReadValue(ElementType, Source[Index], null), Index);
+                }
+                return Result;
             }
-            if (TryDictionaryValue(type, out var dictionaryValue))
+            if (TryCollectionElement(Type, out var CollectionElement))
             {
-                var source = node as JsonObject ??
-                    throw new InvalidDataException($"Setting value for '{type.Name}' must be an object");
-                var result = (IDictionary)Activator.CreateInstance(type)!;
-                foreach (var entry in source.OrderBy(entry => entry.Key,
+                var Source = Node as JsonArray ??
+                    throw new InvalidDataException($"Setting value for '{Type.Name}' must be an array");
+                var Result = (IList)Activator.CreateInstance(Type)!;
+                foreach (var Item in Source)
+                {
+                    Result.Add(ReadValue(CollectionElement!, Item, null));
+                }
+                return Result;
+            }
+            if (TryDictionaryValue(Type, out var DictionaryValue))
+            {
+                var Source = Node as JsonObject ??
+                    throw new InvalidDataException($"Setting value for '{Type.Name}' must be an object");
+                var Result = (IDictionary)Activator.CreateInstance(Type)!;
+                foreach (var Entry in Source.OrderBy(Entry => Entry.Key,
                              StringComparer.Ordinal))
-                    result.Add(entry.Key, ReadValue(dictionaryValue!, entry.Value, null));
-                return result;
+                {
+                    Result.Add(Entry.Key, ReadValue(DictionaryValue!, Entry.Value, null));
+                }
+                return Result;
             }
-            return ReadObject(type, node as JsonObject ??
-                throw new InvalidDataException($"Setting value for '{type.Name}' must be an object"),
-                fallback);
+            return ReadObject(Type, Node as JsonObject ??
+                throw new InvalidDataException($"Setting value for '{Type.Name}' must be an object"),
+                Fallback);
         }
 
         private static bool IsScalar(Type type) =>
@@ -846,42 +915,108 @@ internal sealed class DevelopmentSettingsRegistry : IDevelopmentSettingsProvider
             type == typeof(DateTimeOffset) || type == typeof(TimeSpan) ||
             type == typeof(Uri);
 
-        public static JsonObject Schema(Type declaredType, bool root = false)
+        public static JsonObject Schema(Type DeclaredType, bool Root = false)
         {
-            var type = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-            JsonObject schema;
-            if (type.IsEnum)
-                schema = new() { ["type"] = "string", ["enum"] = new JsonArray(
-                    Enum.GetNames(type).Select(name => (JsonNode?)JsonValue.Create(name)).ToArray()) };
-            else if (IsScalar(type))
-                schema = new() { ["type"] = type == typeof(bool) ? "boolean" :
-                    type == typeof(float) || type == typeof(double) || type == typeof(decimal) ? "number" :
-                    type.IsPrimitive && type != typeof(char) ? "integer" : "string" };
-            else if (type.IsArray)
-                schema = new() { ["type"] = "array", ["items"] = Schema(type.GetElementType()!) };
-            else if (TryCollectionElement(type, out var element))
-                schema = new() { ["type"] = "array", ["items"] = Schema(element!) };
-            else if (TryDictionaryValue(type, out var dictionaryValue))
-                schema = new() { ["type"] = "object", ["additionalProperties"] = Schema(dictionaryValue!) };
+            var Type = Nullable.GetUnderlyingType(DeclaredType) ?? DeclaredType;
+            JsonObject ResultSchema;
+            if (Type.IsEnum)
+            {
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = new JsonArray(Enum.GetNames(Type)
+                        .Select(Name => (JsonNode?)JsonValue.Create(Name)).ToArray()),
+                };
+            }
+            else if (IsScalar(Type))
+            {
+                var ScalarType = Type == typeof(bool) ? "boolean" :
+                    Type == typeof(float) || Type == typeof(double) || Type == typeof(decimal)
+                        ? "number" :
+                    Type.IsPrimitive && Type != typeof(char) ? "integer" : "string";
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = ScalarType,
+                };
+            }
+            else if (Type.IsArray)
+            {
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["items"] = Schema(Type.GetElementType()!),
+                };
+            }
+            else if (TryCollectionElement(Type, out var Element))
+            {
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["items"] = Schema(Element!),
+                };
+            }
+            else if (IsNumericVector(Type))
+            {
+                var Dimension = NumericDimension(Type);
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["items"] = new JsonObject
+                    {
+                        ["type"] = "number",
+                    },
+                    ["minItems"] = Dimension,
+                    ["maxItems"] = Dimension,
+                };
+            }
+            else if (TryDictionaryValue(Type, out var DictionaryValue))
+            {
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = Schema(DictionaryValue!),
+                };
+            }
             else
             {
-                var properties = new JsonObject();
-                var required = new JsonArray();
-                foreach (var field in GetFields(type))
+                var Properties = new JsonObject();
+                var Required = new JsonArray();
+                foreach (var Field in GetFields(Type))
                 {
-                    var fieldSchema = Schema(field.Property.PropertyType);
-                    if (!double.IsNaN(field.Attribute.Minimum)) fieldSchema["minimum"] = field.Attribute.Minimum;
-                    if (!double.IsNaN(field.Attribute.Maximum)) fieldSchema["maximum"] = field.Attribute.Maximum;
-                    properties[field.Attribute.Id] = fieldSchema;
-                    required.Add(field.Attribute.Id);
+                    var FieldSchema = Schema(Field.Property.PropertyType);
+                    if (!double.IsNaN(Field.Attribute.Minimum))
+                    {
+                        FieldSchema["minimum"] = Field.Attribute.Minimum;
+                    }
+                    if (!double.IsNaN(Field.Attribute.Maximum))
+                    {
+                        FieldSchema["maximum"] = Field.Attribute.Maximum;
+                    }
+                    Properties[Field.Attribute.Id] = FieldSchema;
+                    Required.Add(Field.Attribute.Id);
                 }
-                schema = new() { ["type"] = "object", ["properties"] = properties,
-                    ["required"] = required, ["additionalProperties"] = false };
+                ResultSchema = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = Properties,
+                    ["required"] = Required,
+                    ["additionalProperties"] = false,
+                };
             }
-            if (!root && (!declaredType.IsValueType || Nullable.GetUnderlyingType(declaredType) is not null))
-                schema = new() { ["anyOf"] = new JsonArray(schema, new JsonObject { ["type"] = "null" }) };
-            if (root) schema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
-            return schema;
+            if (!Root && (!DeclaredType.IsValueType ||
+                Nullable.GetUnderlyingType(DeclaredType) is not null))
+            {
+                ResultSchema = new JsonObject
+                {
+                    ["anyOf"] = new JsonArray(ResultSchema,
+                        new JsonObject { ["type"] = "null" }),
+                };
+            }
+            if (Root)
+            {
+                ResultSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
+            }
+            return ResultSchema;
         }
 
         private static bool IsStructured(Type type)
@@ -910,11 +1045,151 @@ internal sealed class DevelopmentSettingsRegistry : IDevelopmentSettingsProvider
             return true;
         }
 
-        private static string TypeName(Type type) => type.IsEnum ? "enum" :
-            type == typeof(bool) ? "boolean" :
-            type == typeof(string) || type == typeof(Uri) ? "string" :
-            type.IsPrimitive || type == typeof(decimal) ? "number" :
-            type.IsArray || TryCollectionElement(type, out _) ? "array" : "object";
+        private static string TypeName(Type Type)
+        {
+            if (Type.IsEnum)
+            {
+                return "enum";
+            }
+            if (Type == typeof(Vector2))
+            {
+                return "vector2";
+            }
+            if (Type == typeof(Vector3))
+            {
+                return "vector3";
+            }
+            if (Type == typeof(Vector4))
+            {
+                return "vector4";
+            }
+            if (Type == typeof(Quaternion))
+            {
+                return "quaternion";
+            }
+            if (Type == typeof(Color))
+            {
+                return "color";
+            }
+            if (Type == typeof(bool))
+            {
+                return "boolean";
+            }
+            if (Type == typeof(string) || Type == typeof(Uri))
+            {
+                return "string";
+            }
+            if (Type.IsPrimitive || Type == typeof(decimal))
+            {
+                return "number";
+            }
+            if (Type.IsArray || TryCollectionElement(Type, out _))
+            {
+                return "array";
+            }
+            return TryDictionaryValue(Type, out _) ? "map" : "object";
+        }
+
+        private static bool IsNumericVector(Type Type)
+        {
+            return Type == typeof(Vector2) || Type == typeof(Vector3) ||
+                Type == typeof(Vector4) || Type == typeof(Quaternion) ||
+                Type == typeof(Color);
+        }
+
+        private static int NumericDimension(Type Type)
+        {
+            if (Type == typeof(Vector2))
+            {
+                return 2;
+            }
+            if (Type == typeof(Vector3))
+            {
+                return 3;
+            }
+            return 4;
+        }
+
+        private static float[] GetNumericComponents(Type Type, object? Value)
+        {
+            return Value switch
+            {
+                Vector2 Vector => [Vector.X, Vector.Y],
+                Vector3 Vector => [Vector.X, Vector.Y, Vector.Z],
+                Vector4 Vector => [Vector.X, Vector.Y, Vector.Z, Vector.W],
+                Quaternion Rotation => [Rotation.X, Rotation.Y, Rotation.Z, Rotation.W],
+                Color Color => [Color.R, Color.G, Color.B, Color.A],
+                _ => throw new InvalidDataException(
+                    $"Setting value for '{Type.Name}' has an incompatible runtime type"),
+            };
+        }
+
+        private static object ReadNumericVector(Type Type, JsonNode? Node)
+        {
+            var Dimension = NumericDimension(Type);
+            float[] Components;
+            if (Node is JsonArray Array)
+            {
+                if (Array.Count != Dimension)
+                {
+                    throw new InvalidDataException(
+                        $"Setting value for '{Type.Name}' must contain {Dimension} components");
+                }
+                Components = Array.Select(Value => Value!.Deserialize<float>()).ToArray();
+            }
+            else if (Node is JsonObject Object)
+            {
+                var Names = Type == typeof(Color)
+                    ? new[] { "r", "g", "b", "a" }
+                    : new[] { "x", "y", "z", "w" };
+                if (Object.Count == 0)
+                {
+                    Components = new float[Dimension];
+                }
+                else
+                {
+                    Components = new float[Dimension];
+                    for (var Index = 0; Index < Dimension; Index++)
+                    {
+                        var Name = Names[Index];
+                        if (!Object.TryGetPropertyValue(Name, out var Value) &&
+                            !Object.TryGetPropertyValue(Name.ToUpperInvariant(), out Value))
+                        {
+                            throw new InvalidDataException(
+                                $"Setting value for '{Type.Name}' is missing '{Name}'");
+                        }
+                        Components[Index] = Value!.Deserialize<float>();
+                    }
+                }
+            }
+            else
+            {
+                throw new InvalidDataException(
+                    $"Setting value for '{Type.Name}' must be a component array");
+            }
+            if (Components.Any(Component => !float.IsFinite(Component)))
+            {
+                throw new InvalidDataException(
+                    $"Setting value for '{Type.Name}' must contain finite components");
+            }
+            if (Type == typeof(Vector2))
+            {
+                return new Vector2(Components[0], Components[1]);
+            }
+            if (Type == typeof(Vector3))
+            {
+                return new Vector3(Components[0], Components[1], Components[2]);
+            }
+            if (Type == typeof(Vector4))
+            {
+                return new Vector4(Components[0], Components[1], Components[2], Components[3]);
+            }
+            if (Type == typeof(Quaternion))
+            {
+                return new Quaternion(Components[0], Components[1], Components[2], Components[3]);
+            }
+            return new Color(Components[0], Components[1], Components[2], Components[3]);
+        }
 
         private static void RequireOnly(JsonObject value, string source,
             params string[] allowed)

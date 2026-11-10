@@ -13,6 +13,8 @@ public sealed partial class EditorRuntime
     private readonly HashSet<SettingsScope> SettingsCollectionRefreshPending = new();
     private readonly HashSet<SettingsScope> SettingsValueEditing = new();
     private readonly HashSet<SettingsScope> SettingsValuePointerCommit = new();
+    private readonly Dictionary<string, List<string>> SettingsMapOrders = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> SettingsMapExpanded = new(StringComparer.Ordinal);
 
     private bool HandleSettingsValueAction(string HostId, string Action)
     {
@@ -58,6 +60,10 @@ public sealed partial class EditorRuntime
 
     private bool HandleSettingsCollectionAction(string Action)
     {
+        if (HandleSettingsMapAction(Action))
+        {
+            return true;
+        }
         const string Prefix = "editor.settings-collection:";
         if (!Action.StartsWith(Prefix, StringComparison.Ordinal))
         {
@@ -204,6 +210,11 @@ public sealed partial class EditorRuntime
     private string BuildSettingsCollectionValue(DevelopmentSettingsDescriptor Descriptor, string FieldPath,
         Type Type, JsonNode? Value, JsonNode? Root, string[] Path, string Id)
     {
+        if (MapEditing.ValueType(Type) is not null)
+        {
+            return BuildSettingsMap(Descriptor, FieldPath, "Items", Type, Value,
+                Root, Path);
+        }
         if (CollectionEditing.ElementType(Type) is not null)
         {
             return BuildSettingsCollection(Descriptor, FieldPath, "Items", Type, Value, Root, Path);
