@@ -78,6 +78,10 @@ public static class UiMapEditor
         var Root = System.Xml.Linq.XElement.Parse("<div>" + Markup + "</div>");
         foreach (var Element in Root.Descendants())
         {
+            if (Element.Attribute("data-value-view")?.Value == "true")
+            {
+                continue;
+            }
             if (Element.Ancestors().Any(Ancestor =>
                     Ancestor.Attribute("class")?.Value.Split(' ').Contains("se-map") == true))
             {

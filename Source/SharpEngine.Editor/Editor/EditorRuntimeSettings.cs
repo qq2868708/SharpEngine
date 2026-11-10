@@ -103,12 +103,17 @@ public sealed partial class EditorRuntime
         SettingsCollectionRefreshPending.Clear();
         SettingsMapOrders.Clear();
         SettingsMapExpanded.Clear();
+        CollapsedSettingsStructures.Clear();
         _developmentSettings?.Dispose();
         _developmentSettings = null;
     }
 
     private bool HandleDevelopmentSettingsAction(string hostId, string action)
     {
+        if (HandleSettingsStructureAction(action))
+        {
+            return true;
+        }
         if (HandleSettingsCollectionAction(action))
         {
             return true;
@@ -277,6 +282,15 @@ public sealed partial class EditorRuntime
                 field.Property.PropertyType;
             var label = string.IsNullOrWhiteSpace(field.Attribute.DisplayName)
                 ? field.Property.Name : field.Attribute.DisplayName!;
+            var NumericValue = IsSettingsNumericType(type)
+                ? System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(type, value))
+                : null;
+            if (NumericValue is not null)
+            {
+                markup.Append(BuildSettingsNumericValue(descriptor, path, Array.Empty<string>(),
+                    label, type, NumericValue, NumericValue, "setting-" + path));
+                continue;
+            }
             if (MapEditing.ValueType(type) is not null)
             {
                 var Value = System.Text.Json.Nodes.JsonNode.Parse(
@@ -294,12 +308,14 @@ public sealed partial class EditorRuntime
             }
             if (IsSettingsObject(type) && value is not null)
             {
-                markup.Append("<div class=\"settings-group\" style=\"margin-left:")
-                    .Append(depth * 10).Append("px;\"><div class=\"settings-group-title\">")
-                    .Append(EscapeSettings(label)).Append("</div>");
-                AppendSettingsFields(markup, descriptor, value,
-                    GetSettingFields(type), path, depth + 1);
-                markup.Append("</div>");
+                markup.Append(BuildSettingsStructure(descriptor, path,
+                    Array.Empty<string>(), label, type, () =>
+                    {
+                        var Members = new StringBuilder();
+                        AppendSettingsFields(Members, descriptor, value,
+                            GetSettingFields(type), path, depth + 1);
+                        return Members.ToString();
+                    }));
                 continue;
             }
             markup.Append("<div class=\"settings-field\"><div class=\"settings-field-copy\">")

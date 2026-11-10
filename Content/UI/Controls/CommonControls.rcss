@@ -100,3 +100,10 @@ select.se-value-input:disabled selectvalue { background-color: transparent; bord
 .se-map-entry-value { display: block; min-width: 0px; margin-top: 5px; }
 .se-map-disabled .se-collection-toggle, .se-map-disabled .se-collection-count { color: #697583; }
 .se-map-disabled .se-value-field > label, .se-map-disabled .se-vector-axis > label { color: #697583; }
+.se-struct { display: block; width: 100%; min-width: 0px; margin-bottom: 8px; border: 1px #344153; box-sizing: border-box; }
+.se-struct-toggle { box-sizing: border-box; display: flex; width: 100%; min-width: 0px; align-items: center; gap: 6px; padding: 6px; background-color: #222d3b; border: 0px; color: #c8d5e3; text-align: left; }
+.se-struct-toggle:hover { background-color: #2b394b; }
+.se-struct-toggle img { width: 12px; height: 12px; flex-shrink: 0; pointer-events: none; }
+.se-struct-type { margin-left: auto; color: #8393a7; font-size: 11px; }
+.se-struct-members { display: block; min-width: 0px; padding: 7px 9px 0px; }
+.se-struct-disabled .se-struct-type { color: #697583; }

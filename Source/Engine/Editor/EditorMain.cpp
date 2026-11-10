@@ -324,6 +324,7 @@ int wmain(int argc,wchar_t** argv)
     bool McpVisible = false;
     bool NoSplash = false;
     bool BrowserRequested = false;
+    bool RenderOffscreen = false;
     for (int i=1;i<argc;++i)
     {
         const std::wstring_view argument(argv[i]);
@@ -332,6 +333,10 @@ int wmain(int argc,wchar_t** argv)
             continue;
         }
         if (argument==L"--project" && i+1<argc) projectManifest=argv[++i];
+        else if (argument == L"--render-offscreen" || argument == L"-RenderOffscreen")
+        {
+            RenderOffscreen = true;
+        }
         else if (argument==L"--frames" && i+1<argc) frameLimit=static_cast<uint32_t>(std::stoul(argv[++i]));
         else if (argument==L"--smoke-test") frameLimit=10;
         else if (argument==L"--screenshot" && i+1<argc) screenshot=argv[++i];
@@ -347,10 +352,18 @@ int wmain(int argc,wchar_t** argv)
             NoSplash = true;
         }
     }
+    if (RenderOffscreen && renderOptions.BackendExplicit)
+    {
+        renderError = "RENDER_BACKEND_CONFLICT: graphics and offscreen modes cannot be combined";
+    }
     if (!renderError.empty())
     {
         EngineLog::Error("Editor", renderError);
         return 2;
+    }
+    if (RenderOffscreen)
+    {
+        renderOptions.Backend = RenderBackendType::Offscreen;
     }
     const auto executableDirectory=ExecutableDirectory();
     auto engineRoot=FindEngineRoot(executableDirectory);

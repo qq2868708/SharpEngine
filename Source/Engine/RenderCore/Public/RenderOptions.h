@@ -158,5 +158,14 @@ struct RenderOptions
         return true;
     }
 
-    const char* Name() const { return Backend == RenderBackendType::Vulkan ? "vulkan" : "opengl"; }
+    const char* Name() const
+    {
+        switch (Backend)
+        {
+        case RenderBackendType::Vulkan: return "vulkan";
+        case RenderBackendType::Offscreen: return "offscreen";
+        case RenderBackendType::NullRHI: return "null-rhi";
+        default: return "opengl";
+        }
+    }
 };

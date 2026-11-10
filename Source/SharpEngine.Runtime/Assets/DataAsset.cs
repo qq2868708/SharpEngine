@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using SharpEngine.Components;
 
 namespace SharpEngine.Assets;
@@ -294,6 +295,18 @@ public static class DataAssetSerializer
 {
     private static readonly JsonSerializerOptions Options = CreateOptions();
 
+    internal static JsonTypeInfo ValueContract(Type Type) { return Options.GetTypeInfo(Type); }
+
+    internal static JsonNode? SerializeValue(Type Type, object? Value)
+    {
+        return JsonSerializer.SerializeToNode(Value, Type, Options);
+    }
+
+    internal static object? DeserializeValue(Type Type, JsonNode? Value)
+    {
+        return Value?.Deserialize(Type, Options);
+    }
+
     public static string Serialize<TDataAsset>(TDataAsset Asset,
         bool Indented = true, AssetRegistry? Registry = null)
         where TDataAsset : DataAsset
@@ -338,11 +351,7 @@ public static class DataAssetSerializer
             var Value = Property.Property.GetValue(Asset);
             var SerializedValue = JsonSerializer.SerializeToNode(
                 Value, Property.PropertyType, Options);
-            if (DataAssetSchema.TryMapValue(Property.PropertyType, out _))
-            {
-                SerializedValue = DataAssetSchema.SortMapKeys(SerializedValue);
-            }
-            Root[Property.JsonName] = SerializedValue;
+            Root[Property.JsonName] = DataAssetStructs.Normalize(SerializedValue, Property.PropertyType);
         }
 
         return Root.ToJsonString(new JsonSerializerOptions(Options)
@@ -546,6 +555,7 @@ public static class DataAssetSerializer
         {
             var Value = Property.Property.GetValue(Asset);
             var Constraints = Property.Constraints;
+            ValidateStructValues(Property.PropertyType, Value, Property.JsonName);
             if (Constraints?.Required == true && (Value is null ||
                 Value is string Text && string.IsNullOrWhiteSpace(Text) ||
                 Value is IAssetReference RequiredReference && string.IsNullOrWhiteSpace(RequiredReference.Id)))
@@ -584,6 +594,24 @@ public static class DataAssetSerializer
         DataAssetPropertyDescriptor Property, object? Value)
     {
         var Type = Property.PropertyType;
+        if (Value is not null)
+        {
+            foreach (var Member in DataAssetStructs.Members(Type))
+            {
+                var Child = Property with
+                {
+                    JsonName = Property.JsonName + "/" + Uri.EscapeDataString(Member.Name),
+                    PropertyType = Member.PropertyType,
+                };
+                var ChildValue = Member.Get!(Value);
+                var Reference = ChildValue as IAssetReference;
+                if (Reference is not null && !string.IsNullOrWhiteSpace(Reference.Id))
+                {
+                    ValidateReference(Registry, Child, Reference);
+                }
+                ValidateNestedReferences(Registry, Child, ChildValue);
+            }
+        }
         if (DataAssetSchema.TryMapValue(Type, out var MapValueType))
         {
             var Map = Value as System.Collections.IDictionary;
@@ -656,6 +684,62 @@ public static class DataAssetSerializer
                 $"Data asset reference '{Property.JsonName}' points to '{Referenced.Type}', expected '{Expected}'");
     }
 
+    private static void ValidateStructValues(Type Type, object? Value, string Path)
+    {
+        if (Value is null)
+        {
+            return;
+        }
+        var IsMap = DataAssetSchema.TryMapValue(Type, out var EntryType);
+        if (IsMap)
+        {
+            foreach (System.Collections.DictionaryEntry Entry in (System.Collections.IDictionary)Value)
+            {
+                ValidateStructValues(EntryType!, Entry.Value,
+                    Path + "/" + Uri.EscapeDataString((string)Entry.Key));
+            }
+            return;
+        }
+        var ElementType = Type.IsArray ? Type.GetElementType() :
+            Type.IsGenericType && Type.GetGenericTypeDefinition() == typeof(List<>)
+                ? Type.GetGenericArguments()[0] : null;
+        if (ElementType is not null)
+        {
+            var Index = 0;
+            foreach (var Item in (System.Collections.IEnumerable)Value)
+            {
+                ValidateStructValues(ElementType, Item, Path + "/" + Index);
+                Index++;
+            }
+            return;
+        }
+        foreach (var Member in DataAssetStructs.Members(Type))
+        {
+            var MemberValue = Member.Get!(Value);
+            var Constraints = DataAssetStructs.Constraints(Member);
+            var MemberPath = Path + "/" + Member.Name;
+            if (Constraints?.Required == true && (MemberValue is null ||
+                MemberValue is string Text && string.IsNullOrWhiteSpace(Text) ||
+                MemberValue is IAssetReference Reference && string.IsNullOrWhiteSpace(Reference.Id)))
+            {
+                throw new InvalidDataException("Data asset requires '" + MemberPath + "'");
+            }
+            if (MemberValue is not null && Constraints is not null &&
+                (!double.IsNaN(Constraints.Minimum) || !double.IsNaN(Constraints.Maximum)))
+            {
+                var IsNumber = TryGetNumber(MemberValue, out var Number);
+                if (!IsNumber || !double.IsFinite(Number) ||
+                    !double.IsNaN(Constraints.Minimum) && Number < Constraints.Minimum ||
+                    !double.IsNaN(Constraints.Maximum) && Number > Constraints.Maximum)
+                {
+                    throw new InvalidDataException("Data asset property '" + MemberPath +
+                        "' violates its numeric constraints");
+                }
+            }
+            ValidateStructValues(Member.PropertyType, MemberValue, MemberPath);
+        }
+    }
+
     private static bool TryGetNumber(object Value, out double Number)
     {
         try
@@ -677,6 +761,7 @@ public static class DataAssetSerializer
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = false,
+            TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
         };
         Result.Converters.Add(new DataAssetNumericsVectorConverterFactory());
         Result.Converters.Add(new AssetRefJsonConverterFactory());
@@ -696,6 +781,23 @@ internal static class DataAssetSchema
 
     internal static JsonObject SchemaFor(Type Type)
     {
+        return SchemaFor(Type, new HashSet<Type>());
+    }
+
+    private static JsonObject SchemaFor(Type Type, HashSet<Type> Parents)
+    {
+        var UnderlyingType = Nullable.GetUnderlyingType(Type);
+        if (UnderlyingType is not null)
+        {
+            return new JsonObject
+            {
+                ["anyOf"] = new JsonArray(SchemaFor(UnderlyingType, Parents),
+                    new JsonObject
+                    {
+                        ["type"] = "null",
+                    }),
+            };
+        }
         if (Type == typeof(string))
         {
             return new JsonObject { ["type"] = "string" };
@@ -745,7 +847,7 @@ internal static class DataAssetSchema
             return new JsonObject
             {
                 ["type"] = "array",
-                ["items"] = SchemaFor(Type.IsArray ? Type.GetElementType()! : Type.GetGenericArguments()[0]),
+                ["items"] = SchemaFor(Type.IsArray ? Type.GetElementType()! : Type.GetGenericArguments()[0], Parents),
             };
         }
 
@@ -754,11 +856,49 @@ internal static class DataAssetSchema
             return new JsonObject
             {
                 ["type"] = "object",
-                ["additionalProperties"] = SchemaFor(MapValue!),
+                ["additionalProperties"] = SchemaFor(MapValue!, Parents),
             };
         }
 
-        return new JsonObject { ["type"] = "object" };
+        var Members = DataAssetStructs.Members(Type);
+        if (Members.Count != 0 && Parents.Add(Type))
+        {
+            var Properties = new JsonObject();
+            var Required = new JsonArray();
+            foreach (var Member in Members)
+            {
+                var MemberSchema = SchemaFor(Member.PropertyType, Parents);
+                var Constraints = DataAssetStructs.Constraints(Member);
+                if (Constraints is not null)
+                {
+                    if (!double.IsNaN(Constraints.Minimum))
+                    {
+                        MemberSchema["minimum"] = Constraints.Minimum;
+                    }
+                    if (!double.IsNaN(Constraints.Maximum))
+                    {
+                        MemberSchema["maximum"] = Constraints.Maximum;
+                    }
+                    if (Constraints.Required)
+                    {
+                        Required.Add(Member.Name);
+                    }
+                }
+                MemberSchema["readOnly"] = Member.Set is null;
+                Properties[Member.Name] = MemberSchema;
+            }
+            Parents.Remove(Type);
+            return new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = Properties,
+                ["required"] = Required,
+            };
+        }
+        return new JsonObject
+        {
+            ["type"] = "object",
+        };
     }
 
     internal static bool TryMapValue(Type Type, out Type? ValueType)

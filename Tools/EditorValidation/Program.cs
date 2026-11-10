@@ -324,6 +324,7 @@ try
         "Nested Project Settings edits must update static runtime reads atomically");
     ShortcutValidation.Run(runtime, Require);
     CollectionEditorsValidation.RunSettings(runtime, Require);
+    StructEditorsValidation.RunSettings(runtime, Require);
     if (args.Contains("--settings-only", StringComparer.Ordinal))
     {
         runtime.Shutdown();
@@ -645,6 +646,7 @@ try
     BasicAssetEditorsValidation.Run(runtime, temporary.FullName, Require);
     CollectionEditorsValidation.Run(runtime, temporary.FullName, Require);
     MapEditorsValidation.Run(runtime, temporary.FullName, Require);
+    StructEditorsValidation.Run(runtime, temporary.FullName, Require);
     SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
     StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
     SocketGizmoVisibilityValidation.Run(runtime, temporary.FullName, Require);
@@ -862,6 +864,70 @@ public sealed class ValidationProjectSettings : DevelopmentSettings
 
     [Setting("profiles")]
     public List<ValidationSettingsProfile> Profiles { get; init; } = [];
+
+    [Setting("structure")]
+    public ValidationSettingsStruct Structure
+    {
+        get;
+        init;
+    } = ValidationSettingsStruct.Create();
+
+    [Setting("structures")]
+    public List<ValidationSettingsStruct> Structures
+    {
+        get;
+        init;
+    } = new()
+    {
+        ValidationSettingsStruct.Create(),
+    };
+
+    [Setting("structMap")]
+    public Dictionary<string, ValidationSettingsStruct> StructMap
+    {
+        get;
+        init;
+    } = new()
+    {
+        ["entry"] = ValidationSettingsStruct.Create(),
+    };
+}
+
+public struct ValidationSettingsStruct
+{
+    [Setting("power", Minimum = 0)]
+    public int Power
+    {
+        get;
+        init;
+    }
+
+    [Setting("offset")]
+    public System.Numerics.Vector3 Offset
+    {
+        get;
+        init;
+    }
+
+    [Setting("samples")]
+    public List<int> Samples
+    {
+        get;
+        init;
+    }
+
+    public static ValidationSettingsStruct Create()
+    {
+        return new ValidationSettingsStruct
+        {
+            Power = 5,
+            Offset = new System.Numerics.Vector3(1, 2, 3),
+            Samples = new List<int>
+            {
+                4,
+            },
+        };
+    }
 }
 
 public sealed class ValidationSettingsProfile

@@ -156,6 +156,8 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>Editor 支持 <code>--render-offscreen</code>，所有窗口的 RmlUi 通过已有 CPU 后端生成帧，保留真实输入、布局与 PNG 验证；不能与显式图形后端参数混用。验证通过 <code>render.describe</code> 核对实际后端，详见<a href="../../../../RenderBackends.md">渲染后端</a>。</p>
+      <p>结构体使用共享可折叠分组，Inspector、DataAsset 与 Settings 复用相同外观；DataAsset 的嵌套结构体、列表元素和 Map 值可递归展开编辑，Vector、Color 和集合继续复用基础控件。成员修改保留校验、Undo/Redo 与显式保存；折叠不修改数据或撤销记录，只读成员保留 disabled 布局。字段范围沿用各入口已有序列化或标注规则，详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>数组/List 与字典 Map 现使用共享集合控件：Map 的键和值、Add/Remove/Rename 与每行上/下移动统一呈现；Settings 和 DataAsset 使用同一 Map 布局。运行时字典仍无序，初始显示按 key 排序；手动上/下移仅改变当前编辑器临时可视顺序，不修改数据、revision、dirty、Undo 或保存内容。Map 数据动作沿用所属文档事务，null 与空 Map 分开显示，旧 Map 指纹动作会被拒绝。只读状态禁用键和值输入以及数据修改，但仍允许折叠和调整临时显示顺序。</p>
       <p>修正 Reference 与通用下拉框的重叠边框和箭头溢出：值区和箭头共用一个 28px 外框，禁用态保留相同尺寸；下拉选择和只读保护保持原有行为。</p>
       <p>修复独立 Game 在 Vulkan 下的 UI 快照与输入反馈读回：仅在需要固定帧证据时请求读回并呈现，交互结果与 PNG 使用同一帧。Game 界面验证现在实际转发并核对所选后端。</p>

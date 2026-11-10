@@ -40,6 +40,10 @@ if (args.Contains("--dynamic-ui-only", StringComparer.Ordinal))
 {
     settingsProject = DynamicUiValidation.CreateProject(root, configuration);
 }
+if (args.Contains("--structs-only", StringComparer.Ordinal))
+{
+    settingsProject = StructEditorsUiValidation.CreateProject(root, configuration);
+}
 if (args.Contains("--ui-editor-only", StringComparer.Ordinal))
 {
     settingsProject = UiEditorUiValidation.CreateProject(root);
@@ -215,6 +219,13 @@ try
     {
         DynamicUiValidation.Run(root, Require, Tool, Call);
         Console.WriteLine($"PASS: {assertions} dynamic UI integration assertions");
+        return;
+    }
+    if (args.Contains("--structs-only", StringComparer.Ordinal))
+    {
+        StructEditorsUiValidation.Run(root, Require, Tool, Call,
+            RenderBackend == "--render-offscreen" ? "offscreen" : RenderBackend?.Split('=').Last() ?? "opengl");
+        Console.WriteLine($"PASS: {assertions} struct editor UI assertions");
         return;
     }
     if (args.Contains("--root-motion-only", StringComparer.Ordinal))

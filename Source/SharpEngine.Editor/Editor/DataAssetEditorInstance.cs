@@ -92,6 +92,10 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
 
     public bool TryHandleAction(string Action)
     {
+        if (TryHandleStructureAction(Action))
+        {
+            return true;
+        }
         if (TryHandleMapAction(Action))
         {
             return true;
@@ -353,11 +357,18 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
             return PropertiesMarkup;
         }
         var Root = Document.Snapshot;
-        var Markup = new StringBuilder("<div class=\"asset-inspector data-asset-properties\">");
+        var Markup = new StringBuilder("<div id=\"dataAsset-properties\" class=\"asset-inspector data-asset-properties\">");
         CollectionFingerprints.Clear();
         foreach (var Property in Descriptor.Properties)
         {
             var Value = Root[Property.JsonName];
+            var HasStructure = TryBuildDataStructure(Property.Name, Property.PropertyType, Value,
+                new[] { Property.JsonName }, Root, out var Structure);
+            if (HasStructure)
+            {
+                Markup.Append(Structure);
+                continue;
+            }
             if (CollectionEditing.ElementType(Property.PropertyType) is not null)
             {
                 Markup.Append(BuildCollection(Property.Name, Property.PropertyType, Value,

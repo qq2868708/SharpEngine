@@ -490,15 +490,17 @@ public sealed partial class EditorRuntime : IComponentRuntime
         var Nested = Value as JsonObject;
         if (Nested is not null)
         {
-            Markup.Append("<div class=\"component-nested\"><button data-action=\"editor.component-fold:").Append(FoldId).Append("\">").Append(Escape(Name)).Append("</button>");
-            if (!_collapsedFields.Contains(FoldId))
+            var Expanded = !_collapsedFields.Contains(FoldId);
+            var Members = new StringBuilder();
+            if (Expanded)
             {
                 foreach (var Child in Components!.Data(ValueType).Fields.Where(CandidateField => !CandidateField.Hidden))
                 {
-                    AppendComponentField(Markup, Component, Child, Path + "/" + Child.Name, Nested[Child.Name], Child.ValueType);
+                    AppendComponentField(Members, Component, Child, Path + "/" + Child.Name, Nested[Child.Name], Child.ValueType);
                 }
             }
-            Markup.Append("</div>");
+            Markup.Append(SharpEngine.UI.UiStructEditor.Render("component-struct-" + FoldId,
+                Name, ValueType.Name, Members.ToString(), "editor.component-fold:" + FoldId, Expanded));
             return;
         }
         if (Value is JsonArray || Value is null && (ValueType.IsArray || ValueType.IsGenericType && ValueType.GetGenericTypeDefinition() == typeof(List<>)))

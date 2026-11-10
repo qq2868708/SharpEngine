@@ -74,6 +74,13 @@ manifests, scene assets, or Undo/Redo state. The active backend is reported in
 the native `RenderCore` startup log. Editor retains its semantic UI snapshots
 and pinned rendered-frame resources with either API.
 
+Editor also accepts `--render-offscreen` (or `-RenderOffscreen`), selecting the
+existing CPU framebuffer for all Editor UI hosts. It cannot be combined with an
+explicit graphics backend. Editor still owns hidden native host windows for its
+input and Dock lifecycle; Offscreen replaces their graphics devices, not the UI.
+Verify the `RenderOffscreen initialized` startup log or reported backend rather
+than assuming an unrecognized argument selected the mode.
+
 Game's existing `--render-offscreen` and `--null-rhi` validation modes remain
 available. They cannot be combined with an explicit graphics backend. Both run
 without a native window; Offscreen keeps the Game RmlUi context and composites

@@ -483,6 +483,10 @@ viewport { display: block; }
 .input-binding-heading strong { color: #d9e4ef; }
 .input-binding-heading button { min-width: 72px; height: 24px; margin-left: auto; padding: 2px 8px; }
 .data-asset-properties { padding-bottom: 30px; }
+.asset-inspector scrollbarvertical, .settings-fields scrollbarvertical { width: 10px; background-color: #191d24; }
+.asset-inspector scrollbarvertical sliderbar, .settings-fields scrollbarvertical sliderbar { width: 6px; min-height: 24px; margin-left: 2px; background-color: #485e74; border-radius: 3px; }
+.asset-inspector scrollbarhorizontal, .settings-fields scrollbarhorizontal { height: 10px; background-color: #191d24; }
+.asset-inspector scrollbarhorizontal sliderbar, .settings-fields scrollbarhorizontal sliderbar { height: 6px; min-width: 24px; margin-top: 2px; background-color: #485e74; border-radius: 3px; }
 .menu-path { padding: 6px 12px 4px; color: #65758a; font-size: 9px; overflow: hidden; }
 /* GL2 has no offscreen layer/filter support; box-shadow produces an untextured white quad. */
 .menu-popup { display: none; position: absolute; top: 32px; left: 0px; z-index: 300; width: 236px; padding: 5px; background-color: #22262e; color: #d4dae4; border: 1px #4a5566; border-radius: 4px; }

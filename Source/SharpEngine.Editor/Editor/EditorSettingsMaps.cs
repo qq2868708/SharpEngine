@@ -140,6 +140,10 @@ public sealed partial class EditorRuntime
         string FieldPath, string Label, Type Type, JsonNode? Value, JsonNode? Root,
         string[] Path)
     {
+        if (Path.Length == 0)
+        {
+            SettingsCollectionFingerprint = CollectionEditing.Fingerprint(Root);
+        }
         var Map = Value as JsonObject;
         var EntryType = MapEditing.ValueType(Type) ??
             throw new InvalidDataException("MAP_TYPE: unsupported map type");
@@ -184,6 +188,12 @@ public sealed partial class EditorRuntime
         string FieldPath, Type Type, JsonNode? Value, JsonNode? Root, string[] MapPath,
         string Key, string[] ValuePath, string Id, string Fingerprint)
     {
+        Type = Nullable.GetUnderlyingType(Type) ?? Type;
+        if (CollectionEditing.ElementType(Type) is not null)
+        {
+            return BuildSettingsCollection(Descriptor, FieldPath, "Value", Type, Value,
+                Root, MapPath.Append(Key).Concat(ValuePath).ToArray());
+        }
         var MapValueType = MapEditing.ValueType(Type);
         if (MapValueType is not null)
         {
@@ -195,18 +205,22 @@ public sealed partial class EditorRuntime
         var Fields = IsSettingsObject(Type) ? GetSettingFields(Type) : [];
         if (Object is not null && Fields.Count != 0)
         {
-            var Markup = new StringBuilder();
-            foreach (var Field in Fields)
+            return BuildSettingsStructure(Descriptor, FieldPath,
+                MapPath.Append(Key).Concat(ValuePath).ToArray(), "Value", Type, () =>
             {
-                var NestedValuePath = ValuePath.Append(Field.Attribute.Id).ToArray();
-                Markup.Append(UiValueEditors.Field(
-                    Field.Attribute.DisplayName ?? Field.Property.Name,
-                    BuildSettingsMapValue(Descriptor, FieldPath,
-                        Field.Property.PropertyType, Object[Field.Attribute.Id], Root,
-                        MapPath, Key, NestedValuePath,
-                        Id + "-" + Field.Attribute.Id, Fingerprint)));
-            }
-            return Markup.ToString();
+                var Markup = new StringBuilder();
+                foreach (var Field in Fields)
+                {
+                    var NestedValuePath = ValuePath.Append(Field.Attribute.Id).ToArray();
+                    Markup.Append(UiValueEditors.Field(
+                        Field.Attribute.DisplayName ?? Field.Property.Name,
+                        BuildSettingsMapValue(Descriptor, FieldPath,
+                            Field.Property.PropertyType, Object[Field.Attribute.Id], Root,
+                            MapPath, Key, NestedValuePath,
+                            Id + "-" + Field.Attribute.Id, Fingerprint)));
+                }
+                return Markup.ToString();
+            });
         }
 
         var Editable = IsSettingsMapValueEditable(Type);

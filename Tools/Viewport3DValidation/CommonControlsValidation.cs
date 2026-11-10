@@ -5,6 +5,31 @@ internal static class CommonControlsValidation
 {
     internal static void Run(Action<bool, string> Check)
     {
+        var Members = UiValueEditors.Number("Power", new UiValueInput("struct-power", "5", "set-power:"));
+        var Structure = XElement.Parse(UiStructEditor.Render("structure", "Config <A>",
+            "MyStruct", Members, "fold-structure"));
+        var CollapsedStructure = XElement.Parse(UiStructEditor.Render("structure-other", "Other",
+            "MyStruct", Members, "fold-other", Expanded: false));
+        Check(Structure.Value.Contains("Config <A>", StringComparison.Ordinal) &&
+            Structure.Descendants("input").Single().Attribute("data-value-commit")!.Value == "set-power:" &&
+            !CollapsedStructure.Descendants("input").Any(),
+            "Struct groups independently compose primitive editors, escape labels and omit collapsed children");
+        var ReadOnlyMembers = UiValueEditors.Vector("Offset", new[]
+        {
+            new UiValueInput("readonly-struct-x", "1", "", true),
+            new UiValueInput("readonly-struct-y", "2", "", true),
+            new UiValueInput("readonly-struct-z", "3", "", true),
+        });
+        var ReadOnlyStructure = XElement.Parse(UiCollectionEditor.Render("struct-list", "List",
+            new[]
+            {
+                new UiCollectionItem("struct-row", UiStructEditor.Render("readonly-structure",
+                    "Config", "MyStruct", ReadOnlyMembers, "fold-readonly", ReadOnly: true), ""),
+            }, "fold-list", "", ReadOnly: true));
+        Check(ReadOnlyStructure.Descendants("button").Single(Button =>
+                Button.Attribute("id")?.Value == "readonly-structure-toggle").Attribute("disabled") is null &&
+            ReadOnlyStructure.Descendants("input").All(Input => Input.Attribute("disabled") is not null),
+            "Read-only collection struct groups preserve expansion while their typed values remain disabled");
         var CollectionRows = new[]
         {
             new UiCollectionItem("collection-first", UiValueEditors.Number("Value",

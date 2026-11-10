@@ -1,0 +1,6 @@
+<template>
+  <div id="${Id}" class="se-struct ${StateClass}">
+    <button id="${Id}-toggle" class="se-struct-toggle" data-action="${ToggleAction}" data-value-view="true" aria-expanded="${ExpandedState}" title="Expand or collapse fields"><img src="${ToggleIcon}" /><span>${Label}</span><span class="se-struct-type">${TypeName}</span></button>
+    <ui-if test="Expanded"><div id="${Id}-members" class="se-struct-members"><ui-slot name="Members" /></div></ui-if>
+  </div>
+</template>

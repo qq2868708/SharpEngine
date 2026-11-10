@@ -8,5 +8,6 @@
   <ItemGroup>
     <Compile Include="../SharedValidation/BasicAssetFixture.cs" Link="BasicAssetFixture.cs" />
     <EmbeddedResource Include="Fixtures/DynamicUiEditor.cs.txt" LogicalName="DynamicUiEditorFixture" WithCulture="false" />
+    <EmbeddedResource Include="Fixtures/StructEditors.cs.txt" LogicalName="StructEditorsFixture" WithCulture="false" />
   </ItemGroup>
 </Project>

@@ -107,8 +107,14 @@ public sealed partial class EditorRuntime
             foreach (var Segment in Path)
             {
                 Parent = Cursor;
+                var MapValue = MapEditing.ValueType(Type);
                 var ElementType = CollectionEditing.ElementType(Type);
-                if (ElementType is not null)
+                if (MapValue is not null)
+                {
+                    Type = MapValue;
+                    Cursor = Cursor?[Segment];
+                }
+                else if (ElementType is not null)
                 {
                     Type = ElementType;
                     Cursor = Cursor!.AsArray()[int.Parse(Segment, CultureInfo.InvariantCulture)];
@@ -210,6 +216,12 @@ public sealed partial class EditorRuntime
     private string BuildSettingsCollectionValue(DevelopmentSettingsDescriptor Descriptor, string FieldPath,
         Type Type, JsonNode? Value, JsonNode? Root, string[] Path, string Id)
     {
+        Type = Nullable.GetUnderlyingType(Type) ?? Type;
+        if (IsSettingsNumericType(Type))
+        {
+            return BuildSettingsNumericValue(Descriptor, FieldPath, Path, "Value", Type,
+                Value, Root, Id);
+        }
         if (MapEditing.ValueType(Type) is not null)
         {
             return BuildSettingsMap(Descriptor, FieldPath, "Items", Type, Value,
@@ -222,14 +234,17 @@ public sealed partial class EditorRuntime
         var Object = Value as JsonObject;
         if (IsSettingsObject(Type) && Object is not null)
         {
-            var Markup = new StringBuilder();
-            foreach (var Field in GetSettingFields(Type))
+            return BuildSettingsStructure(Descriptor, FieldPath, Path, "Value", Type, () =>
             {
-                Markup.Append(UiValueEditors.Field(Field.Attribute.DisplayName ?? Field.Property.Name,
-                    BuildSettingsCollectionValue(Descriptor, FieldPath, Field.Property.PropertyType,
-                        Object[Field.Attribute.Id], Root, Path.Append(Field.Attribute.Id).ToArray(), Id + "-" + Field.Attribute.Id)));
-            }
-            return Markup.ToString();
+                var Markup = new StringBuilder();
+                foreach (var Field in GetSettingFields(Type))
+                {
+                    Markup.Append(UiValueEditors.Field(Field.Attribute.DisplayName ?? Field.Property.Name,
+                        BuildSettingsCollectionValue(Descriptor, FieldPath, Field.Property.PropertyType,
+                            Object[Field.Attribute.Id], Root, Path.Append(Field.Attribute.Id).ToArray(), Id + "-" + Field.Attribute.Id)));
+                }
+                return Markup.ToString();
+            });
         }
         var Binding = SettingsCollectionBinding(Descriptor, FieldPath, Root, Path, "value", Id);
         if (Type == typeof(bool))

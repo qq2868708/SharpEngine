@@ -87,6 +87,10 @@ Retain matching snapshot/PNG evidence and complete post-attachment tool,
 resource and template catalogs. See BasicAssetEditors.md and SkeletonEditor.md.
 Shared trees and value editors also require Viewport3DValidation and the
 affected Inspector/UI/Game real-input checks documented in CommonEditorControls.md.
+Struct groups use `Tools/McpUiValidation --structs-only --render-offscreen`;
+verify `render.describe.backend` is `offscreen` before accepting its evidence.
+Editor accepts this CPU-rendering mode while retaining its hidden native input
+hosts. Keep same-frame snapshots/PNGs and complete catalogs for the owned session.
 
 ## Editor Performance Acceptance
 

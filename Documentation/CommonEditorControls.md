@@ -36,7 +36,15 @@ Choice 与 Reference 共用单一 28px 下拉外框，原生值区和箭头在�
 
 `UiCollectionEditor` 组合 `CollectionEditor.rml`、`CollectionItem.rml` 与已有基础值编辑器。公共层显示字段名、数量、折叠、索引、Add、Remove、Up、Down；第一项 Up 和最后一项 Down 禁用。空集合显示 `0`，null 集合显示 `null`，展开查看不修改数据。只读集合保留相同结构和折叠，禁用内部输入和修改按钮并移除动作绑定。公共层只消费 `UiCollectionItem` 的内容与调用方动作，不持有 World、资产数据或撤销栈。
 
-主 Inspector 的一维数组／`List<T>`、DataAsset 属性和 Engine／Project Settings 的有序集合使用同一布局。元素复用 Text、Number、Boolean、Choice、Reference、Vector、Color；支持已有契约允许的嵌套集合。Inspector 继续使用已注册的数据描述符展开对象；Settings 使用带 Setting 标注的对象字段；DataAsset 复杂对象仍保留 JSON 值编辑，不推断额外对象 schema。
+主 Inspector 的一维数组／`List<T>`、DataAsset 属性和 Engine／Project Settings 的有序集合使用同一布局。元素复用 Text、Number、Boolean、Choice、Reference、Vector、Color；支持已有契约允许的嵌套集合。Inspector 继续使用已注册的数据描述符展开对象；Settings 使用带 Setting 标注的对象字段；DataAsset 自定义结构体按既有序列化成员递归展开，其他复杂对象保留 JSON 值编辑。
+
+## 结构体分组
+
+`UiStructEditor.Render(Id, Label, TypeName, Content, ToggleAction, Expanded, ReadOnly)` 使用 `StructEditor.rml` 和共享样式显示字段名、类型、展开箭头与成员区。公共控件不反射成员、不拥有数据或事务；Inspector、DataAsset 和 Settings 各自提供成员与折叠状态。嵌套结构体、列表元素及 Map 值继续组合相同控件，Vector/Color 等基础类型使用已有专用布局。
+
+DataAsset 只展开原有 JSON 契约中的自定义值类型成员，遵守 JsonPropertyName、JsonInclude、JsonIgnore 和 getter/setter；不会因展开自动保存普通字段。只有 getter 的派生值保持禁用，并由当前结构体重新计算显示。成员编辑递归检查 DataProperty 约束与资产引用，走原有文档事务和显式 Save；结构体内 Map 仍按 key 确定排序。发布的 JSON Schema 同步列出成员、约束与 readOnly。Inspector 保持组件数据描述符规则；Settings 保持 Setting 标注规则，不扩展到任意 CLR 对象图。
+
+折叠只改变本视图，不修改 revision、dirty、保存内容或 Undo 历史。只读结构体仍可展开查看，内部输入采用统一 disabled 样式；null 值保留原来的 null 表达，不隐式创建结构体。字段动作携带当前容器指纹，外层集合重排后拒绝过期输入。
 
 ## Map 与字典
 
@@ -63,7 +71,7 @@ DataAsset 按文档 revision 和类型描述符缓存 Properties 布局；折叠
 
 ## 验证入口
 
-`Tools/Viewport3DValidation` 只引用 Runtime，覆盖独立树/输入组合、转义、实例隔离与非法父引用。`Tools/EditorValidation` 验证适配后的领域语义与缓存，并检查 Range/Color/Reference 的共享标记。`Tools/McpUiValidation` 的 `--static-mesh-sockets-only`、`--skeleton-gizmo-only`、`--inspector-only` 和 `--ui-editor-only` 验证真实输入、焦点、草稿/提交/撤销及匹配 PNG；完整的 tools/resources/templates 目录仍保留于 `Saved/Validation/McpUiCatalogs`。界面和性能检查是不同证据，不能用语义测试代替原生可见/可点击验收。
+`Tools/Viewport3DValidation` 只引用 Runtime，覆盖独立树/输入组合、转义、实例隔离与非法父引用。`Tools/EditorValidation` 验证适配后的领域语义与缓存，并检查 Range/Color/Reference 的共享标记。`Tools/McpUiValidation` 的 `--static-mesh-sockets-only`、`--skeleton-gizmo-only`、`--inspector-only` 和 `--ui-editor-only` 验证真实输入、焦点、草稿/提交/撤销及匹配 PNG；`--structs-only --render-offscreen` 验证结构体原生布局、实际输入、折叠、Undo、保存及 Settings，核对实际后端并保留 `Saved/Validation/Structures` 同帧证据。完整的 tools/resources/templates 目录仍保留于 `Saved/Validation/McpUiCatalogs`。界面和性能检查是不同证据，不能用语义测试代替原生可见/可点击验收。
 
 Game 原生宿主同样使用 `RmlValueEditor` 与 `RmlColorPicker` 并将调用方提供的 commit action 交给 `IUiActionHandler`；基础控件不引用 Editor 或 World。`--game-ui-only --render-offscreen` 包含实际 Game 数值草稿、Enter 提交、色盘展开/选色/Apply、Cancel、Esc 与禁用状态验证，并保留同帧 JSON/PNG。
 

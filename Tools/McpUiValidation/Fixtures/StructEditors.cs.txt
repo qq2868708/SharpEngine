@@ -1,0 +1,120 @@
+using System.Numerics;
+using SharpEngine.Assets;
+using SharpEngine.Modules;
+using SharpEngine.Settings;
+
+public sealed class StructValidationModule : ISharpEngineModule
+{
+    public void Startup(ModuleContext Context)
+    {
+    }
+
+    public void Shutdown()
+    {
+    }
+}
+
+[DataAssetType("Validation.StructureData")]
+public sealed class StructureData : DataAsset
+{
+    public StructureSettingsValue Configuration
+    {
+        get;
+        set;
+    } = StructureSettingsValue.Create();
+
+    public List<StructureSettingsValue> Entries
+    {
+        get;
+        set;
+    } = new()
+    {
+        StructureSettingsValue.Create(),
+    };
+
+    public Dictionary<string, StructureSettingsValue> Lookup
+    {
+        get;
+        set;
+    } = new()
+    {
+        ["first"] = StructureSettingsValue.Create(),
+    };
+}
+
+[DevelopmentSettings("validation.structures", SettingsScope.Project,
+    DisplayName = "Structures", Category = "Validation")]
+public sealed class StructureSettings : DevelopmentSettings
+{
+    [Setting("configuration")]
+    public StructureSettingsValue Configuration
+    {
+        get;
+        init;
+    } = StructureSettingsValue.Create();
+}
+
+public struct StructureSettingsValue
+{
+    public int Computed
+    {
+        get
+        {
+            return Power * 2;
+        }
+    }
+
+    [Setting("power", Minimum = 0, Maximum = 100)]
+    [DataProperty(Minimum = 0, Maximum = 100)]
+    public int Power
+    {
+        get;
+        set;
+    }
+
+    [Setting("offset")]
+    public Vector3 Offset
+    {
+        get;
+        set;
+    }
+
+    [Setting("child")]
+    public StructureChild Child
+    {
+        get;
+        set;
+    }
+
+    public static StructureSettingsValue Create()
+    {
+        return new StructureSettingsValue
+        {
+            Power = 5,
+            Offset = new Vector3(1, 2, 3),
+            Child = new StructureChild
+            {
+                Title = "Nested fields",
+                Enabled = true,
+            },
+        };
+    }
+}
+
+public struct StructureChild
+{
+    [Setting("title")]
+    [DataProperty(Required = true)]
+    public string Title
+    {
+        get;
+        set;
+    }
+
+    [Setting("enabled")]
+    public bool Enabled
+    {
+        get;
+        set;
+    }
+}

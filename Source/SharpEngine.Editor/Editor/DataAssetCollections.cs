@@ -83,6 +83,7 @@ internal sealed partial class DataAssetEditorInstance
             var Payload = JsonNode.Parse(Uri.UnescapeDataString(Parts[0]))!.AsObject();
             var CollectionPath = Payload["collection"]!.AsArray().Select(Node => Node!.GetValue<string>()).ToArray();
             var Path = Payload["path"]!.AsArray().Select(Node => Node!.GetValue<string>()).ToArray();
+            EnsureDataPathEditable(Path);
             var Current = AtPath(Root, CollectionPath);
             if (CollectionEditing.Fingerprint(Current) != Payload["expected"]!.GetValue<string>())
             {
@@ -118,12 +119,7 @@ internal sealed partial class DataAssetEditorInstance
             }
             else
             {
-                var Type = Descriptor.Properties.Single(Property => Property.JsonName == Path[0]).PropertyType;
-                foreach (var Segment in Path.Skip(1))
-                {
-                    _ = int.Parse(Segment, CultureInfo.InvariantCulture);
-                    Type = CollectionEditing.ElementType(Type) ?? throw new InvalidDataException("COLLECTION_TYPE: invalid collection path");
-                }
+                var Type = MapContainerType(Path);
                 var ElementType = CollectionEditing.ElementType(Type) ?? throw new InvalidDataException("COLLECTION_TYPE: unsupported type");
                 var Value = AtPath(Root, Path);
                 var Items = CollectionEditing.Apply(Value, Operation, () => DefaultCollectionElement(ElementType));
@@ -154,15 +150,13 @@ internal sealed partial class DataAssetEditorInstance
         {
             return null;
         }
-        return JsonSerializer.SerializeToNode(Activator.CreateInstance(Type), Type, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        });
+        return SharpEngine.Assets.DataAssetSerializer.SerializeValue(Type, Activator.CreateInstance(Type));
     }
 
     private string BuildCollection(string Label, Type Type, JsonNode? Value, string[] Path,
-        JsonObject Root, string[]? GuardPath = null)
+        JsonObject Root, string[]? GuardPath = null, bool ReadOnly = false)
     {
+        ReadOnly |= IsReadOnly;
         GuardPath ??= Path;
         var ElementType = CollectionEditing.ElementType(Type)!;
         var Items = Value as JsonArray ?? new JsonArray();
@@ -174,34 +168,45 @@ internal sealed partial class DataAssetEditorInstance
         {
             var ItemPath = Path.Append(Index.ToString(CultureInfo.InvariantCulture)).ToArray();
             var ItemId = Id + "-item-" + Index.ToString(CultureInfo.InvariantCulture);
-            var Content = Expanded ? BuildCollectionValue(ElementType, Items[Index], ItemPath, Root, GuardPath, ItemId + "-value") : string.Empty;
+            var Content = Expanded ? BuildCollectionValue(ElementType, Items[Index], ItemPath, Root, GuardPath, ItemId + "-value", ReadOnly) : string.Empty;
             Rows.Add(new UiCollectionItem(ItemId, Content,
                 CollectionBinding(Root, GuardPath, Path, "remove," + Index),
                 CollectionBinding(Root, GuardPath, Path, "up," + Index),
                 CollectionBinding(Root, GuardPath, Path, "down," + Index)));
         }
         return UiCollectionEditor.Render(Id, Label, Rows, "editor.data-asset-collection-fold:" + Key,
-            CollectionBinding(Root, GuardPath, Path, "add"), Expanded, IsReadOnly, Value is null);
+            CollectionBinding(Root, GuardPath, Path, "add"), Expanded, ReadOnly, Value is null);
     }
 
     private string BuildCollectionValue(Type Type, JsonNode? Value, string[] Path, JsonObject Root,
-        string[] GuardPath, string Id)
+        string[] GuardPath, string Id, bool ReadOnly = false)
     {
+        ReadOnly |= IsReadOnly;
+        var HasStructure = TryBuildDataStructure("Value", Type, Value, Path, Root,
+            out var Structure, ReadOnly);
+        if (HasStructure)
+        {
+            return Structure;
+        }
+        if (MapEditing.ValueType(Type) is not null)
+        {
+            return BuildMap("Value", Type, Value, Path, Root, ReadOnly);
+        }
         if (CollectionEditing.ElementType(Type) is not null)
         {
-            return BuildCollection("Items", Type, Value, Path, Root, GuardPath);
+            return BuildCollection("Items", Type, Value, Path, Root, GuardPath, ReadOnly);
         }
         var Binding = CollectionBinding(Root, GuardPath, Path, Type == typeof(Color) ? "color" : "value",
             IsAssetReference(Type) ? "reference" : Type == typeof(string) || Type.IsEnum ? "text" : "json");
         if (Type == typeof(bool))
         {
             var Checked = Value?.GetValue<bool>() == true;
-            return UiValueEditors.Boolean("Value", Id, Checked, Binding + (!Checked ? "true" : "false"), IsReadOnly);
+            return UiValueEditors.Boolean("Value", Id, Checked, Binding + (!Checked ? "true" : "false"), ReadOnly);
         }
         if (Type.IsEnum)
         {
             return UiValueEditors.Choice("Value", Id, Value?.GetValue<string>() ?? string.Empty,
-                Enum.GetNames(Type).Select(Name => (Name, Name)), Binding, IsReadOnly);
+                Enum.GetNames(Type).Select(Name => (Name, Name)), Binding, ReadOnly);
         }
         if (IsAssetReference(Type))
         {
@@ -212,7 +217,7 @@ internal sealed partial class DataAssetEditorInstance
             };
             Options.AddRange(Context.Runtime.Assets!.Assets.Where(Asset => Asset.Exists &&
                 EditorAssetReferenceTypes.Matches(Asset.Type, ReferenceType)).Select(Asset => (Asset.Id, Asset.Name)));
-            return UiValueEditors.Reference("Value", Id, Value?.GetValue<string>() ?? string.Empty, Options, Binding, IsReadOnly);
+            return UiValueEditors.Reference("Value", Id, Value?.GetValue<string>() ?? string.Empty, Options, Binding, ReadOnly);
         }
         var Axes = ReadAxes(Type, Value);
         if (Axes is not null)
@@ -220,7 +225,7 @@ internal sealed partial class DataAssetEditorInstance
             var Inputs = Axes.Select((Axis, Index) => new UiValueInput(Id + "-" + Index,
                 UiValueEditors.Format(Axis), CollectionBinding(Root, GuardPath,
                     Path.Append(Value is JsonArray ? Index.ToString(CultureInfo.InvariantCulture) :
-                        (Type == typeof(Color) ? "rgba" : "xyzw")[Index].ToString()).ToArray(), "value"), IsReadOnly, "number")).ToArray();
+                        (Type == typeof(Color) ? "rgba" : "xyzw")[Index].ToString()).ToArray(), "value"), ReadOnly, "number")).ToArray();
             return Type == typeof(Color) ? UiValueEditors.Color("Value", Inputs, Binding) : UiValueEditors.Vector("Value", Inputs);
         }
         if (VectorSize(Type) > 0)
@@ -229,7 +234,7 @@ internal sealed partial class DataAssetEditorInstance
                 string.Empty, true), 2, "The current serialized value does not expose numeric components");
         }
         var Text = Type == typeof(string) ? Value?.GetValue<string>() ?? string.Empty : Value?.ToJsonString() ?? "null";
-        var Input = new UiValueInput(Id, Text, Binding, IsReadOnly, IsNumber(Type) ? (IsInteger(Type) ? "integer" : "number") : "text");
+        var Input = new UiValueInput(Id, Text, Binding, ReadOnly, IsNumber(Type) ? (IsInteger(Type) ? "integer" : "number") : "text");
         if (Type == typeof(string))
         {
             return UiValueEditors.Text("Value", Input);

@@ -23,6 +23,7 @@ internal sealed partial class DataAssetEditorInstance
             ["key"] = Key,
             ["operation"] = Operation,
             ["expected"] = View.Fingerprint,
+            ["containerExpected"] = View.ContainerFingerprint,
         };
         return "editor.data-asset-map:" + Uri.EscapeDataString(Payload.ToJsonString()) + ":";
     }
@@ -51,7 +52,13 @@ internal sealed partial class DataAssetEditorInstance
                 throw new InvalidOperationException(
                     "MAP_VIEW_MISSING: reopen the editor to refresh Map order");
             }
-            var CurrentMapNode = MapAt(Document.Snapshot, Path);
+            var Snapshot = Document.Snapshot;
+            if (Path.Length == 0 || MapEditing.Fingerprint(Snapshot[Path[0]]) !=
+                Payload["containerExpected"]!.GetValue<string>())
+            {
+                throw new InvalidDataException("REVISION_CONFLICT: Map container changed while editing");
+            }
+            var CurrentMapNode = MapAt(Snapshot, Path);
             if (CurrentMapNode is not null && CurrentMapNode is not JsonObject)
             {
                 throw new InvalidDataException("MAP_TYPE: an object or null is required");
@@ -81,6 +88,7 @@ internal sealed partial class DataAssetEditorInstance
                 .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
             var Changed = Document.Edit("data-asset-map", Root =>
             {
+                EnsureDataPathEditable(Path);
                 var MapNode = MapAt(Root, Path);
                 if (!string.Equals(MapEditing.Fingerprint(MapNode), Expected,
                         StringComparison.Ordinal))
@@ -131,6 +139,7 @@ internal sealed partial class DataAssetEditorInstance
                 if (Operation == "value" || Operation == "color" ||
                     Operation.StartsWith("axis,", StringComparison.Ordinal))
                 {
+                    EnsureDataPathEditable(Path.Append(Key).Concat(ValuePath).ToArray());
                     MapEditing.SetValue(Map, new[] { Key }.Concat(ValuePath).ToArray(),
                         Operation, Text, EntryType, GetDataPropertyType);
                     return;
@@ -246,6 +255,12 @@ internal sealed partial class DataAssetEditorInstance
             _ = int.Parse(JsonName, CultureInfo.InvariantCulture);
             return ElementType;
         }
+        var Members = DataAssetStructs.Members(Type);
+        if (Members.Count != 0)
+        {
+            return Members.SingleOrDefault(Member => Member.Name == JsonName)?.PropertyType ??
+                throw new InvalidDataException("STRUCT_PATH: member was not found: " + JsonName);
+        }
         var Properties = Type.GetProperties(System.Reflection.BindingFlags.Instance |
             System.Reflection.BindingFlags.Public);
         var Property = Properties.FirstOrDefault(Property =>
@@ -306,18 +321,15 @@ internal sealed partial class DataAssetEditorInstance
         }
         if (Type.IsValueType)
         {
-            return JsonSerializer.SerializeToNode(Activator.CreateInstance(Type), Type,
-                new JsonSerializerOptions(JsonSerializerOptions.Default)
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                });
+            return DataAssetSerializer.SerializeValue(Type, Activator.CreateInstance(Type));
         }
         return null;
     }
 
     private string BuildMap(string Label, Type Type, JsonNode? Value, string[] Path,
-        JsonObject Root)
+        JsonObject Root, bool ReadOnly = false)
     {
+        ReadOnly |= IsReadOnly;
         var Map = Value as JsonObject;
         var EntryType = MapEditing.ValueType(Type) ??
             throw new InvalidDataException("MAP_TYPE: unsupported map type");
@@ -328,6 +340,7 @@ internal sealed partial class DataAssetEditorInstance
             MapViews.Add(ViewKey, View);
         }
         var Fingerprint = MapEditing.Fingerprint(Value);
+        View.ContainerFingerprint = MapEditing.Fingerprint(Root[Path[0]]);
         if (View.Fingerprint != Fingerprint)
         {
             View.Order = MapEditing.ReconcileOrder(Map, View.Order);
@@ -343,27 +356,29 @@ internal sealed partial class DataAssetEditorInstance
                     System.Text.Encoding.UTF8.GetBytes(Key)))[..10];
             var KeyInput = "<div class=\"se-map-key\">" + MapEditing.KeyInput(
                 EntryId + "-key", Key,
-                IsReadOnly ? string.Empty : MapAction(View, Path, Array.Empty<string>(), "rename", Key),
-                IsReadOnly) + "</div>";
-            var ValueMarkup = MapEditing.ValueType(EntryType) is not null
-                ? BuildMap("Value", EntryType, Map![Key], Path.Append(Key).ToArray(), Root)
+                ReadOnly ? string.Empty : MapAction(View, Path, Array.Empty<string>(), "rename", Key),
+                ReadOnly) + "</div>";
+            var HasStructure = TryBuildDataStructure("Value", EntryType, Map![Key],
+                Path.Append(Key).ToArray(), Root, out var Structure, ReadOnly);
+            var ValueMarkup = HasStructure ? Structure : MapEditing.ValueType(EntryType) is not null
+                ? BuildMap("Value", EntryType, Map![Key], Path.Append(Key).ToArray(), Root, ReadOnly)
                 : MapEditing.ValueActionMarkup("Value", EntryId + "-value", EntryType,
                     Map![Key], MapAction(View, Path, Array.Empty<string>(),
                         EntryType == typeof(Color) ? "color" : "value", Key),
                     Axis => MapAction(View, Path, Array.Empty<string>(), "axis," +
                         Axis.ToString(CultureInfo.InvariantCulture), Key),
-                    IsReadOnly, BuildMapReferenceOptions(EntryType));
+                    ReadOnly, BuildMapReferenceOptions(EntryType));
             Entries.Add(new UiMapEntry(EntryId, KeyInput, ValueMarkup,
-                IsReadOnly ? string.Empty : MapAction(View, Path, Array.Empty<string>(), "remove", Key),
+                ReadOnly ? string.Empty : MapAction(View, Path, Array.Empty<string>(), "remove", Key),
                 Index == 0 ? string.Empty : MapAction(View, Path, Array.Empty<string>(), "view-up", Key),
                 Index + 1 == View.Order.Count ? string.Empty :
                     MapAction(View, Path, Array.Empty<string>(), "view-down", Key)));
         }
         return UiMapEditor.Render(Id, Label, Entries,
             MapAction(View, Path, Array.Empty<string>(), "fold", string.Empty),
-            IsReadOnly ? string.Empty : MapAction(View, Path, Array.Empty<string>(),
+            ReadOnly ? string.Empty : MapAction(View, Path, Array.Empty<string>(),
                 "add", MapEditing.UniqueKey(Map ?? new JsonObject())),
-            View.Expanded, IsReadOnly, Value is null);
+            View.Expanded, ReadOnly, Value is null);
     }
 
     private IEnumerable<(string Id, string Label)> BuildMapReferenceOptions(Type Type)

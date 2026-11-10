@@ -61,10 +61,15 @@ read-only assets cannot be saved. Asset references serialize as stable ID string
 The Editor provides one generic reflection asset editor for every concrete type
 currently registered in `DataAssetTypeRegistry`. It builds controls from
 `DataAssetTypeDescriptor.Properties`: scalar strings and numbers, booleans,
-enums, direct asset references, and JSON-backed arrays or objects. Inherited and
+enums, asset references, shared lists/Maps, and expandable custom structs. Other
+complex objects retain JSON value editing. Struct members follow the existing
+JSON contract (including JsonInclude/JsonIgnore/JsonPropertyName); expansion does
+not opt ordinary fields into serialization. Getter-only members stay disabled.
+Structs nested in lists or Map values use the same groups and typed controls;
+folding is transient and never enters Undo or saved data. Inherited and
 derived properties use the same form. Every candidate edit is deserialized through
 `DataAssetSerializer.Parse`, so Required, Minimum, Maximum, enum, unknown-field,
-and direct-reference validation runs before the editor commits a new document
+and recursive reference/struct-member validation runs before the editor commits a new document
 revision. The editor owns dirty state, Undo/Redo, external-file conflict detection,
 and atomic Save; `DataAssetSerializer.Save` remains the lower-level explicit
 persistence API. When a Runtime Module reload replaces the type registry, the

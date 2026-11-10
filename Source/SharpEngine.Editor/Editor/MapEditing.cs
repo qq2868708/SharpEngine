@@ -16,6 +16,7 @@ internal static class MapEditing
     {
         internal List<string> Order = new();
         internal string Fingerprint = string.Empty;
+        internal string ContainerFingerprint = string.Empty;
         internal bool Expanded = true;
     }
 
@@ -106,12 +107,11 @@ internal static class MapEditing
         var Result = Root.DeepClone().AsObject();
         foreach (var Property in Properties)
         {
-            if (ValueType(Property.PropertyType) is null ||
-                !Result.TryGetPropertyValue(Property.JsonName, out var Value))
+            if (!Result.TryGetPropertyValue(Property.JsonName, out var Value))
             {
                 continue;
             }
-            Result[Property.JsonName] = Canonicalize(Value);
+            Result[Property.JsonName] = DataAssetStructs.Normalize(Value, Property.PropertyType);
         }
         return Result;
     }

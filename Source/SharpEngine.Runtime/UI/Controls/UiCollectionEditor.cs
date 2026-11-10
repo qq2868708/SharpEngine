@@ -76,6 +76,10 @@ public static class UiCollectionEditor
         var Root = XElement.Parse("<div>" + Markup + "</div>");
         foreach (var Element in Root.Descendants())
         {
+            if (Element.Attribute("data-value-view")?.Value == "true")
+            {
+                continue;
+            }
             if (Element.Attribute("data-color-picker") is not null)
             {
                 Element.SetAttributeValue("data-color-readonly", "true");
