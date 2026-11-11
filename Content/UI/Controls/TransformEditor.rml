@@ -1,3 +1,3 @@
 <template>
-  <div class="se-transform"><ui-if test="HasLabel"><div class="se-transform-title">${Label}</div></ui-if><ui-slot name="Position" /><ui-slot name="Rotation" /><ui-slot name="Scale" /></div>
+  <div class="se-transform"><ui-if test="HasLabel"><div class="se-property-row se-transform-title"><span class="se-property-name" title="${Label}">${Label}</span><span class="se-value-editor" /></div></ui-if><ui-slot name="Position" /><ui-slot name="Rotation" /><ui-slot name="Scale" /></div>
 </template>

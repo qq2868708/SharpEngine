@@ -327,7 +327,8 @@ viewport { display: block; }
 .ui-class-suggestion:hover { color: #e8f1fa; border-color: #4e6178; }
 .ui-inspector-group { display: block; width: 220px; box-sizing: border-box; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px #2a323c; }
 .ui-inspector-group-title { display: block; padding: 4px 0px 6px; color: #6f8298; font-size: 8px; }
-.ui-style-row { display: flex; width: 220px; align-items: center; margin-bottom: 3px; }
+.ui-style-row { display: flex; width: 100%; min-width: 0px; align-items: center; }
+.ui-style-row > .se-value-input { flex: 1 1 0px; width: 0px; }
 .ui-style-label { width: 78px; flex-shrink: 0; color: #8494a7; font-size: 9px; }
 .ui-style-input { display: block; position: relative; z-index: 2; flex-grow: 1; flex-shrink: 1; flex-basis: 0px; min-width: 60px; height: 23px; padding: 2px 6px; margin: 0px; color: #cfdcea; background-color: #1b2129; border: 1px #333e4b; border-radius: 3px; font-size: 10px; }
 .ui-style-input:hover { border-color: #4a5a6c; }
@@ -476,13 +477,14 @@ viewport { display: block; }
 .stylesheet-rule-preview strong { margin-bottom: 5px; }
 .stylesheet-rule-preview span { font-family: Segoe UI; font-size: 9px; white-space: pre-wrap; }
 .input-bindings { width: 100%; max-width: 100%; height: 100%; min-width: 0px; padding: 8px; overflow-x: hidden; overflow-y: auto; }
-.input-bindings .asset-field input { width: 760px; max-width: 760px; }
+.input-bindings .asset-field input { width: 100%; max-width: 100%; }
 .input-bindings .asset-field { width: 760px; max-width: 760px; }
 .input-bindings .asset-field > span { width: 760px; max-width: 760px; }
 .input-binding-heading { display: flex; align-items: center; width: 760px; height: 28px; margin-bottom: 8px; }
 .input-binding-heading strong { color: #d9e4ef; }
 .input-binding-heading button { min-width: 72px; height: 24px; margin-left: auto; padding: 2px 8px; }
 .data-asset-properties { padding-bottom: 30px; }
+.asset-field.se-value-field, .mesh-asset-inspector .se-value-field, .stylesheet-rules .se-value-field { display: flex; flex-direction: row; overflow: visible; }
 .asset-inspector scrollbarvertical, .settings-fields scrollbarvertical { width: 10px; background-color: #191d24; }
 .asset-inspector scrollbarvertical sliderbar, .settings-fields scrollbarvertical sliderbar { width: 6px; min-height: 24px; margin-left: 2px; background-color: #485e74; border-radius: 3px; }
 .asset-inspector scrollbarhorizontal, .settings-fields scrollbarhorizontal { height: 10px; background-color: #191d24; }
@@ -553,7 +555,7 @@ viewport { display: block; }
 .ui-layout-option:disabled { color: #627485; background-color: #1d2731; border-color: #303f50; }
 .ui-layout-parent, .ui-layout-note { color: #95abc1; font-size: 10px; line-height: 16px; margin-bottom: 6px; }
 .ui-layout-value { display: flex; align-items: center; margin-bottom: 5px; }
-.ui-layout-value input { width: 126px; height: 25px; background-color: #151c25; color: #e3edf7; border: 1px #405168; padding: 3px 5px; font-size: 11px; }
+.ui-layout-value input { flex: 1 1 0px; width: 0px; min-width: 0px; height: 25px; background-color: #151c25; color: #e3edf7; border: 1px #405168; padding: 3px 5px; font-size: 11px; }
 .ui-layout-measured { color: #8ba9bf; margin-left: 6px; font-size: 10px; }
 .ui-layout-spacing { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0px 8px; }
 .ui-layout-spacing label { display: block; width: 50px; color: #8ba2b9; font-size: 9px; }

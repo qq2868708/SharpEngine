@@ -134,6 +134,29 @@ internal static class StructEditorsUiValidation
         }
         void Capture(string Name)
         {
+            for (var Attempt = 0; Attempt < 10; Attempt++)
+            {
+                var Before = Observe();
+                var Moved = Invoke("ui.pointer", new JsonObject
+                {
+                    ["hostId"] = HostId,
+                    ["event"] = "move",
+                    ["button"] = "none",
+                    ["x"] = (int)Host(Before)["bounds"]!["width"]!.GetValue<double>() / 2,
+                    ["y"] = 60,
+                    ["buttons"] = new JsonArray(),
+                    ["modifiers"] = new JsonArray(),
+                    ["pointerId"] = 0,
+                    ["expectedFrameId"] = Before["frameId"]!.DeepClone(),
+                });
+                if (Moved["accepted"]?.GetValue<bool>() == true)
+                {
+                    break;
+                }
+                Check(Moved["diagnostics"]?.AsArray().Any(Diagnostic =>
+                    Diagnostic?["code"]?.GetValue<string>() == "UI_FRAME_STALE") == true,
+                    "Screenshot pointer movement must follow the observed frame");
+            }
             var Ui = Observe();
             var Frame = Call(Sequence++, "resources/read", new JsonObject
             {
@@ -277,6 +300,14 @@ internal static class StructEditorsUiValidation
         var Configuration = GroupId("configuration");
         Capture("data-asset-struct-expanded");
         var Layout = Observe();
+        var PowerBounds = Element(Layout, Configuration + "-power")["bounds"]!;
+        var ChildBounds = Element(Layout, GroupId("configuration", "child") + "-title")["bounds"]!;
+        var ReadOnlyBounds = Element(Layout, Configuration + "-computed")["bounds"]!;
+        var NameBounds = Element(Layout, Configuration + "-toggle")["bounds"]!;
+        Check(Math.Abs(PowerBounds["x"]!.GetValue<double>() - ChildBounds["x"]!.GetValue<double>()) < 1 &&
+            Math.Abs(PowerBounds["x"]!.GetValue<double>() - ReadOnlyBounds["x"]!.GetValue<double>()) < 1 &&
+            PowerBounds["x"]!.GetValue<double>() >= NameBounds["x"]!.GetValue<double>() + NameBounds["width"]!.GetValue<double>(),
+            "Nested and disabled values align in one column to the right of the name column");
         var PreviousRight = double.NegativeInfinity;
         for (var Axis = 0; Axis < 3; Axis++)
         {
@@ -333,6 +364,10 @@ internal static class StructEditorsUiValidation
         var SettingsGroup = "setting-struct-" + Uri.EscapeDataString(
             "Project:validation.structures:configuration:[]");
         Capture("settings-struct-expanded");
+        var SettingsLayout = Observe();
+        Check(Math.Abs(Element(SettingsLayout, "setting-configuration/power")["bounds"]!["x"]!.GetValue<double>() -
+            Element(SettingsLayout, "setting-configuration/child/title")["bounds"]!["x"]!.GetValue<double>()) < 1,
+            "Settings primitive and nested fields use the same editor column");
         Type("setting-configuration/power", "23");
         var Page = Invoke("editor.describe")["settings"]!["pages"]!.AsArray()
             .Single(Node => Node!["id"]!.GetValue<string>() == "validation.structures")!;

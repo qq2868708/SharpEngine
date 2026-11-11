@@ -1,8 +1,8 @@
 <template>
   <div id="${Id}" class="se-map ${StateClass}">
     <div class="se-map-header">
-      <button id="${Id}-toggle" class="se-collection-toggle" data-action="${ToggleAction}" data-value-view="true" aria-expanded="${ExpandedState}" title="Expand or collapse map"><img src="${ToggleIcon}" /><span>${Label}</span><span id="${Id}-count" class="se-collection-count">${CountText}</span></button>
-      <button id="${Id}-add" class="se-collection-command" data-action="${AddAction}" ui-disabled="AddDisabled" title="Add entry">+</button>
+      <button id="${Id}-toggle" class="se-collection-toggle se-property-name" data-action="${ToggleAction}" data-value-view="true" aria-expanded="${ExpandedState}" title="${Label}"><img src="${ToggleIcon}" /><span>${Label}</span></button>
+      <div class="se-value-editor se-property-commands"><span id="${Id}-count" class="se-collection-count">${CountText}</span><button id="${Id}-add" class="se-collection-command" data-action="${AddAction}" ui-disabled="AddDisabled" title="Add entry">+</button></div>
     </div>
     <ui-if test="Expanded"><div id="${Id}-entries" class="se-map-entries"><ui-if test="Empty"><span class="se-value-hint">${EmptyText}</span></ui-if><ui-slot name="Entries" /></div></ui-if>
   </div>

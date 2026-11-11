@@ -45,7 +45,7 @@ public static class UiCollectionEditor
                     ["RemoveDisabled"] = RemoveDisabled,
                 }, new Dictionary<string, IUiLayoutPart>
                 {
-                    ["Value"] = new MarkupPart(ReadOnly ? DisableValues(Item.ValueMarkup) : Item.ValueMarkup),
+                    ["Value"] = new MarkupPart(UiPropertyRows.Indent(ReadOnly ? DisableValues(Item.ValueMarkup) : Item.ValueMarkup)),
                 }));
             }
         }
@@ -67,7 +67,7 @@ public static class UiCollectionEditor
             ["EmptyText"] = IsNull ? "Null collection" : "Empty collection",
         }, new Dictionary<string, IUiLayoutPart>
         {
-            ["Items"] = new MarkupPart(string.Concat(Rows)),
+            ["Items"] = new MarkupPart(UiPropertyRows.Indent(string.Concat(Rows))),
         });
     }
 

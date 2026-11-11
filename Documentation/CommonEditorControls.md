@@ -22,6 +22,10 @@ Content Manager 的文件夹/资源浏览是目录列表，不把它伪装成递
 
 ## 基础类型
 
+属性行统一采用“名称 + 编辑”双列：左列占 36%，右列使用剩余空间。`ValueField.rml` 的名称单元使用 `se-property-name`，编辑单元使用 `se-value-editor`；提示文本、Range 滑条、Color 色盘都归入右侧编辑单元。长名称单行省略并提供完整标题；只读值保留同样列宽及 disabled 表现。Inspector、资产属性（包括 UI 布局/样式）、Engine/Project Settings 与 MCP 设置复用相同布局。
+
+结构体、列表、Map 的标题和成员保持同一列边界，并用 1px 竖向细线分隔名称与编辑区；分界线覆盖整行高度，包括多行提示、滑条和色盘。名称与编辑内容均在行内垂直居中，按钮组仍横向排列。嵌套只增加名称单元的缩进，不缩小整个容器；右侧编辑区从顶层到子字段对齐。Vector/Rotator 的轴输入始终位于右列，Transform 继续组合 Position、Rotation、Scale 三行。Map 的 key 位于名称列，可视排序和数据命令位于右列；展开与保存规则保持既有契约。
+
 `UiValueEditors.Input/Text/Multiline/Number/Range/Boolean/Choice/Reference/Vector/Rotator/Color/Transform` 提供共同外观与语义绑定。`ValueField.rml` 组合字段标签和编辑器，`ValueAxis.rml` 组合轴标签和标量输入，`VectorEditor.rml` 组合两个至四个分量。Rotator 复用三轴编辑器，以度表示 X pitch / Y yaw / Z roll。Transform 通过 `TransformEditor.rml` 组合 Position(Vector)、Rotation(Rotator)、Scale(Vector)，共九个输入框。Color 组合 RGBA 四分量布局与 `ColorPicker.rml` 共享色盘；Range 在文本输入下方复用带约束的 Slider；Reference 为资产、Entity 和 Component 选择提供语义样式，选项解析仍由领域编辑器负责。
 
 Color 的色块按钮展开饱和度/明度面板、Hue 色相条和 Opacity 滑条。拖动只更新可观察 DOM 中的临时预览，Apply 将整个 RGBA 数组交给调用方一次提交；Cancel、Esc 或再次点击展开按钮丢弃草稿。主场景 Inspector、DataAsset 与 Game 使用相同的原生 `RmlColorPicker`，UI 基础层不持有领域事务。`Color` 的 `CommitAction` 必须提供整色提交前缀；`PickerId` 可指定稳定身份，默认取第一个分量 ID 加 `-picker`。只读分量或未提供整色动作时禁用色盘按钮。色盘以 0–1 范围选色，数值输入仍保留所属领域允许的范围，打开或取消色盘不会截断已提交数值。
@@ -40,7 +44,7 @@ Choice 与 Reference 共用单一 28px 下拉外框，原生值区和箭头在�
 
 ## 结构体分组
 
-`UiStructEditor.Render(Id, Label, TypeName, Content, ToggleAction, Expanded, ReadOnly)` 使用 `StructEditor.rml` 和共享样式显示字段名、类型、展开箭头与成员区。公共控件不反射成员、不拥有数据或事务；Inspector、DataAsset 和 Settings 各自提供成员与折叠状态。嵌套结构体、列表元素及 Map 值继续组合相同控件，Vector/Color 等基础类型使用已有专用布局。
+`UiStructEditor.Render(Id, Label, Content, ToggleAction, Expanded, ReadOnly)` 使用 `StructEditor.rml` 和共享样式显示字段名、展开箭头与成员区。标题右列保持空白，不显示 CLR 类型名称。公共控件不反射成员、不拥有数据或事务；Inspector、DataAsset 和 Settings 各自提供成员与折叠状态。嵌套结构体、列表元素及 Map 值继续组合相同控件，Vector/Color 等基础类型使用已有专用布局。
 
 DataAsset 只展开原有 JSON 契约中的自定义值类型成员，遵守 JsonPropertyName、JsonInclude、JsonIgnore 和 getter/setter；不会因展开自动保存普通字段。只有 getter 的派生值保持禁用，并由当前结构体重新计算显示。成员编辑递归检查 DataProperty 约束与资产引用，走原有文档事务和显式 Save；结构体内 Map 仍按 key 确定排序。发布的 JSON Schema 同步列出成员、约束与 readOnly。Inspector 保持组件数据描述符规则；Settings 保持 Setting 标注规则，不扩展到任意 CLR 对象图。
 

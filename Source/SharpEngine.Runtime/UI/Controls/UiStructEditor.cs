@@ -8,7 +8,7 @@ public static class UiStructEditor
     private static readonly UiLayoutTemplate Layout = UiLayoutTemplate.LoadEmbedded(
         typeof(UiStructEditor).Assembly, "SharpEngine.UI.StructEditor.rml");
 
-    public static string Render(string Id, string Label, string TypeName,
+    public static string Render(string Id, string Label,
         string Content, string ToggleAction, bool Expanded = true, bool ReadOnly = false)
     {
         if (string.IsNullOrWhiteSpace(Id))
@@ -19,7 +19,6 @@ public static class UiStructEditor
         {
             ["Id"] = Id,
             ["Label"] = Label,
-            ["TypeName"] = TypeName,
             ["Expanded"] = Expanded,
             ["ExpandedState"] = Expanded ? "true" : "false",
             ["StateClass"] = ReadOnly ? "se-struct-disabled" : string.Empty,
@@ -28,7 +27,7 @@ public static class UiStructEditor
                 (Expanded ? "chevron-down" : "chevron-right") + ".tga",
         }, new Dictionary<string, IUiLayoutPart>
         {
-            ["Members"] = new MembersPart(Content),
+            ["Members"] = new MembersPart(UiPropertyRows.Indent(Content)),
         });
     }
 

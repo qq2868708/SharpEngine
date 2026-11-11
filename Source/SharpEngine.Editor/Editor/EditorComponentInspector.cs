@@ -484,7 +484,8 @@ public sealed partial class EditorRuntime : IComponentRuntime
         {
             var Initial = Components!.Data(ValueType).Defaults(Components);
             var Action = "editor.component-field:" + Component.ComponentId + ":" + Uri.EscapeDataString(ComponentRevision + "|json|" + Path + "|null") + ":" + Initial.ToJsonString();
-            Markup.Append("<div class=\"component-field\"><label>").Append(Escape(Name)).Append(" (null)</label><button data-action=\"").Append(Escape(Action)).Append("\">Create</button></div>");
+            Markup.Append(SharpEngine.UI.UiValueEditors.Field(Name + " (null)",
+                "<button data-action=\"" + Escape(Action) + "\">Create</button>"));
             return;
         }
         var Nested = Value as JsonObject;
@@ -500,7 +501,7 @@ public sealed partial class EditorRuntime : IComponentRuntime
                 }
             }
             Markup.Append(SharpEngine.UI.UiStructEditor.Render("component-struct-" + FoldId,
-                Name, ValueType.Name, Members.ToString(), "editor.component-fold:" + FoldId, Expanded));
+                Name, Members.ToString(), "editor.component-fold:" + FoldId, Expanded));
             return;
         }
         if (Value is JsonArray || Value is null && (ValueType.IsArray || ValueType.IsGenericType && ValueType.GetGenericTypeDefinition() == typeof(List<>)))
@@ -590,17 +591,20 @@ public sealed partial class EditorRuntime : IComponentRuntime
         else
         {
             var Input = ComponentInput(Component, Path, Value, ValueType);
-            Markup.Append(ValueType == typeof(string) && Field.Lines > 0 ?
-                SharpEngine.UI.UiValueEditors.Multiline(Name, Input, Field.Lines, Field.Tooltip) :
-                SharpEngine.UI.UiValueEditors.Text(Name, Input, Field.Tooltip));
             if (Field.Minimum is not null && Field.Maximum is not null)
             {
                 var RangeInput = new SharpEngine.UI.UiValueInput(ControlId,
                     InspectorFieldText(Value, ValueType), ActionPrefix,
                     Kind: ValueType == typeof(float) || ValueType == typeof(double) ? "number" : "integer");
-                Markup.Append(SharpEngine.UI.UiValueEditors.RangeInput(RangeInput,
+                Markup.Append(SharpEngine.UI.UiValueEditors.Range(Name, RangeInput,
                     Field.Minimum.Value, Field.Maximum.Value,
-                    ValueType == typeof(float) || ValueType == typeof(double) ? 0.01 : 1));
+                    ValueType == typeof(float) || ValueType == typeof(double) ? 0.01 : 1, Field.Tooltip));
+            }
+            else
+            {
+                Markup.Append(ValueType == typeof(string) && Field.Lines > 0 ?
+                    SharpEngine.UI.UiValueEditors.Multiline(Name, Input, Field.Lines, Field.Tooltip) :
+                    SharpEngine.UI.UiValueEditors.Text(Name, Input, Field.Tooltip));
             }
         }
     }

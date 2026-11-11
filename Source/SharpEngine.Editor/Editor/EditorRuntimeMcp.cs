@@ -247,13 +247,11 @@ public sealed partial class EditorRuntime
             <div class="settings-header"><div class="settings-heading">MCP Settings</div><div class="grow" />
             <button id="mcp-cancel" class="settings-action" action="editor.mcp-cancel">Cancel</button>
             <button id="mcp-confirm" class="settings-action primary" action="editor.mcp-confirm">Confirm &amp; Restart</button></div>
-            <div class="settings-fields"><div class="settings-field"><div class="settings-field-copy">
-            <label>Port</label><span>Confirm to save and restart MCP immediately.</span></div>
-            <div class="settings-control">{SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("mcp-port", McpPortDraft, "editor.mcp-port:", Kind: "integer"))}</div></div>
-            <div class="settings-field"><div class="settings-field-copy"><label>Endpoint</label></div>
-            <div id="mcp-endpoint" class="settings-control">{Escape(McpHttp?.Endpoint ?? "Offline")}</div></div>
-            <div class="settings-field mcp-configuration-row"><div class="settings-field-copy"><label>Configuration file</label></div>
-            <div class="settings-control mcp-configuration-path">{Escape(McpConfigurationPath)}</div></div></div>
+            <div class="settings-fields">
+            {SharpEngine.UI.UiValueEditors.Number("Port", new SharpEngine.UI.UiValueInput("mcp-port", McpPortDraft, "editor.mcp-port:", Kind: "integer"), "Confirm to save and restart MCP immediately.")}
+            {AssetEditorInstanceUtilities.ReadOnlyField("Endpoint", McpHttp?.Endpoint ?? "Offline", "mcp-endpoint")}
+            {AssetEditorInstanceUtilities.ReadOnlyField("Configuration file", McpConfigurationPath, "mcp-configuration-file")}
+            </div>
             <div id="mcp-feedback" class="settings-footer"><span>{Escape(McpDiagnostic ?? "Ready")}</span></div>
             </div></div>
             """);

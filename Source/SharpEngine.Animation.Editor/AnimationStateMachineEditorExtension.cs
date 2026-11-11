@@ -361,14 +361,15 @@ internal sealed partial class AnimationStateMachineEditorExtension : IEditorExte
                     {
                         var Curve = Transitions[Index]![Key]!.GetValue<string>();
                         var NextCurve = Curve == "Linear" ? "SmoothStep" : "Linear";
-                        Markup.Append("<div class=\"asset-field\"><label>blendCurve</label><button id=\"stateMachineCurve-")
+                        var CurveButton = new StringBuilder("<button id=\"stateMachineCurve-")
                             .Append(Index).Append("\" data-action=\"editor.state-machine:transition:")
                             .Append(Index).Append(":blendCurve:").Append(NextCurve).Append('"');
                         if (IsReadOnly)
                         {
-                            Markup.Append(" disabled=\"disabled\"");
+                            CurveButton.Append(" disabled=\"disabled\"");
                         }
-                        Markup.Append('>').Append(Curve).Append(" (switch to ").Append(NextCurve).Append(")</button></div>");
+                        CurveButton.Append('>').Append(Curve).Append(" (switch to ").Append(NextCurve).Append(")</button>");
+                        Markup.Append(UiValueEditors.Field("blendCurve", CurveButton.ToString(), Class: "asset-field"));
                     }
                     else
                     {

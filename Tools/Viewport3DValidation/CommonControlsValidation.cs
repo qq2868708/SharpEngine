@@ -7,9 +7,15 @@ internal static class CommonControlsValidation
     {
         var Members = UiValueEditors.Number("Power", new UiValueInput("struct-power", "5", "set-power:"));
         var Structure = XElement.Parse(UiStructEditor.Render("structure", "Config <A>",
-            "MyStruct", Members, "fold-structure"));
+            Members, "fold-structure"));
+        var NameCell = Structure.Descendants("label").Single();
+        Check(NameCell.Attribute("class")!.Value == "se-property-name" &&
+            NameCell.Attribute("data-property-depth")!.Value == "1" &&
+            NameCell.ElementsAfterSelf().Single().Attribute("class")!.Value == "se-value-editor" &&
+            NameCell.ElementsAfterSelf().Single().Descendants("input").Single().Attribute("id")!.Value == "struct-power",
+            "Struct nesting indents only the name cell while reusing the shared editor column");
         var CollapsedStructure = XElement.Parse(UiStructEditor.Render("structure-other", "Other",
-            "MyStruct", Members, "fold-other", Expanded: false));
+            Members, "fold-other", Expanded: false));
         Check(Structure.Value.Contains("Config <A>", StringComparison.Ordinal) &&
             Structure.Descendants("input").Single().Attribute("data-value-commit")!.Value == "set-power:" &&
             !CollapsedStructure.Descendants("input").Any(),
@@ -24,7 +30,7 @@ internal static class CommonControlsValidation
             new[]
             {
                 new UiCollectionItem("struct-row", UiStructEditor.Render("readonly-structure",
-                    "Config", "MyStruct", ReadOnlyMembers, "fold-readonly", ReadOnly: true), ""),
+                    "Config", ReadOnlyMembers, "fold-readonly", ReadOnly: true), ""),
             }, "fold-list", "", ReadOnly: true));
         Check(ReadOnlyStructure.Descendants("button").Single(Button =>
                 Button.Attribute("id")?.Value == "readonly-structure-toggle").Attribute("disabled") is null &&

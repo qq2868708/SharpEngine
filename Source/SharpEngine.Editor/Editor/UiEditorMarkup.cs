@@ -445,9 +445,7 @@ internal static partial class UiEditorMarkup
             ? Field.Placeholder
             : Resolved.Value + " (" + (Resolved.Source == "inline"
                 ? "inline" : Resolved.Source) + ")";
-        var Builder = new StringBuilder();
-        Builder.Append("<div class=\"ui-style-row\"><label class=\"ui-style-label\">")
-            .Append(Escape(Field.Label)).Append("</label>");
+        var Builder = new StringBuilder("<div class=\"ui-style-row\">");
         var OptionsHint = Field.Options.Count == 0
             ? string.Empty
             : " (" + string.Join(" | ", Field.Options) + ")";
@@ -459,7 +457,7 @@ internal static partial class UiEditorMarkup
         Builder.Append("<button class=\"ui-style-clear\" title=\"Remove inline value\"")
             .AppendAction("editor.ui-style-clear:" + Field.Name, !ReadOnly && HasInline)
             .Append(">x</button></div>");
-        return Builder.ToString();
+        return SharpEngine.UI.UiValueEditors.Field(Field.Label, Builder.ToString());
     }
 
     private static string TextField(string Label, string Value, string Action,

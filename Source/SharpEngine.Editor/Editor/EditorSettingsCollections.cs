@@ -214,34 +214,34 @@ public sealed partial class EditorRuntime
     }
 
     private string BuildSettingsCollectionValue(DevelopmentSettingsDescriptor Descriptor, string FieldPath,
-        Type Type, JsonNode? Value, JsonNode? Root, string[] Path, string Id)
+        Type Type, JsonNode? Value, JsonNode? Root, string[] Path, string Id, string Label = "Value")
     {
         Type = Nullable.GetUnderlyingType(Type) ?? Type;
         if (IsSettingsNumericType(Type))
         {
-            return BuildSettingsNumericValue(Descriptor, FieldPath, Path, "Value", Type,
+            return BuildSettingsNumericValue(Descriptor, FieldPath, Path, Label, Type,
                 Value, Root, Id);
         }
         if (MapEditing.ValueType(Type) is not null)
         {
-            return BuildSettingsMap(Descriptor, FieldPath, "Items", Type, Value,
+            return BuildSettingsMap(Descriptor, FieldPath, Label, Type, Value,
                 Root, Path);
         }
         if (CollectionEditing.ElementType(Type) is not null)
         {
-            return BuildSettingsCollection(Descriptor, FieldPath, "Items", Type, Value, Root, Path);
+            return BuildSettingsCollection(Descriptor, FieldPath, Label, Type, Value, Root, Path);
         }
         var Object = Value as JsonObject;
         if (IsSettingsObject(Type) && Object is not null)
         {
-            return BuildSettingsStructure(Descriptor, FieldPath, Path, "Value", Type, () =>
+            return BuildSettingsStructure(Descriptor, FieldPath, Path, Label, () =>
             {
                 var Markup = new StringBuilder();
                 foreach (var Field in GetSettingFields(Type))
                 {
-                    Markup.Append(UiValueEditors.Field(Field.Attribute.DisplayName ?? Field.Property.Name,
-                        BuildSettingsCollectionValue(Descriptor, FieldPath, Field.Property.PropertyType,
-                            Object[Field.Attribute.Id], Root, Path.Append(Field.Attribute.Id).ToArray(), Id + "-" + Field.Attribute.Id)));
+                    Markup.Append(BuildSettingsCollectionValue(Descriptor, FieldPath, Field.Property.PropertyType,
+                        Object[Field.Attribute.Id], Root, Path.Append(Field.Attribute.Id).ToArray(),
+                        Id + "-" + Field.Attribute.Id, Field.Attribute.DisplayName ?? Field.Property.Name));
                 }
                 return Markup.ToString();
             });
@@ -250,16 +250,16 @@ public sealed partial class EditorRuntime
         if (Type == typeof(bool))
         {
             var Checked = Value?.GetValue<bool>() == true;
-            return UiValueEditors.Boolean("Value", Id, Checked, Binding + (!Checked ? "true" : "false"));
+            return UiValueEditors.Boolean(Label, Id, Checked, Binding + (!Checked ? "true" : "false"));
         }
         if (Type.IsEnum)
         {
-            return UiValueEditors.Choice("Value", Id, Value?.GetValue<string>() ?? string.Empty,
+            return UiValueEditors.Choice(Label, Id, Value?.GetValue<string>() ?? string.Empty,
                 Enum.GetNames(Type).Select(Name => (Name, Name)), Binding);
         }
         var Text = Type == typeof(string) ? Value?.GetValue<string>() ?? string.Empty : Value?.ToJsonString() ?? "null";
         var Number = Type.IsPrimitive && Type != typeof(char);
-        return UiValueEditors.Text("Value", new UiValueInput(Id, Text, Binding, Kind: Number ? "number" : "text"));
+        return UiValueEditors.Text(Label, new UiValueInput(Id, Text, Binding, Kind: Number ? "number" : "text"));
     }
 
     private string SettingsCollectionBinding(DevelopmentSettingsDescriptor Descriptor, string FieldPath,

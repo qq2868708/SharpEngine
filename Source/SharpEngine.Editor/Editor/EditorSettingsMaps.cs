@@ -186,19 +186,19 @@ public sealed partial class EditorRuntime
 
     private string BuildSettingsMapValue(DevelopmentSettingsDescriptor Descriptor,
         string FieldPath, Type Type, JsonNode? Value, JsonNode? Root, string[] MapPath,
-        string Key, string[] ValuePath, string Id, string Fingerprint)
+        string Key, string[] ValuePath, string Id, string Fingerprint, string Label = "Value")
     {
         Type = Nullable.GetUnderlyingType(Type) ?? Type;
         if (CollectionEditing.ElementType(Type) is not null)
         {
-            return BuildSettingsCollection(Descriptor, FieldPath, "Value", Type, Value,
+            return BuildSettingsCollection(Descriptor, FieldPath, Label, Type, Value,
                 Root, MapPath.Append(Key).Concat(ValuePath).ToArray());
         }
         var MapValueType = MapEditing.ValueType(Type);
         if (MapValueType is not null)
         {
             var NestedPath = MapPath.Append(Key).Concat(ValuePath).ToArray();
-            return BuildSettingsMap(Descriptor, FieldPath, "Value", Type, Value,
+            return BuildSettingsMap(Descriptor, FieldPath, Label, Type, Value,
                 Root, NestedPath);
         }
         var Object = Value as JsonObject;
@@ -206,18 +206,17 @@ public sealed partial class EditorRuntime
         if (Object is not null && Fields.Count != 0)
         {
             return BuildSettingsStructure(Descriptor, FieldPath,
-                MapPath.Append(Key).Concat(ValuePath).ToArray(), "Value", Type, () =>
+                MapPath.Append(Key).Concat(ValuePath).ToArray(), Label, () =>
             {
                 var Markup = new StringBuilder();
                 foreach (var Field in Fields)
                 {
                     var NestedValuePath = ValuePath.Append(Field.Attribute.Id).ToArray();
-                    Markup.Append(UiValueEditors.Field(
-                        Field.Attribute.DisplayName ?? Field.Property.Name,
-                        BuildSettingsMapValue(Descriptor, FieldPath,
-                            Field.Property.PropertyType, Object[Field.Attribute.Id], Root,
-                            MapPath, Key, NestedValuePath,
-                            Id + "-" + Field.Attribute.Id, Fingerprint)));
+                    Markup.Append(BuildSettingsMapValue(Descriptor, FieldPath,
+                        Field.Property.PropertyType, Object[Field.Attribute.Id], Root,
+                        MapPath, Key, NestedValuePath,
+                        Id + "-" + Field.Attribute.Id, Fingerprint,
+                        Field.Attribute.DisplayName ?? Field.Property.Name));
                 }
                 return Markup.ToString();
             });
@@ -229,11 +228,11 @@ public sealed partial class EditorRuntime
             Fingerprint, Editable ? Operation : string.Empty, Key);
         if (!Editable)
         {
-            return UiValueEditors.Multiline("Value", new UiValueInput(Id,
+            return UiValueEditors.Multiline(Label, new UiValueInput(Id,
                 Value?.ToJsonString() ?? "null", string.Empty, true), 4,
                 "This settings Map value is read-only because its type is not editable");
         }
-        return MapEditing.ValueActionMarkup("Value", Id, Type, Value, Action,
+        return MapEditing.ValueActionMarkup(Label, Id, Type, Value, Action,
             Axis => SettingsMapAction(Descriptor, FieldPath, MapPath, ValuePath,
                 Fingerprint, "axis," + Axis.ToString(CultureInfo.InvariantCulture), Key),
             false);

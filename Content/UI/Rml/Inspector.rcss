@@ -57,7 +57,7 @@
 .component-vector .component-field input { width: 0px; min-width: 0px; flex-basis: 0px; padding: 5px 6px; }
 .component-color { flex-wrap: wrap; }
 #inspectorContent .component-color .component-field { flex-basis: 40%; }
-.component-nested { margin: 0px; padding: 8px 10px; border-left-width: 0px; }
+.component-nested { margin: 0px; padding: 0px; border-left-width: 0px; }
 .component-nested > label { display: block; color: #9eacc0; font-size: 11px; line-height: 16px; }
 .component-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0px; padding: 7px 9px; border-top: 1px #303844; }
 .component-actions button { position: relative; display: flex; align-items: center; height: 25px; padding: 4px 7px; font-size: 10px; color: #9aaabd; background-color: #2a323e; border: 1px #3c495b; }

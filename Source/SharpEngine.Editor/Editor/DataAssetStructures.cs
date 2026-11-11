@@ -46,7 +46,7 @@ internal sealed partial class DataAssetEditorInstance
             }
         }
         Markup = UiStructEditor.Render(Id, Label,
-            (Nullable.GetUnderlyingType(Type) ?? Type).Name, Children.ToString(),
+            Children.ToString(),
             "editor.data-asset-structure-fold:" + Uri.EscapeDataString(Id),
             Expanded, ReadOnly || IsReadOnly);
         return true;

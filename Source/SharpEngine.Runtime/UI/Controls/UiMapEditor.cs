@@ -43,7 +43,7 @@ public static class UiMapEditor
                 }, new Dictionary<string, IUiLayoutPart>
                 {
                     ["Key"] = new MarkupPart(DisableMarkup(Entry.KeyMarkup, ReadOnly)),
-                    ["Value"] = new MarkupPart(DisableMarkup(Entry.ValueMarkup, ReadOnly)),
+                    ["Value"] = new MarkupPart(UiPropertyRows.Indent(DisableMarkup(Entry.ValueMarkup, ReadOnly))),
                 }));
             }
         }
@@ -65,7 +65,7 @@ public static class UiMapEditor
             ["EmptyText"] = IsNull ? "Null map" : "Empty map",
         }, new Dictionary<string, IUiLayoutPart>
         {
-            ["Entries"] = new MarkupPart(string.Concat(Rows)),
+            ["Entries"] = new MarkupPart(UiPropertyRows.Indent(string.Concat(Rows))),
         });
     }
 

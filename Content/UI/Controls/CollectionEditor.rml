@@ -1,8 +1,8 @@
 <template>
   <div id="${Id}" class="se-collection ${StateClass}">
     <div class="se-collection-header">
-      <button id="${Id}-toggle" class="se-collection-toggle" data-action="${ToggleAction}" data-value-view="true" aria-expanded="${ExpandedState}" title="Expand or collapse collection"><img src="${ToggleIcon}" /><span>${Label}</span><span id="${Id}-count" class="se-collection-count">${CountText}</span></button>
-      <button id="${Id}-add" class="se-collection-command" data-action="${AddAction}" ui-disabled="AddDisabled" title="Add item">+</button>
+      <button id="${Id}-toggle" class="se-collection-toggle se-property-name" data-action="${ToggleAction}" data-value-view="true" aria-expanded="${ExpandedState}" title="${Label}"><img src="${ToggleIcon}" /><span>${Label}</span></button>
+      <div class="se-value-editor se-property-commands"><span id="${Id}-count" class="se-collection-count">${CountText}</span><button id="${Id}-add" class="se-collection-command" data-action="${AddAction}" ui-disabled="AddDisabled" title="Add item">+</button></div>
     </div>
     <ui-if test="Expanded"><div id="${Id}-items" class="se-collection-items"><ui-if test="Empty"><span class="se-value-hint">${EmptyText}</span></ui-if><ui-slot name="Items" /></div></ui-if>
   </div>

@@ -269,82 +269,76 @@ public sealed partial class EditorRuntime
         return markup.ToString();
     }
 
-    private void AppendSettingsFields(StringBuilder markup,
-        DevelopmentSettingsDescriptor descriptor, object owner,
-        IReadOnlyList<DevelopmentSettingField> fields, string parentPath, int depth)
+    private void AppendSettingsFields(StringBuilder Markup,
+        DevelopmentSettingsDescriptor Descriptor, object Owner,
+        IReadOnlyList<DevelopmentSettingField> Fields, string ParentPath, int Depth)
     {
-        foreach (var field in fields)
+        foreach (var Field in Fields)
         {
-            var path = parentPath.Length == 0 ? field.Attribute.Id :
-                parentPath + "/" + field.Attribute.Id;
-            var value = field.Property.GetValue(owner);
-            var type = Nullable.GetUnderlyingType(field.Property.PropertyType) ??
-                field.Property.PropertyType;
-            var label = string.IsNullOrWhiteSpace(field.Attribute.DisplayName)
-                ? field.Property.Name : field.Attribute.DisplayName!;
-            var NumericValue = IsSettingsNumericType(type)
-                ? System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(type, value))
+            var Path = ParentPath.Length == 0 ? Field.Attribute.Id :
+                ParentPath + "/" + Field.Attribute.Id;
+            var Value = Field.Property.GetValue(Owner);
+            var Type = Nullable.GetUnderlyingType(Field.Property.PropertyType) ??
+                Field.Property.PropertyType;
+            var Label = string.IsNullOrWhiteSpace(Field.Attribute.DisplayName)
+                ? Field.Property.Name : Field.Attribute.DisplayName!;
+            var NumericValue = IsSettingsNumericType(Type)
+                ? System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(Type, Value))
                 : null;
             if (NumericValue is not null)
             {
-                markup.Append(BuildSettingsNumericValue(descriptor, path, Array.Empty<string>(),
-                    label, type, NumericValue, NumericValue, "setting-" + path));
+                Markup.Append(BuildSettingsNumericValue(Descriptor, Path, Array.Empty<string>(),
+                    Label, Type, NumericValue, NumericValue, "setting-" + Path));
                 continue;
             }
-            if (MapEditing.ValueType(type) is not null)
+            if (MapEditing.ValueType(Type) is not null)
             {
-                var Value = System.Text.Json.Nodes.JsonNode.Parse(
-                    _developmentSettings!.EditorValue(type, value));
-                markup.Append(BuildSettingsMap(descriptor, path, label, type,
-                    Value, Value, Array.Empty<string>()));
+                var SerializedValue = System.Text.Json.Nodes.JsonNode.Parse(
+                    _developmentSettings!.EditorValue(Type, Value));
+                Markup.Append(BuildSettingsMap(Descriptor, Path, Label, Type,
+                    SerializedValue, SerializedValue, Array.Empty<string>()));
                 continue;
             }
-            if (CollectionEditing.ElementType(type) is not null)
+            if (CollectionEditing.ElementType(Type) is not null)
             {
-                var Value = System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(type, value));
-                markup.Append(BuildSettingsCollection(descriptor, path, label, type, Value,
-                    Value, Array.Empty<string>()));
+                var SerializedValue = System.Text.Json.Nodes.JsonNode.Parse(_developmentSettings!.EditorValue(Type, Value));
+                Markup.Append(BuildSettingsCollection(Descriptor, Path, Label, Type, SerializedValue,
+                    SerializedValue, Array.Empty<string>()));
                 continue;
             }
-            if (IsSettingsObject(type) && value is not null)
+            if (IsSettingsObject(Type) && Value is not null)
             {
-                markup.Append(BuildSettingsStructure(descriptor, path,
-                    Array.Empty<string>(), label, type, () =>
+                Markup.Append(BuildSettingsStructure(Descriptor, Path,
+                    Array.Empty<string>(), Label, () =>
                     {
                         var Members = new StringBuilder();
-                        AppendSettingsFields(Members, descriptor, value,
-                            GetSettingFields(type), path, depth + 1);
+                        AppendSettingsFields(Members, Descriptor, Value,
+                            GetSettingFields(Type), Path, Depth + 1);
                         return Members.ToString();
                     }));
                 continue;
             }
-            markup.Append("<div class=\"settings-field\"><div class=\"settings-field-copy\">")
-                .Append("<label>").Append(EscapeSettings(label)).Append("</label>");
-            if (!string.IsNullOrWhiteSpace(field.Attribute.Description))
-                markup.Append("<span>").Append(EscapeSettings(field.Attribute.Description!))
-                    .Append("</span>");
-            markup.Append("</div><div class=\"settings-control\">");
-            var action = $"editor.settings-change:{ScopeToken(descriptor.Attribute.Scope)}:" +
-                $"{descriptor.Attribute.Id}:{path}:";
-            if (type == typeof(bool) && Nullable.GetUnderlyingType(field.Property.PropertyType) is null)
+            var Control = string.Empty;
+            var Action = $"editor.settings-change:{ScopeToken(Descriptor.Attribute.Scope)}:" +
+                $"{Descriptor.Attribute.Id}:{Path}:";
+            if (Type == typeof(bool) && Nullable.GetUnderlyingType(Field.Property.PropertyType) is null)
             {
-                var Enabled = value is true;
-                markup.Append(SharpEngine.UI.UiValueEditors.BooleanInput("setting-" + path, Enabled, action + (Enabled ? "false" : "true")));
+                var Enabled = Value is true;
+                Control = SharpEngine.UI.UiValueEditors.BooleanInput("setting-" + Path, Enabled, Action + (Enabled ? "false" : "true"));
             }
-            else if (type.IsEnum && Nullable.GetUnderlyingType(field.Property.PropertyType) is null)
+            else if (Type.IsEnum && Nullable.GetUnderlyingType(Field.Property.PropertyType) is null)
             {
-                var Names = Enum.GetNames(type);
-                var Current = value?.ToString() ?? Names[0];
-                markup.Append(SharpEngine.UI.UiValueEditors.ChoiceInput("setting-" + path, Current,
-                    Names.Select(Name => (Name, Name)), action));
+                var Names = Enum.GetNames(Type);
+                var Current = Value?.ToString() ?? Names[0];
+                Control = SharpEngine.UI.UiValueEditors.ChoiceInput("setting-" + Path, Current,
+                    Names.Select(Name => (Name, Name)), Action);
             }
             else
             {
-                markup.Append(SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("setting-" + path,
-                    _developmentSettings!.EditorValue(field.Property.PropertyType, value), action)));
-
+                Control = SharpEngine.UI.UiValueEditors.Input(new SharpEngine.UI.UiValueInput("setting-" + Path,
+                    _developmentSettings!.EditorValue(Field.Property.PropertyType, Value), Action));
             }
-            markup.Append("</div></div>");
+            Markup.Append(SharpEngine.UI.UiValueEditors.Field(Label, Control, Field.Attribute.Description));
         }
     }
 

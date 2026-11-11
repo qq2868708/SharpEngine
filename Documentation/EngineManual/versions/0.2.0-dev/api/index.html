@@ -162,7 +162,7 @@
       </article>
       <article class="api-entry">
         <h3><code>UiStructEditor.Render</code></h3>
-        <p><code>Render(Id, Label, TypeName, Content, ToggleAction, Expanded, ReadOnly)</code> 组合共享 StructEditor.rml 与调用方提供的成员布局，分组只负责呈现。折叠状态归属消费者，不进入文档事务。DataAsset 按现有 JSON 类型契约递归发现自定义值类型成员，Schema 发布 properties、readOnly 与约束；成员编辑递归校验 DataProperty 和资产引用，使用顶层容器指纹拒绝过期动作。Inspector 与 Settings 沿用各自描述符，资产版本和原生 ABI 不变。源码：<a href="../../../../../Source/SharpEngine.Runtime/UI/Controls/UiStructEditor.cs">UiStructEditor.cs</a>；使用范围见<a href="../../../../CommonEditorControls.md">通用控件契约</a>。</p>
+        <p><code>Render(Id, Label, Content, ToggleAction, Expanded, ReadOnly)</code> 组合共享 StructEditor.rml 与调用方提供的成员布局，分组只负责呈现；移除 TypeName 参数及标题类型名显示。折叠状态归属消费者，不进入文档事务。DataAsset 按现有 JSON 类型契约递归发现自定义值类型成员，Schema 发布 properties、readOnly 与约束；成员编辑递归校验 DataProperty 和资产引用，使用顶层容器指纹拒绝过期动作。Inspector 与 Settings 沿用各自描述符，资产版本和原生 ABI 不变。源码：<a href="../../../../../Source/SharpEngine.Runtime/UI/Controls/UiStructEditor.cs">UiStructEditor.cs</a>；使用范围见<a href="../../../../CommonEditorControls.md">通用控件契约</a>。</p>
       </article>
       <article class="api-entry">
         <h3><code>UiMapEditor.Render</code> / <code>UiMapEntry</code></h3>
@@ -237,6 +237,7 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>公共属性布局增加 <code>se-property-name</code> / <code>se-value-editor</code> 两列单元；ValueField.rml 将编辑内容与提示组合于右列，结构体、集合、Map 使用同一 36% 名称列并只对名称累计缩进。<code>UiStructEditor.Render</code> 移除 TypeName 参数和类型名显示；其他值控件、集合/Map 的公共方法签名、动作和资产 schemaVersion 不变。Settings 去除重复字段包装，复用同一布局；详见<a href="../../../../CommonEditorControls.md">控件契约</a>。</p>
       <p>Editor 新增 <code>--render-offscreen</code> / <code>-RenderOffscreen</code> 参数，复用现有 Offscreen 后端；与显式图形后端冲突时返回 <code>RENDER_BACKEND_CONFLICT</code>。原生 ABI 不变，<code>render.describe.backend</code> 返回实际 <code>offscreen</code>。</p>
       <p>新增公共 <code>UiStructEditor.Render</code>，由 Inspector、DataAsset 和 Settings 提供成员布局、折叠与事务适配。DataAsset 自定义结构体 Schema 同步暴露序列化成员与只读/约束信息，递归校验引用和范围；成员编辑保留原资产 schemaVersion，无新增存储格式或原生 ABI。</p>
       <p>新增 Runtime UI <code>UiCollectionEditor.Render</code> / <code>UiCollectionItem</code> 与 <code>UiMapEditor.Render</code> / <code>UiMapEntry</code>，通过共享 RML 和调用方动作组合内容，公共层不拥有数据或事务。Inspector、DataAsset、Settings 适配器校验当前内容指纹后执行各自语义事务；Map 上/下移只改变临时视图顺序，字典写出仍按 key 确定排序。DataAsset List schema 发布 array/items、Map 发布 object/<code>additionalProperties</code>，并递归校验集合/Map 中 AssetRef。DataAsset Vector2/3/4 与 Quaternion 采用数值数组并兼容读取旧对象值；不改变资产版本或原生 ABI。null 与空集合/Map 保持区分；详见<a href="../../../../CommonEditorControls.md">公共控件契约</a>。</p>

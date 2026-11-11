@@ -130,6 +130,11 @@ public static class UiValueEditors
 
     public static string Vector(string Label, IReadOnlyList<UiValueInput> Values, string Axes = "XYZW", string Class = "")
     {
+        return FieldCore(Label, VectorMarkup(Values, Axes, Class), Disabled: Values.All(Value => Value.ReadOnly));
+    }
+
+    private static string VectorMarkup(IReadOnlyList<UiValueInput> Values, string Axes, string Class)
+    {
         if (Values.Count < 2 || Values.Count > 4 || Axes.Length < Values.Count)
         {
             throw new ArgumentException("UI_VECTOR_DIMENSION: two to four inputs and matching axis labels are required");
@@ -156,7 +161,7 @@ public static class UiValueEditors
         {
             ["Axes"] = new MarkupPart(string.Concat(Parts)),
         });
-        return FieldCore(Label, Vector, Disabled: Values.All(Value => Value.ReadOnly));
+        return Vector;
     }
 
     public static string Rotator(string Label, IReadOnlyList<UiValueInput> Values) { return Vector(Label, Values, "XYZ", "se-rotator"); }
@@ -168,8 +173,9 @@ public static class UiValueEditors
         {
             throw new ArgumentException("UI_COLOR_DIMENSION: four RGBA inputs are required");
         }
-        return Vector(Label, Values, "RGBA", "se-color") + ColorPicker(
-            PickerId ?? Values[0].Id + "-picker", Values, CommitAction);
+        return FieldCore(Label, VectorMarkup(Values, "RGBA", "se-color") + ColorPicker(
+            PickerId ?? Values[0].Id + "-picker", Values, CommitAction),
+            Disabled: Values.All(Value => Value.ReadOnly));
     }
 
     public static string ColorPicker(string Id, IReadOnlyList<UiValueInput> Values, string CommitAction)

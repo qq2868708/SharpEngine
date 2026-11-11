@@ -19,7 +19,7 @@ public sealed partial class EditorRuntime
     }
 
     private string BuildSettingsStructure(DevelopmentSettingsDescriptor Descriptor,
-        string FieldPath, string[] Path, string Label, Type Type, Func<string> BuildMembers)
+        string FieldPath, string[] Path, string Label, Func<string> BuildMembers)
     {
         var Key = Descriptor.Attribute.Scope + ":" + Descriptor.Attribute.Id + ":" +
             FieldPath + ":" + JsonSerializer.Serialize(Path);
@@ -31,7 +31,6 @@ public sealed partial class EditorRuntime
             ["key"] = Key,
         };
         return UiStructEditor.Render(Id, Label,
-            (Nullable.GetUnderlyingType(Type) ?? Type).Name,
             Expanded ? BuildMembers() : string.Empty,
             "editor.settings-structure-fold:" + Uri.EscapeDataString(Payload.ToJsonString()),
             Expanded);

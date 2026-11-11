@@ -156,6 +156,8 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>结构体分组标题只显示字段名称和展开箭头，移除右侧 CLR 类型名；标题保留双列边界与分界线。</p>
+      <p>属性面板统一为“名称 + 编辑”双列：Inspector、资产属性和 Settings 共用左侧名称、右侧输入布局，两列内容在行内垂直居中，以贯穿整行高度的 1px 竖线分隔，Vector/Rotator、Transform、色盘及只读字段保持类型结构。结构体、列表和 Map 仅缩进名称，嵌套编辑区持续对齐；长名称省略并提供完整标题。字段提交、Undo 和显式保存规则保持不变。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>Editor 支持 <code>--render-offscreen</code>，所有窗口的 RmlUi 通过已有 CPU 后端生成帧，保留真实输入、布局与 PNG 验证；不能与显式图形后端参数混用。验证通过 <code>render.describe</code> 核对实际后端，详见<a href="../../../../RenderBackends.md">渲染后端</a>。</p>
       <p>结构体使用共享可折叠分组，Inspector、DataAsset 与 Settings 复用相同外观；DataAsset 的嵌套结构体、列表元素和 Map 值可递归展开编辑，Vector、Color 和集合继续复用基础控件。成员修改保留校验、Undo/Redo 与显式保存；折叠不修改数据或撤销记录，只读成员保留 disabled 布局。字段范围沿用各入口已有序列化或标注规则，详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>数组/List 与字典 Map 现使用共享集合控件：Map 的键和值、Add/Remove/Rename 与每行上/下移动统一呈现；Settings 和 DataAsset 使用同一 Map 布局。运行时字典仍无序，初始显示按 key 排序；手动上/下移仅改变当前编辑器临时可视顺序，不修改数据、revision、dirty、Undo 或保存内容。Map 数据动作沿用所属文档事务，null 与空 Map 分开显示，旧 Map 指纹动作会被拒绝。只读状态禁用键和值输入以及数据修改，但仍允许折叠和调整临时显示顺序。</p>
