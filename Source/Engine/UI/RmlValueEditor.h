@@ -19,9 +19,19 @@ public:
         {
             Range = Range->GetParentNode();
         }
+        const bool PrimaryRelease = Event.GetId() == Rml::EventId::Mouseup &&
+            Event.GetParameter<int>("button", -1) == 0;
+        if (PrimaryRelease && Target && Target->GetOwnerDocument())
+        {
+            auto* Dragging = Target->GetOwnerDocument()->QuerySelector("[data-range-dragging]");
+            if (Dragging)
+            {
+                Range = Dragging;
+            }
+        }
         if (Range)
         {
-            return ProcessRange(Event, Range, Emit);
+            return ProcessRange(Event, Range, PointerDown, Emit);
         }
         if (!Target || !Target->HasAttribute("data-value-editor"))
         {
@@ -80,8 +90,20 @@ public:
     }
 
 private:
+    static void PreviewRange(Rml::Element* Range, const Rml::String& Value)
+    {
+        Range->SetAttribute("data-range-value", Value);
+        const auto InputId = Range->GetAttribute<Rml::String>("data-value-input", "");
+        auto* Document = Range->GetOwnerDocument();
+        auto* Input = Document && !InputId.empty() ? Document->GetElementById(InputId) : nullptr;
+        if (Input && Input->HasAttribute("data-value-editor") && !Input->HasAttribute("disabled"))
+        {
+            Input->SetAttribute("value", Value);
+        }
+    }
+
     static bool ProcessRange(Rml::Event& Event, Rml::Element* Target,
-        const std::function<void(const Rml::String&)>& Emit)
+        bool PointerDown, const std::function<void(const Rml::String&)>& Emit)
     {
         if (Target->HasAttribute("disabled"))
         {
@@ -89,34 +111,64 @@ private:
         }
         const auto Id = Event.GetId();
         const auto Value = Target->GetAttribute<Rml::String>("value", "");
-        if (Id == Rml::EventId::Focus || Id == Rml::EventId::Mousedown)
+        const bool PrimaryDown = Id == Rml::EventId::Mousedown &&
+            Event.GetParameter<int>("button", -1) == 0;
+        if ((Id == Rml::EventId::Focus || PrimaryDown || Id == Rml::EventId::Change) &&
+            !Target->HasAttribute("data-range-editing"))
         {
             Target->SetAttribute("data-range-start", Value);
-            if (Id == Rml::EventId::Mousedown)
-            {
-                Target->SetAttribute("data-range-dragging", true);
-            }
+            Target->SetAttribute("data-range-value", Value);
+            Target->SetAttribute("data-range-editing", true);
             Emit("ui.value-focus");
+        }
+        if (PrimaryDown)
+        {
+            Target->SetAttribute("data-range-dragging", true);
+        }
+        if (Id == Rml::EventId::Change)
+        {
+            // RmlUi dispatches Change before it updates the input's value attribute.
+            if (!Target->HasAttribute("data-range-cancelled"))
+            {
+                PreviewRange(Target, Event.GetParameter<Rml::String>("value", Value));
+            }
+            return true;
         }
         const bool Cancel = Id == Rml::EventId::Keydown &&
             Event.GetParameter<int>("key_identifier", 0) == Rml::Input::KI_ESCAPE;
-        const bool Commit = Id == Rml::EventId::Blur || Id == Rml::EventId::Keyup ||
+        const auto Key = Event.GetParameter<int>("key_identifier", 0);
+        const bool SubmitKey = Id == Rml::EventId::Keyup &&
+            (Key == Rml::Input::KI_LEFT || Key == Rml::Input::KI_RIGHT ||
+             Key == Rml::Input::KI_UP || Key == Rml::Input::KI_DOWN || Key == Rml::Input::KI_RETURN);
+        const bool Commit = Id == Rml::EventId::Blur || SubmitKey ||
             (Id == Rml::EventId::Mouseup && Event.GetParameter<int>("button", -1) == 0);
-        if (Cancel || Commit)
+        if ((Cancel || Commit) && Target->HasAttribute("data-range-editing"))
         {
             const auto Start = Target->GetAttribute<Rml::String>("data-range-start", Value);
+            const bool Cancelled = Cancel || Target->HasAttribute("data-range-cancelled");
+            const auto Draft = Cancelled ? Start : Target->GetAttribute<Rml::String>("data-range-value", Value);
+            if (Cancelled)
+            {
+                Target->SetAttribute("data-range-cancelled", true);
+                Target->SetAttribute("value", Start);
+            }
+            PreviewRange(Target, Draft);
+            if (!Cancelled && Draft != Start)
+            {
+                Emit(Target->GetAttribute<Rml::String>("data-value-commit", "") + Draft);
+            }
             if (Cancel)
             {
-                Target->SetAttribute("value", Start);
                 Event.StopPropagation();
             }
-            else if (Value != Start)
+            // Keep a cancelled pointer gesture suppressed until its release.
+            if (!Cancel || !Target->HasAttribute("data-range-dragging"))
             {
-                Emit(Target->GetAttribute<Rml::String>("data-value-commit", "") + Value);
-                Target->SetAttribute("data-range-start", Value);
+                Target->RemoveAttribute("data-range-dragging");
+                Target->RemoveAttribute("data-range-editing");
+                Target->RemoveAttribute("data-range-cancelled");
             }
-            Target->RemoveAttribute("data-range-dragging");
-            Emit("ui.value-end");
+            Emit(PointerDown && Id != Rml::EventId::Mouseup ? "ui.value-end-pointer" : "ui.value-end");
         }
         return Id == Rml::EventId::Change || Cancel || Commit;
     }

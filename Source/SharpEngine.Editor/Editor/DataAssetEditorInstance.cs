@@ -358,7 +358,13 @@ internal sealed partial class DataAssetEditorInstance : IAssetEditorInstance
         }
         var Root = Document.Snapshot;
         var Markup = new StringBuilder("<div id=\"dataAsset-properties\" class=\"asset-inspector data-asset-properties\">");
-        CollectionFingerprints.Clear();
+        if (PropertiesRevision != Document.Revision || !ReferenceEquals(CachedDescriptor, CurrentDescriptor))
+        {
+            CollectionFingerprints.Clear();
+            StructureFingerprints.Clear();
+            StructureMarkup.Clear();
+            CollectionMarkup.Clear();
+        }
         foreach (var Property in Descriptor.Properties)
         {
             var Value = Root[Property.JsonName];

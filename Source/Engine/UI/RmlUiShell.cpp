@@ -2895,6 +2895,7 @@ bool RmlUiShell::Initialize(HWND window,
     main.Document->AddEventListener(Rml::EventId::Focus, &main, true);
     main.Document->AddEventListener(Rml::EventId::Blur, &main, true);
     main.Document->AddEventListener(Rml::EventId::Keydown, &main, true);
+    main.Document->AddEventListener(Rml::EventId::Keyup, &main, true);
     main.Document->AddEventListener(Rml::EventId::Mouseup, &main);
     main.Document->AddEventListener(Rml::EventId::Mousescroll, &main, true);
     main.Document->AddEventListener(Rml::EventId::Mousedown, &main, true);
@@ -3085,6 +3086,7 @@ HWND RmlUiShell::CreateEditorHostWindow(std::string_view rootId,
     host->Document->AddEventListener(Rml::EventId::Focus, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Blur, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Keydown, host.get(), true);
+    host->Document->AddEventListener(Rml::EventId::Keyup, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Mouseup, host.get());
     host->Document->AddEventListener(Rml::EventId::Mousescroll, host.get(), true);
     host->Document->AddEventListener(Rml::EventId::Mousedown, host.get(), true);

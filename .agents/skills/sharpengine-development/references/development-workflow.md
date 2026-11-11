@@ -98,6 +98,14 @@ Cache derived presentation by committed document/interaction revisions. Unchange
 reads must avoid full serialization and content-dependent dirty checks each frame.
 Validate cache invalidation through edit, Undo/Redo, Save and external conflicts
 with `Tools/EditorValidation --asset-performance-only`.
+For shared property rendering or recursive struct/list changes, also run
+`dotnet run --project Tools/EditorValidation/SharpEngine.EditorValidation.csproj -c Development -- . --property-performance-only`.
+It exercises 128 expanded structs with 768 inputs, revision invalidation,
+stale-action rejection, Undo/Redo and Save. Warmed fold rebuilds require median
+<=18 ms and P95 <=25 ms, under 16 MiB per rebuild; first-build allocations stay
+under 180 MiB and 10,000 unchanged reads allocate zero bytes. These are managed
+presentation budgets, separate from native drawing, initial load latency and
+RPC round trips. Avoid concurrent CPU-heavy builds or tests during timing runs.
 The StaticMesh native validation measures warmed frame timing separately from
 functional RPC/capture work, with average <=18 ms and P95 <=25 ms for its workload.
 `--functional-only` explicitly excludes performance and cannot prove this gate.

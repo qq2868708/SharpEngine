@@ -30,6 +30,8 @@ Content Manager 的文件夹/资源浏览是目录列表，不把它伪装成递
 
 Color 的色块按钮展开饱和度/明度面板、Hue 色相条和 Opacity 滑条。拖动只更新可观察 DOM 中的临时预览，Apply 将整个 RGBA 数组交给调用方一次提交；Cancel、Esc 或再次点击展开按钮丢弃草稿。主场景 Inspector、DataAsset 与 Game 使用相同的原生 `RmlColorPicker`，UI 基础层不持有领域事务。`Color` 的 `CommitAction` 必须提供整色提交前缀；`PickerId` 可指定稳定身份，默认取第一个分量 ID 加 `-picker`。只读分量或未提供整色动作时禁用色盘按钮。色盘以 0–1 范围选色，数值输入仍保留所属领域允许的范围，打开或取消色盘不会截断已提交数值。
 
+Opacity 从滑条 Change 事件携带的当前值更新预览，首次调节与 Apply 不会落后一次；仍由 Apply 整色提交一次，Cancel 不修改数据。
+
 类型呈现是 UI 契约，不修改源资产的 JSON 字段、坐标系或四元数存储，不把所有 Quaternion 自动解释成 Rotator。主场景 Transform 和 Socket 旋转使用各自既有的领域转换；修改一个分量保留其他分量。
 
 Choice 与 Reference 共用单一 28px 下拉外框，原生值区和箭头在内部对齐，不重复绘制文本框边框。展开列表的宽度包含自身留白和边框；只读态保留同样尺寸并禁用选择。
@@ -60,9 +62,13 @@ null Map 显示为 `null`，空 Map 显示为 `0`；Add 将 null 初始化为 Ma
 
 新增值沿用所属领域的默认值规则；null 集合通过 Add 创建并加入第一项，Undo 可恢复 null，与空数组区分。移除或上下移动只影响目标元素，每次操作是所属文档的一次事务，保存仍须显式执行。元素输入继续采用草稿、Enter／失焦提交、Esc 取消。集合动作携带渲染时的集合指纹，集合发生变化后拒绝旧索引事件，避免旧输入修改排序后的另一个元素；没有在资产中新增元素 ID 或改变存储格式。DataAsset 的集合引用逐项校验存在性与类型，`List<T>` schema 与数组一样发布 items。
 
-DataAsset 按文档 revision 和类型描述符缓存 Properties 布局；折叠单独失效缓存，未修改的重复读取不克隆文档或重建所有元素。共享基础布局不持有消费者状态，两个集合的折叠、输入和权限互不影响。
+DataAsset 按文档 revision 和类型描述符缓存 Properties 布局；结构体折叠只失效目标及祖先，未变化的兄弟结构体和集合行复用已有布局。嵌套集合折叠、Map 折叠和可视排序也会刷新包含它们的结构体；真实编辑、Undo/Redo 或类型描述符替换清空派生缓存。容器指纹在同一版本内复用，执行修改时仍重新核对当前数据，拒绝过期动作。未修改的重复读取不克隆文档或重建元素。缓存归属各编辑器实例，两个集合的折叠、输入和权限互不影响；共享布局定义保持只读。
+
+模板输出和名称缩进使用流式 XML 处理，集合可保留已验证的行片段，减少嵌套布局反复解析与复制。固定结构仍以 RML 为准，不改变公共控件签名、字段动作、序列化、权限、Undo 或显式保存规则。
 
 ## 提交、撤销与焦点
+
+Range 的滑块和数值输入框共享本次编辑草稿：拖动或方向键调节时两者同步显示，尚未提交的预览不修改所属文档。松开鼠标（包括移到滑条外再松开）、方向键抬起或失焦时提交最终值一次；Esc 同时恢复滑块和输入框，不提交取消的拖动。只读 Range 的两个控件都保持禁用。原生适配器通过 `data-value-input` 查找同一文档中的数值输入，读取 Change 事件的新值，避免滑块先变、数值滞后；验证和 Undo/Save 仍由调用方持有。
 
 - 输入框中的中间文本仅是原生临时草稿；输入负号、小数点不会发作者变更。
 - 单行输入按 Enter 或失焦时交给原有领域命令校验后提交一次；多行文本保留 Enter 换行，Ctrl+Enter 或失焦提交一次。无效值不改变文档；结束编辑后回显最后提交值，领域诊断仍可见。
@@ -76,6 +82,8 @@ DataAsset 按文档 revision 和类型描述符缓存 Properties 布局；折叠
 ## 验证入口
 
 `Tools/Viewport3DValidation` 只引用 Runtime，覆盖独立树/输入组合、转义、实例隔离与非法父引用。`Tools/EditorValidation` 验证适配后的领域语义与缓存，并检查 Range/Color/Reference 的共享标记。`Tools/McpUiValidation` 的 `--static-mesh-sockets-only`、`--skeleton-gizmo-only`、`--inspector-only` 和 `--ui-editor-only` 验证真实输入、焦点、草稿/提交/撤销及匹配 PNG；`--structs-only --render-offscreen` 验证结构体原生布局、实际输入、折叠、Undo、保存及 Settings，核对实际后端并保留 `Saved/Validation/Structures` 同帧证据。完整的 tools/resources/templates 目录仍保留于 `Saved/Validation/McpUiCatalogs`。界面和性能检查是不同证据，不能用语义测试代替原生可见/可点击验收。
+
+`dotnet run --project Tools/EditorValidation/SharpEngine.EditorValidation.csproj -c Development -- . --property-performance-only` 单独验证 128 项、768 个输入框的结构体列表，输出初次生成、预热后展开耗时与分配；预热展开中位数预算为 18ms，P95 为 25ms，单次分配小于 16MiB，初次分配小于 180MiB。未变化布局读取 10,000 次要求复用同一字符串且零分配，同时核对编辑、过期输入拒绝、Undo/Redo 和保存后的缓存刷新。这是托管布局生成预算，不包含原生布局、绘制或 RPC 往返，也不表示初次打开能在一帧内完成；原生帧率仍通过既有性能入口单独验收。
 
 Game 原生宿主同样使用 `RmlValueEditor` 与 `RmlColorPicker` 并将调用方提供的 commit action 交给 `IUiActionHandler`；基础控件不引用 Editor 或 World。`--game-ui-only --render-offscreen` 包含实际 Game 数值草稿、Enter 提交、色盘展开/选色/Apply、Cancel、Esc 与禁用状态验证，并保留同帧 JSON/PNG。
 

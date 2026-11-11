@@ -237,6 +237,9 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p><code>UiValueEditors.RangeInput</code> 生成 <code>data-value-input</code> 指向数值输入 ID；Editor/Game 共用原生 Range 草稿同步和手势结束逻辑。Change 读取事件当前值，鼠标释放按原拖动目标提交，公共方法签名、动作载荷、资产 Schema 与原生 ABI 不变。</p>
+      <p><code>RmlColorPicker</code> 的 Opacity 适配器优先读取 Change 事件的 <code>value</code>，避免依赖事件之后才更新的控件属性。公共控件 API、整色提交动作、Schema 和原生 ABI 不变。</p>
+      <p>布局生成改用流式 XML 输出及实例内派生缓存，减少结构体列表重复计算容器指纹、解析和复制。公共控件 API、动作载荷、资产 schemaVersion 与原生 ABI 不变；执行写入时仍核对当前容器。新增 EditorValidation 的 <code>--property-performance-only</code> 验证入口，预算和覆盖边界见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>公共属性布局增加 <code>se-property-name</code> / <code>se-value-editor</code> 两列单元；ValueField.rml 将编辑内容与提示组合于右列，结构体、集合、Map 使用同一 36% 名称列并只对名称累计缩进。<code>UiStructEditor.Render</code> 移除 TypeName 参数和类型名显示；其他值控件、集合/Map 的公共方法签名、动作和资产 schemaVersion 不变。Settings 去除重复字段包装，复用同一布局；详见<a href="../../../../CommonEditorControls.md">控件契约</a>。</p>
       <p>Editor 新增 <code>--render-offscreen</code> / <code>-RenderOffscreen</code> 参数，复用现有 Offscreen 后端；与显式图形后端冲突时返回 <code>RENDER_BACKEND_CONFLICT</code>。原生 ABI 不变，<code>render.describe.backend</code> 返回实际 <code>offscreen</code>。</p>
       <p>新增公共 <code>UiStructEditor.Render</code>，由 Inspector、DataAsset 和 Settings 提供成员布局、折叠与事务适配。DataAsset 自定义结构体 Schema 同步暴露序列化成员与只读/约束信息，递归校验引用和范围；成员编辑保留原资产 schemaVersion，无新增存储格式或原生 ABI。</p>

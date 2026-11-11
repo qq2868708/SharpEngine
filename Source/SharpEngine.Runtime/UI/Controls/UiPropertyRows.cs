@@ -1,5 +1,6 @@
 using System.Globalization;
-using System.Xml.Linq;
+using System.Text;
+using System.Xml;
 
 namespace SharpEngine.UI;
 
@@ -12,18 +13,62 @@ internal static class UiPropertyRows
         {
             return Markup;
         }
-        var Root = XElement.Parse("<div>" + Markup + "</div>");
-        foreach (var Element in Root.Descendants())
+        var Output = new StringBuilder(Markup.Length);
+        using var Reader = XmlReader.Create(new StringReader(Markup), new XmlReaderSettings
         {
-            var IsName = Element.Attribute("class")?.Value.Split(' ').Contains("se-property-name") == true;
-            if (!IsName)
+            ConformanceLevel = ConformanceLevel.Fragment,
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreWhitespace = true,
+        });
+        using var Writer = XmlWriter.Create(Output, new XmlWriterSettings
+        {
+            ConformanceLevel = ConformanceLevel.Fragment,
+            OmitXmlDeclaration = true,
+            NewLineHandling = NewLineHandling.Entitize,
+        });
+        Reader.Read();
+        while (!Reader.EOF)
+        {
+            if (Reader.NodeType == XmlNodeType.Element)
             {
+                var IsName = Reader.GetAttribute("class")?.Split(' ').Contains("se-property-name") == true;
+                var Empty = Reader.IsEmptyElement;
+                Writer.WriteStartElement(Reader.Prefix, Reader.LocalName, Reader.NamespaceURI);
+                if (IsName)
+                {
+                    var Depth = int.Parse(Reader.GetAttribute("data-property-depth") ?? "0", CultureInfo.InvariantCulture) + 1;
+                    while (Reader.MoveToNextAttribute())
+                    {
+                        if (Reader.Name is not "data-property-depth" and not "style")
+                        {
+                            Writer.WriteAttributeString(Reader.Prefix, Reader.LocalName, Reader.NamespaceURI, Reader.Value);
+                        }
+                    }
+                    Reader.MoveToElement();
+                    Writer.WriteAttributeString("data-property-depth", Depth.ToString(CultureInfo.InvariantCulture));
+                    Writer.WriteAttributeString("style", "padding-left:" + (8 + Depth * 12).ToString(CultureInfo.InvariantCulture) + "px;");
+                }
+                else
+                {
+                    Writer.WriteAttributes(Reader, false);
+                }
+                if (Empty)
+                {
+                    Writer.WriteEndElement();
+                }
+                Reader.Read();
                 continue;
             }
-            var Depth = int.Parse(Element.Attribute("data-property-depth")?.Value ?? "0", CultureInfo.InvariantCulture) + 1;
-            Element.SetAttributeValue("data-property-depth", Depth);
-            Element.SetAttributeValue("style", "padding-left:" + (8 + Depth * 12).ToString(CultureInfo.InvariantCulture) + "px;");
+            if (Reader.NodeType == XmlNodeType.EndElement)
+            {
+                Writer.WriteFullEndElement();
+                Reader.Read();
+                continue;
+            }
+            Writer.WriteNode(Reader, false);
         }
-        return string.Concat(Root.Nodes().Select(Node => Node.ToString(SaveOptions.DisableFormatting)));
+        Writer.Flush();
+        return Output.ToString();
     }
 }

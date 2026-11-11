@@ -136,6 +136,13 @@ try
     BasicAssetFixture.Prepare(temporary.FullName);
     var runtime = new EditorRuntime(0, 1440, 900, 0);
     runtime.Initialize();
+    if (args.Contains("--property-performance-only", StringComparer.Ordinal))
+    {
+        StructPresentationPerformanceValidation.Run(runtime, temporary.FullName, Require);
+        runtime.Shutdown();
+        Console.WriteLine($"PASS: {assertions} focused property presentation performance assertions");
+        return;
+    }
     SharpEngine.EditorValidation.UiScreenValidation.Run(temporary.FullName,
         runtime.Assets!, runtime.UiRuntime, Require);
     DataAssetModuleReloadValidation.Run(runtime, Require);
@@ -647,6 +654,7 @@ try
     CollectionEditorsValidation.Run(runtime, temporary.FullName, Require);
     MapEditorsValidation.Run(runtime, temporary.FullName, Require);
     StructEditorsValidation.Run(runtime, temporary.FullName, Require);
+    StructPresentationPerformanceValidation.Run(runtime, temporary.FullName, Require);
     SkeletonEditorValidation.Run(runtime, temporary.FullName, Require);
     StaticMeshEditorValidation.Run(runtime, temporary.FullName, Require);
     SocketGizmoVisibilityValidation.Run(runtime, temporary.FullName, Require);

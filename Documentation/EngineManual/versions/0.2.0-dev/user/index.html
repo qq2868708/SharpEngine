@@ -156,6 +156,9 @@
     </section>
     <section class="section-card" id="updates">
       <h2>本版更新</h2>
+      <p>修复 Range 滑块移动而数值未同步的问题：拖动和方向键调节时数值框同步预览，滑条外松开也提交最终值一次，Esc 同时恢复两者；只读、Undo 与保存规则不变。</p>
+      <p>修复色盘 Opacity 首次调节读取旧值的问题：预览和 Apply 使用本次滑条事件的新透明度；取消、只读与一次整色提交规则保持不变。</p>
+      <p>优化 DataAsset 大型结构体列表的展开响应：复用未变化的兄弟项和集合行，嵌套折叠与 Map 可视排序及时刷新祖先。编辑、Undo/Redo 和类型重载继续刷新显示，过期输入仍拒绝；只读、保存和双列布局规则不变。性能预算与复测入口见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>结构体分组标题只显示字段名称和展开箭头，移除右侧 CLR 类型名；标题保留双列边界与分界线。</p>
       <p>属性面板统一为“名称 + 编辑”双列：Inspector、资产属性和 Settings 共用左侧名称、右侧输入布局，两列内容在行内垂直居中，以贯穿整行高度的 1px 竖线分隔，Vector/Rotator、Transform、色盘及只读字段保持类型结构。结构体、列表和 Map 仅缩进名称，嵌套编辑区持续对齐；长名称省略并提供完整标题。字段提交、Undo 和显式保存规则保持不变。详见<a href="../../../../CommonEditorControls.md">通用控件</a>。</p>
       <p>Editor 支持 <code>--render-offscreen</code>，所有窗口的 RmlUi 通过已有 CPU 后端生成帧，保留真实输入、布局与 PNG 验证；不能与显式图形后端参数混用。验证通过 <code>render.describe</code> 核对实际后端，详见<a href="../../../../RenderBackends.md">渲染后端</a>。</p>

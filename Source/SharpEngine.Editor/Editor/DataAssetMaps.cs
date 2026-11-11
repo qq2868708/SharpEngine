@@ -74,13 +74,13 @@ internal sealed partial class DataAssetEditorInstance
             {
                 View.Order = MapEditing.ReconcileOrder(CurrentMapNode as JsonObject, View.Order);
                 View.Expanded = !View.Expanded;
-                PropertiesMarkup = null;
+                InvalidateStructureMarkup(Path);
                 return true;
             }
             if (Operation is "view-up" or "view-down")
             {
                 MoveMapViewEntry(View, Key, Operation);
-                PropertiesMarkup = null;
+                InvalidateStructureMarkup(Path);
                 return true;
             }
 

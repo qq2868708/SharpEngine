@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace SharpEngine.UI;
@@ -10,6 +11,13 @@ public sealed record UiCollectionItem(string Id, string ValueMarkup, string Remo
 
 public static class UiCollectionEditor
 {
+    internal sealed class PresentationCache
+    {
+        internal readonly Dictionary<string, CachedItem> Items = new(StringComparer.Ordinal);
+    }
+
+    internal sealed record CachedItem(UiCollectionItem Item, int Index, int Count, bool ReadOnly, XElement Markup);
+
     private static readonly UiLayoutTemplate Layout = UiLayoutTemplate.LoadEmbedded(
         typeof(UiCollectionEditor).Assembly, "SharpEngine.UI.CollectionEditor.rml");
     private static readonly UiLayoutTemplate ItemLayout = UiLayoutTemplate.LoadEmbedded(
@@ -19,21 +27,36 @@ public static class UiCollectionEditor
         string ToggleAction, string AddAction, bool Expanded = true, bool ReadOnly = false,
         bool IsNull = false)
     {
+        return Render(Id, Label, Items, ToggleAction, AddAction, Expanded, ReadOnly, IsNull, null);
+    }
+
+    internal static string Render(string Id, string Label, IReadOnlyList<UiCollectionItem> Items,
+        string ToggleAction, string AddAction, bool Expanded, bool ReadOnly,
+        bool IsNull, PresentationCache? Cache)
+    {
         if (string.IsNullOrWhiteSpace(Id) || Items.Any(Item => string.IsNullOrWhiteSpace(Item.Id)) ||
             Items.Select(Item => Item.Id).Distinct(StringComparer.Ordinal).Count() != Items.Count)
         {
             throw new ArgumentException("UI_COLLECTION_ID: unique stable control IDs are required");
         }
-        var Rows = new List<string>();
+        var Rows = new List<XElement>();
         if (Expanded)
         {
             for (var Index = 0; Index < Items.Count; Index++)
             {
                 var Item = Items[Index];
+                CachedItem? Cached = null;
+                var Found = Cache?.Items.TryGetValue(Item.Id, out Cached) == true;
+                if (Found && Cached is not null && Cached.Item == Item && Cached.Index == Index &&
+                    Cached.Count == Items.Count && Cached.ReadOnly == ReadOnly)
+                {
+                    Rows.Add(Cached.Markup);
+                    continue;
+                }
                 var UpDisabled = ReadOnly || Index == 0 || Item.MoveUpAction.Length == 0;
                 var DownDisabled = ReadOnly || Index + 1 == Items.Count || Item.MoveDownAction.Length == 0;
                 var RemoveDisabled = ReadOnly || Item.RemoveAction.Length == 0;
-                Rows.Add(ItemLayout.Render(default, new JsonObject
+                var Row = XElement.Parse(UiPropertyRows.Indent(ItemLayout.Render(default, new JsonObject
                 {
                     ["Id"] = Item.Id,
                     ["Index"] = Index,
@@ -46,7 +69,12 @@ public static class UiCollectionEditor
                 }, new Dictionary<string, IUiLayoutPart>
                 {
                     ["Value"] = new MarkupPart(UiPropertyRows.Indent(ReadOnly ? DisableValues(Item.ValueMarkup) : Item.ValueMarkup)),
-                }));
+                })));
+                Rows.Add(Row);
+                if (Cache is not null)
+                {
+                    Cache.Items[Item.Id] = new CachedItem(Item, Index, Items.Count, ReadOnly, Row);
+                }
             }
         }
         var AddDisabled = ReadOnly || AddAction.Length == 0;
@@ -67,7 +95,7 @@ public static class UiCollectionEditor
             ["EmptyText"] = IsNull ? "Null collection" : "Empty collection",
         }, new Dictionary<string, IUiLayoutPart>
         {
-            ["Items"] = new MarkupPart(UiPropertyRows.Indent(string.Concat(Rows))),
+            ["Items"] = new RowsPart(Rows),
         });
     }
 
@@ -106,5 +134,21 @@ public static class UiCollectionEditor
     private sealed record MarkupPart(string Markup) : IUiLayoutPart
     {
         public string BuildLayout(UiLayoutContext Context) { return Markup; }
+    }
+
+    private sealed record RowsPart(IReadOnlyList<XElement> Rows) : IUiLayoutFragment
+    {
+        public string BuildLayout(UiLayoutContext Context)
+        {
+            return string.Concat(Rows.Select(Row => Row.ToString(SaveOptions.DisableFormatting)));
+        }
+
+        public void WriteTo(XmlWriter Writer, UiLayoutContext Context)
+        {
+            foreach (var Row in Rows)
+            {
+                Row.WriteTo(Writer);
+            }
+        }
     }
 }

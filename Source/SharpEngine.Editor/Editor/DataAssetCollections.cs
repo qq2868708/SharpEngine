@@ -10,6 +10,7 @@ internal sealed partial class DataAssetEditorInstance
 {
     private readonly HashSet<string> CollapsedCollections = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> CollectionFingerprints = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, UiCollectionEditor.PresentationCache> CollectionMarkup = new(StringComparer.Ordinal);
 
     private static JsonArray PathJson(IEnumerable<string> Path)
     {
@@ -69,7 +70,9 @@ internal sealed partial class DataAssetEditorInstance
             {
                 CollapsedCollections.Remove(Key);
             }
-            PropertiesMarkup = null;
+            var Path = JsonNode.Parse(Uri.UnescapeDataString(Key))!.AsArray()
+                .Select(Node => Node!.GetValue<string>()).ToArray();
+            InvalidateStructureMarkup(Path);
             return true;
         }
         const string Prefix = "editor.data-asset-collection:";
@@ -174,8 +177,14 @@ internal sealed partial class DataAssetEditorInstance
                 CollectionBinding(Root, GuardPath, Path, "up," + Index),
                 CollectionBinding(Root, GuardPath, Path, "down," + Index)));
         }
+        var Found = CollectionMarkup.TryGetValue(Key, out var Cache);
+        if (!Found)
+        {
+            Cache = new UiCollectionEditor.PresentationCache();
+            CollectionMarkup.Add(Key, Cache);
+        }
         return UiCollectionEditor.Render(Id, Label, Rows, "editor.data-asset-collection-fold:" + Key,
-            CollectionBinding(Root, GuardPath, Path, "add"), Expanded, ReadOnly, Value is null);
+            CollectionBinding(Root, GuardPath, Path, "add"), Expanded, ReadOnly, Value is null, Cache);
     }
 
     private string BuildCollectionValue(Type Type, JsonNode? Value, string[] Path, JsonObject Root,

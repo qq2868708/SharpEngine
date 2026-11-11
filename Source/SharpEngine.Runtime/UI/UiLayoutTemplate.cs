@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -15,6 +16,12 @@ public readonly record struct UiLayoutContext(float Width, float Height, string 
 public interface IUiLayoutPart
 {
     string BuildLayout(UiLayoutContext Context);
+}
+
+// Internal controls may retain validated XML fragments between renders.
+internal interface IUiLayoutFragment : IUiLayoutPart
+{
+    void WriteTo(XmlWriter Writer, UiLayoutContext Context);
 }
 
 public interface IUiActionHandler
@@ -117,37 +124,42 @@ public sealed class UiLayoutTemplate
         {
             EffectiveValues[Pair.Key] = Pair.Value?.DeepClone();
         }
-        var Resolved = UiLayoutComposition.Expand(Definition, Context, Parts, ResolveAsset, Stack);
-        var Output = new XElement("fragment");
+        var Resolved = Definition.Descendants("ui-use").Any()
+            ? UiLayoutComposition.Expand(Definition, Context, Parts, ResolveAsset, Stack) : Definition;
+        var Output = new StringBuilder();
+        using var Writer = XmlWriter.Create(Output, new XmlWriterSettings
+        {
+            OmitXmlDeclaration = true,
+            ConformanceLevel = ConformanceLevel.Fragment,
+            NewLineHandling = NewLineHandling.Entitize,
+        });
         foreach (var Node in Resolved.Nodes())
         {
-            foreach (var Rendered in RenderNode(Node, Context, [EffectiveValues], Parts))
-            {
-                Output.Add(Rendered);
-            }
+            RenderNode(Writer, Node, Context, [EffectiveValues], Parts);
         }
-        return string.Concat(Output.Nodes().Select(Node => Node.ToString(SaveOptions.DisableFormatting)));
+        Writer.Flush();
+        return Output.ToString();
     }
 
-    private static IEnumerable<XNode> RenderNode(XNode Node, UiLayoutContext Context,
+    private static void RenderNode(XmlWriter Writer, XNode Node, UiLayoutContext Context,
         IReadOnlyList<JsonObject> Scopes, IReadOnlyDictionary<string, IUiLayoutPart>? Parts)
     {
         var Text = Node as XText;
         if (Text is not null)
         {
-            yield return new XText(Expand(Text.Value, Scopes));
-            yield break;
+            Writer.WriteString(Expand(Text.Value, Scopes));
+            return;
         }
         var Element = Node as XElement;
         if (Element is null)
         {
-            yield break;
+            return;
         }
         UiAuthoringMetadata.Validate(Element);
         if (Element.Annotation<UiLayoutComposition.ComposedNode>() is not null)
         {
-            yield return new XElement(Element);
-            yield break;
+            Element.WriteTo(Writer);
+            return;
         }
         if (Element.Name == "ui-if")
         {
@@ -159,16 +171,13 @@ public sealed class UiLayoutTemplate
             }
             if (!Condition.GetValue<bool>())
             {
-                yield break;
+                return;
             }
             foreach (var Child in Element.Nodes())
             {
-                foreach (var Rendered in RenderNode(Child, Context, Scopes, Parts))
-                {
-                    yield return Rendered;
-                }
+                RenderNode(Writer, Child, Context, Scopes, Parts);
             }
-            yield break;
+            return;
         }
         if (Element.Name == "ui-repeat")
         {
@@ -181,13 +190,10 @@ public sealed class UiLayoutTemplate
                 var Nested = Scopes.Append(Values).ToArray();
                 foreach (var Child in Element.Nodes())
                 {
-                    foreach (var Rendered in RenderNode(Child, Context, Nested, Parts))
-                    {
-                        yield return Rendered;
-                    }
+                    RenderNode(Writer, Child, Context, Nested, Parts);
                 }
             }
-            yield break;
+            return;
         }
         if (Element.Name == "ui-slot")
         {
@@ -206,23 +212,41 @@ public sealed class UiLayoutTemplate
             var Title = Element.Attribute("title") is null ? Context.Title : Expand(Element.Attribute("title")!.Value, Scopes);
             var Width = Dimension(Element, "width", Context.Width, Scopes);
             var Height = Dimension(Element, "height", Context.Height, Scopes);
-            var Fragment = Parse("<template>" + Part.BuildLayout(new(Width, Height, Title)) + "</template>");
-            foreach (var Child in Fragment.Definition.Nodes())
+            var Fragment = Part as IUiLayoutFragment;
+            if (Fragment is not null)
             {
-                yield return Clone(Child);
+                Fragment.WriteTo(Writer, new(Width, Height, Title));
+                return;
             }
-            yield break;
+            using var Reader = XmlReader.Create(new StringReader(Part.BuildLayout(new(Width, Height, Title))), new XmlReaderSettings
+            {
+                ConformanceLevel = ConformanceLevel.Fragment,
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                IgnoreWhitespace = true,
+            });
+            Reader.Read();
+            while (!Reader.EOF)
+            {
+                if (Reader.Depth == 0 && Reader.NodeType is XmlNodeType.Comment or XmlNodeType.ProcessingInstruction)
+                {
+                    Reader.Read();
+                    continue;
+                }
+                Writer.WriteNode(Reader, false);
+            }
+            return;
         }
         if (Element.Name.LocalName.StartsWith("ui-", StringComparison.Ordinal))
         {
             throw new InvalidDataException("UILAYOUT_DIRECTIVE_UNKNOWN: " + Element.Name);
         }
-        var Result = new XElement(Element.Name);
+        var Header = new XElement(Element.Name);
         foreach (var Attribute in Element.Attributes())
         {
             if (UiAuthoringMetadata.IsAttribute(Attribute.Name.LocalName))
             {
-                Result.SetAttributeValue(Attribute.Name, Attribute.Value);
+                Header.SetAttributeValue(Attribute.Name, Attribute.Value);
                 continue;
             }
             if (Attribute.Name == "ui-disabled")
@@ -234,7 +258,7 @@ public sealed class UiLayoutTemplate
                 }
                 if (Value.GetValue<bool>())
                 {
-                    Result.SetAttributeValue("disabled", "disabled");
+                    Header.SetAttributeValue("disabled", "disabled");
                 }
             }
             else
@@ -243,17 +267,19 @@ public sealed class UiLayoutTemplate
                 {
                     throw new InvalidDataException("UILAYOUT_DIRECTIVE_UNKNOWN: " + Attribute.Name);
                 }
-                Result.SetAttributeValue(Attribute.Name, Expand(Attribute.Value, Scopes));
+                Header.SetAttributeValue(Attribute.Name, Expand(Attribute.Value, Scopes));
             }
         }
+        // Let LINQ to XML preserve namespace declarations and last-write-wins attributes.
+        using var HeaderReader = Header.CreateReader();
+        HeaderReader.Read();
+        Writer.WriteStartElement(HeaderReader.Prefix, HeaderReader.LocalName, HeaderReader.NamespaceURI);
+        Writer.WriteAttributes(HeaderReader, false);
         foreach (var Child in Element.Nodes())
         {
-            foreach (var Rendered in RenderNode(Child, Context, Scopes, Parts))
-            {
-                Result.Add(Rendered);
-            }
+            RenderNode(Writer, Child, Context, Scopes, Parts);
         }
-        yield return Result;
+        Writer.WriteEndElement();
     }
 
     private static string Expand(string Value, IReadOnlyList<JsonObject> Scopes)
@@ -324,13 +350,4 @@ public sealed class UiLayoutTemplate
         }
     }
 
-    private static XNode Clone(XNode Node)
-    {
-        return Node switch
-        {
-            XElement Element => new XElement(Element),
-            XText Text => new XText(Text.Value),
-            _ => new XText(string.Empty),
-        };
-    }
 }

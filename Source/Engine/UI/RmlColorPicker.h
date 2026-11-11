@@ -187,7 +187,8 @@ public:
         }
         if (Control && Id == Rml::EventId::Change && Channel == "alpha")
         {
-            Picker->SetAttribute("data-color-a", std::clamp(Control->GetAttribute<float>("value", 1), 0.0f, 1.0f));
+            const float Alpha = Event.GetParameter<float>("value", Control->GetAttribute<float>("value", 1));
+            Picker->SetAttribute("data-color-a", std::clamp(Alpha, 0.0f, 1.0f));
             Update(Picker, true);
             return true;
         }

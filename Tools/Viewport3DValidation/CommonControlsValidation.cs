@@ -5,6 +5,12 @@ internal static class CommonControlsValidation
 {
     internal static void Run(Action<bool, string> Check)
     {
+        var Range = XElement.Parse(UiValueEditors.Range("Range",
+            new UiValueInput("range", "0.5", "set-range:", false, "number"), 0, 1, 0.01));
+        Check(Range.Descendants("input").Single(Element => Element.Attribute("id")?.Value == "range-range")
+                .Attribute("data-value-input")?.Value == "range" &&
+            Range.Descendants("input").Count() == 2,
+            "A shared Range explicitly identifies its sibling numeric input for native draft synchronization");
         var Members = UiValueEditors.Number("Power", new UiValueInput("struct-power", "5", "set-power:"));
         var Structure = XElement.Parse(UiStructEditor.Render("structure", "Config <A>",
             Members, "fold-structure"));

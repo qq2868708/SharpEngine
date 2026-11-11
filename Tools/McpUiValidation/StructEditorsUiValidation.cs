@@ -132,9 +132,9 @@ internal static class StructEditorsUiValidation
             return Matches.FirstOrDefault(Node => Node["visible"]!.GetValue<bool>() &&
                 Node["hitTarget"]!.GetValue<bool>()) ?? Matches.First();
         }
-        void Capture(string Name)
+        void Capture(string Name, bool MovePointer = true)
         {
-            for (var Attempt = 0; Attempt < 10; Attempt++)
+            for (var Attempt = 0; MovePointer && Attempt < 10; Attempt++)
             {
                 var Before = Observe();
                 var Moved = Invoke("ui.pointer", new JsonObject
@@ -280,6 +280,34 @@ internal static class StructEditorsUiValidation
             Key("down", 0x0D);
             Key("up", 0x0D);
         }
+        void RangePointer(string Event, int X, int Y)
+        {
+            for (var Attempt = 0; Attempt < 10; Attempt++)
+            {
+                var Ui = Observe();
+                var Result = Invoke("ui.pointer", new JsonObject
+                {
+                    ["hostId"] = HostId,
+                    ["event"] = Event,
+                    ["button"] = Event == "move" ? "none" : "left",
+                    ["x"] = X,
+                    ["y"] = Y,
+                    ["buttons"] = Event == "down" ? new JsonArray() : new JsonArray("left"),
+                    ["modifiers"] = new JsonArray(),
+                    ["pointerId"] = 0,
+                    ["expectedFrameId"] = Ui["frameId"]!.DeepClone(),
+                });
+                if (Result["accepted"]?.GetValue<bool>() == true)
+                {
+                    return;
+                }
+                if (Result["diagnostics"]?[0]?["code"]?.GetValue<string>() != "UI_FRAME_STALE")
+                {
+                    throw new InvalidOperationException(Result.ToJsonString());
+                }
+            }
+            throw new TimeoutException("Range pointer frame stayed stale");
+        }
         string GroupId(params string[] Path)
         {
             return "dataAsset-struct-" + Uri.EscapeDataString(
@@ -318,6 +346,59 @@ internal static class StructEditorsUiValidation
                 "Struct Vector axes have usable widths and do not overlap");
             PreviousRight = Left + Width;
         }
+        var RangeBounds = Element(Observe(), Configuration + "-power-range")["bounds"]!;
+        var RangeLeft = RangeBounds["x"]!.GetValue<double>();
+        var RangeWidth = RangeBounds["width"]!.GetValue<double>();
+        var RangeY = (int)(RangeBounds["y"]!.GetValue<double>() + RangeBounds["height"]!.GetValue<double>() / 2);
+        int RangeX(double Fraction) { return (int)(RangeLeft + 6 + (RangeWidth - 12) * Fraction); }
+        var RangeRevision = State()["documentRevision"]!.GetValue<ulong>();
+        RangePointer("down", RangeX(0.05), RangeY);
+        RangePointer("move", RangeX(0.8), RangeY);
+        RangePointer("move", RangeX(0.7), RangeY);
+        Capture("data-asset-range-preview", MovePointer: false);
+        var RangePreview = Observe();
+        var RangeDraft = double.Parse(Element(RangePreview, Configuration + "-power-range")["value"]!.GetValue<string>(),
+            System.Globalization.CultureInfo.InvariantCulture);
+        var NumberDraft = double.Parse(Element(RangePreview, Configuration + "-power")["value"]!.GetValue<string>(),
+            System.Globalization.CultureInfo.InvariantCulture);
+        Check(RangeDraft > 60 && RangeDraft == NumberDraft &&
+            State()["documentRevision"]!.GetValue<ulong>() == RangeRevision &&
+            State()["document"]!["configuration"]!["power"]!.GetValue<int>() == 5,
+            "The Range and numeric drafts move together without changing authoring state while held");
+        RangePointer("up", RangeX(0.7), RangeY + 40);
+        Check(State()["document"]!["configuration"]!["power"]!.GetValue<int>() == (int)RangeDraft &&
+            State()["documentRevision"]!.GetValue<ulong>() == RangeRevision + 1,
+            "Releasing outside an asset Range commits exactly one authoring transaction");
+        Capture("data-asset-range-committed");
+        Click("editor.asset-command:undo");
+        Check(State()["document"]!["configuration"]!["power"]!.GetValue<int>() == 5,
+            "One Undo restores the complete slider gesture");
+        Check(Element(Observe(), Configuration + "-power")["value"]!.GetValue<string>() == "5" &&
+            Element(Observe(), Configuration + "-power-range")["value"]!.GetValue<string>() == "5",
+            "Undo restores both the numeric input and slider");
+        var CancelRevision = State()["documentRevision"]!.GetValue<ulong>();
+        RangePointer("down", RangeX(0.05), RangeY);
+        RangePointer("move", RangeX(0.3), RangeY);
+        Key("down", 0x1B);
+        Key("up", 0x1B);
+        RangePointer("up", RangeX(0.3), RangeY);
+        Check(State()["documentRevision"]!.GetValue<ulong>() == CancelRevision &&
+            Element(Observe(), Configuration + "-power")["value"]!.GetValue<string>() == "5" &&
+            Element(Observe(), Configuration + "-power-range")["value"]!.GetValue<string>() == "5",
+            "Escape cancels a held asset slider without a revision and restores both controls");
+        Click(Configuration + "-power");
+        Key("down", 0x09);
+        Key("up", 0x09);
+        var KeyStart = State()["document"]!["configuration"]!["power"]!.GetValue<int>();
+        var KeyRevision = State()["documentRevision"]!.GetValue<ulong>();
+        Key("down", 0x27);
+        Check(State()["documentRevision"]!.GetValue<ulong>() == KeyRevision,
+            "Range arrow-key preview leaves the authoring revision unchanged");
+        Key("up", 0x27);
+        Check(State()["document"]!["configuration"]!["power"]!.GetValue<int>() == KeyStart + 1 &&
+            State()["documentRevision"]!.GetValue<ulong>() == KeyRevision + 1,
+            "The asset host receives arrow-key release and commits the final slider value once");
+        Click("editor.asset-command:undo");
         Type(Configuration + "-power", "12");
         Check(State()["document"]!["configuration"]!["power"]!.GetValue<int>() == 12,
             "Real focused input edits a DataAsset struct member");

@@ -164,10 +164,24 @@ internal static class InspectorUiValidation
         Click(PickerId + "-apply");
         var PickedColor = Entity("crate")["components"]!.AsArray().Single(Component =>
             Component!["typeId"]!.GetValue<string>() == "engine.mesh-renderer")!["state"]!["Color"]!.AsArray();
-        require(PickedColor[0]!.GetValue<float>() > 0 && PickedColor[0]!.GetValue<float>() < 0.5f &&
+        var ColorValid = PickedColor[0]!.GetValue<float>() > 0 && PickedColor[0]!.GetValue<float>() < 0.5f &&
             PickedColor[1]!.GetValue<float>() > PickedColor[0]!.GetValue<float>() &&
-            PickedColor[3]!.GetValue<float>() > 0.3f && PickedColor[3]!.GetValue<float>() < 0.7f,
-            "The saturation/value plane, hue strip and opacity slider commit a continuous RGBA color");
+            PickedColor[3]!.GetValue<float>() > 0.3f && PickedColor[3]!.GetValue<float>() < 0.7f;
+        if (!ColorValid)
+        {
+            var Snapshot = Read();
+            var Output = Path.Combine(root, "Saved", "Validation", "Inspector");
+            Directory.CreateDirectory(Output);
+            File.WriteAllText(Path.Combine(Output, "color-failed-ui.json"), Snapshot.ToJsonString());
+            var Frame = call(sequence++, "resources/read", new JsonObject
+            {
+                ["uri"] = $"sharpengine://ui/frames/{Snapshot["frameId"]}/main.png",
+            });
+            File.WriteAllBytes(Path.Combine(Output, "color-failed-ui.png"),
+                Convert.FromBase64String(Frame["result"]!["contents"]![0]!["blob"]!.GetValue<string>()));
+        }
+        require(ColorValid,
+            "The saturation/value plane, hue strip and opacity slider commit a continuous RGBA color: " + PickedColor.ToJsonString());
         Click("menu-root-edit");
         Click("editor.command:core.undo");
         require(JsonNode.DeepEquals(OriginalColor, Entity("crate")["components"]!.AsArray().Single(Component =>

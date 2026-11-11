@@ -132,6 +132,46 @@ internal static class StructEditorsValidation
             !Editor.IsDirty && !Editor.CanExecuteCommand("undo"),
             "Struct folding is view state and does not change document revision, savepoint or history");
         Editor.TryHandleAction(Toggle);
+        var ChildId = StructId("configuration", "child");
+        var ChildToggle = Markup().Descendants().Single(Element =>
+            Element.Attribute("id")?.Value == ChildId + "-toggle").Attribute("data-action")!.Value;
+        Editor.TryHandleAction(ChildToggle);
+        Check(!Editor.BuildPaneMarkup("details").Contains(ChildId + "-title", StringComparison.Ordinal),
+            "Folding a nested struct invalidates its cached ancestor presentation");
+        Editor.TryHandleAction(Toggle);
+        _ = Editor.BuildPaneMarkup("details");
+        Editor.TryHandleAction(Toggle);
+        Check(!Editor.BuildPaneMarkup("details").Contains(ChildId + "-title", StringComparison.Ordinal),
+            "Reopening a cached parent preserves its child's independent fold state");
+        Editor.TryHandleAction(ChildToggle);
+        var NestedSamplesId = "dataAsset-collection-" + Uri.EscapeDataString(
+            new JsonArray("configuration", "samples").ToJsonString());
+        var SamplesToggle = Markup().Descendants().Single(Element =>
+            Element.Attribute("id")?.Value == NestedSamplesId + "-toggle").Attribute("data-action")!.Value;
+        Editor.TryHandleAction(SamplesToggle);
+        Check(!Markup().Descendants().Any(Element => Element.Attribute("id")?.Value == NestedSamplesId + "-items"),
+            "Collection folding invalidates a containing struct without a document edit");
+        Editor.TryHandleAction(SamplesToggle);
+        var NestedMapId = "dataAsset-map-" + Uri.EscapeDataString(
+            MapEditing.ViewKey(Asset.Id, new[] { "configuration", "labels" }));
+        XElement NestedMap()
+        {
+            return Markup().Descendants().Single(Element => Element.Attribute("id")?.Value == NestedMapId);
+        }
+        var Move = NestedMap().Descendants("button").First(Element =>
+            Element.Attribute("id")?.Value.EndsWith("-down", StringComparison.Ordinal) == true)
+            .Attribute("data-action")!.Value;
+        Editor.TryHandleAction(Move);
+        Check(NestedMap().Descendants("input").Where(Element =>
+                Element.Attribute("id")?.Value.EndsWith("-key", StringComparison.Ordinal) == true)
+            .Select(Element => Element.Attribute("value")!.Value).SequenceEqual(new[] { "b", "a" }),
+            "Map view sorting inside a cached struct refreshes the presentation immediately");
+        var MapToggle = NestedMap().Descendants().Single(Element =>
+            Element.Attribute("id")?.Value == NestedMapId + "-toggle").Attribute("data-action")!.Value;
+        Editor.TryHandleAction(MapToggle);
+        Check(!NestedMap().Descendants("input").Any() && !Editor.IsDirty && !Editor.CanExecuteCommand("undo"),
+            "Nested Map folding and view sorting invalidate ancestors while preserving clean state and history");
+        Editor.TryHandleAction(MapToggle);
         Edit("power", "7", "configuration");
         Check(State()["configuration"]!["power"]!.GetValue<int>() == 7 &&
             State()["configuration"]!["child"]!["title"]!.GetValue<string>() == "Nested" &&
@@ -370,6 +410,12 @@ public struct StructConfiguration
         set;
     }
 
+    public Dictionary<string, StructChild> Labels
+    {
+        get;
+        set;
+    }
+
     public AssetRef<StaticMeshAsset> Mesh
     {
         get;
@@ -407,6 +453,17 @@ public struct StructConfiguration
             Samples = new List<int>
             {
                 2,
+            },
+            Labels = new Dictionary<string, StructChild>
+            {
+                ["a"] = new StructChild
+                {
+                    Title = "First",
+                },
+                ["b"] = new StructChild
+                {
+                    Title = "Second",
+                },
             },
             IncludedField = 9,
         };

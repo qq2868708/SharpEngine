@@ -11,6 +11,22 @@ namespace SharpEngine.Editor;
 internal sealed partial class DataAssetEditorInstance
 {
     private readonly HashSet<string> CollapsedStructures = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> StructureFingerprints = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> StructureMarkup = new(StringComparer.Ordinal);
+
+    private static string StructureId(IEnumerable<string> Path)
+    {
+        return "dataAsset-struct-" + Uri.EscapeDataString(PathJson(Path).ToJsonString());
+    }
+
+    private void InvalidateStructureMarkup(string[] Path)
+    {
+        for (var Length = 1; Length <= Path.Length; Length++)
+        {
+            StructureMarkup.Remove(StructureId(Path.Take(Length)));
+        }
+        PropertiesMarkup = null;
+    }
 
     private bool TryBuildDataStructure(string Label, Type Type, JsonNode? Value,
         string[] Path, JsonObject Root, out string Markup, bool ReadOnly = false)
@@ -22,7 +38,13 @@ internal sealed partial class DataAssetEditorInstance
         {
             return false;
         }
-        var Id = "dataAsset-struct-" + Uri.EscapeDataString(PathJson(Path).ToJsonString());
+        var Id = StructureId(Path);
+        var Cached = StructureMarkup.TryGetValue(Id, out var CachedMarkup);
+        if (Cached)
+        {
+            Markup = CachedMarkup!;
+            return true;
+        }
         var Expanded = !CollapsedStructures.Contains(Id);
         var Children = new StringBuilder();
         if (Expanded)
@@ -49,6 +71,7 @@ internal sealed partial class DataAssetEditorInstance
             Children.ToString(),
             "editor.data-asset-structure-fold:" + Uri.EscapeDataString(Id),
             Expanded, ReadOnly || IsReadOnly);
+        StructureMarkup[Id] = Markup;
         return true;
     }
 
@@ -93,10 +116,16 @@ internal sealed partial class DataAssetEditorInstance
 
     private string StructureBinding(JsonObject Root, string[] Path, string Operation)
     {
+        var Found = StructureFingerprints.TryGetValue(Path[0], out var Fingerprint);
+        if (!Found)
+        {
+            Fingerprint = MapEditing.Fingerprint(Root[Path[0]]);
+            StructureFingerprints.Add(Path[0], Fingerprint);
+        }
         return "editor.data-asset-structure:" + Uri.EscapeDataString(new JsonObject
         {
             ["path"] = PathJson(Path),
-            ["expected"] = MapEditing.Fingerprint(Root[Path[0]]),
+            ["expected"] = Fingerprint,
             ["operation"] = Operation,
         }.ToJsonString()) + ":";
     }
@@ -111,7 +140,9 @@ internal sealed partial class DataAssetEditorInstance
             {
                 CollapsedStructures.Remove(Id);
             }
-            PropertiesMarkup = null;
+            var Path = JsonNode.Parse(Uri.UnescapeDataString(Id["dataAsset-struct-".Length..]))!
+                .AsArray().Select(Node => Node!.GetValue<string>()).ToArray();
+            InvalidateStructureMarkup(Path);
             return true;
         }
         const string Prefix = "editor.data-asset-structure:";

@@ -275,6 +275,8 @@ internal static class GameUiValidation
                     private set;
                 } = 0.25;
 
+                private int RangeCommits;
+
                 public string ReferenceValue
                 {
                     get;
@@ -500,6 +502,8 @@ internal static class GameUiValidation
                             "<span id='color-commits'>" + ColorCommits + "</span>" +
                             UiValueEditors.Range("Range (editable)", new UiValueInput("shared-range",
                                 RangeValue.ToString(System.Globalization.CultureInfo.InvariantCulture), "fixture.range:", false, "number"), 0, 1, 0.01) +
+                            "<span id='range-state'>" + RangeValue.ToString(System.Globalization.CultureInfo.InvariantCulture) + "</span>" +
+                            "<span id='range-commits'>" + RangeCommits + "</span>" +
                             UiValueEditors.Reference("Reference (editable)", "shared-reference", ReferenceValue,
                                 Options, "fixture.reference:") +
                             "</div><div style='width:48%;'>" +
@@ -608,6 +612,7 @@ internal static class GameUiValidation
                     if (Id == "secondary" && Action.StartsWith("fixture.range:", System.StringComparison.Ordinal))
                     {
                         RangeValue = double.Parse(Action["fixture.range:".Length..], System.Globalization.CultureInfo.InvariantCulture);
+                        RangeCommits++;
                         return true;
                     }
                     if (Id == "secondary" && Action.StartsWith("fixture.reference:", System.StringComparison.Ordinal))
@@ -1053,6 +1058,72 @@ internal static class GameUiValidation
             Check(RangeNumber > 0.4 && RangeNumber < 0.6,
                 "Real pointer input on the range track changes the authoritative value");
 
+            var RangeStart = TextOf("range-state");
+            var RangeCommitsBefore = int.Parse(TextOf("range-commits"));
+            var RangeBounds = Find("shared-range-range")!["bounds"]!;
+            var RangeLeft = RangeBounds["x"]!.GetValue<double>();
+            var RangeWidth = RangeBounds["width"]!.GetValue<double>();
+            var SliderY = (int)(RangeBounds["y"]!.GetValue<double>() + RangeBounds["height"]!.GetValue<double>() / 2);
+            int SliderX(double Value) { return (int)(RangeLeft + 6 + (RangeWidth - 12) * Value); }
+            SendPointer("move", SliderX(RangeNumber), SliderY, "none");
+            SendPointer("down", SliderX(RangeNumber), SliderY);
+            SendPointer("move", SliderX(0.8), SliderY, "none");
+            SendPointer("move", SliderX(0.7), SliderY, "none");
+            CaptureReference("range-drag-preview");
+            var RangeDraft = double.Parse(Find("shared-range-range")!["value"]!.GetValue<string>(),
+                System.Globalization.CultureInfo.InvariantCulture);
+            var NumberDraft = double.Parse(Find("shared-range")!["value"]!.GetValue<string>(),
+                System.Globalization.CultureInfo.InvariantCulture);
+            Check(RangeDraft > 0.65 && Math.Abs(RangeDraft - NumberDraft) < 0.001 &&
+                TextOf("range-state") == RangeStart && int.Parse(TextOf("range-commits")) == RangeCommitsBefore,
+                "Dragging a Range updates its numeric draft without submitting intermediate project changes: " +
+                $"slider={RangeDraft}, number={NumberDraft}");
+            SendPointer("up", SliderX(0.7), SliderY + 30);
+            CaptureReference("range-drag-committed");
+            Check(Math.Abs(double.Parse(TextOf("range-state"), System.Globalization.CultureInfo.InvariantCulture) - RangeDraft) < 0.001 &&
+                int.Parse(TextOf("range-commits")) == RangeCommitsBefore + 1,
+                "Releasing outside the Range commits its final draft once");
+            SendPointer("down", SliderX(RangeDraft), SliderY);
+            SendPointer("move", SliderX(0.2), SliderY, "none");
+            ValueKey("down", 0x1B);
+            ValueKey("up", 0x1B);
+            SendPointer("up", SliderX(0.2), SliderY);
+            CaptureReference("range-drag-cancelled");
+            Check(Math.Abs(double.Parse(Find("shared-range")!["value"]!.GetValue<string>(),
+                    System.Globalization.CultureInfo.InvariantCulture) - RangeDraft) < 0.001 &&
+                Math.Abs(double.Parse(Find("shared-range-range")!["value"]!.GetValue<string>(),
+                    System.Globalization.CultureInfo.InvariantCulture) - RangeDraft) < 0.001 &&
+                int.Parse(TextOf("range-commits")) == RangeCommitsBefore + 1,
+                "Escape cancels a held slider gesture and restores both controls without a commit");
+            ClickHit("shared-range");
+            ValueKey("down", 0x09);
+            ValueKey("up", 0x09);
+            ObserveGame();
+            var KeyboardStart = double.Parse(TextOf("range-state"), System.Globalization.CultureInfo.InvariantCulture);
+            var KeyboardCommits = int.Parse(TextOf("range-commits"));
+            ValueKey("down", 0x27);
+            ObserveGame();
+            var KeyboardDraft = double.Parse(Find("shared-range")!["value"]!.GetValue<string>(),
+                System.Globalization.CultureInfo.InvariantCulture);
+            CaptureReference("range-keyboard-preview");
+            Check(KeyboardDraft > KeyboardStart && Math.Abs(KeyboardDraft -
+                    double.Parse(Find("shared-range-range")!["value"]!.GetValue<string>(),
+                        System.Globalization.CultureInfo.InvariantCulture)) < 0.001 &&
+                int.Parse(TextOf("range-commits")) == KeyboardCommits,
+                $"An arrow key previews the same slider and numeric draft before committing: start={KeyboardStart}, draft={KeyboardDraft}, " +
+                $"slider={Find("shared-range-range")!["value"]}, commits={TextOf("range-commits")}/{KeyboardCommits}");
+            ValueKey("up", 0x27);
+            CaptureReference("range-keyboard-committed");
+            Check(Math.Abs(double.Parse(TextOf("range-state"), System.Globalization.CultureInfo.InvariantCulture) - KeyboardDraft) < 0.001 &&
+                int.Parse(TextOf("range-commits")) == KeyboardCommits + 1,
+                "Releasing the arrow key commits its final value once");
+            ClickHit("readonly-range-range");
+            ObserveGame();
+            Check(Find("readonly-range-range")!["value"]!.GetValue<string>() == "0.75" &&
+                Find("readonly-range")!["value"]!.GetValue<string>() == "0.75" &&
+                int.Parse(TextOf("range-commits")) == KeyboardCommits + 1,
+                "Disabled slider and numeric controls reject changes and share the same value");
+
             JsonObject CaptureReference(string Name)
             {
                 var Current = ObserveGame();
@@ -1118,10 +1189,15 @@ internal static class GameUiValidation
             ClickHit(PickerId + "-open");
             ClickHit(PickerId + "-hue");
             ClickHit(PickerId + "-sv");
+            ClickHit(PickerId + "-alpha");
             ClickHit(PickerId + "-apply");
             ObserveGame();
             Check(TextOf("color-commits") == "1" && Find("editable-color-R")?["value"]?.GetValue<string>() != "0.2",
                 "Apply commits the entire RGBA color exactly once through its owner action");
+            var AppliedAlpha = float.Parse(Find("editable-color-A")!["value"]!.GetValue<string>(),
+                System.Globalization.CultureInfo.InvariantCulture);
+            Check(AppliedAlpha > 0.3f && AppliedAlpha < 0.7f,
+                "The first opacity slider change commits its current value rather than the preceding attribute value");
             CaptureReference("color-picker-applied");
             ClickHit(PickerId + "-open");
             ClickHit(PickerId + "-open");

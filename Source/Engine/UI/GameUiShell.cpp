@@ -94,7 +94,7 @@ namespace
             {
                 PointerDown = true;
             }
-            if (RmlValueEditor::ProcessEvent(event, PointerDown, RmlWin32::GetKeyModifierState(),
+            const bool ValueHandled = RmlValueEditor::ProcessEvent(event, PointerDown, RmlWin32::GetKeyModifierState(),
                 [&](const Rml::String& Action)
                 {
                     if (Action == "ui.value-end-pointer")
@@ -102,10 +102,7 @@ namespace
                         ValueEndOnRelease = true;
                     }
                     Pending->push_back(Action);
-                }))
-            {
-                return;
-            }
+                });
             if (event.GetId() == Rml::EventId::Mouseup)
             {
                 PointerDown = false;
@@ -114,6 +111,10 @@ namespace
                     ValueEndOnRelease = false;
                     Pending->push_back("ui.value-release");
                 }
+            }
+            if (ValueHandled)
+            {
+                return;
             }
             if (event.GetId() == Rml::EventId::Change)
             {

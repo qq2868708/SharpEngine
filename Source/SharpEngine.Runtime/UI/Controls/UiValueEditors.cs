@@ -117,6 +117,7 @@ public static class UiValueEditors
         if (Value.Id.Length != 0)
         {
             Range.SetAttributeValue("id", Value.Id + "-range");
+            Range.SetAttributeValue("data-value-input", Value.Id);
         }
         if (Value.ReadOnly)
         {
